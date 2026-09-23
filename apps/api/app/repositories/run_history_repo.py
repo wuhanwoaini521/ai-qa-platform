@@ -253,10 +253,13 @@ class RunHistoryRepository:
         # endpoint scale with (distinct tests x executions). A window function keeps the most recent
         # samples per node, which is what the scoring actually uses.
         sample_limit = 20
+        # Partitioning by project as well as node id is required: the same node id (a path such as
+        # tests/test_login.py::test_login) exists in every imported project, and partitioning by node
+        # id alone let a busier project consume the sample budget for the others.
         row_number = (
             func.row_number()
             .over(
-                partition_by=TestExecutionORM.nodeid,
+                partition_by=(TestRunORM.project_id, TestExecutionORM.nodeid),
                 order_by=(desc(TestExecutionORM.started_at), desc(TestExecutionORM.id)),
             )
             .label("sample_rank")
@@ -278,6 +281,8 @@ class RunHistoryRepository:
         stmt = select(ranked).where(ranked.c.sample_rank <= sample_limit)
         if project_id:
             stmt = stmt.where(ranked.c.project_id == project_id)
+        # Newest-first per node, which is the order the scoring relies on (`executions[:5]`).
+        stmt = stmt.order_by(ranked.c.project_id, ranked.c.nodeid, ranked.c.sample_rank)
 
         async with self.session_factory() as session:
             result = await session.execute(stmt)

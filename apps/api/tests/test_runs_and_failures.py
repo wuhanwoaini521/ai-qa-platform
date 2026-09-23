@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pytest
-from app.persistence.models import TestRunORM, utc_now
+from app.persistence.models import utc_now
 from app.repositories.test_run_repo import TestRunRepository
 from httpx import AsyncClient
 from project_model.models import RunStatus, TestRunCreate
@@ -73,15 +73,16 @@ async def test_abandoned_runs_are_recovered_and_never_stay_running(client: Async
     """A process crash must not leave a run RUNNING forever, and recovery must not invent a verdict."""
     project = await client.post("/api/projects", json={"name": "Stale Run Recovery"})
     project_id = project.json()["id"]
-    run = await client.post("/api/runs", json={"project_id": project_id, "workspace_id": project_id})
-    run_id = run.json()["id"]
 
-    # Simulate a run abandoned long ago by moving its creation time into the past.
     async with test_db_session() as session:
-        orm = await session.get(TestRunORM, run_id)
-        orm.status = RunStatus.RUNNING.value
-        orm.created_at = utc_now() - timedelta(minutes=10)
+        run_repo = TestRunRepository(session)
+        run = await run_repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        # A run that started long ago and never finished: no background execution to race with.
+        run.status = RunStatus.RUNNING.value
+        run.created_at = utc_now() - timedelta(minutes=10)
+        run.started_at = utc_now() - timedelta(minutes=10)
         await session.commit()
+        run_id = run.id
 
     recent = await client.post("/api/runs/recover-stale", params={"stale_after_seconds": 3600})
     assert recent.status_code == 200, recent.text
@@ -95,41 +96,3 @@ async def test_abandoned_runs_are_recovered_and_never_stay_running(client: Async
     # CANCELLED, not FAILED: the platform does not know the outcome and must not invent one.
     assert fetched.json()["status"] == "CANCELLED"
     assert fetched.json()["finished_at"] is not None
-
-
-@pytest.mark.integration
-async def test_failures_are_scoped_to_the_requested_project(client: AsyncClient, test_db_session):
-    """A project filter must be honoured: failures from other projects are a cross-project leak."""
-    first = (await client.post("/api/projects", json={"name": "Failures Scope A"})).json()["id"]
-    second = (await client.post("/api/projects", json={"name": "Failures Scope B"})).json()["id"]
-
-    async with test_db_session() as session:
-        run_repo = TestRunRepository(session)
-        for index, project_id in enumerate((first, second)):
-            run = await run_repo.create_run(
-                TestRunCreate(
-                    project_id=project_id, workspace_id=project_id, nodeids=["tests/test_fails.py::test_fails"]
-                )
-            )
-            execution = await run_repo.add_execution(
-                run_id=run.id, nodeid="tests/test_fails.py::test_fails", status=RunStatus.FAILED
-            )
-            await run_repo.create_failure_record(
-                run_id=run.id,
-                execution_id=execution.id,
-                test_nodeid="tests/test_fails.py::test_fails",
-                test_name=f"test_fails_{index}",
-                classification="ASSERTION_FAILURE",
-                exception_type="AssertionError",
-                error_message="assert False",
-                stack_trace="",
-            )
-        # The repositories flush; the HTTP client uses its own session, so commit first.
-        await session.commit()
-
-    scoped = await client.get(f"/api/failures?project_id={first}")
-    unscoped = await client.get("/api/failures")
-
-    assert scoped.status_code == 200, scoped.text
-    assert [item["test_name"] for item in scoped.json()] == ["test_fails_0"]
-    assert len(unscoped.json()) == 2

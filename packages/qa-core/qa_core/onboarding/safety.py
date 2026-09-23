@@ -4,10 +4,20 @@ The platform must be able to say, before running anything, that a selected test 
 outside world. Marker names are not evidence: in the reference repository the `smoke` marker selects
 tests that drive a live public website.
 
-The policy analyses the test function's AST rather than its raw text, so a synthetic URL inside a
-fixture or an assertion is not mistaken for a network call, while a real `page.goto(...)` or
-`requests.get(...)` is always caught. Anything the policy cannot inspect is refused, and executing a
-flagged test requires an explicit override.
+The policy analyses the test function's AST rather than its raw text, and it errs towards refusing:
+
+* browser/network/subprocess calls are matched **case-insensitively** and by method name, so a
+  browser reached through a helper (`get_page().goto(...)`) or a differently-named fixture
+  (`browser_session.visit(...)`) is refused just like `page.goto(...)`;
+* a module import of a driver (`socket`, `subprocess`, `playwright`, requests clients) is itself a
+  refusal reason, so an aliased call cannot slip through;
+* file calls with an absolute, `~`-rooted or `..` path are refused, because reading a private key or
+  writing outside the workspace is exactly the access this policy gates;
+* the test file must resolve **inside the workspace**: an absolute node id cannot make the platform
+  inspect (or run) a host file.
+
+Anything the policy cannot inspect is refused, and executing a flagged test requires an explicit
+override.
 """
 
 from __future__ import annotations
@@ -29,10 +39,13 @@ BROWSER_FIXTURES = frozenset(
     }
 )
 
-#: Method names that reach outside the process.
+#: Method names that reach outside the process. Matched case-insensitively, whatever the receiver is.
 NETWORK_CALL_NAMES = frozenset(
     {
         "goto",
+        "navigate",
+        "visit",
+        "open_url",
         "get",
         "post",
         "put",
@@ -42,35 +55,39 @@ NETWORK_CALL_NAMES = frozenset(
         "request",
         "send",
         "urlopen",
-        "connect",
         "urlretrieve",
+        "connect",
+        "create_connection",
         "fetch",
+        "download",
+        "upload",
     }
 )
 
-#: Receivers that make such a call a real outbound call.
-NETWORK_RECEIVERS = frozenset(
+#: Method names that drive a browser even when the receiver is a local variable or a helper result.
+BROWSER_ACTION_NAMES = frozenset(
     {
-        "page",
-        "browser",
-        "context",
-        "request",
-        "session",
-        "client",
-        "api_client",
-        "api_request_context",
-        "requests",
-        "httpx",
-        "urllib",
-        "aiohttp",
-        "playwright",
-        "response",
-        "resp",
-        "driver",
+        "goto",
+        "navigate",
+        "visit",
+        "reload",
+        "go_back",
+        "go_forward",
+        "click",
+        "dblclick",
+        "fill",
+        "type",
+        "press",
+        "check",
+        "select_option",
+        "hover",
+        "screenshot",
+        "wait_for_selector",
+        "expect",
     }
 )
 
-#: Calls that are unsafe unconditionally, whatever the receiver looks like.
+#: Calls that are unsafe whatever the receiver looks like (lower-case; compared case-insensitively).
 UNCONDITIONAL_UNSAFE_CALLS = frozenset(
     {
         "system",
@@ -79,9 +96,41 @@ UNCONDITIONAL_UNSAFE_CALLS = frozenset(
         "call",
         "check_call",
         "check_output",
+        "spawn",
+        "spawnl",
+        "spawnlp",
+        "spawnv",
+        "exec",
+        "execl",
+        "execv",
+        "eval",
         "urlopen",
         "urlretrieve",
         "connect",
+        "create_connection",
+        "fork",
+    }
+)
+
+#: File-access calls: an absolute, `~`-rooted or parent-relative path is a refusal.
+FILE_CALL_NAMES = frozenset({"open", "read_text", "write_text", "read_bytes", "write_bytes", "unlink", "remove"})
+
+#: Modules that put a test in touch with the outside world just by being imported.
+UNSAFE_MODULES = frozenset(
+    {
+        "playwright",
+        "selenium",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "socket",
+        "subprocess",
+        "shutil",
+        "ftplib",
+        "smtplib",
+        "telnetlib",
+        "paramiko",
+        "boto3",
     }
 )
 
@@ -116,7 +165,7 @@ class SafetyPolicy(BaseModel):
         source_file, function = self._function_source(project_root, nodeid)
         if function is None:
             reasons.append("test source could not be inspected")
-            return SafetyVerdict(nodeid=nodeid, safe=False, reasons=reasons)
+            return SafetyVerdict(nodeid=nodeid, safe=False, reasons=dedupe(reasons))
 
         for marker in sorted({*(markers or []), *self._markers_from_source(function)}):
             if marker in self.unsafe_markers:
@@ -126,24 +175,37 @@ class SafetyPolicy(BaseModel):
         for fixture in sorted({arg.arg for arg in parameters} & self.browser_fixtures):
             reasons.append(f"requires the '{fixture}' fixture")
 
-        if source_file is not None:
-            reasons.extend(self._module_level_reasons(source_file, function))
+        reasons.extend(self._module_level_reasons(source_file))
 
         for node in ast.walk(function):
             if not isinstance(node, ast.Call):
                 continue
             target = node.func
-            name = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", "")
+            name = str(target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", ""))
+            lowered = name.lower()
             receiver = (
-                ast.unparse(target.value).split(".")[0].split("[")[0] if isinstance(target, ast.Attribute) else None
+                ast.unparse(target.value).split(".")[0].split("[")[0].lower()
+                if isinstance(target, ast.Attribute)
+                else None
             )
 
-            if name in UNCONDITIONAL_UNSAFE_CALLS:
+            if lowered in UNCONDITIONAL_UNSAFE_CALLS:
                 reasons.append(f"calls {name}()")
-            elif name in NETWORK_CALL_NAMES and receiver in NETWORK_RECEIVERS:
+            elif lowered in BROWSER_ACTION_NAMES:
+                reasons.append(f"calls browser action {name}()")
+            elif lowered in NETWORK_CALL_NAMES and receiver in {
+                "requests",
+                "httpx",
+                "urllib",
+                "aiohttp",
+                "session",
+                "client",
+            }:
                 reasons.append(f"calls {receiver}.{name}()")
-            elif name in NETWORK_CALL_NAMES and self._has_url_argument(node):
+            elif lowered in NETWORK_CALL_NAMES and self._has_url_argument(node):
                 reasons.append(f"calls {name}() with an absolute URL")
+            elif lowered in FILE_CALL_NAMES and self._has_escaping_path_argument(node):
+                reasons.append(f"calls {name}() with a path outside the workspace")
 
         return SafetyVerdict(nodeid=nodeid, safe=not reasons, reasons=dedupe(reasons))
 
@@ -173,28 +235,31 @@ class SafetyPolicy(BaseModel):
                     return True
         return False
 
-    def _module_level_reasons(self, source_file: Path, function: ast.FunctionDef) -> list[str]:
-        """A test module that imports a browser driver is treated as browser-bound."""
+    def _has_escaping_path_argument(self, call: ast.Call) -> bool:
+        for argument in [*call.args, *call.keywords]:
+            value = argument.value if isinstance(argument, ast.keyword) else argument
+            text = ast.unparse(value)
+            if text.startswith(("'/", '"/', "'~", '"~')) or ".." in text or "home()" in text:
+                return True
+        return False
+
+    def _module_level_reasons(self, source_file: Path) -> list[str]:
+        """A test module that imports a driver or shells out is treated as touching the outside world."""
         try:
             tree = ast.parse(source_file.read_text(encoding="utf-8", errors="replace"), filename=str(source_file))
         except SyntaxError:
             return []
         reasons: list[str] = []
         for node in tree.body:
-            text = ast.unparse(node) if not isinstance(node, ast.Import | ast.ImportFrom) else ""
             if isinstance(node, ast.Import):
                 modules = {alias.name.split(".")[0] for alias in node.names}
             elif isinstance(node, ast.ImportFrom):
                 modules = {(node.module or "").split(".")[0]}
             else:
-                modules = set()
-            if modules & {"playwright", "selenium", "requests", "httpx", "aiohttp"}:
-                reasons.append(
-                    f"module imports {', '.join(sorted(modules & {'playwright', 'selenium', 'requests', 'httpx', 'aiohttp'}))}"
-                )
-            if "autouse=True" in text and any(name in text for name in ("page", "browser")):
-                reasons.append("module has an autouse browser fixture")
-        _ = function
+                continue
+            touched = modules & UNSAFE_MODULES
+            if touched:
+                reasons.append(f"module imports {', '.join(sorted(touched))}")
         return dedupe(reasons)
 
     def _markers_from_source(self, source: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
@@ -210,7 +275,14 @@ class SafetyPolicy(BaseModel):
 
     def _function_source(self, project_root: Path, nodeid: str) -> tuple[Path | None, ast.FunctionDef | None]:
         file_part, _, test_part = nodeid.partition("::")
-        path = project_root / file_part
+        root = Path(project_root).resolve()
+        candidate = Path(file_part)
+        if candidate.is_absolute():
+            # An absolute node id must never make the policy inspect a host file.
+            return None, None
+        path = (root / file_part).resolve()
+        if root not in path.parents and path != root:
+            return None, None
         if not path.is_file():
             return None, None
         try:
@@ -231,11 +303,11 @@ class SafetyPolicy(BaseModel):
             if class_name:
                 parent_class = next(
                     (
-                        candidate
-                        for candidate in ast.walk(tree)
-                        if isinstance(candidate, ast.ClassDef)
-                        and candidate.name == class_name
-                        and any(child is node for child in candidate.body)
+                        candidate_class
+                        for candidate_class in ast.walk(tree)
+                        if isinstance(candidate_class, ast.ClassDef)
+                        and candidate_class.name == class_name
+                        and any(child is node for child in candidate_class.body)
                     ),
                     None,
                 )

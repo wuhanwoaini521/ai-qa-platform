@@ -63,8 +63,9 @@ logging interleaves with pytest's progress output.
 
 `POST /api/onboarding/{id}/allure` imported **4 real result files** produced by the pilot run
 (`ERROR ×2`, `FAILED ×1`, `PASSED ×1`) with `historyId`, `fullName`, labels (`parentSuite`, `suite`,
-`framework`, `language`, `package`) and attachments. Allure remains evidence: the platform's own
-verdict comes from the run's exit status and the report-log, never from Allure.
+`framework`, `language`, `package`) and attachments. Allure remains evidence: the run's verdict comes from pytest's exit status, never from Allure. The
+per-test outcomes come from a platform-written report log that lives **outside** the workspace and is
+cross-checked against pytest's own summary line, so a project cannot rewrite its own verdicts.
 
 ## 8. Failure pilot (Gates 14.10 / 14.11)
 
@@ -120,8 +121,10 @@ Defects found by running at scale (all three were invisible in the small test fi
 - Abandoned runs can no longer stay `RUNNING` forever: `POST /api/runs/recover-stale` and a startup
   recovery pass close runs that never reached a terminal state — as `CANCELLED`, never as a
   fabricated PASS/FAIL.
-- SSE: a stale token returns to the sign-in screen instead of a silent blank screen; the run stream
-  survives browser reconnects.
+- SSE: a stale token returns to the sign-in screen instead of a silent blank screen. The client now
+  handles the event names the server actually publishes (`RUN_STARTED`, `TEST_FINISHED`, `LOG_STREAM`,
+  `RUN_FINISHED`, `RUN_ERROR`, `RUN_CANCELLED`); a dropped connection still falls back to a one-shot
+  refetch (the client closes the stream on error rather than reconnecting).
 - Worker: registration/heartbeat now send the schema the API accepts and report real load.
 - AI: provider failures fall back to the deterministic fake provider with `fallback_used=true`
   recorded on the invocation row.
@@ -134,9 +137,12 @@ Defects found by running at scale (all three were invisible in the small test fi
 | pytest flag injection via node ids (`--pyargs=os`, `-p evil`, `--collect-only`, shell fragments) | rejected with 400 before reaching the command line |
 | Marker expression injection (`smoke --alluredir=/tmp/evil`) | rejected with 400 |
 | Symlink escape from a workspace | rejected on read and write |
-| Unauthenticated access to any non-probe route | 401 (35 authorization tests) |
+| Unauthenticated access to any non-probe route | 401 (36 authorization tests) |
 | Role escalation (VIEWER writing, ENGINEER gating a release) | 403 |
 | Secret leakage in prompts/traces | `SensitiveRedactor` + context selection excludes non-related files |
+| Process/socket/file access from a selected test | refused (case-insensitive call matching, driver-import and socket coverage, escaping-path detection) — nine evasion cases pinned by test |
+| Absolute node id pointing at a host file | rejected by validation and by the policy |
+| Arbitrary pytest flags in the run request | the raw `extra_args` passthrough was removed; only named `n_workers`/`reruns` options remain |
 
 ## 13. UX dogfooding (Gate 14.19)
 
@@ -157,8 +163,8 @@ Findings from running the workflow end to end in a browser, and their dispositio
 
 | Lane | Result |
 |---|---|
-| SQLite (`uv run pytest`) | 168 passed, 3 skipped |
-| PostgreSQL (`AI_QA_TEST_DATABASE_URL=…`) | 171 passed (re-verified below) |
+| SQLite (`uv run pytest`) | 177 passed, 3 skipped |
+| PostgreSQL (`AI_QA_TEST_DATABASE_URL=…`) | 179 passed |
 | Lint (ruff check + format, eslint) | clean |
 | Frontend typecheck + build | clean; entry chunk 254 kB (gzip 77 kB) |
 | GitHub Actions | `Backend Lint & Test`, `Backend Tests (PostgreSQL 16)`, `Frontend Lint & Build` — see `docs/RELEASE_READINESS.md` |

@@ -25,6 +25,19 @@ a recorded run, and every "open" row names the concrete limitation.
 | G12 | Worker registration/heartbeat payloads did not match the API schema | a distributed worker could never register | payloads fixed (`hostname`, `browsers`, `ONLINE/BUSY/OFFLINE`) + real load reporting | worker tests |
 | G13 | The distributed job queue had no producer | Phase 12's "distributed execution" was unreachable in practice | `runner_type`-agnostic onboarding path executes imported projects; the queue gap is documented below | see §2 O1 |
 
+## 1b. Fixed after the Phase 14 review (second pass)
+
+| # | Gap | Impact before | Fix | Evidence |
+|---|---|---|---|---|
+| G14 | `subprocess.Popen`, `os.spawn*`, `socket.create_connection`, driver imports, host-file access and browser access through a helper/fixture were all classified **safe** | the safety policy's contract ("anything that touches the outside world is refused") did not hold for the most common evasions | case-insensitive call matching, browser-action names refused whatever the receiver, driver-module imports, socket calls, and escaping file paths | `test_safety_policy_refuses_the_evasions_a_real_project_can_use` (9 cases) |
+| G15 | an absolute node id made the platform inspect and execute a host file outside the workspace | `AUTOMATION_EDIT` could execute any `test_*.py` on the API host | absolute paths rejected in validation; the policy refuses files outside the root | `test_absolute_node_ids_cannot_reach_host_files` (2 cases) |
+| G16 | `extra_args` put arbitrary pytest flags on the command line at `automation:edit` privilege | `--junitxml`, `-c`, `--rootdir`, `-p` all reached the project process | the raw passthrough was removed; only named `n_workers`/`reruns` remain | `test_runner_options_are_named_not_raw_flags` |
+| G17 | skipped and xfailed tests were recorded as `ERROR` with fabricated failure records and a diagnosis | inflated failure counts and pointless repair work for every skipped test | skip/xfail/xpass map to their real statuses; only genuine failures create records | `test_report_log_maps_skips_and_xfails_without_fabricating_failures` |
+| G18 | the flaky query partitioned by node id only | a project's flaky tests disappeared when another project used the same node id more recently | partition by (project, node) + explicit newest-first ordering | `test_flaky_and_history`, PostgreSQL lane |
+| G19 | the report log lived inside the workspace | the project under test could rewrite its own verdicts | the log lives in a platform directory outside the workspace and is cross-checked against pytest's summary | `QAProjectRunner(artifacts_dir=…)` + cross-check in `run()` |
+| G20 | stale-run recovery used creation time and included Jenkins runs | a long-queued or CI-backed run could be cancelled while still running | staleness measured from `started_at`; Jenkins runs excluded | `test_abandoned_runs_are_recovered_and_never_stay_running` |
+| G21 | the Runs page consumed SSE event names the server never publishes | live execution updates never applied | client handles the published event types | `RunsPage.tsx` |
+
 ## 2. Still open (known limitations)
 
 | # | Limitation | Why it matters | Recommended next step |

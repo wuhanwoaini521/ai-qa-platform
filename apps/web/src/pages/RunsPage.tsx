@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
+import { TestExecution } from '../types';
 import { api } from '../api/client';
 import {
   PlayCircle,
@@ -120,23 +121,67 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       const unsub = api.streamRunEvents(
         run.id,
         (event) => {
-          if (event.type === 'status') {
-            setSelectedRun((prev) => (prev ? { ...prev, status: event.status } : prev));
-          } else if (event.type === 'execution_update') {
-            setSelectedRun((prev) => {
-              if (!prev) return prev;
-              const exists = prev.executions.some((e) => e.id === event.execution.id);
-              const nextExecutions = exists
-                ? prev.executions.map((e) => (e.id === event.execution.id ? event.execution : e))
-                : [...prev.executions, event.execution];
-              return { ...prev, executions: nextExecutions };
-            });
-          } else if (event.type === 'log_chunk') {
-            setSelectedRun((prev) =>
-              prev ? { ...prev, log_output: prev.log_output + event.chunk } : prev
-            );
-          } else if (event.type === 'complete') {
-            fetchRunDetail(run.id);
+          // Event names and payloads are the ones the API publishes (see test_run_service):
+          // RUN_STARTED / TEST_FINISHED / LOG_STREAM / RUN_FINISHED / RUN_ERROR / RUN_CANCELLED.
+          switch (event.type) {
+            case 'RUN_STARTED':
+              setSelectedRun((prev) => (prev ? { ...prev, status: 'RUNNING' } : prev));
+              break;
+            case 'TEST_FINISHED':
+              setSelectedRun((prev) => {
+                if (!prev) return prev;
+                const existing = prev.executions.find((e) => e.nodeid === event.nodeid);
+                const nextExecutions = existing
+                  ? prev.executions.map((e) =>
+                      e.nodeid === event.nodeid
+                        ? { ...e, status: event.status, duration_ms: event.duration_ms }
+                        : e
+                    )
+                  : [
+                      ...prev.executions,
+                      {
+                        id: `live_${event.nodeid}`,
+                        run_id: prev.id,
+                        nodeid: event.nodeid,
+                        status: event.status,
+                        duration_ms: event.duration_ms,
+                        retry_count: 0,
+                        error_message: null,
+                        stack_trace: null,
+                        failure_category: null,
+                        artifact_paths: [],
+                        started_at: new Date().toISOString(),
+                        finished_at: new Date().toISOString(),
+                      } as TestExecution,
+                    ];
+                return { ...prev, executions: nextExecutions };
+              });
+              break;
+            case 'LOG_STREAM':
+              setSelectedRun((prev) =>
+                prev ? { ...prev, log_output: (prev.log_output || '') + (event.log ?? '') } : prev
+              );
+              break;
+            case 'RUN_FINISHED':
+              setSelectedRun((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: event.status,
+                      passed: event.passed ?? prev.passed,
+                      failed: event.failed ?? prev.failed,
+                      duration_ms: event.duration_ms ?? prev.duration_ms,
+                    }
+                  : prev
+              );
+              fetchRunDetail(run.id);
+              break;
+            case 'RUN_ERROR':
+            case 'RUN_CANCELLED':
+              fetchRunDetail(run.id);
+              break;
+            default:
+              break;
           }
         },
         () => {

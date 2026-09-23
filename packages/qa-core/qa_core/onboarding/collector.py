@@ -284,7 +284,7 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
     if not report_log.is_file():
         return None
 
-    attempts: dict[str, list[tuple[str, float | None, str | None]]] = {}
+    attempts: dict[str, list[tuple[str, float | None, str | None, bool]]] = {}
     order: list[str] = []
     for line in report_log.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
@@ -307,7 +307,7 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
             order.append(nodeid)
         longrepr = entry.get("longrepr")
         message = str(longrepr).strip().splitlines()[-1] if longrepr else None
-        attempts[nodeid].append((f"{outcome}:{when}", entry.get("duration"), message))
+        attempts[nodeid].append((f"{outcome}:{when}", entry.get("duration"), message, bool(entry.get("xfail"))))
 
     if not order:
         return None
@@ -317,21 +317,32 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
     reruns_total = 0
     for nodeid in order:
         tries = attempts[nodeid]
-        physical += len(tries)
-        reruns = max(len(tries) - 1, 0)
+        decisive = [entry for entry in tries if entry[0].endswith(":call")]
+        skipped_everywhere = all(
+            entry[0].endswith((":call", ":setup")) and entry[0].startswith("skipped") for entry in tries
+        )
+        # Physical attempts are what actually ran: every call phase, plus any setup/teardown that
+        # did not simply pass (a failed or skipping setup is work the machine performed).
+        physical += sum(1 for entry in tries if entry[0].endswith(":call") or not entry[0].startswith("passed"))
+        reruns = max(len(decisive) - 1, 0) if decisive else 0
         reruns_total += reruns
-        outcome, _duration, message = tries[-1]
+        outcome, _duration, message, expected_failure = (decisive or tries)[-1]
         phase = outcome.split(":", 1)[1] if ":" in outcome else "call"
         base = outcome.split(":", 1)[0]
-        if phase == "call":
-            status = {
-                "passed": RunStatus.PASSED,
-                "failed": RunStatus.FAILED,
-                "skipped": RunStatus.SKIPPED,
-            }.get(base, RunStatus.NOT_RUN)
+        if phase != "call":
+            # A failed setup/teardown means the body never produced a decisive result; a skipped
+            # setup is a skip, not an error (pytest reports `pytest.mark.skip` that way).
+            status = RunStatus.SKIPPED if base == "skipped" else RunStatus.ERROR
+        elif base == "passed":
+            status = RunStatus.XPASS if expected_failure else RunStatus.PASSED
+        elif base == "failed":
+            status = RunStatus.FAILED
+        elif base == "skipped":
+            status = RunStatus.XFAIL if expected_failure else RunStatus.SKIPPED
+        elif skipped_everywhere:
+            status = RunStatus.SKIPPED
         else:
-            # Setup/teardown failure: the test body never produced a decisive result.
-            status = RunStatus.ERROR
+            status = RunStatus.NOT_RUN
         outcomes.append(
             LogicalTestOutcome(
                 nodeid=nodeid,
@@ -342,6 +353,23 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
             )
         )
     return outcomes, physical, reruns_total
+
+
+def counts_from_logical(logical: list[LogicalTestOutcome]) -> dict[str, int]:
+    """Summary counts derived from the authoritative per-test outcomes."""
+    counts: dict[str, int] = {}
+    for item in logical:
+        key = {
+            RunStatus.PASSED: "passed",
+            RunStatus.FAILED: "failed",
+            RunStatus.ERROR: "error",
+            RunStatus.SKIPPED: "skipped",
+            RunStatus.XFAIL: "xfailed",
+            RunStatus.XPASS: "xpassed",
+        }.get(item.status)
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 class QAProjectCollector:
@@ -390,9 +418,17 @@ class QAProjectCollector:
 class QAProjectRunner:
     """Runs a bounded selection of an imported project's tests and parses the outcome."""
 
-    def __init__(self, contract: QAProjectContract, timeout_sec: float = 900.0) -> None:
+    def __init__(
+        self,
+        contract: QAProjectContract,
+        timeout_sec: float = 900.0,
+        artifacts_dir: Path | None = None,
+    ) -> None:
         self.contract = contract
         self.timeout_sec = timeout_sec
+        # The report log must not live inside the workspace: the project under test runs in that
+        # directory and could rewrite its own verdicts.
+        self.artifacts_dir = artifacts_dir
 
     async def run(
         self,
@@ -401,7 +437,7 @@ class QAProjectRunner:
         markers: list[str] | None = None,
         extra_args: list[str] | None = None,
     ) -> SuiteRunOutcome:
-        artifacts_dir = project_root / ARTIFACTS_DIR_NAME
+        artifacts_dir = Path(self.artifacts_dir) if self.artifacts_dir else project_root / ARTIFACTS_DIR_NAME
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         report_log = artifacts_dir / REPORT_LOG_NAME
         report_log.unlink(missing_ok=True)
@@ -427,10 +463,19 @@ class QAProjectRunner:
             environment=environment,
             timeout_sec=self.timeout_sec,
         )
-        logical, counts, physical_attempts, reruns_total = parse_execution(result.stdout, result.stderr)
+        logical, text_counts, physical_attempts, reruns_total = parse_execution(result.stdout, result.stderr)
+        counts = text_counts
         structured = parse_report_log(report_log)
         if structured:
-            logical, physical_attempts, reruns_total = structured
+            structured_logical, structured_physical, structured_reruns = structured
+            structured_counts = counts_from_logical(structured_logical)
+            # Cross-check: a report log that claims fewer failures than pytest's own summary means
+            # the workspace tampered with it, so the text parse wins.
+            if structured_counts.get("failed", 0) < text_counts.get("failed", 0):
+                counts = text_counts
+            else:
+                logical, physical_attempts, reruns_total = structured_logical, structured_physical, structured_reruns
+                counts = {**text_counts, **structured_counts}
         return SuiteRunOutcome(
             exit_code=result.exit_code,
             command=command,

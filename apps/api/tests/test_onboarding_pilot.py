@@ -265,3 +265,49 @@ async def test_marker_expression_cannot_inject_flags(client: AsyncClient, tmp_pa
 
     assert response.status_code == 400
     assert "invalid marker expression" in response.json()["detail"]
+
+
+@pytest.mark.security
+@pytest.mark.parametrize(
+    "absolute_nodeid_tail",
+    ["/tmp/test_outside.py::test_outside", "/etc/test_probe.py::test_probe"],
+)
+async def test_absolute_node_ids_cannot_reach_host_files(
+    client: AsyncClient, tmp_path: Path, absolute_nodeid_tail: str
+):
+    """A selection must stay inside the imported workspace, whatever path shape it uses."""
+    source = build_reference_repo(tmp_path / "reference-repo")
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(source)})
+    project_id = imported.json()["project_id"]
+
+    response = await client.post(f"/api/onboarding/{project_id}/run", json={"nodeids": [absolute_nodeid_tail]})
+
+    assert response.status_code == 400
+    assert "invalid test selection" in response.json()["detail"]
+
+
+@pytest.mark.security
+async def test_runner_options_are_named_not_raw_flags(client: AsyncClient, tmp_path: Path):
+    """The operator selects workers/retries by name; arbitrary pytest flags are not accepted."""
+    source = build_reference_repo(tmp_path / "reference-repo")
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(source)})
+    project_id = imported.json()["project_id"]
+
+    rejected = await client.post(
+        f"/api/onboarding/{project_id}/run",
+        json={
+            "nodeids": ["tests/test_sample.py::test_offline_math"],
+            "extra_args": ["--junitxml=/tmp/qa_probe.xml"],
+        },
+    )
+    # The field no longer exists, and an unknown field must not silently reach the command line.
+    assert rejected.status_code == 200, rejected.text
+    assert "--junitxml" not in rejected.json()["outcome"]["command"]
+
+    accepted = await client.post(
+        f"/api/onboarding/{project_id}/run",
+        json={"nodeids": ["tests/test_sample.py::test_offline_math"], "n_workers": 2, "reruns": 1},
+    )
+    command = accepted.json()["outcome"]["command"]
+    assert "-n" in command and "2" in command
+    assert "--reruns" in command

@@ -31,8 +31,9 @@ production identity provider, and no browser-driven execution on this machine.
 | History works | ✅ | per-test executions with `retry_count`, trend and score components |
 | Flaky works | ✅ | 71 scored entries; classification (`STABLE` / `INSUFFICIENT_DATA`) and failure categories |
 | Workspace source isolation works | ✅ | read-only source, isolated runtime, isolated artifacts |
-| P0 = 0, P1 = 0 | ✅ | Phase 13.5 review findings closed (§3) |
-| GitHub Actions green | ✅ | `Backend Lint & Test`, `Backend Tests (PostgreSQL 16)`, `Frontend Lint & Build` |
+| P0 = 0 | ✅ | no open P0 (the last two reviews' P0-grade items — workspace escape via absolute node ids, unvalidated pytest flags, forged run verdicts — are closed in §3) |
+| P1 = 0 | ✅ | all P1 findings from both reviews are closed and covered by tests (§3) |
+| GitHub Actions green | ✅ (point-in-time) | `gh run list` for the release commit; the three jobs are `Backend Lint & Test`, `Backend Tests (PostgreSQL 16)`, `Frontend Lint & Build`. This is an external fact, not something the repository can assert by itself |
 
 ## 3. Defects closed before this assessment
 
@@ -40,9 +41,25 @@ Phase 13.5 review (P1): SSE stream had no way to send credentials after authoriz
 Projects row actions opened the previously selected project; the `AutomationBinding` contract
 divergence made binding saves and every "run test" action fail.
 
-Pilot (P0/P1): `risk-matrix` returned HTTP 500 for any project with flaky tests; the flaky query was
-N+1 and made the dashboard 5.5 s at moderate scale; a crashed run stayed `RUNNING` forever; test
-selection could inject pytest flags.
+Pilot, first pass (P0/P1): `risk-matrix` returned HTTP 500 for any project with flaky tests; the flaky
+query was N+1 and made the dashboard 5.5 s at moderate scale; a crashed run stayed `RUNNING` forever;
+test selection could inject pytest flags.
+
+Phase 14 review (P0/P1), all closed with tests:
+
+| Finding | Fix |
+|---|---|
+| `subprocess.Popen` / `os.spawn*` were classified safe (case-sensitive allow-list) | call matching is case-insensitive; nine evasion cases are pinned by `test_safety_policy_refuses_the_evasions_a_real_project_can_use` |
+| `socket.create_connection` and other driver modules were not analysed | driver imports and socket-level calls are refusal reasons |
+| browser use through a helper or a project-specific fixture name was safe | browser-action method names are refused whatever the receiver is |
+| host file access (`open('/etc/passwd')`, `~/.ssh`, `..`) was not analysed | file calls with absolute, `~`-rooted or parent-relative paths are refused |
+| an absolute node id executed a host file outside the workspace | absolute paths are rejected by validation **and** the policy refuses any file outside the workspace |
+| arbitrary pytest flags reached argv through `extra_args` at `automation:edit` privilege | the passthrough was removed; only named `n_workers`/`reruns` options remain |
+| skipped/xfailed tests were recorded as `ERROR` with fabricated failure records | skip/xfail/xpass map to their real statuses; only genuine failures create failure records |
+| the flaky query partitioned by node id only, hiding a project's flaky tests | partitions by (project, node) with an explicit newest-first order |
+| the report log lived inside the workspace and could be rewritten by the project | it now lives in a platform directory outside the workspace and is cross-checked against pytest's own summary |
+| stale-run recovery could cancel a legitimately long run or desync a Jenkins build | staleness is measured from `started_at`, and Jenkins runs are excluded |
+| the Runs page consumed SSE event names the server never publishes | the client now handles `RUN_STARTED`/`TEST_FINISHED`/`LOG_STREAM`/`RUN_FINISHED`/`RUN_ERROR`/`RUN_CANCELLED` |
 
 ## 4. Why this is not "V1 production proven"
 

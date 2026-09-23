@@ -461,7 +461,9 @@ class TestRunService:
         workers heartbeat, so an abandoned job is detected there instead.
         """
         cutoff = utc_now() - timedelta(seconds=stale_after_seconds)
-        stale = await self.run_repo.list_unfinished_runs(older_than=cutoff)
+        # Jenkins runs are left alone: the platform cannot stop the external build here, so marking
+        # the row CANCELLED would desync it from the CI job that is still running.
+        stale = await self.run_repo.list_unfinished_runs(older_than=cutoff, exclude_runner_types=["JENKINS"])
         recovered: list[str] = []
         for orm in stale:
             await self.run_repo.update_run_status(run_id=orm.id, status=RunStatus.CANCELLED, finished_at=utc_now())

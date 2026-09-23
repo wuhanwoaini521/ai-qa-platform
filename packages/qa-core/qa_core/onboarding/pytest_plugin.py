@@ -31,6 +31,8 @@ class QAReportPlugin:
             "when": report.when,
             "outcome": report.outcome,
             "duration": report.duration,
+            # pytest marks expected failures with `wasxfail`; without it an xfail looks like a skip.
+            "xfail": getattr(report, "wasxfail", None) is not None,
         }
         longrepr = report.longrepr
         if longrepr is not None:

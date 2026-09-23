@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from project_model.models import RunStatus, TestRunCreate
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -209,14 +209,21 @@ class TestRunRepository:
         await self.session.flush()
         return orm
 
-    async def list_unfinished_runs(self, older_than: datetime) -> list[TestRunORM]:
-        """Runs that were started but never reached a terminal state before `older_than`."""
-        result = await self.session.execute(
-            select(TestRunORM).where(
-                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
-                TestRunORM.created_at < older_than,
-            )
+    async def list_unfinished_runs(
+        self, older_than: datetime, exclude_runner_types: list[str] | None = None
+    ) -> list[TestRunORM]:
+        """Runs that were started but never reached a terminal state before `older_than`.
+
+        Staleness is measured from `started_at` when the run began, falling back to `created_at` for
+        runs that never started: a long queue wait is not evidence that a run was abandoned.
+        """
+        query = select(TestRunORM).where(
+            TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+            func.coalesce(TestRunORM.started_at, TestRunORM.created_at) < older_than,
         )
+        if exclude_runner_types:
+            query = query.where(TestRunORM.runner_type.notin_(exclude_runner_types))
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def list_failures(self, limit: int = 50, project_id: str | None = None) -> list[FailureRecordORM]:

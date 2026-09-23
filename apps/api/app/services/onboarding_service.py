@@ -69,7 +69,10 @@ def validate_nodeids(nodeids: list[str]) -> list[str]:
     invalid = [
         nodeid
         for nodeid in nodeids
-        if not NODEID_PATTERN.match(nodeid.strip()) or ".." in nodeid.split("::")[0].split("/")
+        # An absolute path would let the selection point at a host file instead of the workspace.
+        if not NODEID_PATTERN.match(nodeid.strip())
+        or nodeid.strip().startswith("/")
+        or ".." in nodeid.split("::")[0].split("/")
     ]
     if invalid:
         raise OnboardingError(
@@ -242,7 +245,8 @@ class OnboardingService:
         markers: list[str] | None = None,
         allow_unsafe: bool = False,
         persist: bool = True,
-        extra_args: list[str] | None = None,
+        n_workers: int | None = None,
+        reruns: int | None = None,
     ) -> PilotRunReport:
         imported = await self.get_imported_project(project_id)
         root = Path(imported.workspace_path)
@@ -274,12 +278,19 @@ class OnboardingService:
         # plugin is guaranteed to be importable), the platform owns the results directory: the run's
         # artifacts land inside the isolated workspace and can be imported afterwards. Without a
         # provisioned runtime the ambient interpreter is used and no project plugin may be assumed.
-        run_args: list[str] = list(extra_args or [])
+        run_args: list[str] = []
+        if n_workers:
+            run_args.extend(["-n", str(max(1, min(n_workers, 32)))])
+        if reruns:
+            run_args.extend(["--reruns", str(max(0, min(reruns, 5)))])
         if imported.contract.has_plugin("allure") and imported.contract.runtime.virtualenv_dir:
             results_dir = root / (imported.contract.allure_results_dir or "allure-results")
             run_args.append(f"--alluredir={results_dir}")
 
-        outcome = await QAProjectRunner(imported.contract).run(root, nodeids=safe or None, extra_args=run_args)
+        outcome = await QAProjectRunner(
+            imported.contract,
+            artifacts_dir=self._report_artifacts_dir(imported.project_id),
+        ).run(root, nodeids=safe or None, extra_args=run_args)
 
         run_id: str | None = None
         if persist:
@@ -317,6 +328,8 @@ class OnboardingService:
                 error_message=logical.failure_message,
                 stack_trace=outcome.stdout_tail if logical.status.value in ("FAILED", "ERROR") else None,
             )
+            # Skips, xfails and xpasses are outcomes, not failures: only real failures feed the
+            # diagnosis/repair pipeline.
             if logical.status.value in ("FAILED", "ERROR"):
                 category, action, locator = FailureClassifier.classify(
                     logical.failure_message or "", outcome.stdout_tail
@@ -359,6 +372,12 @@ class OnboardingService:
         base = self.imports_dir or ((self.workspace_base_dir or Path("runtime/workspaces")) / IMPORTS_DIRNAME)
         slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", (project_name or source.name)).strip("-").lower() or "project"
         return Path(base) / slug
+
+    def _report_artifacts_dir(self, project_id: str) -> Path:
+        """Platform-owned directory for pytest report logs, deliberately outside the workspace."""
+        base = (self.workspace_base_dir or Path("runtime/workspaces")).parent / "pytest-reports" / project_id
+        base.mkdir(parents=True, exist_ok=True)
+        return base
 
     def _identity_mapper(self, workspace_path: str) -> NodeIdCaseMapper:
         return NodeIdCaseMapper(self._explicit_mappings(Path(workspace_path)))
