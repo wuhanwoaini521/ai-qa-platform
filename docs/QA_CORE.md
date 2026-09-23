@@ -9,8 +9,8 @@
 | `TestRunner` | Cross-framework test execution | `ExecutionRequest` | `ExecutionReport` |
 | `FailureAnalyzer` | Root-cause diagnosis & failure taxonomy | `FailureContext` | `FailureAnalysis` |
 | `TestAuthor` | Automated test script generation | `AuthoringRequest` | `AuthoringResult` |
-| `LocatorHealer` | Broken selector self-healing | `HealingRequest` | `HealingResult` |
-| `BrowserExplorer` | Autonomous UI exploration session | `url` | `ExplorationSession` |
+| `LocatorHealer` | Locator repair proposal (never mutates code) | `HealingRequest` | `HealingResult` |
+| `BrowserExplorer` | Bounded UI exploration session | `url` | `ExplorationSession` |
 | `QAOrchestrator` | Coordinated run, diagnosis, and healing | `ExecutionRequest` | `(ExecutionReport, list[FailureAnalysis])` |
 
 ---

@@ -1,6 +1,6 @@
 # Complete QA Lifecycle Workflow Guide
 
-This guide walks through the end-to-end engineering workflow supported by the AI QA Platform: from business requirement ingestion to self-healed test execution.
+This guide walks through the end-to-end engineering workflow supported by the AI QA Platform: from business requirement ingestion to human-approved locator repair and reruns.
 
 ---
 
@@ -66,7 +66,7 @@ Human-Approved Apply & Re-run Verification
 2. Watch real-time test outcomes and line-by-line terminal logs streamed via Server-Sent Events (SSE).
 3. View pass/fail status, test duration, and individual test verdicts.
 
-### 6. Failure Intelligence & Self-Healing
+### 6. Failure Intelligence & Human-Approved Repair
 1. If a test fails, navigate to **Failure Intelligence** page.
 2. Review categorized failure (`LOCATOR_CHANGED`, `TIMING_ISSUE`, `ASSERTION_FAILURE`).
 3. Click **AI Root Cause Diagnosis** for in-depth explanation and recommendations.

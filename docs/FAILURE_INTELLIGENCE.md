@@ -1,4 +1,4 @@
-# Failure Intelligence & Locator Self-Healing
+# Failure Intelligence & Locator Repair (Human-Approved)
 
 The Failure Intelligence system automates test failure taxonomy classification, sensitive data redaction, and human-in-the-loop locator healing.
 
@@ -11,7 +11,7 @@ Upon test failure, `FailureClassifier` analyzes pytest output and stack traces i
 | Category | Typical Signatures | Automatic Action |
 |---|---|---|
 | `LOCATOR_CHANGED` | `TimeoutError: waiting for locator(...)`, `Element not found` | Trigger `LocatorHealer` candidate proposal |
-| `TIMING_ISSUE` | `TimeoutError: locator.to_be_visible() exceeded 5000ms`, `race condition` | Suggest explicit state waiting / auto-retry |
+| `TIMING_ISSUE` | `TimeoutError: locator.to_be_visible() exceeded 5000ms`, `race condition` | Suggest explicit state waiting; retries require an explicit rerun policy |
 | `ASSERTION_FAILURE` | `AssertionError: assert actual == expected` | Flag business logic regression |
 | `ENVIRONMENT_ERROR` | `ConnectionRefusedError`, `502 Bad Gateway`, `Database error` | Flag infrastructure dependency outage |
 | `UNKNOWN` | Unmatched stack trace pattern | Route to generic root-cause diagnosis |

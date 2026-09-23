@@ -1,4 +1,4 @@
-# Autonomous Worker Node Architecture
+# Worker Node Architecture
 
 ## 1. Worker Lifecycle
 

@@ -1048,7 +1048,6 @@ version = "0.1.0"
 source = { editable = "apps/worker" }
 dependencies = [
     { name = "httpx" },
-    { name = "project-model" },
     { name = "pydantic" },
     { name = "qa-core" },
 ]
@@ -1056,7 +1055,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "project-model", editable = "packages/project-model" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "qa-core", editable = "packages/qa-core" },
 ]

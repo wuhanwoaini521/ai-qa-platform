@@ -32,7 +32,7 @@ Rather than relying purely on lines of code executed, the AI QA Platform evaluat
 
 ### API Endpoint
 ```http
-GET /api/quality/{project_id}/coverage
+GET /api/quality/coverage?project_id={project_id}
 ```
 
 **Response**:
@@ -64,7 +64,7 @@ The system continuously scans tests, executions, and defect history to compute a
 
 ### API Endpoint
 ```http
-GET /api/quality/{project_id}/risks
+GET /api/quality/risk-matrix?project_id={project_id}
 ```
 
 **Response**:
@@ -86,7 +86,7 @@ GET /api/quality/{project_id}/risks
       "impacted_nodeids": ["tests/test_login.py::test_login_flow"],
       "recommended_actions": [
         "Inspect locator stability and async wait conditions",
-        "Quarantine test or apply AI locator healing"
+        "Quarantine test or review a locator repair proposal"
       ]
     }
   ]
@@ -104,7 +104,7 @@ The impact analysis engine parses changed file paths (or diffs from git branches
 
 ### API Endpoint
 ```http
-POST /api/quality/{project_id}/impact-analysis
+POST /api/quality/impact-analysis   # project_id is in the JSON body
 ```
 
 **Request**:
@@ -151,5 +151,6 @@ Release gates guarantee that software is not marked `READY_TO_RELEASE` or `PASSE
 - `POST /api/releases` — Create release target
 - `GET /api/releases?project_id=...` — List project releases
 - `GET /api/releases/{id}` — Get release details
-- `PUT /api/releases/{id}` — Update release configuration
-- `POST /api/releases/{id}/gate` — Evaluate release gate criteria and generate gate report
+- `PATCH /api/releases/{id}` — Update release configuration
+- `POST /api/releases/{id}/gate-evaluate` — Evaluate release gate criteria and generate gate report
+- `DELETE /api/releases/{id}` — Delete a release target

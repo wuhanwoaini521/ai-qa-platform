@@ -29,7 +29,7 @@ Live Test Outcome & Multi-Artifact Capture (Traces / DOM / Allure)
       ↓
 Failure Classification & AI Root-Cause Diagnosis
       ↓
-Locator Repair Proposal & Human-Approved Diff Patching
+Locator Repair Proposal (AI) & Human-Approved Diff Patching
       ↓
 Quality Intelligence, Risk Radar & Release Gate Enforcement
       ↓
@@ -51,7 +51,7 @@ Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 - **Phase 9: Jira & TestRail Integration** — Bi-directional requirement sync, preview-first bug creation, and TestRail case result publisher.
 - **Phase 10: Quality Intelligence & Gating** — Multi-dimensional coverage score, quality risk matrix, git change impact analysis, and release gates.
 - **Phase 11: Enterprise RBAC, Security & Audit** — 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API keys, and immutable security audit trails.
-- **Phase 12: Distributed Execution Platform** — Multi-node worker registry with heartbeat liveness, browser capability matching, and S3 artifact storage.
+- **Phase 12: Distributed Execution Platform** — Multi-node worker registry with heartbeat liveness, browser capability matching, and local artifact storage (S3/MinIO object storage is reserved, not implemented).
 - **Phase 13: Production Deployment & Operations** — Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks, and zero-downtime health probes.
 
 ---
@@ -95,7 +95,7 @@ cp .env.example .env
 - **Web Application**: [http://localhost:3000](http://localhost:3000)
 - **API Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Prometheus Metrics**: [http://localhost:8000/api/metrics](http://localhost:8000/api/metrics)
-- **MinIO S3 Console**: [http://localhost:9001](http://localhost:9001)
+- **MinIO S3 Console**: [http://localhost:9001](http://localhost:9001) *(provisioned by the stack; the API does not use it yet)*
 
 ### 2. Local Development
 
@@ -136,8 +136,9 @@ mise exec -- pnpm install
 - [Quality Intelligence & Coverage](docs/QUALITY_INTELLIGENCE.md)
 - [Distributed Execution Architecture](docs/DISTRIBUTED_EXECUTION.md)
 - [Enterprise RBAC & Security](docs/RBAC.md)
-- [Jira & TestRail Integration](docs/JIRA_TESTRAIL.md)
-- [GitHub PR Engineering Workflow](docs/GITHUB_WORKFLOW.md)
+- [Jira & TestRail Integration](docs/JIRA_INTEGRATION.md)
+- [TestRail Integration](docs/TESTRAIL_INTEGRATION.md)
+- [GitHub PR Engineering Workflow](docs/GITHUB_INTEGRATION.md)
 - [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
-- [Failure Intelligence & Self-Healing](docs/FAILURE_INTELLIGENCE.md)
+- [Failure Intelligence & Human-Approved Repair](docs/FAILURE_INTELLIGENCE.md)
 - [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)

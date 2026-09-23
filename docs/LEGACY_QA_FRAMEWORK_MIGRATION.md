@@ -12,7 +12,7 @@ This document defines how mature concepts, abstractions, and tools from existing
 | **FailureArtifact & Classification** | `packages/qa-core/qa_core/contracts.py` → `FailureAnalyzer` | Phase 3 | Extract screenshot / trace extractor into pluggable `FailureContext` analyzer |
 | **AIProvider & TestAuthor** | `packages/qa-core/qa_core/adapters/ai_author.py` | Phase 3 | Wrap OpenAI / Gemini client behind `TestAuthor` protocol |
 | **LocatorHealing** | `packages/qa-core/qa_core/adapters/healer.py` | Phase 3 | Port DOM tree diffing and semantic selector recovery algorithms |
-| **BrowserExplorer** | `packages/qa-core/qa_core/adapters/explorer.py` | Phase 3 | Port autonomous browser agent loop into structured `ExplorationSession` |
+| **BrowserExplorer** | `packages/qa-core/qa_core/adapters/explorer.py` | Phase 3 | Port the bounded exploration loop into structured `ExplorationSession` |
 | **Test Execution & Pytest Runner** | `apps/worker` + `qa_core/runner.py` | Phase 4 | Subprocess / containerized Playwright runner with streaming JSON output |
 | **History & Flaky Analytics** | `apps/api/app/domain/analytics.py` | Phase 5 | Store test run metrics and flaky frequency scores in PostgreSQL |
 | **TestRail & GitHub CI Integration**| `packages/integrations` | Phase 6 | Turn webhook stubs into live bidirectional syncing adapters |

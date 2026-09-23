@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Distributed Execution Platform** decouples test suite triggers from local compute resources, dispatching test suites across autonomous worker nodes, containerized Docker runners, and ephemeral cloud sandboxes.
+The **Distributed Execution Platform** decouples test suite triggers from local compute resources, dispatching test suites across worker nodes, containerized Docker runners, and ephemeral cloud sandboxes.
 
 ```
       Test Run Trigger (API / Web / CI)
