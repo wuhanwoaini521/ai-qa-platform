@@ -1,0 +1,119 @@
+import React, { useEffect, useState } from 'react';
+import { Project, ProjectCreate } from './types';
+import { api } from './api/client';
+import { Navigation, NavTab } from './components/Navigation';
+import { Header } from './components/Header';
+import { DashboardPage } from './pages/DashboardPage';
+import { ProjectsPage } from './pages/ProjectsPage';
+import { RequirementsPage } from './pages/RequirementsPage';
+import { TestCasesPage } from './pages/TestCasesPage';
+import { AutomationStudioPage } from './pages/AutomationStudioPage';
+import { RunsPage } from './pages/RunsPage';
+import { FailuresPage } from './pages/FailuresPage';
+
+export const App: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
+
+  const fetchProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const data = await api.getProjects();
+      setProjects(data);
+      if (data.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(data[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load projects', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const handleCreateProject = async (data: ProjectCreate) => {
+    const created = await api.createProject(data);
+    setProjects([created, ...projects]);
+    setSelectedProjectId(created.id);
+  };
+
+  const pageTitles: Record<NavTab, string> = {
+    dashboard: 'Platform Overview',
+    projects: 'QA Projects',
+    requirements: 'Requirements & Design',
+    test_cases: 'Test Cases',
+    automation: 'Automation Studio',
+    runs: 'Execution Runs',
+    failures: 'Failure Intelligence',
+  };
+
+  return (
+    <div className="app-container">
+      {/* Sidebar Navigation */}
+      <Navigation currentTab={currentTab} onSelectTab={setCurrentTab} />
+
+      {/* Main Content Area */}
+      <div className="app-main">
+        {currentTab !== 'automation' && (
+          <Header
+            title={pageTitles[currentTab]}
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={setSelectedProjectId}
+          />
+        )}
+
+        <div className={`content-viewport ${currentTab === 'automation' ? 'full-bleed' : ''}`}>
+          {currentTab === 'dashboard' && (
+            <DashboardPage
+              onNavigate={setCurrentTab}
+              onOpenCreateProject={() => setCurrentTab('projects')}
+            />
+          )}
+
+          {currentTab === 'projects' && (
+            <ProjectsPage
+              projects={projects}
+              loading={loadingProjects}
+              onRefresh={fetchProjects}
+              onCreateProject={handleCreateProject}
+              onSelectProject={setSelectedProjectId}
+              onNavigate={setCurrentTab}
+            />
+          )}
+
+          {currentTab === 'requirements' && (
+            <RequirementsPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+            />
+          )}
+
+          {currentTab === 'test_cases' && (
+            <TestCasesPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+            />
+          )}
+
+          {currentTab === 'automation' && (
+            <AutomationStudioPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onSelectProject={setSelectedProjectId}
+            />
+          )}
+
+          {currentTab === 'runs' && <RunsPage />}
+
+          {currentTab === 'failures' && <FailuresPage />}
+        </div>
+      </div>
+    </div>
+  );
+};
