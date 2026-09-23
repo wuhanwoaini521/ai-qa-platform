@@ -60,13 +60,30 @@
   },
   "assistant": {
     "title": "QA 助手",
+    "subtitle": "解释 · 起草 · 诊断",
     "groundingActive": "已启用知识库关联",
+    "quickActionsLabel": "快捷操作",
+    "welcomeTitle": "就当前工作区向我提问",
+    "welcomeHintLine1": "让我解释当前打开的文件、依据用例草拟测试，或诊断失败的运行。",
+    "welcomeHintLine2": "定位器不稳定？我可以给出修复建议。",
+    "roleYou": "你",
+    "send": "发送消息",
+    "composerHint": "Enter 发送 · Shift+Enter 换行",
     "explainCode": "解释代码",
     "generateTest": "生成测试",
     "refactorPo": "重构为 PO",
     "diagnose": "诊断",
     "insertCode": "插入代码到编辑器",
     "reasoning": "QA 助手正在推理...",
-    "placeholder": "向 QA 助手提问..."
+    "placeholder": "向 QA 助手提问...",
+    "welcomeImageNote": "有截图也可以直接贴上来，我会结合失败输出一起分析。"
+  },
+  "statusBar": {
+    "ready": "就绪",
+    "running": "正在执行测试",
+    "saving": "正在保存",
+    "validating": "正在校验工作区",
+    "issues": "{{problemCount}} 个问题",
+    "engine": "Production QA 引擎"
   }
 }

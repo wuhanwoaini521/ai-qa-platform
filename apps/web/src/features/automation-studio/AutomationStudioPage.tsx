@@ -20,6 +20,7 @@ import { TestExplorer } from './components/TestExplorer';
 import { SourceControlPanel } from './components/SourceControlPanel';
 import { PullRequestPanel } from './components/PullRequestPanel';
 import { EditorTabs } from './components/EditorTabs';
+import { WorkbenchStatusBar } from './components/WorkbenchStatusBar';
 import { ProblemsPanel } from './components/ProblemsPanel';
 import { RunOutputPanel } from './components/RunOutputPanel';
 import { QAAssistantPanel } from './components/QAAssistantPanel';
@@ -369,9 +370,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         </div>
       </div>
 
-      {/* Center Panel: Multi-Tab Monaco Editor or Diff View */}
+      {/* Center Panel: workbench (tabs, tools, editor, problems, status bar) */}
       <div className="studio-editor-pane">
-        {/* Tab Bar */}
         <div className="studio-editor-tabs">
           <EditorTabs
             tabs={editor.tabs}
@@ -381,43 +381,41 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             onCloseTab={editor.closeTab}
           />
 
-          {/* Action Buttons in Editor Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="studio-toolbar-group no-chrome">
             {editor.activeTab && (
-              <button
-                className="btn btn-secondary btn-sm"
-                disabled={!editor.activeTab.isDirty || editor.saving}
-                onClick={editor.saveActiveTab}
-                title={t('editor.saveCurrentFile')}
-              >
-                <Save size={13} /> {editor.saving ? t('editor.saving') : t('common:save')}
+              <button className="studio-tool" disabled={!editor.activeTab.isDirty || editor.saving} onClick={editor.saveActiveTab} title={t('editor.saveCurrentFile')}>
+                <Save size={14} />
+                {editor.saving ? t('editor.saving') : t('common:save')}
               </button>
             )}
-
             <button
-              className="btn btn-secondary btn-sm"
+              className="studio-tool"
               onClick={problems.validateWorkspace}
               disabled={problems.validating}
               title={t('editor.validateTooltip')}
             >
-              <CheckCircle2 size={13} color={problems.validationIssues.length === 0 ? '#16a34a' : '#ef4444'} />
-              {problems.validating ? t('editor.checking') : t('editor.problems', { problemCount: problems.validationIssues.length })}
+              <CheckCircle2 size={14} color={problems.validationIssues.length === 0 ? 'var(--ui-mint-strong)' : 'var(--ui-rose)'} />
+              {t('editor.problemsShort')}
+              <span className={`studio-tool-count ${problems.validationIssues.length > 0 ? 'has-issues' : ''}`}>
+                {problems.validationIssues.length}
+              </span>
             </button>
-
             {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
               <button
-                className="btn btn-primary btn-sm"
+                className="studio-tool is-primary"
                 disabled={run.runningTest}
                 onClick={() => run.runExecution(editor.activeTab?.path)}
                 title={t('editor.runTestTooltip')}
               >
-                <Play size={13} /> {run.runningTest ? t('editor.running') : t('editor.runTest')}
+                <Play size={14} />
+                {run.runningTest ? t('editor.running') : t('editor.runTest')}
               </button>
             )}
           </div>
         </div>
 
         {/* Editor or Diff View Area */}
+        <div className="studio-editor-surface">
         <MonacoEditorPane
           activeTab={editor.activeTab}
           loadingFile={workspace.loadingFile}
@@ -427,8 +425,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           onChange={editor.updateContent}
         />
 
+        </div>
+
         {/* Collapsible Bottom Problems Panel */}
-        <div style={{ borderTop: '1px solid var(--border-color)', background: '#ffffff' }}>
+        <div style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>
           <ProblemsPanel
             issues={problems.validationIssues}
             expanded={problems.showProblemsPanel}
@@ -439,6 +439,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           {/* Quick Execution Log notification bar */}
           <RunOutputPanel lastRunResult={run.lastRunResult} onNavigateToRuns={onNavigateToRuns} />
         </div>
+
+        <WorkbenchStatusBar
+          branch={git.currentBranch}
+          problemCount={problems.validationIssues.length}
+          validating={problems.validating}
+          runningTest={run.runningTest}
+          saving={editor.saving}
+          activeFileName={editor.activeTab?.path ?? null}
+          language={editor.activeTab ? (editor.activeTab.path.split('.').pop() ?? null) : null}
+        />
       </div>
 
       {/* Right Panel: Interactive QA Assistant Sidecar */}

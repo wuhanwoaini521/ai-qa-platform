@@ -43,7 +43,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   };
 
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
       {showDiffView ? (
         <div
           style={{

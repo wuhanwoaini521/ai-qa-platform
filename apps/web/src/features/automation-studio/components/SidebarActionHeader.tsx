@@ -15,6 +15,7 @@ interface SidebarActionHeaderProps {
   onRefreshAll: () => void;
 }
 
+/** Workspace card title row: what the card currently shows, plus its context actions. */
 export const SidebarActionHeader: React.FC<SidebarActionHeaderProps> = ({
   sidebarTab,
   currentBranch,
@@ -36,20 +37,20 @@ export const SidebarActionHeader: React.FC<SidebarActionHeaderProps> = ({
         {sidebarTab === 'pr' &&
           (activePRNumber ? t('sidebarHeader.prWithNumber', { number: activePRNumber }) : t('sidebarHeader.pullRequest'))}
       </span>
-      <div style={{ display: 'flex', gap: '4px' }}>
+      <div style={{ display: 'flex', gap: '2px' }}>
         {sidebarTab === 'files' && (
           <>
             <button className="icon-btn" title={t('sidebarHeader.newFile')} onClick={onNewFile}>
-              <FilePlus size={13} />
+              <FilePlus size={14} />
             </button>
             <button className="icon-btn" title={t('sidebarHeader.newFolder')} onClick={onNewFolder}>
-              <FolderPlus size={13} />
+              <FolderPlus size={14} />
             </button>
           </>
         )}
         {sidebarTab === 'git' && (
           <button className="icon-btn" title={t('sidebarHeader.newBranch')} onClick={onNewBranch}>
-            <Plus size={13} />
+            <Plus size={14} />
           </button>
         )}
         {sidebarTab === 'pr' && activePRNumber !== null && (
@@ -59,11 +60,11 @@ export const SidebarActionHeader: React.FC<SidebarActionHeaderProps> = ({
             disabled={loadingChecks}
             onClick={onRefreshChecks}
           >
-            <RefreshCw size={13} className={loadingChecks ? 'spin' : ''} />
+            <RefreshCw size={14} className={loadingChecks ? 'spin' : ''} />
           </button>
         )}
         <button className="icon-btn" title={t('common:refresh')} onClick={onRefreshAll}>
-          <RefreshCw size={13} />
+          <RefreshCw size={14} />
         </button>
       </div>
     </div>

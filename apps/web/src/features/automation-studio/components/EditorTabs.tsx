@@ -11,6 +11,7 @@ interface EditorTabsProps {
   onCloseTab: (path: string, e?: React.MouseEvent) => void;
 }
 
+/** Rounded tab chips; a square pixel dot marks an unsaved buffer. */
 export const EditorTabs: React.FC<EditorTabsProps> = ({
   tabs,
   activeTabPath,
@@ -26,35 +27,19 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
         return (
           <div
             key={tab.path}
-            className={`studio-tab ${isActive ? 'active' : ''}`}
-            style={{
-              background: isActive ? '#ffffff' : '#f1f5f9',
-              borderBottom: isActive ? '2px solid var(--primary)' : 'none',
-              fontWeight: isActive ? 600 : 400,
-              cursor: 'pointer',
-            }}
+            className={`studio-tab ${isActive ? 'is-active' : ''}`}
             onClick={() => onSelectTab(tab.path)}
           >
-            <span>{tab.name}</span>
-            {tab.isDirty && <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span>}
-            <button
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--text-muted)',
-                display: 'flex',
-              }}
-              onClick={(e) => onCloseTab(tab.path, e)}
-            >
+            {tab.isDirty && <span className="tab-dot" aria-hidden="true" />}
+            <span className="studio-tab-name">{tab.name}</span>
+            <button className="studio-tab-close" onClick={(e) => onCloseTab(tab.path, e)}>
               <X size={12} />
             </button>
           </div>
         );
       })}
       {tabs.length === 0 && !showDiffView && (
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('tabs.noOpenTabs')}</span>
+        <span style={{ fontSize: '12px', color: 'var(--ui-ink-muted)' }}>{t('tabs.noOpenTabs')}</span>
       )}
     </div>
   );

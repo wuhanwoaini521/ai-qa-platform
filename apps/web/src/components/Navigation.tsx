@@ -1,7 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import i18n from '../i18n';
 import {
   LayoutDashboard,
   FolderGit2,
@@ -16,6 +15,7 @@ import {
   Server,
   Settings,
 } from 'lucide-react';
+import i18n from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
 
 export type NavTab =
@@ -40,6 +40,7 @@ interface NavItem {
   end?: boolean;
 }
 
+/** Floating navigation dock: compact destinations, the active one marked with a pixel accent. */
 export const Navigation: React.FC = () => {
   const { t } = useTranslation('nav');
   const { selectedProjectId } = useProjectScope();
@@ -73,9 +74,8 @@ export const Navigation: React.FC = () => {
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
-        <div className="sidebar-logo-icon">QA</div>
-        <div>
-          <div className="sidebar-brand-title">{t('common:appName')}</div>
+        <div className="sidebar-logo-icon" title={t('common:appName')}>
+          QA
         </div>
         <span className="sidebar-brand-badge">v0.3</span>
       </div>
@@ -88,9 +88,10 @@ export const Navigation: React.FC = () => {
               key={item.id}
               to={item.to}
               end={item.end}
+              title={t(item.labelKey)}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <Icon size={16} />
+              <Icon size={17} />
               <span>{t(item.labelKey)}</span>
             </NavLink>
           );
@@ -98,8 +99,7 @@ export const Navigation: React.FC = () => {
       </nav>
 
       <div className="sidebar-footer">
-        <span>Engine: Production QA</span>
-        <span>{i18n.resolvedLanguage === 'zh-CN' ? '中文' : 'EN'}</span>
+        <span className="lang-badge">{i18n.resolvedLanguage === 'zh-CN' ? '中文' : 'EN'}</span>
       </div>
     </aside>
   );

@@ -22,13 +22,7 @@ export const useQAAssistant = ({
   onInsertFallback,
 }: UseQAAssistantOptions) => {
   // QA Assistant Sidecar State
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
-    {
-      role: 'assistant',
-      text: 'Hello! I am your AI QA Assistant. I can help you write Playwright & Pytest tests, explain code, diagnose test failures, or suggest locator refactorings.',
-      actions: ['Explain Code', 'Generate Test', 'Suggest Refactor', 'Diagnose Errors'],
-    },
-  ]);
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantInput, setAssistantInput] = useState<string>('');
   const [assistantLoading, setAssistantLoading] = useState<boolean>(false);
 

@@ -60,13 +60,30 @@
   },
   "assistant": {
     "title": "QA Assistant",
+    "subtitle": "Explain · draft · diagnose",
     "groundingActive": "Grounding Active",
+    "quickActionsLabel": "Quick actions",
+    "welcomeTitle": "Ask me about this workspace",
+    "welcomeHintLine1": "Explain the open file, draft a test from a case, or diagnose a failing run.",
+    "welcomeHintLine2": "Dealing with a flaky locator? I can propose a repair.",
+    "roleYou": "You",
+    "send": "Send message",
+    "composerHint": "Enter to send · Shift+Enter for a new line",
     "explainCode": "Explain Code",
     "generateTest": "Generate Test",
     "refactorPo": "Refactor PO",
     "diagnose": "Diagnose",
     "insertCode": "Insert Code into Editor",
     "reasoning": "QA Assistant is reasoning...",
-    "placeholder": "Ask QA assistant..."
+    "placeholder": "Ask QA assistant...",
+    "welcomeImageNote": "Prefer a screenshot? Paste the failure output and I will read it."
+  },
+  "statusBar": {
+    "ready": "Ready",
+    "running": "Running tests",
+    "saving": "Saving",
+    "validating": "Checking workspace",
+    "issues": "{{problemCount}} problem(s)",
+    "engine": "Production QA"
   }
 }

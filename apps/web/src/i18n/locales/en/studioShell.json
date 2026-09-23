@@ -16,7 +16,8 @@
     "noUncommittedChanges": "No uncommitted changes detected in working tree.",
     "loadingFile": "Loading file content...",
     "emptySelectFile": "Select a file from the explorer or press",
-    "emptyHint": "Write Playwright test suites, Page Objects, and test fixtures."
+    "emptyHint": "Write Playwright test suites, Page Objects, and test fixtures.",
+    "problemsShort": "Problems"
   },
   "tabs": {
     "noOpenTabs": "No open tabs (Press Cmd+P to open file)"
@@ -25,7 +26,8 @@
     "newFileInside": "New File Inside",
     "rename": "Rename",
     "uninitialized": "Workspace is uninitialized.",
-    "initializeWorkspace": "Initialize Workspace"
+    "initializeWorkspace": "Initialize Workspace",
+    "pythonTestBadge": "PY"
   },
   "quickOpen": {
     "placeholder": "Search files by name... (Esc to close)",
@@ -66,7 +68,11 @@
     "files": "Files",
     "tests": "Tests ({{testCount}})",
     "git": "Git ({{changeCount}})",
-    "pr": "PR"
+    "pr": "PR",
+    "filesShort": "Files",
+    "testsShort": "Tests",
+    "gitShort": "Git",
+    "prShort": "PR"
   },
   "sidebarHeader": {
     "workspaceFiles": "Workspace Files",

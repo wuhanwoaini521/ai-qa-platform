@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Bot, Check, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, Send, Sparkles, User } from 'lucide-react';
 import { AssistantActionType, AssistantMessage } from '../types';
 
 interface QAAssistantPanelProps {
@@ -12,6 +12,83 @@ interface QAAssistantPanelProps {
   onInsertSnippet: (snippet: string) => void;
 }
 
+interface MessageSegment {
+  type: 'text' | 'code';
+  value: string;
+}
+
+/** ```lang\n … ``` — an unterminated fence runs to the end of the reply. */
+const CODE_FENCE = /```[^\n]*\n?([\s\S]*?)(?:```|$)/g;
+
+/** Split assistant copy so generated snippets render in their own block. */
+const splitMessage = (text: string): MessageSegment[] => {
+  const segments: MessageSegment[] = [];
+  let cursor = 0;
+
+  CODE_FENCE.lastIndex = 0;
+  for (let match = CODE_FENCE.exec(text); match; match = CODE_FENCE.exec(text)) {
+    const prose = text.slice(cursor, match.index).trim();
+    if (prose) segments.push({ type: 'text', value: prose });
+
+    const code = match[1].replace(/^\n+/, '').replace(/\s+$/, '');
+    if (code) segments.push({ type: 'code', value: code });
+
+    cursor = match.index + match[0].length;
+  }
+
+  const tail = text.slice(cursor).trim();
+  if (tail) segments.push({ type: 'text', value: tail });
+
+  return segments.length > 0 ? segments : [{ type: 'text', value: text }];
+};
+
+/** Square dot: the only pixel accent used inside the stream. */
+const pixelDot = (color: string, offset = false): React.CSSProperties => ({
+  width: '6px',
+  height: '6px',
+  borderRadius: '2px',
+  background: color,
+  flexShrink: 0,
+  boxShadow: offset ? 'var(--ui-shadow-pixel)' : undefined,
+});
+
+const QUICK_ACTIONS: ReadonlyArray<{
+  labelKey: string;
+  prompt: string;
+  actionType: AssistantActionType;
+  color: string;
+  Icon: typeof Sparkles;
+}> = [
+  {
+    labelKey: 'assistant.explainCode',
+    prompt: 'Explain the currently open file and test structure.',
+    actionType: 'explain',
+    color: '#2563eb',
+    Icon: Sparkles,
+  },
+  {
+    labelKey: 'assistant.generateTest',
+    prompt: 'Generate a Playwright test scaffold following project standards.',
+    actionType: 'generate',
+    color: '#16a34a',
+    Icon: Sparkles,
+  },
+  {
+    labelKey: 'assistant.refactorPo',
+    prompt: 'Suggest refactoring to Page Object pattern.',
+    actionType: 'refactor',
+    color: '#d97706',
+    Icon: Sparkles,
+  },
+  {
+    labelKey: 'assistant.diagnose',
+    prompt: 'Diagnose syntax and locator stability issues.',
+    actionType: 'diagnose',
+    color: '#9333ea',
+    Icon: AlertTriangle,
+  },
+];
+
 export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
   messages,
   input,
@@ -21,131 +98,171 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
   onInsertSnippet,
 }) => {
   const { t } = useTranslation('studioPanels');
+  const streamRef = useRef<HTMLDivElement>(null);
+
+  // Keep the newest turn in view; only the stream scrolls.
+  useEffect(() => {
+    const stream = streamRef.current;
+    if (stream) stream.scrollTop = stream.scrollHeight;
+  }, [messages.length, loading]);
+
+  const renderedMessages = useMemo(
+    () =>
+      messages.map((msg) => {
+        const segments = msg.role === 'assistant' ? splitMessage(msg.text) : [];
+        const fencedCode = segments.filter((segment) => segment.type === 'code').map((segment) => segment.value);
+        // A structured snippet the backend returned alongside the reply.
+        const trailingSnippet =
+          msg.codeSnippet && !fencedCode.some((code) => code.trim() === msg.codeSnippet?.trim())
+            ? msg.codeSnippet
+            : null;
+        return { msg, segments, trailingSnippet };
+      }),
+    [messages],
+  );
+
+  const canSend = Boolean(input.trim()) && !loading;
 
   return (
     <div className="studio-assistant-pane">
-      <div className="studio-sidebar-header">
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Bot size={14} color="#9333ea" /> {t('assistant.title')}
+      <header className="ai-header">
+        <span className="ai-mark" aria-hidden="true">
+          <Sparkles size={15} />
         </span>
-        <span className="badge badge-ready" style={{ fontSize: '10px' }}>
+        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <span className="ai-title">{t('assistant.title')}</span>
+          <span className="ai-subtitle">{t('assistant.subtitle')}</span>
+        </span>
+        <span className="ai-status-pill">
+          <span aria-hidden="true" style={pixelDot('var(--ui-mint-strong)')} />
           {t('assistant.groundingActive')}
         </span>
-      </div>
+      </header>
 
-      {/* Assistant Quick Actions */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-        <button
-          className="btn btn-secondary btn-sm"
-          style={{ fontSize: '11px', padding: '4px 6px', justifyContent: 'center' }}
-          disabled={loading}
-          onClick={() => onSend('Explain the currently open file and test structure.', 'explain')}
-        >
-          <Sparkles size={12} color="#2563eb" /> {t('assistant.explainCode')}
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          style={{ fontSize: '11px', padding: '4px 6px', justifyContent: 'center' }}
-          disabled={loading}
-          onClick={() => onSend('Generate a Playwright test scaffold following project standards.', 'generate')}
-        >
-          <Sparkles size={12} color="#16a34a" /> {t('assistant.generateTest')}
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          style={{ fontSize: '11px', padding: '4px 6px', justifyContent: 'center' }}
-          disabled={loading}
-          onClick={() => onSend('Suggest refactoring to Page Object pattern.', 'refactor')}
-        >
-          <Sparkles size={12} color="#d97706" /> {t('assistant.refactorPo')}
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          style={{ fontSize: '11px', padding: '4px 6px', justifyContent: 'center' }}
-          disabled={loading}
-          onClick={() => onSend('Diagnose syntax and locator stability issues.', 'diagnose')}
-        >
-          <AlertTriangle size={12} color="#9333ea" /> {t('assistant.diagnose')}
-        </button>
-      </div>
-
-      {/* Message Stream */}
-      <div style={{ padding: '12px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            style={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '90%',
-              background: msg.role === 'user' ? '#2563eb' : '#f8fafc',
-              color: msg.role === 'user' ? '#ffffff' : '#1e293b',
-              padding: '8px 12px',
-              borderRadius: '6px',
-              border: msg.role === 'user' ? 'none' : '1px solid var(--border-color)',
-              fontSize: '12px',
-            }}
+      <div className="ai-chips" role="group" aria-label={t('assistant.quickActionsLabel')}>
+        {QUICK_ACTIONS.map(({ labelKey, prompt, actionType, color, Icon }) => (
+          <button
+            key={actionType}
+            type="button"
+            className="ai-chip"
+            disabled={loading}
+            onClick={() => onSend(prompt, actionType)}
           >
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{msg.text}</div>
-            {msg.codeSnippet && (
-              <div style={{ marginTop: '8px' }}>
-                <div
-                  style={{
-                    background: '#0f172a',
-                    color: '#f8fafc',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px',
-                    overflowX: 'auto',
-                    maxHeight: '180px',
-                  }}
-                >
-                  <pre>{msg.codeSnippet}</pre>
-                </div>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginTop: '6px', width: '100%', fontSize: '11px', justifyContent: 'center' }}
-                  onClick={() => onInsertSnippet(msg.codeSnippet!)}
-                >
-                  <Check size={12} /> {t('assistant.insertCode')}
-                </button>
-              </div>
-            )}
-          </div>
+            <Icon size={12} color={color} />
+            {t(labelKey)}
+          </button>
         ))}
+      </div>
+
+      <div className="ai-stream" ref={streamRef}>
+        {messages.length === 0 ? (
+          <div className="ai-welcome">
+            <div className="ai-welcome-mark" aria-hidden="true">
+              <Sparkles size={20} />
+            </div>
+            <div className="ai-welcome-title">{t('assistant.welcomeTitle')}</div>
+            <p className="ai-welcome-hint">{t('assistant.welcomeHintLine1')}</p>
+            <p className="ai-welcome-hint">{t('assistant.welcomeHintLine2')}</p>
+            <div
+              aria-hidden="true"
+              style={{ display: 'flex', gap: '5px', justifyContent: 'center', marginTop: 'var(--sp-4)' }}
+            >
+              <span style={{ ...pixelDot('var(--ui-primary)'), opacity: 0.35 }} />
+              <span style={{ ...pixelDot('var(--ui-primary)'), opacity: 0.6 }} />
+              <span style={pixelDot('var(--ui-primary)')} />
+            </div>
+          </div>
+        ) : (
+          renderedMessages.map(({ msg, segments, trailingSnippet }, index) => (
+            <div
+              key={index}
+              className={`ai-message${msg.role === 'user' ? ' is-user' : ''}`}
+              style={msg.role === 'user' ? { alignSelf: 'flex-end', maxWidth: '92%' } : undefined}
+            >
+              <div className="ai-message-role">
+                {msg.role === 'user' ? <User size={11} /> : <Sparkles size={11} />}
+                {msg.role === 'user' ? t('assistant.roleYou') : t('assistant.title')}
+              </div>
+
+              {msg.role === 'user'
+                ? msg.text
+                : segments.map((segment, segmentIndex) =>
+                    segment.type === 'code' ? (
+                      <React.Fragment key={segmentIndex}>
+                        <pre className="ai-code">{segment.value}</pre>
+                        <button
+                          type="button"
+                          className="ai-snippet-action"
+                          onClick={() => onInsertSnippet(segment.value)}
+                        >
+                          <Check size={12} /> {t('assistant.insertCode')}
+                        </button>
+                      </React.Fragment>
+                    ) : (
+                      <div key={segmentIndex}>{segment.value}</div>
+                    ),
+                  )}
+
+              {trailingSnippet && (
+                <>
+                  <pre className="ai-code">{trailingSnippet}</pre>
+                  <button
+                    type="button"
+                    className="ai-snippet-action"
+                    onClick={() => onInsertSnippet(trailingSnippet)}
+                  >
+                    <Check size={12} /> {t('assistant.insertCode')}
+                  </button>
+                </>
+              )}
+            </div>
+          ))
+        )}
+
         {loading && (
-          <div style={{ alignSelf: 'flex-start', fontSize: '12px', color: 'var(--text-muted)', padding: '6px' }}>
+          <div className="ai-thinking" style={{ alignSelf: 'flex-start' }}>
+            <span aria-hidden="true" style={pixelDot('var(--ui-primary)', true)} />
             {t('assistant.reasoning')}
           </div>
         )}
       </div>
 
-      {/* Assistant Input Form */}
-      <div style={{ padding: '10px', borderTop: '1px solid var(--border-color)', background: '#ffffff' }}>
+      <div className="ai-composer">
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSend();
+          className="ai-composer-box"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSend) onSend();
           }}
-          style={{ display: 'flex', gap: '6px' }}
         >
-          <input
-            type="text"
-            className="form-control"
-            style={{ fontSize: '12px', padding: '6px 8px' }}
+          <textarea
+            className="ai-input"
+            rows={Math.min(4, Math.max(1, input.split('\n').length))}
             placeholder={t('assistant.placeholder')}
+            aria-label={t('assistant.placeholder')}
             value={input}
-            onChange={(e) => onInputChange(e.target.value)}
             disabled={loading}
+            onChange={(event) => onInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (canSend) onSend();
+              }
+            }}
           />
           <button
             type="submit"
-            className="btn btn-primary btn-sm"
-            disabled={!input.trim() || loading}
+            className="ai-send"
+            disabled={!canSend}
+            aria-label={t('assistant.send')}
+            title={t('assistant.send')}
           >
-            <Send size={13} />
+            <Send size={14} />
           </button>
         </form>
+        <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--ui-ink-muted)' }}>
+          {t('assistant.composerHint')}
+        </div>
       </div>
     </div>
   );

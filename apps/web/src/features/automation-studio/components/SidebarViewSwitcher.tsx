@@ -10,20 +10,7 @@ interface SidebarViewSwitcherProps {
   onSelectTab: (tab: SidebarTab) => void;
 }
 
-const tabButtonStyle = (active: boolean): React.CSSProperties => ({
-  flex: 1,
-  padding: '8px 4px',
-  fontSize: '10px',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  background: active ? '#ffffff' : 'transparent',
-  border: 'none',
-  borderBottom: active ? '2px solid var(--primary)' : 'none',
-  color: active ? 'var(--primary)' : 'var(--text-muted)',
-  cursor: 'pointer',
-});
-
+/** Segmented control: one rounded track, the active view is a raised pill with a pixel dot. */
 export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   sidebarTab,
   testCount,
@@ -32,20 +19,38 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   onSelectTab,
 }) => {
   const { t } = useTranslation('studioShell');
+
+  const views: { id: SidebarTab; label: string; count?: number }[] = [
+    { id: 'files', label: t('sidebarView.files') },
+    { id: 'tests', label: t('sidebarView.testsShort'), count: testCount },
+    { id: 'git', label: t('sidebarView.gitShort'), count: changeCount },
+    { id: 'pr', label: t('sidebarView.prShort') },
+  ];
+
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
-      <button style={tabButtonStyle(sidebarTab === 'files')} onClick={() => onSelectTab('files')}>
-        {t('sidebarView.files')}
-      </button>
-      <button style={tabButtonStyle(sidebarTab === 'tests')} onClick={() => onSelectTab('tests')}>
-        {t('sidebarView.tests', { testCount })}
-      </button>
-      <button style={tabButtonStyle(sidebarTab === 'git')} onClick={() => onSelectTab('git')}>
-        {t('sidebarView.git', { changeCount })}
-      </button>
-      <button style={tabButtonStyle(sidebarTab === 'pr')} onClick={() => onSelectTab('pr')}>
-        {t('sidebarView.pr')} {activePRNumber ? `#${activePRNumber}` : ''}
-      </button>
+    <div className="studio-view-switcher" role="tablist">
+      {views.map((view) => (
+        <button
+          key={view.id}
+          type="button"
+          role="tab"
+          aria-selected={sidebarTab === view.id}
+          className={sidebarTab === view.id ? 'is-active' : ''}
+          title={
+            view.id === 'git'
+              ? t('sidebarView.git', { changeCount })
+              : view.id === 'tests'
+                ? t('sidebarView.tests', { testCount })
+                : view.id === 'pr' && activePRNumber
+                  ? `PR #${activePRNumber}`
+                  : view.label
+          }
+          onClick={() => onSelectTab(view.id)}
+        >
+          {view.label}
+          {typeof view.count === 'number' && view.count > 0 && <span className="view-count">{view.count}</span>}
+        </button>
+      ))}
     </div>
   );
 };
