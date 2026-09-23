@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import ast
 import asyncio
+import os
+import shutil
 from pathlib import Path
 
 import aiofiles
 import aiofiles.os
 from project_model.models import (
+    CollectedTest,
+    CollectionReport,
     FileNode,
     FileNodeType,
     GitChangedFile,
     GitDiffResult,
+    ValidationIssue,
+    ValidationReport,
+    ValidationSeverity,
 )
 
 from app.settings import settings
@@ -94,11 +102,24 @@ def test_login_flow(page: Page):
     page.goto("/login")
     login_page.login("qa_user", "secure_password")
     expect(page).to_have_url(r".*/dashboard")
+
+def test_login_invalid_password(page: Page):
+    login_page = LoginPage(page)
+    page.goto("/login")
+    login_page.login("qa_user", "wrong_password")
+    expect(page.locator(".error-banner")).to_be_visible()
+"""
+        sample_knowledge = """# Knowledge Base: Authentication & Login
+## Common Locators
+- `username`: `input[name="username"]` or `[data-testid="login-username"]`
+- `password`: `input[name="password"]` or `[data-testid="login-password"]`
+- `submit`: `button[type="submit"]` or `[data-testid="login-submit"]`
 """
         await self.write_file(workspace_id, "README.md", readme_content)
         await self.write_file(workspace_id, ".gitignore", gitignore_content)
         await self.write_file(workspace_id, "pages/login_page.py", sample_page)
         await self.write_file(workspace_id, "tests/test_login.py", sample_test)
+        await self.write_file(workspace_id, "knowledge/login_knowledge.md", sample_knowledge)
 
         # Initialize local git repository in workspace for diff tracking
         proc = await asyncio.create_subprocess_exec(
@@ -152,7 +173,7 @@ def test_login_flow(page: Page):
                 return []
 
             for entry in entries:
-                if entry.name == ".git":
+                if entry.name in (".git", "__pycache__", ".pytest_cache", ".ruff_cache"):
                     continue
                 node_rel = f"{rel}/{entry.name}" if rel else entry.name
                 if entry.is_dir():
@@ -190,6 +211,80 @@ def test_login_flow(page: Page):
         target.parent.mkdir(parents=True, exist_ok=True)
         async with aiofiles.open(target, "w", encoding="utf-8") as f:
             await f.write(content)
+
+    async def create_file_or_dir(
+        self, workspace_id: str, relative_path: str, is_directory: bool = False, content: str = ""
+    ) -> str:
+        target = self._resolve_safe_file_path(workspace_id, relative_path)
+        if target.exists():
+            raise FileExistsError(f"Path already exists: {relative_path}")
+
+        if is_directory:
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            async with aiofiles.open(target, "w", encoding="utf-8") as f:
+                await f.write(content)
+        return relative_path
+
+    async def rename_path(self, workspace_id: str, old_path: str, new_path: str) -> None:
+        old_target = self._resolve_safe_file_path(workspace_id, old_path)
+        new_target = self._resolve_safe_file_path(workspace_id, new_path)
+
+        if not old_target.exists():
+            raise FileNotFoundError(f"Source path not found: {old_path}")
+        if new_target.exists():
+            raise FileExistsError(f"Target path already exists: {new_path}")
+
+        new_target.parent.mkdir(parents=True, exist_ok=True)
+        old_target.rename(new_target)
+
+    async def delete_path(self, workspace_id: str, relative_path: str) -> None:
+        target = self._resolve_safe_file_path(workspace_id, relative_path)
+        if not target.exists():
+            raise FileNotFoundError(f"Path not found: {relative_path}")
+
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if target == ws_dir:
+            raise SecurityException("Cannot delete entire root workspace directory.")
+
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+
+    async def commit_changes(self, workspace_id: str, message: str) -> str:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            raise RuntimeError("Workspace is not a Git repository.")
+
+        proc_add = await asyncio.create_subprocess_exec(
+            "git",
+            "add",
+            ".",
+            cwd=str(ws_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc_add.communicate()
+
+        proc_commit = await asyncio.create_subprocess_exec(
+            "git",
+            "-c",
+            "user.name=AI QA Platform",
+            "-c",
+            "user.email=agent@ai-qa.local",
+            "commit",
+            "-m",
+            message,
+            cwd=str(ws_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc_commit.communicate()
+        if proc_commit.returncode != 0:
+            raise RuntimeError(f"Commit failed: {stderr.decode() or stdout.decode()}")
+        return stdout.decode()
 
     async def get_git_status(self, workspace_id: str) -> list[GitChangedFile]:
         ws_dir = self.get_workspace_dir(workspace_id)
@@ -232,7 +327,6 @@ def test_login_flow(page: Page):
         stdout, _ = await proc.communicate()
         diff_text = stdout.decode()
         if not diff_text:
-            # Check unstaged diff
             proc2 = await asyncio.create_subprocess_exec(
                 "git",
                 "diff",
@@ -244,3 +338,134 @@ def test_login_flow(page: Page):
             diff_text = stdout2.decode()
 
         return GitDiffResult(diff=diff_text, changed_files=changed_files)
+
+    async def validate_workspace(self, workspace_id: str) -> ValidationReport:
+        """Checks for Python syntax errors and basic lint diagnostics."""
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not ws_dir.exists():
+            return ValidationReport(workspace_id=workspace_id, valid=False, issues=[])
+
+        issues: list[ValidationIssue] = []
+
+        # 1. AST Syntax validation on all .py files
+        for root, _, files in os.walk(ws_dir):
+            for file in files:
+                if file.endswith(".py"):
+                    full_path = Path(root) / file
+                    rel_path = str(full_path.relative_to(ws_dir))
+                    try:
+                        content = full_path.read_text(encoding="utf-8")
+                        ast.parse(content, filename=rel_path)
+                    except SyntaxError as e:
+                        issues.append(
+                            ValidationIssue(
+                                file=rel_path,
+                                line=e.lineno or 1,
+                                column=e.offset or 1,
+                                severity=ValidationSeverity.ERROR,
+                                code="E999",
+                                message=f"SyntaxError: {e.msg}",
+                                source="syntax",
+                            )
+                        )
+                    except Exception as ex:
+                        issues.append(
+                            ValidationIssue(
+                                file=rel_path,
+                                line=1,
+                                column=1,
+                                severity=ValidationSeverity.ERROR,
+                                code="ERR",
+                                message=str(ex),
+                                source="syntax",
+                            )
+                        )
+
+        # 2. Pytest collection check to capture test discovery issues
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "pytest",
+                "--collect-only",
+                "-q",
+                cwd=str(ws_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0 and b"ERROR" in stderr or b"errors during collection" in stdout:
+                for line in (stderr.decode() + "\n" + stdout.decode()).splitlines():
+                    if "ERROR collecting" in line or "ModuleNotFoundError" in line:
+                        issues.append(
+                            ValidationIssue(
+                                file="pytest",
+                                line=1,
+                                column=1,
+                                severity=ValidationSeverity.WARNING,
+                                code="PYTEST_COLLECT",
+                                message=line.strip(),
+                                source="pytest",
+                            )
+                        )
+        except Exception:
+            pass
+
+        return ValidationReport(
+            workspace_id=workspace_id,
+            valid=len([i for i in issues if i.severity == ValidationSeverity.ERROR]) == 0,
+            issues=issues,
+        )
+
+    async def collect_tests(self, workspace_id: str) -> CollectionReport:
+        """Parses test files using AST and pytest to collect all test nodeids."""
+        ws_dir = self.get_workspace_dir(workspace_id)
+        tests: list[CollectedTest] = []
+        errors: list[str] = []
+
+        tests_dir = ws_dir / "tests"
+        if not tests_dir.exists():
+            return CollectionReport(workspace_id=workspace_id, total=0, tests=[])
+
+        for root, _, files in os.walk(tests_dir):
+            for file in files:
+                if file.startswith("test_") and file.endswith(".py"):
+                    full_path = Path(root) / file
+                    rel_path = str(full_path.relative_to(ws_dir))
+                    try:
+                        content = full_path.read_text(encoding="utf-8")
+                        tree = ast.parse(content, filename=rel_path)
+
+                        for node in tree.body:
+                            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                                markers = [
+                                    decorator.attr if isinstance(decorator, ast.Attribute) else str(decorator)
+                                    for decorator in node.decorator_list
+                                ]
+                                tests.append(
+                                    CollectedTest(
+                                        nodeid=f"{rel_path}::{node.name}",
+                                        file=rel_path,
+                                        class_name=None,
+                                        test_name=node.name,
+                                        markers=markers,
+                                        line=node.lineno,
+                                    )
+                                )
+                            elif isinstance(node, ast.ClassDef) and (
+                                node.name.startswith("Test") or "Test" in node.name
+                            ):
+                                for item in node.body:
+                                    if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
+                                        tests.append(
+                                            CollectedTest(
+                                                nodeid=f"{rel_path}::{node.name}::{item.name}",
+                                                file=rel_path,
+                                                class_name=node.name,
+                                                test_name=item.name,
+                                                markers=[],
+                                                line=item.lineno,
+                                            )
+                                        )
+                    except Exception as e:
+                        errors.append(f"Failed parsing {rel_path}: {e}")
+
+        return CollectionReport(workspace_id=workspace_id, total=len(tests), tests=tests, errors=errors)

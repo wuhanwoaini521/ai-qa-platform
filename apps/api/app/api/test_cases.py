@@ -1,10 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from project_model.models import TestCase, TestCaseCreate, TestCaseUpdate
+from project_model.models import (
+    AutomationBinding,
+    AutomationBindingCreate,
+    TestCase,
+    TestCaseCreate,
+    TestCaseUpdate,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.database import get_db
+from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.test_case_repo import TestCaseRepository
+from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.automation_binding_service import AutomationBindingService
 from app.services.test_case_service import TestCaseService
+from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
 
@@ -12,6 +22,14 @@ router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
 def get_test_case_service(session: AsyncSession = Depends(get_db)) -> TestCaseService:
     repo = TestCaseRepository(session)
     return TestCaseService(repo)
+
+
+def get_binding_service(session: AsyncSession = Depends(get_db)) -> AutomationBindingService:
+    binding_repo = AutomationBindingRepository(session)
+    test_case_repo = TestCaseRepository(session)
+    workspace_repo = WorkspaceRepository(session)
+    workspace_service = WorkspaceService()
+    return AutomationBindingService(binding_repo, test_case_repo, workspace_repo, workspace_service)
 
 
 @router.get("", response_model=list[TestCase])
@@ -48,3 +66,47 @@ async def update_test_case(
     if not tc:
         raise HTTPException(status_code=404, detail="Test Case not found")
     return tc
+
+
+@router.get("/{case_id}/binding", response_model=AutomationBinding | None)
+async def get_test_case_binding(
+    case_id: str,
+    service: AutomationBindingService = Depends(get_binding_service),
+):
+    return await service.get_binding(case_id)
+
+
+@router.post("/{case_id}/binding", response_model=AutomationBinding)
+async def create_or_update_binding(
+    case_id: str,
+    data: AutomationBindingCreate,
+    service: AutomationBindingService = Depends(get_binding_service),
+):
+    if data.test_case_id != case_id:
+        raise HTTPException(status_code=400, detail="Mismatched test_case_id in body")
+    return await service.bind_test_case(data)
+
+
+@router.delete("/{case_id}/binding")
+async def delete_binding(
+    case_id: str,
+    service: AutomationBindingService = Depends(get_binding_service),
+):
+    success = await service.unbind_test_case(case_id)
+    return {"success": success}
+
+
+@router.post("/{case_id}/generate-automation")
+async def generate_automation(
+    case_id: str,
+    service: AutomationBindingService = Depends(get_binding_service),
+):
+    try:
+        binding, code = await service.generate_automation_draft(case_id)
+        return {
+            "status": "generated",
+            "binding": binding,
+            "code": code,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

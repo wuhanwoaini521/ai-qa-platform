@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from project_model.models import (
+    CollectionReport,
+    CreateFilePayload,
     FileContentPayload,
     FileNode,
     GitDiffResult,
+    RenameFilePayload,
+    ValidationReport,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +60,55 @@ async def write_workspace_file(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/{workspace_id}/files/create", status_code=status.HTTP_201_CREATED)
+async def create_file_or_dir(
+    workspace_id: str,
+    payload: CreateFilePayload,
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        created_path = await service.create_file_or_dir(
+            workspace_id, payload.path, is_directory=payload.is_directory, content=payload.content
+        )
+        return {"status": "created", "path": created_path}
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{workspace_id}/files/rename")
+async def rename_file_or_dir(
+    workspace_id: str,
+    payload: RenameFilePayload,
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        await service.rename_path(workspace_id, payload.old_path, payload.new_path)
+        return {"status": "renamed", "old_path": payload.old_path, "new_path": payload.new_path}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{workspace_id}/files/delete")
+async def delete_file_or_dir(
+    workspace_id: str,
+    path: str = Query(..., description="Relative path to delete"),
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        await service.delete_path(workspace_id, path)
+        return {"status": "deleted", "path": path}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/{workspace_id}/diff", response_model=GitDiffResult)
 async def get_workspace_diff(
     workspace_id: str,
@@ -63,6 +116,43 @@ async def get_workspace_diff(
 ):
     try:
         return await service.get_diff(workspace_id)
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{workspace_id}/commit")
+async def commit_workspace_changes(
+    workspace_id: str,
+    message: str = Query(..., min_length=1, description="Commit message"),
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        out = await service.commit_changes(workspace_id, message)
+        return {"status": "committed", "output": out}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{workspace_id}/validate", response_model=ValidationReport)
+async def validate_workspace(
+    workspace_id: str,
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        return await service.validate_workspace(workspace_id)
+    except SecurityException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{workspace_id}/collect", response_model=CollectionReport)
+async def collect_workspace_tests(
+    workspace_id: str,
+    service: WorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        return await service.collect_tests(workspace_id)
     except SecurityException as e:
         raise HTTPException(status_code=400, detail=str(e))
 
