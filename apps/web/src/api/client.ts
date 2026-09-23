@@ -86,22 +86,71 @@ import {
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
+
+let authToken: string | null = (() => {
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+})();
+
+let unauthorizedHandler: (() => void) | null = null;
+
+/** Stores the bearer token used by every subsequent request. Pass `null` to sign out. */
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+  try {
+    if (token) {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    /* storage unavailable: the token stays in memory for this session only */
+  }
+}
+
+/** Registers the handler invoked when the API rejects a request with 401. */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+/** True when a bearer token is present; used by the app shell to decide between login and routes. */
+export function hasAuthToken(): boolean {
+  return authToken !== null;
+}
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}/api${endpoint}`;
-  const headers = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string> | undefined),
   };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
 
   const response = await fetch(url, {
     ...options,
     headers,
   });
 
+  if (response.status === 401) {
+    setAuthToken(null);
+    if (unauthorizedHandler) {
+      unauthorizedHandler();
+    }
+  }
+
   if (!response.ok) {
     const errorBody = await response.text();
     throw new Error(`API Error [${response.status}]: ${errorBody || response.statusText}`);
+  }
+
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as T;
   }
 
   return response.json();
@@ -193,26 +242,26 @@ export const api = {
       body: JSON.stringify({ path, content }),
     }),
   createWorkspaceFile: (workspaceId: string, path: string, content = '') =>
-    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/file`, {
+    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/files/create`, {
       method: 'POST',
-      body: JSON.stringify({ path, content }),
+      body: JSON.stringify({ path, is_directory: false, content }),
     }),
   createWorkspaceDirectory: (workspaceId: string, path: string) =>
-    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/directory`, {
+    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/files/create`, {
       method: 'POST',
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, is_directory: true }),
     }),
   renameWorkspaceFile: (workspaceId: string, oldPath: string, newPath: string) =>
     request<{ status: string; old_path: string; new_path: string }>(
-      `/workspaces/${workspaceId}/rename`,
+      `/workspaces/${workspaceId}/files/rename`,
       {
-        method: 'POST',
+        method: 'PATCH',
         body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
       }
     ),
   deleteWorkspaceFile: (workspaceId: string, path: string) =>
     request<{ status: string; path: string }>(
-      `/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}`,
+      `/workspaces/${workspaceId}/files/delete?path=${encodeURIComponent(path)}`,
       { method: 'DELETE' }
     ),
   getWorkspaceDiff: (workspaceId: string) =>
@@ -435,13 +484,13 @@ export const api = {
 
   // Quality Intelligence & Coverage (Phase 10)
   getQualityCoverage: (projectId: string) =>
-    request<QualityCoverageSummary>(`/quality/${encodeURIComponent(projectId)}/coverage`),
+    request<QualityCoverageSummary>(`/quality/coverage?project_id=${encodeURIComponent(projectId)}`),
   getQualityRiskMatrix: (projectId: string) =>
-    request<QualityRiskMatrix>(`/quality/${encodeURIComponent(projectId)}/risks`),
+    request<QualityRiskMatrix>(`/quality/risk-matrix?project_id=${encodeURIComponent(projectId)}`),
   analyzeImpact: (projectId: string, data: ImpactAnalysisRequest) =>
-    request<ImpactAnalysisResult>(`/quality/${encodeURIComponent(projectId)}/impact-analysis`, {
+    request<ImpactAnalysisResult>('/quality/impact-analysis', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, project_id: projectId }),
     }),
 
   // Releases & Release Gate (Phase 10)
@@ -456,7 +505,7 @@ export const api = {
     }),
   updateRelease: (releaseId: string, data: ReleaseUpdate) =>
     request<Release>(`/releases/${encodeURIComponent(releaseId)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
   deleteRelease: (releaseId: string) =>
@@ -464,10 +513,12 @@ export const api = {
       method: 'DELETE',
     }),
   evaluateReleaseGate: (releaseId: string) =>
-    request<ReleaseGateReport>(`/releases/${encodeURIComponent(releaseId)}/gate`),
+    request<ReleaseGateReport>(`/releases/${encodeURIComponent(releaseId)}/gate-evaluate`, {
+      method: 'POST',
+    }),
 
   // Identity, RBAC & Enterprise Security (Phase 11)
-  login: (email: string, password = 'password123') =>
+  login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
