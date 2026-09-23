@@ -1,26 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
-from project_model.models import ExecutionJob
-from pydantic import BaseModel
+from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest
 
 from app.services.job_queue_service import JobQueueService
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 job_queue_service = JobQueueService()
-
-
-class ClaimJobRequest(BaseModel):
-    worker_id: str
-    browser: str = "chromium"
-
-
-class CompleteJobRequest(BaseModel):
-    duration_ms: float = 0.0
-
-
-class FailJobRequest(BaseModel):
-    error_message: str
 
 
 @router.get("", response_model=list[ExecutionJob])

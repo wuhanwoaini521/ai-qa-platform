@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from project_model.models import Team, TeamCreate, TeamMember, TeamUpdate, User
-from pydantic import BaseModel
+from project_model.models import AddMemberRequest, Team, TeamCreate, TeamMember, TeamUpdate, User
 
 from app.api.auth import get_current_user
 from app.services.team_service import TeamService
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 team_service = TeamService()
-
-
-class AddMemberRequest(BaseModel):
-    user_id: str
-    role: str = "MEMBER"
 
 
 @router.get("", response_model=list[Team])

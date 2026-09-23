@@ -17,7 +17,7 @@ from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
-from app.services.workspace_service import WorkspaceService
+from app.services.workspace_service import SecurityException, WorkspaceService
 
 
 class QualityIntelligenceService:
@@ -237,9 +237,10 @@ class QualityIntelligenceService:
         # Auto-detect from git if workspace_id provided and files empty
         if not files and workspace_id:
             try:
-                diff_res = await self.workspace_service.get_git_diff(workspace_id)
+                diff_res = await self.workspace_service.get_diff(workspace_id)
                 files = [cf.path for cf in diff_res.changed_files]
-            except Exception:
+            except (SecurityException, FileNotFoundError):
+                # Unknown/unsafe workspace: fall back to an empty change set instead of guessing.
                 files = []
 
         test_cases = await self.test_case_repo.list_by_project(project_id)
@@ -266,9 +267,9 @@ class QualityIntelligenceService:
 
         # Match against bindings
         for b in bindings:
-            if any(k in b.test_file_path.lower() for k in keywords) or any(f in b.test_file_path for f in files):
+            if any(k in b.file_path.lower() for k in keywords) or any(f in b.file_path for f in files):
                 impacted_case_ids.add(b.test_case_id)
-                recommended_nodeids.add(b.test_node_id or b.test_file_path)
+                recommended_nodeids.add(b.nodeid or b.file_path)
 
         # Match against test cases
         for tc in test_cases:

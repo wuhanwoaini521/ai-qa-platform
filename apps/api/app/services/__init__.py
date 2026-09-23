@@ -12,11 +12,6 @@ from app.services.qa_assistant_service import QAAssistantService
 from app.services.quality_intelligence_service import QualityIntelligenceService
 from app.services.release_service import ReleaseService
 from app.services.requirement_service import RequirementService
-from app.services.runner_backends import (
-    DistributedWorkerBackend,
-    DockerRunnerBackend,
-    LocalProcessRunnerBackend,
-)
 from app.services.secret_store import SecretStore
 from app.services.team_service import TeamService
 from app.services.test_case_service import TestCaseService
@@ -32,12 +27,9 @@ __all__ = [
     "AuthService",
     "AutomationBindingService",
     "DashboardService",
-    "DistributedWorkerBackend",
-    "DockerRunnerBackend",
     "FailureService",
     "JiraService",
     "JobQueueService",
-    "LocalProcessRunnerBackend",
     "PRService",
     "PullRequestService",
     "ProjectService",

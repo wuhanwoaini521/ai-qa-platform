@@ -41,7 +41,7 @@ class WorkspaceService:
         # Prevent traversal in workspace_id
         clean_id = Path(workspace_id).name
         target = (self.base_dir / clean_id).resolve()
-        if not str(target).startswith(str(self.base_dir)):
+        if not (str(target) == str(self.base_dir) or str(target).startswith(str(self.base_dir) + os.sep)):
             raise SecurityException("Invalid workspace ID or path traversal attempt.")
         return target
 

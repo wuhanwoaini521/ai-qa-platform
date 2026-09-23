@@ -17,7 +17,7 @@
    - `knowledge/`
 
 4. **Runtime Artifacts are Not Source Code**:
-   Screenshots, trace zip files, video recordings, and DOM dumps generated during test runs are managed independently through `LocalArtifactStore` under `runtime/artifacts/` with cloud storage pluggability (S3/MinIO) planned for future phases.
+   Screenshots, trace zip files, video recordings, and DOM dumps generated during test runs are managed independently through `ArtifactStorageService` under `runtime/artifacts/` with cloud storage pluggability (S3/MinIO) planned for future phases.
 
 ---
 

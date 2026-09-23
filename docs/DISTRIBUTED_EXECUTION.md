@@ -41,6 +41,9 @@ Worker nodes register with the central orchestrator and transmit periodic heartb
 
 ## 3. Runner Backends
 
-1. **LocalProcessRunnerBackend**: Native async process execution for local developer loops.
-2. **DockerRunnerBackend**: Containerized execution with volume mounting and isolated ephemeral dependencies (`mcr.microsoft.com/playwright/python`).
-3. **DistributedWorkerBackend**: Networked dispatch to remote worker pools.
+A runner profile (`RunnerProfile`, `/api/runners`) selects the execution backend used for its runs:
+
+1. **`LocalRunnerBackend`** (`qa_core.execution.runner_backend`): native async process execution for local developer loops.
+2. **`JenkinsRunnerBackend`** (`integrations.jenkins_runner`): remote pipeline dispatch with health checks, triggered by profile type `JENKINS` and its `base_url` / `job_name` config.
+
+Profiles of any other type fall back to the local backend.

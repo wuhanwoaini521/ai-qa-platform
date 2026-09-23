@@ -4,6 +4,8 @@ import time
 from collections import defaultdict
 from typing import Any
 
+from project_model.models import JobStatus, WorkerStatus
+
 from app.persistence.database import async_session_factory
 from app.repositories import JobRepository, TestRunRepository, WorkerRepository
 
@@ -15,7 +17,6 @@ class MetricsService:
         self._start_time = time.time()
         self._http_requests_total: dict[str, int] = defaultdict(int)
         self._http_request_durations: dict[str, list[float]] = defaultdict(list)
-        self._custom_counters: dict[str, int] = defaultdict(int)
 
     @property
     def uptime_seconds(self) -> float:
@@ -32,9 +33,6 @@ class MetricsService:
         durations.append(duration_seconds)
         if len(durations) > 100:
             self._http_request_durations[key] = durations[-100:]
-
-    def increment_counter(self, name: str, value: int = 1) -> None:
-        self._custom_counters[name] += value
 
     def _normalize_path(self, path: str) -> str:
         # Collapse UUIDs/IDs into placeholder
@@ -56,14 +54,14 @@ class MetricsService:
             run_repo = TestRunRepository(session)
 
             workers = await worker_repo.list_all()
-            online_workers = [w for w in workers if w.status in ("idle", "busy")]
-            busy_workers = [w for w in workers if w.status == "busy"]
+            online_workers = [w for w in workers if w.status in (WorkerStatus.ONLINE, WorkerStatus.BUSY)]
+            busy_workers = [w for w in workers if w.status == WorkerStatus.BUSY]
 
             jobs = await job_repo.list_jobs()
-            queued_jobs = [j for j in jobs if j.status == "queued"]
-            running_jobs = [j for j in jobs if j.status == "running"]
-            completed_jobs = [j for j in jobs if j.status == "completed"]
-            failed_jobs = [j for j in jobs if j.status == "failed"]
+            queued_jobs = [j for j in jobs if j.status == JobStatus.QUEUED]
+            running_jobs = [j for j in jobs if j.status == JobStatus.RUNNING]
+            completed_jobs = [j for j in jobs if j.status == JobStatus.COMPLETED]
+            failed_jobs = [j for j in jobs if j.status == JobStatus.FAILED]
 
             runs = await run_repo.list_runs()
 

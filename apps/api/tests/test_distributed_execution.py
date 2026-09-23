@@ -1,23 +1,29 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 import pytest
-from app.main import app
-from app.persistence.database import init_db
+from app.api import artifacts as artifacts_api
+from app.api import jobs as jobs_api
+from app.api import workers as workers_api
+from app.repositories.artifact_repo import ArtifactRepository
+from app.repositories.job_repo import JobRepository
+from app.repositories.project_repo import ProjectRepository
+from app.repositories.runner_profile_repo import RunnerProfileRepository
+from app.repositories.test_run_repo import TestRunRepository
+from app.repositories.worker_repo import WorkerRepository
 from app.services.artifact_storage_service import ArtifactStorageService
 from app.services.job_queue_service import JobQueueService
-from app.services.runner_backends import (
-    DistributedWorkerBackend,
-    DockerRunnerBackend,
-    LocalProcessRunnerBackend,
-)
+from app.services.runner_service import RunnerService
 from app.services.worker_service import WorkerService
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
+from project_model import models as pm
 from project_model.models import (
     JobStatus,
-    TestRun,
+    ProjectCreate,
+    RunnerProfileCreate,
+    RunnerProfileUpdate,
+    RunnerType,
     WorkerCreate,
     WorkerHeartbeatRequest,
     WorkerStatus,
@@ -25,9 +31,11 @@ from project_model.models import (
 
 
 @pytest.mark.asyncio
-async def test_worker_and_cluster_status():
-    await init_db()
-    worker_service = WorkerService()
+async def test_worker_and_cluster_status(test_db_session):
+    worker_service = WorkerService(
+        worker_repo=WorkerRepository(test_db_session),
+        job_repo=JobRepository(test_db_session),
+    )
 
     # 1. Register worker
     hostname = f"worker-{uuid.uuid4().hex[:6]}"
@@ -60,12 +68,18 @@ async def test_worker_and_cluster_status():
 
 
 @pytest.mark.asyncio
-async def test_job_queue_and_dispatch():
-    await init_db()
-    job_service = JobQueueService()
+async def test_job_queue_and_dispatch(test_db_session):
+    job_service = JobQueueService(job_repo=JobRepository(test_db_session))
 
-    run_id = str(uuid.uuid4())
-    project_id = str(uuid.uuid4())
+    # Jobs reference a run and a project (FK enforced by the engine), so seed real parents.
+    async with test_db_session() as session:
+        project = await ProjectRepository(session).create(ProjectCreate(name="Job Queue Dispatch Project"))
+        run = await TestRunRepository(session).create_run(
+            pm.TestRunCreate(project_id=project.id, workspace_id=str(uuid.uuid4()))
+        )
+        await session.commit()
+    run_id = run.id
+    project_id = project.id
     workspace_id = str(uuid.uuid4())
     worker_id = str(uuid.uuid4())
 
@@ -97,45 +111,44 @@ async def test_job_queue_and_dispatch():
 
 
 @pytest.mark.asyncio
-async def test_runner_backends():
-    run = TestRun(
-        id="run_test_123",
-        project_id="proj_1",
-        workspace_id="ws_1",
-        status="RUNNING",
-        requested_by="user",
-        environment={},
-        browser="chromium",
-        markers=[],
-        nodeids=["tests/test_demo.py::test_example"],
-        total=1,
-        passed=0,
-        failed=0,
-        skipped=0,
-        cancelled=0,
-        duration_ms=0.0,
-        created_at=datetime.now(timezone.utc),
-    )
+async def test_runner_selection_resolves_backend_by_profile_type(test_db_session):
+    """RunnerService selects an execution backend from the runner profile type/config."""
+    service = RunnerService(runner_repo=RunnerProfileRepository(test_db_session))
 
-    local_backend = LocalProcessRunnerBackend()
-    local_res = await local_backend.execute(run, workspace_path="/tmp/ws")
-    assert local_res["runner_type"] == "LOCAL"
-    assert "pytest -v tests/test_demo.py::test_example" in local_res["command"]
+    # 1. An enabled LOCAL profile resolves to the local runner backend.
+    local_profile = await service.create_runner(RunnerProfileCreate(name="Local Dev Runner", type=RunnerType.LOCAL))
+    local_health = await service.check_health(local_profile.id)
+    assert local_health.type == RunnerType.LOCAL
+    assert local_health.status == "AVAILABLE"
 
-    docker_backend = DockerRunnerBackend()
-    docker_res = await docker_backend.execute(run, workspace_path="/tmp/ws")
-    assert docker_res["runner_type"] == "DOCKER"
-    assert "docker run --rm" in docker_res["command"]
+    # 2. Non-local-runner profile types fall back to the local backend as well.
+    docker_profile = await service.create_runner(RunnerProfileCreate(name="Docker Pool", type=RunnerType.DOCKER))
+    docker_health = await service.check_health(docker_profile.id)
+    assert docker_health.type == RunnerType.LOCAL
+    assert docker_health.status == "AVAILABLE"
 
-    worker_backend = DistributedWorkerBackend()
-    worker_res = await worker_backend.execute(run, workspace_path="/tmp/ws")
-    assert worker_res["runner_type"] == "WORKER"
-    assert worker_res["total_nodeids"] == 1
+    # 3. A disabled profile is reported as DISABLED without contacting any backend.
+    await service.update_runner(docker_profile.id, RunnerProfileUpdate(enabled=False))
+    disabled_health = await service.check_health(docker_profile.id)
+    assert disabled_health.status == "DISABLED"
+    assert disabled_health.type == RunnerType.DOCKER
+
+    # 4. The built-in local alias always resolves to the local backend.
+    local_alias_health = await service.check_health("local")
+    assert local_alias_health.type == RunnerType.LOCAL
+    assert local_alias_health.status == "AVAILABLE"
+
+    # 5. Unknown runner profiles are rejected.
+    with pytest.raises(ValueError):
+        await service.check_health("runner-that-does-not-exist")
 
 
 @pytest.mark.asyncio
-async def test_artifact_storage_service():
-    storage = ArtifactStorageService(base_dir="/tmp/ai_qa_test_artifacts")
+async def test_artifact_storage_service(test_db_session):
+    storage = ArtifactStorageService(
+        artifact_repo=ArtifactRepository(test_db_session),
+        base_dir="/tmp/ai_qa_test_artifacts",
+    )
     test_bytes = b"<html><body>Test Report</body></html>"
 
     upload_res = await storage.save_artifact(
@@ -156,51 +169,65 @@ async def test_artifact_storage_service():
 
 
 @pytest.mark.asyncio
-async def test_distributed_endpoints():
-    await init_db()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Register worker endpoint
-        reg_resp = await client.post(
-            "/api/workers",
-            json={
-                "hostname": f"node-test-{uuid.uuid4().hex[:6]}",
-                "ip_address": "192.168.1.100",
-                "status": "ONLINE",
-                "browsers": ["chromium"],
-                "max_concurrency": 8,
-            },
-        )
-        assert reg_resp.status_code == 201
-        worker_data = reg_resp.json()
-        wid = worker_data["id"]
+async def test_distributed_endpoints(client: AsyncClient, test_db_session, tmp_path, monkeypatch):
+    # The /workers, /jobs and /artifacts routers hold service singletons built at import time,
+    # which captured their session factory before the test database was installed, so bind them here.
+    monkeypatch.setattr(
+        workers_api,
+        "worker_service",
+        WorkerService(worker_repo=WorkerRepository(test_db_session), job_repo=JobRepository(test_db_session)),
+    )
+    monkeypatch.setattr(jobs_api, "job_queue_service", JobQueueService(job_repo=JobRepository(test_db_session)))
+    monkeypatch.setattr(
+        artifacts_api,
+        "artifact_service",
+        ArtifactStorageService(
+            artifact_repo=ArtifactRepository(test_db_session),
+            base_dir=str(tmp_path / "artifacts"),
+        ),
+    )
 
-        # 2. Heartbeat endpoint
-        hb_resp = await client.post(
-            f"/api/workers/{wid}/heartbeat",
-            json={"status": "BUSY", "current_load": 4},
-        )
-        assert hb_resp.status_code == 200
-        assert hb_resp.json()["current_load"] == 4
+    # 1. Register worker endpoint
+    reg_resp = await client.post(
+        "/api/workers",
+        json={
+            "hostname": f"node-test-{uuid.uuid4().hex[:6]}",
+            "ip_address": "192.168.1.100",
+            "status": "ONLINE",
+            "browsers": ["chromium"],
+            "max_concurrency": 8,
+        },
+    )
+    assert reg_resp.status_code == 201
+    worker_data = reg_resp.json()
+    wid = worker_data["id"]
 
-        # 3. Cluster status endpoint
-        cluster_resp = await client.get("/api/workers/cluster-status")
-        assert cluster_resp.status_code == 200
-        assert cluster_resp.json()["total_workers"] >= 1
+    # 2. Heartbeat endpoint
+    hb_resp = await client.post(
+        f"/api/workers/{wid}/heartbeat",
+        json={"status": "BUSY", "current_load": 4},
+    )
+    assert hb_resp.status_code == 200
+    assert hb_resp.json()["current_load"] == 4
 
-        # 4. Jobs list endpoint
-        jobs_resp = await client.get("/api/jobs")
-        assert jobs_resp.status_code == 200
+    # 3. Cluster status endpoint
+    cluster_resp = await client.get("/api/workers/cluster-status")
+    assert cluster_resp.status_code == 200
+    assert cluster_resp.json()["total_workers"] >= 1
 
-        # 5. Artifacts upload endpoint
-        art_resp = await client.post(
-            "/api/artifacts/upload",
-            files={"file": ("screenshot.png", b"\x89PNG\r\n\x1a\nfake-png-data", "image/png")},
-        )
-        assert art_resp.status_code == 201
-        art_id = art_resp.json()["artifact_id"]
+    # 4. Jobs list endpoint
+    jobs_resp = await client.get("/api/jobs")
+    assert jobs_resp.status_code == 200
 
-        # 6. Artifact download endpoint
-        dl_resp = await client.get(f"/api/artifacts/{art_id}/download")
-        assert dl_resp.status_code == 200
-        assert dl_resp.content == b"\x89PNG\r\n\x1a\nfake-png-data"
+    # 5. Artifacts upload endpoint
+    art_resp = await client.post(
+        "/api/artifacts/upload",
+        files={"file": ("screenshot.png", b"\x89PNG\r\n\x1a\nfake-png-data", "image/png")},
+    )
+    assert art_resp.status_code == 201
+    art_id = art_resp.json()["artifact_id"]
+
+    # 6. Artifact download endpoint
+    dl_resp = await client.get(f"/api/artifacts/{art_id}/download")
+    assert dl_resp.status_code == 200
+    assert dl_resp.content == b"\x89PNG\r\n\x1a\nfake-png-data"
