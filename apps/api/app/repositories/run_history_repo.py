@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+from dataclasses import dataclass
 from datetime import datetime
 
 from project_model.models import (
@@ -13,7 +14,7 @@ from project_model.models import (
     TestHistoryResponse,
     TestTrend,
 )
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from app.persistence import database
 from app.persistence.models import (
@@ -21,6 +22,18 @@ from app.persistence.models import (
     TestExecutionORM,
     TestRunORM,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSample:
+    """The fields flaky scoring and trend calculation need, detached from the ORM session."""
+
+    nodeid: str
+    status: str
+    retry_count: int
+    failure_category: str | None
+    started_at: datetime | None
+    duration_ms: float = 0.0
 
 
 class RunHistoryRepository:
@@ -89,7 +102,7 @@ class RunHistoryRepository:
             flaky_score=flaky,
         )
 
-    def calculate_trend(self, executions: list[TestExecutionORM]) -> TestTrend:
+    def calculate_trend(self, executions: list[TestExecutionORM] | list[ExecutionSample]) -> TestTrend:
         sample_count = len(executions)
         if sample_count == 0:
             return TestTrend()
@@ -123,7 +136,7 @@ class RunHistoryRepository:
             failure_categories=categories,
         )
 
-    def calculate_flaky_score(self, executions: list[TestExecutionORM]) -> FlakyScore:
+    def calculate_flaky_score(self, executions: list[TestExecutionORM] | list[ExecutionSample]) -> FlakyScore:
         sample_count = len(executions)
 
         # Gate 6.6: Minimum sample guard
@@ -236,23 +249,56 @@ class RunHistoryRepository:
         min_score: float = 0.0,
         classification: FlakyClassification | None = None,
     ) -> list[FlakyTestItem]:
-        async with self.session_factory() as session:
-            # Query distinct nodeids
-            stmt = select(TestExecutionORM.nodeid, TestRunORM.project_id).join(
-                TestRunORM, TestExecutionORM.run_id == TestRunORM.id
+        # One query for the whole project instead of one per test: the per-node queries made this
+        # endpoint scale with (distinct tests x executions). A window function keeps the most recent
+        # samples per node, which is what the scoring actually uses.
+        sample_limit = 20
+        row_number = (
+            func.row_number()
+            .over(
+                partition_by=TestExecutionORM.nodeid,
+                order_by=(desc(TestExecutionORM.started_at), desc(TestExecutionORM.id)),
             )
-            if project_id:
-                stmt = stmt.where(TestRunORM.project_id == project_id)
-            stmt = stmt.distinct()
+            .label("sample_rank")
+        )
+        ranked = (
+            select(
+                TestExecutionORM.nodeid.label("nodeid"),
+                TestExecutionORM.status.label("status"),
+                TestExecutionORM.retry_count.label("retry_count"),
+                TestExecutionORM.failure_category.label("failure_category"),
+                TestExecutionORM.started_at.label("started_at"),
+                TestExecutionORM.duration_ms.label("duration_ms"),
+                TestRunORM.project_id.label("project_id"),
+                row_number,
+            )
+            .join(TestRunORM, TestExecutionORM.run_id == TestRunORM.id)
+            .subquery()
+        )
+        stmt = select(ranked).where(ranked.c.sample_rank <= sample_limit)
+        if project_id:
+            stmt = stmt.where(ranked.c.project_id == project_id)
 
+        async with self.session_factory() as session:
             result = await session.execute(stmt)
-            distinct_tests = result.all()
+            rows = result.all()
+
+        grouped: dict[tuple[str, str], list[ExecutionSample]] = {}
+        for row in rows:
+            key = (row.nodeid, row.project_id)
+            grouped.setdefault(key, []).append(
+                ExecutionSample(
+                    nodeid=row.nodeid,
+                    status=row.status,
+                    retry_count=row.retry_count,
+                    failure_category=row.failure_category,
+                    started_at=row.started_at,
+                    duration_ms=row.duration_ms or 0.0,
+                )
+            )
 
         flaky_items: list[FlakyTestItem] = []
-        for row in distinct_tests:
-            nodeid = row[0]
-            pid = row[1]
-            executions = await self.get_test_executions(nodeid=nodeid, project_id=pid, limit=20)
+        for (nodeid, pid), executions in grouped.items():
             score = self.calculate_flaky_score(executions)
             trend = self.calculate_trend(executions)
 

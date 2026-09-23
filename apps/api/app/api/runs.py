@@ -46,6 +46,16 @@ async def get_run(
     return run
 
 
+@router.post("/recover-stale")
+async def recover_stale_runs(
+    stale_after_seconds: float = 7200.0,
+    service: TestRunService = Depends(get_run_service),
+) -> dict[str, list[str]]:
+    """Close runs that were abandoned mid-flight so they never stay RUNNING forever."""
+    recovered = await service.recover_stale_runs(stale_after_seconds=stale_after_seconds)
+    return {"recovered_run_ids": recovered}
+
+
 @router.post("/{run_id}/cancel", response_model=TestRun)
 async def cancel_run(
     run_id: str,

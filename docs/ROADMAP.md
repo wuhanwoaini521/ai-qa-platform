@@ -40,4 +40,4 @@ Every item below — shipped or planned — must respect these invariants. A roa
 - **v0.2.0** — Phases 4-7: Real Execution, Flaky Intelligence & Jenkins
 - **v0.3.0** — Phases 8-10: GitHub, Jira, TestRail, Coverage & Release Gate
 - **v1.0.0** — Phases 11-13: Enterprise RBAC, Distributed Runner Grid, Production Docker & Prometheus Observability
-- **v1.0.0-rc.x** — Phase 13.5/14: architecture stabilization and real-project pilot hardening
+- **v1.0.0-rc.1** — Phase 13.5/14: architecture stabilization and real-project pilot hardening (see `docs/RELEASE_READINESS.md`)

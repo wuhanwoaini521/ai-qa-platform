@@ -50,6 +50,15 @@ The AI QA Platform is a deterministic, enterprise-grade AI QA Engineering Platfo
 
 ---
 
+## 2b. Phase 13.5/14 additions
+
+| Area | Where | What |
+|---|---|---|
+| Route authorization | `apps/api/app/api/authz.py` | one policy table + an application-level guard; probes and `/api/auth/login` are the only public routes, the run-event stream may carry the token as a query parameter |
+| Onboarding | `packages/qa-core/qa_core/onboarding/` + `apps/api/app/services/onboarding_service.py` | contract, detector, isolated import, per-project runtime, structured collection, safety policy, test identity, Allure import |
+| AI safety | `packages/qa-core/qa_core/ai/context.py`, `qa_core/author/grounding.py` | bounded, source-attributed prompt context; grounding validation that refuses fabricated fixtures/pages/flows/imports |
+| Routed UI | `apps/web/src/app/` | react-router shell, deep links, per-route code splitting, error boundary |
+
 ## 3. Guiding Architectural Principles
 
 1. **Deterministic Test Oracles**: AI assists with test generation, locator repair proposals, and root cause analysis, but never fakes or overrides test execution results.

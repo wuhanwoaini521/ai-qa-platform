@@ -53,6 +53,8 @@ Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 - **Phase 11: Enterprise RBAC, Security & Audit** — 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API keys, and immutable security audit trails.
 - **Phase 12: Distributed Execution Platform** — Multi-node worker registry with heartbeat liveness, browser capability matching, and local artifact storage (S3/MinIO object storage is reserved, not implemented).
 - **Phase 13: Production Deployment & Operations** — Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks, and zero-downtime health probes.
+- **Phase 13.5: Architecture Stabilization** — feature-based frontend modularization, routed application shell, PostgreSQL parity in CI, central route authorization, dead-code removal, audit-driven defect fixes.
+- **Phase 14: Real-Project Pilot** — detect, import and pilot an existing pytest/Playwright repository in isolation: structured collection, test identity, safety-checked execution, rerun and xdist accounting, Allure import, and failure diagnosis on real runs.
 
 ---
 
@@ -146,3 +148,7 @@ mise exec -- pnpm install
 - [Failure Intelligence & Human-Approved Repair](docs/FAILURE_INTELLIGENCE.md)
 - [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
 - [Architecture Stabilization Audit (Phase 13.5)](docs/ARCHITECTURE_STABILIZATION_AUDIT.md)
+- [Pilot Reference Project](docs/PILOT_REFERENCE_PROJECT.md)
+- [Phase 14 Pilot Report](docs/PHASE_14_PILOT_REPORT.md)
+- [Pilot Gap Analysis](docs/PILOT_GAP_ANALYSIS.md)
+- [Release Readiness](docs/RELEASE_READINESS.md)

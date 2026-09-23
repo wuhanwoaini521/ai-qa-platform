@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from project_model.models import RunStatus, TestRunCreate
@@ -207,6 +208,16 @@ class TestRunRepository:
         self.session.add(orm)
         await self.session.flush()
         return orm
+
+    async def list_unfinished_runs(self, older_than: datetime) -> list[TestRunORM]:
+        """Runs that were started but never reached a terminal state before `older_than`."""
+        result = await self.session.execute(
+            select(TestRunORM).where(
+                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+                TestRunORM.created_at < older_than,
+            )
+        )
+        return list(result.scalars().all())
 
     async def list_failures(self, limit: int = 50) -> list[FailureRecordORM]:
         result = await self.session.execute(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from project_model.models import TestCaseCreate, TestCaseUpdate
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import TestCaseORM, utc_now
@@ -13,14 +13,23 @@ class TestCaseRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def list_by_project(self, project_id: str) -> list[TestCaseORM]:
-        result = await self.session.execute(
-            select(TestCaseORM).where(TestCaseORM.project_id == project_id).order_by(TestCaseORM.created_at.desc())
-        )
+    async def list_by_project(self, project_id: str, limit: int | None = None) -> list[TestCaseORM]:
+        query = select(TestCaseORM).where(TestCaseORM.project_id == project_id).order_by(TestCaseORM.created_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def list_all(self) -> list[TestCaseORM]:
-        result = await self.session.execute(select(TestCaseORM).order_by(TestCaseORM.created_at.desc()))
+    async def count_all(self) -> int:
+        """Row count without materialising the table."""
+        result = await self.session.execute(select(func.count()).select_from(TestCaseORM))
+        return int(result.scalar() or 0)
+
+    async def list_all(self, limit: int | None = None) -> list[TestCaseORM]:
+        query = select(TestCaseORM).order_by(TestCaseORM.created_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_id(self, case_id: str) -> TestCaseORM | None:

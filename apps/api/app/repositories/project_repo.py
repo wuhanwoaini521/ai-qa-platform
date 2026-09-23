@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from project_model.models import ProjectCreate, ProjectUpdate
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import ProjectORM, utc_now
@@ -13,8 +13,16 @@ class ProjectRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def list_all(self) -> list[ProjectORM]:
-        result = await self.session.execute(select(ProjectORM).order_by(ProjectORM.created_at.desc()))
+    async def count_all(self) -> int:
+        """Row count without materialising the table."""
+        result = await self.session.execute(select(func.count()).select_from(ProjectORM))
+        return int(result.scalar() or 0)
+
+    async def list_all(self, limit: int | None = None) -> list[ProjectORM]:
+        query = select(ProjectORM).order_by(ProjectORM.created_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_id(self, project_id: str) -> ProjectORM | None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import timedelta
 from typing import AsyncGenerator
 
 from integrations.jenkins_runner import JenkinsConfig, JenkinsRunnerBackend
@@ -29,6 +30,8 @@ from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.workspace_service import WorkspaceService
+
+DEFAULT_STALE_RUN_SECONDS = 7200.0
 
 logger = logging.getLogger("app.services.test_run")
 
@@ -445,6 +448,33 @@ class TestRunService:
                         "error": str(e),
                     },
                 )
+
+    async def recover_stale_runs(self, stale_after_seconds: float = DEFAULT_STALE_RUN_SECONDS) -> list[str]:
+        """Close runs that can never finish.
+
+        A process crash mid-run leaves a run in RUNNING forever, which the UI shows as in-progress
+        and which makes every pass-rate and coverage figure wrong. Unfinished runs older than the
+        threshold are closed as CANCELLED rather than FAILED: the platform does not know their
+        outcome, and must never invent a verdict.
+
+        This assumes a single API instance. Distributed execution belongs to the job queue, where
+        workers heartbeat, so an abandoned job is detected there instead.
+        """
+        cutoff = utc_now() - timedelta(seconds=stale_after_seconds)
+        stale = await self.run_repo.list_unfinished_runs(older_than=cutoff)
+        recovered: list[str] = []
+        for orm in stale:
+            await self.run_repo.update_run_status(run_id=orm.id, status=RunStatus.CANCELLED, finished_at=utc_now())
+            await event_bus.publish(
+                orm.id,
+                {
+                    "type": "RUN_CANCELLED",
+                    "run_id": orm.id,
+                    "reason": "recovered as stale: the run never reached a terminal state",
+                },
+            )
+            recovered.append(orm.id)
+        return recovered
 
     async def cancel_run(self, run_id: str) -> TestRun | None:
         orm = await self.run_repo.get_by_id(run_id)

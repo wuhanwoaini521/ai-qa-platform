@@ -48,9 +48,43 @@ from app.repositories.workspace_repo import WorkspaceRepository
 CONTRACT_FILENAME = ".qa-platform.yaml"
 IMPORTS_DIRNAME = "imports"
 
+#: A selection must look like `path/to/test_file.py::test_name[param]`. Anything else (a flag, a
+#: shell fragment, a glob) is rejected before it can reach the pytest command line.
+NODEID_PATTERN = re.compile(r"^[^\s:=-][^\s:]*\.py::[^\s]+$")
+#: Marker expressions are limited to the syntax pytest itself accepts.
+MARKER_PATTERN = re.compile(r"^[A-Za-z0-9_\-\s()]+$")
+
 
 class OnboardingError(RuntimeError):
     """Raised for operator-fixable onboarding problems (bad path, missing runtime, unknown project)."""
+
+
+def validate_nodeids(nodeids: list[str]) -> list[str]:
+    """Reject anything that is not a pytest node id, so a selection can never inject CLI flags.
+
+    node ids and marker expressions are appended to the pytest command line, so they are validated
+    here rather than trusted: an operator (or a compromised caller) must not be able to turn a test
+    selection into `--pyargs`, `-p`, `-c` or a shell fragment.
+    """
+    invalid = [
+        nodeid
+        for nodeid in nodeids
+        if not NODEID_PATTERN.match(nodeid.strip()) or ".." in nodeid.split("::")[0].split("/")
+    ]
+    if invalid:
+        raise OnboardingError(
+            "invalid test selection: "
+            + ", ".join(repr(item) for item in invalid[:5])
+            + " (expected 'tests/test_file.py::test_name')"
+        )
+    return [nodeid.strip() for nodeid in nodeids]
+
+
+def validate_markers(markers: list[str]) -> list[str]:
+    invalid = [marker for marker in markers if not MARKER_PATTERN.match(marker.strip())]
+    if invalid:
+        raise OnboardingError("invalid marker expression: " + ", ".join(repr(item) for item in invalid[:5]))
+    return [marker.strip() for marker in markers]
 
 
 class ImportedProject(BaseModel):
@@ -213,8 +247,9 @@ class OnboardingService:
         imported = await self.get_imported_project(project_id)
         root = Path(imported.workspace_path)
 
-        requested = list(nodeids or [])
+        requested = validate_nodeids(list(nodeids or []))
         if markers:
+            markers = validate_markers(markers)
             collection = await self._collect(imported, markers=markers)
             if collection.status.value != "COLLECTED":
                 raise OnboardingError(

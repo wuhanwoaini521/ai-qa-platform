@@ -37,8 +37,11 @@ class ProjectService:
             updated_at=orm.updated_at,
         )
 
-    async def list_projects(self) -> list[Project]:
-        orms = await self.project_repo.list_all()
+    async def count_projects(self) -> int:
+        return await self.project_repo.count_all()
+
+    async def list_projects(self, limit: int | None = None) -> list[Project]:
+        orms = await self.project_repo.list_all(limit=limit)
         return [self._to_dto(orm) for orm in orms]
 
     async def get_project(self, project_id: str) -> Project | None:

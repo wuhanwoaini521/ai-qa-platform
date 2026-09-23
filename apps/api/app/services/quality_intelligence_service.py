@@ -168,12 +168,13 @@ class QualityIntelligenceService:
                     score=round(flaky.flaky_score.score * 100, 1),
                     reasons=[
                         f"Deterministic flaky rate of {round(flaky.flaky_score.score * 100, 1)}%",
-                        f"Flip rate: {round(flaky.flaky_score.flip_rate * 100, 1)}% across {flaky.flaky_score.sample_count} runs",
+                        f"Alternation rate {round(flaky.flaky_score.alternation_rate * 100, 1)}% "
+                        f"across {flaky.flaky_score.sample_count} runs",
                     ],
                     impacted_nodeids=[flaky.nodeid],
                     recommended_actions=[
                         "Inspect locator stability and async wait conditions",
-                        "Quarantine test or apply AI locator healing",
+                        "Quarantine the test or review a locator repair proposal (applying it stays manual)",
                     ],
                 )
             )

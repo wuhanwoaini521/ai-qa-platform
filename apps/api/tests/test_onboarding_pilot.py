@@ -227,3 +227,41 @@ async def test_importing_a_missing_path_is_a_clear_client_error(client: AsyncCli
 
     assert response.status_code == 400
     assert "not found" in response.json()["detail"]
+
+
+@pytest.mark.security
+@pytest.mark.parametrize(
+    "malicious_nodeid",
+    [
+        "--pyargs=os",
+        "-p evil_plugin",
+        "--collect-only",
+        "tests/test_sample.py::test_offline_math; rm -rf /tmp/x",
+        "--rootdir=/",
+        "tests/../../etc/passwd.py::test_x",
+    ],
+)
+async def test_test_selection_cannot_inject_pytest_flags_or_shell(
+    client: AsyncClient, tmp_path: Path, malicious_nodeid: str
+):
+    """node ids and markers reach the pytest command line, so they are validated, never trusted."""
+    source = build_reference_repo(tmp_path / "reference-repo")
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(source)})
+    project_id = imported.json()["project_id"]
+
+    response = await client.post(f"/api/onboarding/{project_id}/run", json={"nodeids": [malicious_nodeid]})
+
+    assert response.status_code == 400
+    assert "invalid test selection" in response.json()["detail"]
+
+
+@pytest.mark.security
+async def test_marker_expression_cannot_inject_flags(client: AsyncClient, tmp_path: Path):
+    source = build_reference_repo(tmp_path / "reference-repo")
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(source)})
+    project_id = imported.json()["project_id"]
+
+    response = await client.post(f"/api/onboarding/{project_id}/run", json={"markers": ["smoke --alluredir=/tmp/evil"]})
+
+    assert response.status_code == 400
+    assert "invalid marker expression" in response.json()["detail"]

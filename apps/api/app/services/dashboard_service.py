@@ -28,9 +28,15 @@ class DashboardService:
         self.history_repo = history_repo or RunHistoryRepository(lambda: run_repo.session)
 
     async def get_stats(self) -> DashboardStats:
-        projects = await self.project_service.list_projects()
-        requirements = await self.requirement_service.list_requirements()
-        test_cases = await self.test_case_service.list_test_cases()
+        # Counts come from the database: loading every row just to call len() made the dashboard
+        # scale with the size of the largest table (10k test cases was already ~2s of pure transfer).
+        total_projects = await self.project_service.count_projects()
+        total_requirements = await self.requirement_service.count_requirements()
+        total_test_cases = await self.test_case_service.count_test_cases()
+        # Only the five rows the dashboard actually renders, not entire tables.
+        recent_projects = await self.project_service.list_projects(limit=5)
+        recent_requirements = await self.requirement_service.list_requirements(limit=5)
+        recent_test_cases = await self.test_case_service.list_test_cases(limit=5)
         runs_orms = await self.run_repo.list_runs(limit=20)
         failures_orms = await self.run_repo.list_failures(limit=20)
 
@@ -51,9 +57,9 @@ class DashboardService:
         avg_dur = statistics.mean(durations) if durations else 0.0
 
         return DashboardStats(
-            total_projects=len(projects),
-            total_requirements=len(requirements),
-            total_test_cases=len(test_cases),
+            total_projects=total_projects,
+            total_requirements=total_requirements,
+            total_test_cases=total_test_cases,
             total_runs=len(runs_orms),
             runs_today=len(runs_today),
             tests_executed_today=tests_executed_today,
@@ -62,8 +68,8 @@ class DashboardService:
             flaky_tests_count=flaky_count,
             rerun_recovery_count=rerun_recoveries,
             average_test_duration_ms=round(avg_dur, 2),
-            recent_projects=projects[:5],
-            recent_requirements=requirements[:5],
-            recent_test_cases=test_cases[:5],
+            recent_projects=recent_projects,
+            recent_requirements=recent_requirements,
+            recent_test_cases=recent_test_cases,
             recent_runs=[],
         )

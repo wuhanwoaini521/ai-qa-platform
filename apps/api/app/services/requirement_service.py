@@ -30,11 +30,14 @@ class RequirementService:
             updated_at=orm.updated_at,
         )
 
-    async def list_requirements(self, project_id: str | None = None) -> list[Requirement]:
+    async def count_requirements(self) -> int:
+        return await self.requirement_repo.count_all()
+
+    async def list_requirements(self, project_id: str | None = None, limit: int | None = None) -> list[Requirement]:
         if project_id:
-            orms = await self.requirement_repo.list_by_project(project_id)
+            orms = await self.requirement_repo.list_by_project(project_id, limit=limit)
         else:
-            orms = await self.requirement_repo.list_all()
+            orms = await self.requirement_repo.list_all(limit=limit)
         return [self._to_dto(orm) for orm in orms]
 
     async def get_requirement(self, req_id: str) -> Requirement | None:

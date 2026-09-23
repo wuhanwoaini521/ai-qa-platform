@@ -36,11 +36,14 @@ class TestCaseService:
             updated_at=orm.updated_at,
         )
 
-    async def list_test_cases(self, project_id: str | None = None) -> list[TestCase]:
+    async def count_test_cases(self) -> int:
+        return await self.test_case_repo.count_all()
+
+    async def list_test_cases(self, project_id: str | None = None, limit: int | None = None) -> list[TestCase]:
         if project_id:
-            orms = await self.test_case_repo.list_by_project(project_id)
+            orms = await self.test_case_repo.list_by_project(project_id, limit=limit)
         else:
-            orms = await self.test_case_repo.list_all()
+            orms = await self.test_case_repo.list_all(limit=limit)
         return [self._to_dto(orm) for orm in orms]
 
     async def get_test_case(self, case_id: str) -> TestCase | None:

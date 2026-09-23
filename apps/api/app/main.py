@@ -1,3 +1,4 @@
+import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -37,11 +38,29 @@ from app.persistence.database import init_db
 from app.services.metrics_service import metrics_service
 from app.settings import settings
 
+logger = logging.getLogger("app.startup")
+
+
+async def _recover_stale_runs() -> list[str]:
+    """Recovery uses the application's own session factory, independent of the request lifecycle."""
+    from app.api.runs import get_run_service
+
+    service = get_run_service()
+    return await service.recover_stale_runs()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize database tables
     await init_db()
+    # Close runs abandoned by a previous process: without this a crashed run stays RUNNING forever
+    # and every pass-rate and coverage figure built on it stays wrong.
+    try:
+        recovered = await _recover_stale_runs()
+        if recovered:
+            logger.warning("Recovered %d stale run(s) at startup: %s", len(recovered), ", ".join(recovered))
+    except Exception as error:  # pragma: no cover - startup must never fail because of recovery
+        logger.warning("Stale run recovery skipped: %s", error)
     yield
 
 

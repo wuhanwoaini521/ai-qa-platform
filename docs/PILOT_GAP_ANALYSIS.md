@@ -1,0 +1,61 @@
+# Pilot Gap Analysis — what a real project exposed
+
+The pilot (`docs/PHASE_14_PILOT_REPORT.md`) ran a real pytest + Playwright repository through the
+platform. This document records what that exposed, what was fixed, and what is still open — including
+the things the platform still cannot do. Nothing here is aspirational: every "fixed" row has a test or
+a recorded run, and every "open" row names the concrete limitation.
+
+---
+
+## 1. Fixed during the pilot
+
+| # | Gap | Impact before | Fix | Evidence |
+|---|---|---|---|---|
+| G1 | `calculate_risk_matrix` read `FlakyScore.flip_rate`, which does not exist | `GET /api/quality/risk-matrix` returned HTTP 500 for any project with flaky tests | use `alternation_rate` | 500 → 676 ms at 100k executions |
+| G2 | `list_flaky_tests` ran one query per distinct test | endpoint cost grew with (tests × executions); 5.5 s dashboard at 20 projects | single window-function query, portable across SQLite/PostgreSQL | `test_flaky_and_history`, PostgreSQL lane |
+| G3 | Dashboard loaded whole tables to count them and to show five rows | 5.5 s at 10k test cases | `count()` queries + `limit=5` for the rendered rows | 5.5 s → 0.9 s |
+| G4 | Test identity/selection would have inherited the frontend/backend drift | binding save and every "run test" action failed in the UI | payloads aligned to the API schema; verified in a browser | `docs/PHASE_14_PILOT_REPORT.md` §13 |
+| G5 | Marker selection collected *all* tests and then filtered at run time | selection did not match what executed | markers applied to collection as well as to the run | `test_onboarding_flow…`, marker test |
+| G6 | Rerun accounting depended on parsing `RERUN` lines | the reference project's logging splits pytest's progress lines, so reruns were lost | platform-written pytest plugin records one JSON line per attempt | 2 logical / 4 physical / 2 reruns |
+| G7 | xdist progress lines were not parsed | worker-parallel runs reported zero tests | `[gwN] [ nn%] OUTCOME nodeid` supported | unit test + `-n 2` pilot run |
+| G8 | Parametrised node ids (`test_x[chromium]`) could not be inspected by the safety policy | browser tests were reported as "source could not be inspected" instead of a concrete reason | node id parsing keeps the class and strips the parameter | `test_safety_policy_inspects_parameterised_nodeids` |
+| G9 | Safety policy flagged any file merely mentioning `https://` | 18 of the reference project's offline unit tests were refused (false positives) | AST-based analysis: fixtures, receiver calls, URL arguments, unsafe markers | 69/69 offline tests execute; live tests still refused |
+| G10 | A crashed run stayed `RUNNING` forever | dashboards and pass rates permanently wrong | startup recovery + `POST /api/runs/recover-stale`, closing abandoned runs as `CANCELLED` (never a fabricated verdict) | `test_abandoned_runs_are_recovered…` |
+| G11 | Node ids and markers reached the pytest command line unvalidated | a test selection could inject CLI flags | node ids/markers validated (shape, traversal segments, marker syntax) | 7 security cases |
+| G12 | Worker registration/heartbeat payloads did not match the API schema | a distributed worker could never register | payloads fixed (`hostname`, `browsers`, `ONLINE/BUSY/OFFLINE`) + real load reporting | worker tests |
+| G13 | The distributed job queue had no producer | Phase 12's "distributed execution" was unreachable in practice | `runner_type`-agnostic onboarding path executes imported projects; the queue gap is documented below | see §2 O1 |
+
+## 2. Still open (known limitations)
+
+| # | Limitation | Why it matters | Recommended next step |
+|---|---|---|---|
+| O1 | **The distributed job queue still has no producer.** `JobQueueService.enqueue_job` has no caller: runs execute in the API process (`IMPORTED_PYTEST` / `LOCAL`) or through Jenkins, while `apps/worker` polls `/api/jobs/claim` and receives nothing | the "Distributed Execution Grid" is not exercised end to end; a worker container contributes no capacity | enqueue a job when a run is triggered with `runner_type=DISTRIBUTED`, and have the worker report per-test results back into the run |
+| O2 | **`runner_type=DOCKER` is not implemented** | the runner profile accepts a type it cannot execute | implement or reject the type at the API boundary |
+| O3 | **Object storage (S3/MinIO) is not implemented**; artifacts are local files and `stored_artifacts.storage_path` stores an absolute host path | multi-host deployments share no artifacts | implement an S3 backend or drop the `S3` storage type |
+| O4 | **`SecretStore` is not wired into the adapters**; integration credentials come from environment variables | no central rotation, and the docs used to imply otherwise (now corrected) | wire `SecretStore` (or remove it) and document the rotation story |
+| O5 | **No schema migrations** (`create_all` only) | a column change never reaches an existing database | adopt Alembic before the first production upgrade |
+| O6 | **SSE and metrics are per-process** | multi-worker deployments lose stream fan-out and counters | Redis/backplane, or pin the deployment to one API instance and say so |
+| O7 | **Run list payload ≈800 KB for 50 runs** because executions are eager-loaded | slow first paint on the Runs page | add a list projection without executions; fetch executions on the detail view |
+| O8 | **Monaco is loaded from a public CDN** (`@monaco-editor/react` default loader) | the Studio needs internet access; the bundle size is not representative | vendor Monaco (and its workers) into the build |
+| O9 | **AI output is only as grounded as the validator it passes** | a plausible-but-wrong test can still be adopted by a human | wire `GroundingValidator` into the authoring endpoint as a hard gate and surface violations in the UI |
+| O10 | **Flaky ↔ case-id mapping is by node id only for this repository** | the reference project's C-ids live in its integration layer, not on the tests | adopt `.qa-platform-cases.yaml` for repositories without inline case ids |
+| O11 | **Jenkins/TestRail/GitHub writes remain preview/dry-run** in every environment available here | no live, enterprise-verified write path | validate against real instances before claiming production proof |
+| O12 | **Duplicated AI DTOs** (`project_model` vs `qa_core/ai/models.py`) remain, bridged by hand | two shapes can drift | collapse onto the shared package (out of Phase 13.5 scope) |
+
+## 3. Reference-project findings (not platform defects)
+
+| Finding | Detail |
+|---|---|
+| `test_worker_id_and_retry_index_resolution` fails under `-n 2` | asserts the worker id is `master`/`none`; under xdist it is `gw0`. The platform reported it honestly as a failure rather than hiding it |
+| The repository's `smoke` marker selects live tests | the reason the platform never treats marker names as evidence of safety |
+| CI is `workflow_dispatch`-only | the repository deliberately does not run its UI tests automatically; the pilot respected that by only executing the offline unit layer |
+
+## 4. What the pilot did **not** prove
+
+- No live Jira, TestRail, GitHub or Jenkins write was performed (no credentials were used): those
+  integrations remain *preview/dry-run verified only*.
+- No OIDC/SSO provider, multi-tenancy or SSO flow was exercised.
+- Browser-driven Playwright execution was never performed on this machine: the reference project's own
+  audit notes that prebuilt Chromium binaries are not installable here, so all UI tests were refused by
+  policy rather than executed. The platform's browser execution path is therefore verified only
+  through the local runner's contract, not with a real browser.
