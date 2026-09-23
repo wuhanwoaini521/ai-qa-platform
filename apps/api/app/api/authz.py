@@ -79,6 +79,9 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/ai", Permission.PROJECT_READ, Permission.PROJECT_READ),
     Rule("/api/qa-assistant", Permission.PROJECT_READ, Permission.PROJECT_READ),
     Rule("/api/dashboard", Permission.PROJECT_READ, Permission.PROJECT_READ),
+    # Onboarding reads host paths outside the workspace; the two host-filesystem routes additionally
+    # carry an explicit `require_permission(SECURITY_ADMIN)` guard (see api/onboarding.py).
+    Rule("/api/onboarding", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
 )
 
 #: Applied when no rule matches: reads stay open to authenticated users, writes are not.

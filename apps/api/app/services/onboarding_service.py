@@ -1,0 +1,337 @@
+"""Onboarding and piloting a real QA repository through the platform.
+
+Everything here operates on the *imported copy*: the source repository is read once, never written
+to, and never executed in place. The service is the only place that turns a foreign pytest project
+into platform records (project, workspace, run, executions, failure records).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+from project_model.models import (
+    ProjectCreate,
+    RunStatus,
+    TestRunCreate,
+    WorkspaceCreate,
+)
+from pydantic import BaseModel, Field
+from qa_core.failure.classifier import FailureClassifier
+from qa_core.onboarding import (
+    AllureImportReport,
+    AllureResultImporter,
+    CollectionOutcome,
+    IdentityReport,
+    ImportPlan,
+    NodeIdCaseMapper,
+    QAProjectCollector,
+    QAProjectContract,
+    QAProjectDetection,
+    QAProjectImporter,
+    QAProjectRunner,
+    QARuntimeProvisioner,
+    RuntimeProvisioningResult,
+    SafetyPolicy,
+    SafetyVerdict,
+    SuiteRunOutcome,
+    load_contract_file,
+    render_contract,
+)
+
+from app.repositories.project_repo import ProjectRepository
+from app.repositories.test_run_repo import TestRunRepository
+from app.repositories.workspace_repo import WorkspaceRepository
+
+CONTRACT_FILENAME = ".qa-platform.yaml"
+IMPORTS_DIRNAME = "imports"
+
+
+class OnboardingError(RuntimeError):
+    """Raised for operator-fixable onboarding problems (bad path, missing runtime, unknown project)."""
+
+
+class ImportedProject(BaseModel):
+    project_id: str
+    workspace_id: str
+    project_name: str
+    workspace_path: str
+    source_path: str
+    contract: QAProjectContract
+    copied_files: int = 0
+    copied_bytes: int = 0
+    excluded_dirs: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DetectionPreview(BaseModel):
+    plan: ImportPlan
+    detection: QAProjectDetection
+
+
+class CollectionReport(BaseModel):
+    project_id: str
+    outcome: CollectionOutcome
+    identity: IdentityReport | None = None
+
+
+class PilotRunReport(BaseModel):
+    project_id: str
+    run_id: str | None = None
+    outcome: SuiteRunOutcome
+    executed_nodeids: list[str] = Field(default_factory=list)
+    rejected: list[SafetyVerdict] = Field(default_factory=list)
+    persisted: bool = False
+
+
+class OnboardingService:
+    """Imports a QA repository into an isolated workspace and pilots it."""
+
+    def __init__(
+        self,
+        project_repo: ProjectRepository,
+        workspace_repo: WorkspaceRepository,
+        run_repo: TestRunRepository,
+        workspace_base_dir: Path | None = None,
+        imports_dir: Path | None = None,
+    ) -> None:
+        self.project_repo = project_repo
+        self.workspace_repo = workspace_repo
+        self.run_repo = run_repo
+        self.workspace_base_dir = workspace_base_dir
+        self.imports_dir = imports_dir
+
+    # --- detection & import -----------------------------------------------------------------
+
+    async def preview_import(self, source_path: str, project_name: str | None = None) -> DetectionPreview:
+        source = Path(source_path).expanduser()
+        if not source.is_dir():
+            raise OnboardingError(f"Source repository not found: {source}")
+        destination = self._destination_for(source, project_name)
+        importer = QAProjectImporter()
+        plan = importer.plan(source, destination)
+        detection = importer.detector.detect(source)
+        return DetectionPreview(plan=plan, detection=detection)
+
+    async def import_repository(
+        self,
+        source_path: str,
+        project_name: str | None = None,
+        overwrite: bool = False,
+    ) -> ImportedProject:
+        source = Path(source_path).expanduser()
+        preview = await self.preview_import(source_path, project_name)
+        destination = Path(preview.plan.destination)
+
+        importer = QAProjectImporter()
+        result = importer.execute(preview.plan, overwrite=overwrite)
+
+        # The contract is materialised inside the workspace so the operator can review and edit it.
+        (destination / CONTRACT_FILENAME).write_text(render_contract(result.contract), encoding="utf-8")
+
+        name = project_name or source.name
+        project = await self.project_repo.create(ProjectCreate(name=name[:115], description=f"Imported from {source}"))
+        # The imported workspace already contains the project's own files: never scaffold over them.
+        workspace = await self.workspace_repo.create(
+            WorkspaceCreate(project_id=project.id, branch="main"), path=str(destination)
+        )
+
+        return ImportedProject(
+            project_id=project.id,
+            workspace_id=workspace.id,
+            project_name=name,
+            workspace_path=str(destination),
+            source_path=str(source),
+            contract=result.contract,
+            copied_files=result.copied_files,
+            copied_bytes=result.copied_bytes,
+            excluded_dirs=result.excluded_dirs,
+            warnings=preview.detection.warnings,
+        )
+
+    async def get_imported_project(self, project_id: str) -> ImportedProject:
+        workspace = await self.workspace_repo.get_by_project_id(project_id)
+        if workspace is None:
+            raise OnboardingError(f"No workspace imported for project {project_id}")
+        root = Path(workspace.path)
+        contract_path = root / CONTRACT_FILENAME
+        if contract_path.is_file():
+            contract = load_contract_file(contract_path)
+        else:
+            contract = QAProjectImporter().detector.detect(root).contract
+        project = await self.project_repo.get_by_id(project_id)
+        return ImportedProject(
+            project_id=project_id,
+            workspace_id=workspace.id,
+            project_name=project.name if project else root.name,
+            workspace_path=str(root),
+            source_path="",
+            contract=contract,
+        )
+
+    # --- runtime ----------------------------------------------------------------------------
+
+    async def provision_runtime(self, project_id: str) -> RuntimeProvisioningResult:
+        imported = await self.get_imported_project(project_id)
+        result = await QARuntimeProvisioner().provision(Path(imported.workspace_path), imported.contract)
+        if result.status.value == "READY" and result.virtualenv_dir:
+            imported.contract.runtime.virtualenv_dir = result.virtualenv_dir
+            (Path(imported.workspace_path) / CONTRACT_FILENAME).write_text(
+                render_contract(imported.contract), encoding="utf-8"
+            )
+        return result
+
+    # --- collection & identity --------------------------------------------------------------
+
+    async def collect(
+        self, project_id: str, with_identity: bool = True, markers: list[str] | None = None
+    ) -> CollectionReport:
+        imported = await self.get_imported_project(project_id)
+        outcome = await self._collect(imported, markers=markers)
+        identity = None
+        if with_identity and outcome.status.value == "COLLECTED":
+            mapper = self._identity_mapper(imported.workspace_path)
+            identity = mapper.map(Path(imported.workspace_path), outcome.tests)
+        return CollectionReport(project_id=project_id, outcome=outcome, identity=identity)
+
+    async def _collect(self, imported: ImportedProject, markers: list[str] | None = None) -> CollectionOutcome:
+        return await QAProjectCollector(imported.contract).collect(Path(imported.workspace_path), markers=markers)
+
+    # --- execution --------------------------------------------------------------------------
+
+    async def run_selection(
+        self,
+        project_id: str,
+        nodeids: list[str] | None = None,
+        markers: list[str] | None = None,
+        allow_unsafe: bool = False,
+        persist: bool = True,
+    ) -> PilotRunReport:
+        imported = await self.get_imported_project(project_id)
+        root = Path(imported.workspace_path)
+
+        requested = list(nodeids or [])
+        if markers:
+            collection = await self._collect(imported, markers=markers)
+            if collection.status.value != "COLLECTED":
+                raise OnboardingError(
+                    f"cannot select tests by marker: the project does not collect cleanly ({collection.error_message})"
+                )
+            requested.extend(test.nodeid for test in collection.tests)
+
+        safe, rejected = SafetyPolicy().split(requested, root) if requested else ([], [])
+        if allow_unsafe:
+            safe, rejected = requested, []
+
+        if requested and not safe:
+            return PilotRunReport(
+                project_id=project_id,
+                outcome=SuiteRunOutcome(exit_code=None, command=[], timed_out=False),
+                executed_nodeids=[],
+                rejected=rejected,
+                persisted=False,
+            )
+
+        # When the project reports through Allure *and* its own runtime was provisioned (so the
+        # plugin is guaranteed to be importable), the platform owns the results directory: the run's
+        # artifacts land inside the isolated workspace and can be imported afterwards. Without a
+        # provisioned runtime the ambient interpreter is used and no project plugin may be assumed.
+        extra_args: list[str] = []
+        if imported.contract.has_plugin("allure") and imported.contract.runtime.virtualenv_dir:
+            results_dir = root / (imported.contract.allure_results_dir or "allure-results")
+            extra_args = [f"--alluredir={results_dir}"]
+
+        outcome = await QAProjectRunner(imported.contract).run(root, nodeids=safe or None, extra_args=extra_args)
+
+        run_id: str | None = None
+        if persist:
+            run_id = await self._persist_run(imported, outcome, safe or requested)
+        return PilotRunReport(
+            project_id=project_id,
+            run_id=run_id,
+            outcome=outcome,
+            executed_nodeids=safe,
+            rejected=rejected,
+            persisted=persist,
+        )
+
+    async def _persist_run(self, imported: ImportedProject, outcome: SuiteRunOutcome, executed: list[str]) -> str:
+        run = await self.run_repo.create_run(
+            TestRunCreate(
+                project_id=imported.project_id,
+                workspace_id=imported.workspace_id,
+                requested_by="pilot",
+                runner_type="IMPORTED_PYTEST",
+                nodeids=executed,
+            )
+        )
+        status = RunStatus.PASSED if outcome.exit_code == 0 else RunStatus.FAILED
+
+        counts = outcome.counts
+        for logical in outcome.logical_tests:
+            execution = await self.run_repo.add_execution(
+                run_id=run.id,
+                nodeid=logical.nodeid,
+                status=RunStatus(logical.status.value)
+                if logical.status.value in {member.value for member in RunStatus}
+                else RunStatus.ERROR,
+                retry_count=logical.reruns,
+                error_message=logical.failure_message,
+                stack_trace=outcome.stdout_tail if logical.status.value in ("FAILED", "ERROR") else None,
+            )
+            if logical.status.value in ("FAILED", "ERROR"):
+                category, action, locator = FailureClassifier.classify(
+                    logical.failure_message or "", outcome.stdout_tail
+                )
+                await self.run_repo.create_failure_record(
+                    run_id=run.id,
+                    execution_id=execution.id,
+                    test_nodeid=logical.nodeid,
+                    test_name=logical.nodeid.split("::")[-1][:250],
+                    classification=category.value,
+                    exception_type=(logical.failure_message or "").split(":")[0][:200] or "UnknownError",
+                    error_message=logical.failure_message or "test failed",
+                    stack_trace=outcome.stdout_tail,
+                    failing_locator=locator,
+                    suggested_action=action,
+                )
+
+        await self.run_repo.update_run_status(
+            run_id=run.id,
+            status=status,
+            passed=counts.get("passed", 0),
+            failed=counts.get("failed", 0) + counts.get("error", 0),
+            skipped=counts.get("skipped", 0),
+            duration_ms=outcome.duration_ms,
+        )
+        return run.id
+
+    # --- allure -----------------------------------------------------------------------------
+
+    async def import_allure_results(self, project_id: str) -> AllureImportReport:
+        imported = await self.get_imported_project(project_id)
+        results_dir = Path(imported.workspace_path) / (imported.contract.allure_results_dir or "allure-results")
+        if not results_dir.is_dir():
+            raise OnboardingError(f"No Allure results directory in the imported workspace: {results_dir}")
+        return AllureResultImporter().import_from(results_dir)
+
+    # --- helpers ----------------------------------------------------------------------------
+
+    def _destination_for(self, source: Path, project_name: str | None) -> Path:
+        base = self.imports_dir or ((self.workspace_base_dir or Path("runtime/workspaces")) / IMPORTS_DIRNAME)
+        slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", (project_name or source.name)).strip("-").lower() or "project"
+        return Path(base) / slug
+
+    def _identity_mapper(self, workspace_path: str) -> NodeIdCaseMapper:
+        return NodeIdCaseMapper(self._explicit_mappings(Path(workspace_path)))
+
+    def _explicit_mappings(self, root: Path) -> dict[str, Any]:
+        """Optional `.qa-platform-cases.yaml` next to the contract: nodeid -> case id(s)."""
+        path = root / ".qa-platform-cases.yaml"
+        if not path.is_file():
+            return {}
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        mappings = payload.get("mappings", {})
+        return mappings if isinstance(mappings, dict) else {}

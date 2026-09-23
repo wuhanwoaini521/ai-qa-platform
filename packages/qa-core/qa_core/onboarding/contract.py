@@ -49,12 +49,19 @@ class QARuntimeProfile(BaseModel):
     environment: dict[str, str] = Field(default_factory=dict)
 
     def resolve_interpreter(self, project_root: Path) -> str:
-        """Return the interpreter to run the project with, preferring its own virtualenv."""
-        candidates = [
-            project_root / ".venv" / "bin" / "python",
-            project_root / "venv" / "bin" / "python",
-            project_root / ".venv" / "Scripts" / "python.exe",
-        ]
+        """Return the interpreter to run the project with, preferring its provisioned virtualenv."""
+        candidates = []
+        if self.virtualenv_dir:
+            candidates.append(Path(self.virtualenv_dir) / "bin" / "python")
+            candidates.append(Path(self.virtualenv_dir) / "Scripts" / "python.exe")
+        candidates.extend(
+            [
+                project_root / ".qa-platform-runtime" / "bin" / "python",
+                project_root / ".venv" / "bin" / "python",
+                project_root / "venv" / "bin" / "python",
+                project_root / ".venv" / "Scripts" / "python.exe",
+            ]
+        )
         for candidate in candidates:
             if candidate.exists():
                 return str(candidate)
@@ -86,7 +93,9 @@ class QAProjectContract(BaseModel):
 
     plugins: list[str] = Field(default_factory=list)
     markers: dict[str, str] = Field(default_factory=dict)
-    default_markers: list[str] = Field(default_factory=list)
+    #: Markers that look like a fast subset. Purely a suggestion: they are NOT verified as
+    #: offline-safe, and the execution path applies its own safety policy before running anything.
+    suggested_markers: list[str] = Field(default_factory=list)
     case_id_strategy: CaseIdStrategy = CaseIdStrategy.NONE
 
     runtime: QARuntimeProfile = Field(default_factory=QARuntimeProfile)

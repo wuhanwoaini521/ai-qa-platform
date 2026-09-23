@@ -80,6 +80,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
   const [repairApplied, setRepairApplied] = useState<boolean>(false);
+  // Failures repaired in this session. The API records the patch on the workspace, not on the
+  // failure row, so "resolved" is deliberately a local view state rather than a fabricated field.
+  const [resolvedFailureIds, setResolvedFailureIds] = useState<string[]>([]);
 
   const [rerunning, setRerunning] = useState<boolean>(false);
   const [rerunMessage, setRerunMessage] = useState<string | null>(null);
@@ -191,9 +194,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         new_locator: chosenLocator,
       });
       setRepairApplied(true);
-      // Update resolved state in list
-      setFailures((prev) =>
-        prev.map((f) => (f.id === selectedFailure.id ? { ...f, is_resolved: true } : f))
+      setResolvedFailureIds((prev) =>
+        prev.includes(selectedFailure.id) ? prev : [...prev, selectedFailure.id]
       );
       alert(`Successfully patched locator in ${repairProposal.target_file}`);
     } catch (err: any) {
@@ -208,7 +210,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     try {
       setRerunning(true);
       setRerunMessage('Triggering verification re-run...');
-      const target = selectedFailure.nodeid || selectedFailure.test_nodeid;
+      const target = selectedFailure.test_nodeid;
       const run = await api.createTestRun({
         project_id: currentProjectId,
         target_nodeids: [target],
@@ -357,15 +359,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       >
                         <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                            {getCategoryBadge(f.category)}
-                            {f.is_resolved && (
+                            {getCategoryBadge(f.classification)}
+                            {resolvedFailureIds.includes(f.id) && (
                               <span className="badge badge-ready" style={{ fontSize: '10px' }}>
                                 ✓ Resolved
                               </span>
                             )}
                           </div>
                           <div style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#0f172a' }}>
-                            {f.nodeid}
+                            {f.test_nodeid}
                           </div>
                           <div style={{ fontSize: '11px', color: '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
                             {f.error_message}
@@ -389,10 +391,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <AlertTriangle size={16} color="#dc2626" />
                     <span className="card-title" style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-                      {selectedFailure.nodeid}
+                      {selectedFailure.test_nodeid}
                     </span>
                   </div>
-                  {getCategoryBadge(selectedFailure.category)}
+                  {getCategoryBadge(selectedFailure.classification)}
                 </div>
                 <div className="card-body">
                   <div style={{ marginBottom: '12px' }}>
@@ -446,7 +448,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     {onOpenInStudio && (
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => onOpenInStudio((selectedFailure.nodeid || '').split('::')[0])}
+                        onClick={() => onOpenInStudio(selectedFailure.test_nodeid.split('::')[0])}
                         title="Open the failing test file in the Automation Studio"
                       >
                         <Code2 size={13} /> Open Test in Studio

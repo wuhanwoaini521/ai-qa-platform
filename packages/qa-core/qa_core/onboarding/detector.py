@@ -124,7 +124,7 @@ class QAProjectDetector:
             allure_results_dir=self._first_existing(project_root, ALLURE_DIRS),
             plugins=sorted(set(plugins)),
             markers=pytest_options.markers,
-            default_markers=self._default_markers(pytest_options),
+            suggested_markers=self._suggested_markers(pytest_options),
             case_id_strategy=self._case_id_strategy(project_root, test_files, collector),
             environment=self._default_environment(project_root, pytest_options),
             source="detected",
@@ -280,8 +280,13 @@ class QAProjectDetector:
             plugins.append("allure")
         return plugins
 
-    def _default_markers(self, options: _PytestOptions) -> list[str]:
-        """Markers that look like a safe smoke subset, in declaration order."""
+    def _suggested_markers(self, options: _PytestOptions) -> list[str]:
+        """Markers that look like a fast subset, in declaration order.
+
+        This is only a suggestion for the operator: a marker name says nothing about whether the
+        tests behind it are offline-safe (in the reference repository the `smoke` marker selects
+        tests that drive a live website). Execution always re-checks each selected test.
+        """
         preferred = ("smoke", "sanity", "critical", "p0")
         return [marker for marker in preferred if marker in options.markers]
 

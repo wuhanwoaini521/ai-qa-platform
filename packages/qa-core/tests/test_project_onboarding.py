@@ -83,7 +83,7 @@ def test_detects_a_realistic_pytest_playwright_project(tmp_path: Path):
     # Plugins come from declared dependencies and from addopts, deduplicated.
     assert {"xdist", "rerunfailures", "allure", "playwright"} <= set(contract.plugins)
     assert contract.markers["smoke"] == "fast subset"
-    assert contract.default_markers == ["smoke", "p0"]
+    assert contract.suggested_markers == ["smoke", "p0"]
     assert contract.environment["BASE_URL"] == "https://qa.example.com"
     assert contract.environment["ALLURE_RESULTS_DIR"] == "allure-results"
 
@@ -141,7 +141,7 @@ install_command: ["uv", "sync", "--frozen"]
 collect_command: ["python", "-m", "pytest", "--collect-only", "-q"]
 test_command: ["python", "-m", "pytest", "-v"]
 test_roots: ["qa"]
-default_markers: ["smoke"]
+suggested_markers: ["smoke"]
 """.lstrip(),
     )
     contract = load_contract_file(tmp_path / ".qa-platform.yaml")

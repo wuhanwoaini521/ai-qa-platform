@@ -16,6 +16,7 @@ from app.api import (
     health_router,
     jira_router,
     jobs_router,
+    onboarding_router,
     projects_router,
     qa_assistant_router,
     quality_router,
@@ -103,6 +104,7 @@ app.include_router(runners_router, prefix="/api")
 app.include_router(failures_router, prefix="/api")
 app.include_router(flaky_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(onboarding_router, prefix="/api")
 app.include_router(qa_assistant_router, prefix="/api")
 
 

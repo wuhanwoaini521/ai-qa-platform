@@ -308,10 +308,8 @@ export interface FailureRecord {
   run_id: string;
   execution_id: string;
   test_nodeid: string;
-  nodeid?: string;
   test_name: string;
   classification: FailureCategory | string;
-  category?: FailureCategory;
   exception_type: string;
   error_message: string;
   stack_trace: string;
@@ -321,8 +319,7 @@ export interface FailureRecord {
   dom_snapshot_path?: string | null;
   console_logs: string[];
   suggested_action?: string | null;
-  repair_proposal?: any | null;
-  is_resolved?: boolean;
+  repair_proposal?: Record<string, unknown> | null;
   created_at: string;
 }
 
