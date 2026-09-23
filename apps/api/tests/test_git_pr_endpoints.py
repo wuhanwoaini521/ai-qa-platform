@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_git_and_pr_api_workflow(client: AsyncClient):

@@ -1,8 +1,8 @@
 from typing import AsyncGenerator
 
 from app.settings import settings
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -10,23 +10,49 @@ class Base(DeclarativeBase):
     pass
 
 
+def enable_sqlite_foreign_keys(engine: AsyncEngine) -> None:
+    """SQLite ignores ``ON DELETE CASCADE`` unless foreign keys are enforced.
+
+    PostgreSQL enforces them unconditionally, so without this pragma the same
+    code path behaves differently on the two backends.
+    """
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record):  # noqa: ARG001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
+def build_engine(database_url: str = settings.database_url) -> AsyncEngine:
+    """Create an engine for ``database_url`` with the backend-specific setup.
+
+    Kept as a factory so tests can build an engine with the exact same
+    configuration the application uses.
+    """
+    is_sqlite = "sqlite" in database_url.lower()
+
+    engine_kwargs: dict = {}
+    if is_sqlite:
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # PostgreSQL pooling parameters
+        engine_kwargs["pool_size"] = 20
+        engine_kwargs["max_overflow"] = 10
+        engine_kwargs["pool_pre_ping"] = True
+
+    engine = create_async_engine(
+        database_url,
+        echo=False,
+        **engine_kwargs,
+    )
+    if is_sqlite:
+        enable_sqlite_foreign_keys(engine)
+    return engine
+
+
 # SQLite / PostgreSQL compatible engine
-is_sqlite = "sqlite" in settings.database_url.lower()
-
-engine_kwargs = {}
-if is_sqlite:
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
-    # PostgreSQL pooling parameters
-    engine_kwargs["pool_size"] = 20
-    engine_kwargs["max_overflow"] = 10
-    engine_kwargs["pool_pre_ping"] = True
-
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    **engine_kwargs,
-)
+engine = build_engine()
 
 async_session_factory = async_sessionmaker(
     bind=engine,

@@ -7,13 +7,20 @@ from project_model.models import User, UserCreate, UserRole, UserUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_session
+from app.persistence import database
 from app.persistence.models import UserORM, utc_now
 
 
 class UserRepository:
-    def __init__(self, session_factory=get_session) -> None:
-        self.session_factory = session_factory
+    def __init__(self, session_factory=None) -> None:
+        self._session_factory = session_factory
+
+    @property
+    def session_factory(self):
+        if self._session_factory is not None:
+            return self._session_factory
+
+        return database.get_session
 
     @staticmethod
     def _hash_password(raw: str) -> str:

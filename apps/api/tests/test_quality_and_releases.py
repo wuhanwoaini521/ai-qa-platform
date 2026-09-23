@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_quality_coverage_and_risk_matrix(client: AsyncClient):
@@ -116,6 +118,54 @@ async def test_impact_analysis_and_regression_selector(client: AsyncClient):
     assert len(impact["changed_files"]) == 2
     assert any("auth" in test.lower() for test in impact["recommended_regression_tests"])
     assert len(impact["rationale"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_maps_automation_binding_to_nodeid(client: AsyncClient):
+    """A bound automated test case contributes its stored nodeid/file_path to the impact result."""
+    proj_resp = await client.post(
+        "/api/projects",
+        json={"name": "Impact Binding Project"},
+    )
+    project_id = proj_resp.json()["id"]
+
+    tc_resp = await client.post(
+        "/api/test-cases",
+        json={
+            "project_id": project_id,
+            "title": "Verify Coupon Display",
+            "priority": "P2",
+            "automation_status": "MANUAL",
+            "tags": ["coupon"],
+        },
+    )
+    tc_id = tc_resp.json()["id"]
+
+    nodeid = "tests/test_auth_session.py::test_login_persists_session"
+    bind_resp = await client.post(
+        f"/api/test-cases/{tc_id}/binding",
+        json={
+            "test_case_id": tc_id,
+            "workspace_id": project_id,
+            "nodeid": nodeid,
+            "file_path": "tests/test_auth_session.py",
+            "framework": "playwright_python",
+            "status": "ACTIVE",
+        },
+    )
+    assert bind_resp.status_code == 200
+
+    impact_resp = await client.post(
+        "/api/quality/impact-analysis",
+        json={
+            "project_id": project_id,
+            "changed_files": ["src/auth/session.py"],
+        },
+    )
+    assert impact_resp.status_code == 200
+    impact = impact_resp.json()
+    assert impact["impacted_test_cases"] == [tc_id]
+    assert impact["recommended_regression_tests"] == [nodeid]
 
 
 @pytest.mark.asyncio

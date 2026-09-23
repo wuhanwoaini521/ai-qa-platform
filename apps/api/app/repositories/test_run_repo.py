@@ -220,6 +220,8 @@ class TestRunRepository:
 
     async def list_executions(self, run_id: str) -> list[TestExecutionORM]:
         result = await self.session.execute(
-            select(TestExecutionORM).where(TestExecutionORM.run_id == run_id).order_by(TestExecutionORM.started_at)
+            select(TestExecutionORM)
+            .where(TestExecutionORM.run_id == run_id)
+            .order_by(TestExecutionORM.started_at.asc().nulls_first(), TestExecutionORM.id.asc())
         )
         return list(result.scalars().all())

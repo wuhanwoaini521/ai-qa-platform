@@ -53,6 +53,33 @@ class JsonDict(TypeDecorator):
             return {}
 
 
+class UtcDateTime(TypeDecorator):
+    """Timezone-aware UTC ``DateTime`` behaving identically on SQLite and PostgreSQL.
+
+    SQLite stores ``DateTime(timezone=True)`` as a naive string and hands naive
+    datetimes back, while PostgreSQL returns aware ``timestamptz`` values.
+    Normalising on bind and on result keeps comparisons and API payloads
+    independent of the backend.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
 class ProjectORM(Base):
     __tablename__ = "projects"
 
@@ -62,8 +89,8 @@ class ProjectORM(Base):
     repository_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     default_branch: Mapped[str] = mapped_column(String(100), default="main")
     framework_type: Mapped[str] = mapped_column(String(50), default="playwright_python")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     requirements: Mapped[list[RequirementORM]] = relationship(
         "RequirementORM", back_populates="project", cascade="all, delete-orphan"
@@ -89,8 +116,8 @@ class RequirementORM(Base):
     external_system: Mapped[str | None] = mapped_column(String(50), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     project: Mapped[ProjectORM] = relationship("ProjectORM", back_populates="requirements")
     test_designs: Mapped[list[TestDesignORM]] = relationship(
@@ -110,8 +137,8 @@ class TestDesignORM(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     risk: Mapped[str] = mapped_column(String(100), default="Medium")
     status: Mapped[str] = mapped_column(String(50), default="DRAFT")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     requirement: Mapped[RequirementORM] = relationship("RequirementORM", back_populates="test_designs")
 
@@ -137,8 +164,8 @@ class TestCaseORM(Base):
     external_system: Mapped[str | None] = mapped_column(String(50), nullable=True)
     external_case_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     project: Mapped[ProjectORM] = relationship("ProjectORM", back_populates="test_cases")
     binding: Mapped[AutomationBindingORM | None] = relationship(
@@ -158,8 +185,8 @@ class AutomationBindingORM(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     framework: Mapped[str] = mapped_column(String(50), default="playwright_python")
     status: Mapped[str] = mapped_column(String(50), default="DRAFT", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     test_case: Mapped[TestCaseORM] = relationship("TestCaseORM", back_populates="binding")
 
@@ -172,8 +199,8 @@ class WorkspaceORM(Base):
     path: Mapped[str] = mapped_column(String(500), nullable=False)
     branch: Mapped[str] = mapped_column(String(100), default="main")
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     project: Mapped[ProjectORM] = relationship("ProjectORM", back_populates="workspaces")
 
@@ -201,9 +228,9 @@ class TestRunORM(Base):
     skipped: Mapped[int] = mapped_column(Integer, default=0)
     cancelled: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
     project: Mapped[ProjectORM] = relationship("ProjectORM", back_populates="runs")
     executions: Mapped[list[TestExecutionORM]] = relationship(
@@ -227,8 +254,8 @@ class TestExecutionORM(Base):
     stack_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_category: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     artifact_paths: Mapped[list[str]] = mapped_column(JsonList, default=list)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
     run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="executions")
     failure_record: Mapped[FailureRecordORM | None] = relationship(
@@ -257,7 +284,7 @@ class FailureRecordORM(Base):
     console_logs: Mapped[list[str]] = mapped_column(JsonList, default=list)
     suggested_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     repair_proposal: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
     execution: Mapped[TestExecutionORM] = relationship("TestExecutionORM", back_populates="failure_record")
 
@@ -269,7 +296,7 @@ class AIInvocationORM(Base):
     task: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -278,7 +305,7 @@ class AIInvocationORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
     error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
 
 class RunnerProfileORM(Base):
@@ -292,8 +319,8 @@ class RunnerProfileORM(Base):
     type: Mapped[str] = mapped_column(String(50), default="LOCAL", index=True)  # "LOCAL", "JENKINS"
     enabled: Mapped[bool] = mapped_column(default=True)
     config: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class ExternalArtifactReferenceORM(Base):
@@ -305,7 +332,7 @@ class ExternalArtifactReferenceORM(Base):
     type: Mapped[str] = mapped_column(String(50), default="ALLURE")  # ALLURE, HTML_REPORT, SCREENSHOT, TRACE, LOGS
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
     run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="external_artifacts")
 
@@ -320,7 +347,7 @@ class IntegrationAuditORM(Base):
     user_id: Mapped[str] = mapped_column(String(100), default="user")
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)  # SUCCESS, FAILED, DRY_RUN
     details: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
 
 class ReleaseORM(Base):
@@ -337,8 +364,8 @@ class ReleaseORM(Base):
     max_allowed_flaky: Mapped[int] = mapped_column(Integer, default=0)
     quality_score: Mapped[float] = mapped_column(Float, default=0.0)
     blockers: Mapped[list[str]] = mapped_column(JsonList, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 # --- Phase 11: Identity, RBAC & Security ORM Models ---
@@ -352,8 +379,8 @@ class UserORM(Base):
     role: Mapped[str] = mapped_column(String(50), default="QA_ENGINEER", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class TeamORM(Base):
@@ -362,8 +389,8 @@ class TeamORM(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class TeamMemberORM(Base):
@@ -373,7 +400,7 @@ class TeamMemberORM(Base):
     team_id: Mapped[str] = mapped_column(String(36), ForeignKey("teams.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(50), default="MEMBER")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
 class ApiKeyORM(Base):
@@ -384,9 +411,9 @@ class ApiKeyORM(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
 class SecurityAuditORM(Base):
@@ -400,7 +427,7 @@ class SecurityAuditORM(Base):
     ip_address: Mapped[str] = mapped_column(String(50), default="127.0.0.1")
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
     details: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
 
 # --- Phase 12: Distributed Execution ORM Models ---
@@ -416,8 +443,8 @@ class WorkerORM(Base):
     max_concurrency: Mapped[int] = mapped_column(Integer, default=4)
     current_load: Mapped[int] = mapped_column(Integer, default=0)
     tags: Mapped[list[str]] = mapped_column(JsonList, default=list)
-    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
-    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+    registered_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
 class ExecutionJobORM(Base):
@@ -437,10 +464,10 @@ class ExecutionJobORM(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=2)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class ArtifactORM(Base):
@@ -452,4 +479,4 @@ class ArtifactORM(Base):
     content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
     storage_type: Mapped[str] = mapped_column(String(50), default="LOCAL")  # LOCAL, S3
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)

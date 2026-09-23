@@ -7,24 +7,30 @@ from project_model.models import Worker, WorkerCreate, WorkerStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_session
+from app.persistence import database
 from app.persistence.models import WorkerORM, utc_now
 
 
 class WorkerRepository:
-    def __init__(self, session_or_factory=get_session) -> None:
+    def __init__(self, session_or_factory=None) -> None:
         if isinstance(session_or_factory, AsyncSession):
             self._session: AsyncSession | None = session_or_factory
-            self.session_factory = None
+            self._session_factory = None
         else:
             self._session = None
-            self.session_factory = session_or_factory
+            self._session_factory = session_or_factory
+
+    @property
+    def session_factory(self):
+        if self._session_factory is not None:
+            return self._session_factory
+
+        return database.get_session
 
     async def _run(self, session: AsyncSession | None, fn):
         active_session = session or self._session
         if active_session:
             return await fn(active_session)
-        assert self.session_factory is not None
         async with self.session_factory() as s:
             return await fn(s)
 
@@ -110,8 +116,6 @@ class WorkerRepository:
             workers = []
             for orm in res.scalars().all():
                 hb = orm.last_heartbeat_at
-                if hb and hb.tzinfo is None:
-                    hb = hb.replace(tzinfo=timezone.utc)
                 if hb and hb < cutoff and orm.status not in ("OFFLINE", "LOST"):
                     orm.status = "LOST"
                 workers.append(self._to_model(orm))

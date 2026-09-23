@@ -6,24 +6,30 @@ from project_model.models import ExecutionJob, ExecutionJobCreate, JobStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_session
+from app.persistence import database
 from app.persistence.models import ExecutionJobORM, utc_now
 
 
 class JobRepository:
-    def __init__(self, session_or_factory=get_session) -> None:
+    def __init__(self, session_or_factory=None) -> None:
         if isinstance(session_or_factory, AsyncSession):
             self._session: AsyncSession | None = session_or_factory
-            self.session_factory = None
+            self._session_factory = None
         else:
             self._session = None
-            self.session_factory = session_or_factory
+            self._session_factory = session_or_factory
+
+    @property
+    def session_factory(self):
+        if self._session_factory is not None:
+            return self._session_factory
+
+        return database.get_session
 
     async def _run(self, session: AsyncSession | None, fn):
         active_session = session or self._session
         if active_session:
             return await fn(active_session)
-        assert self.session_factory is not None
         async with self.session_factory() as s:
             return await fn(s)
 
@@ -56,15 +62,6 @@ class JobRepository:
 
         return await self._run(session, _exec)
 
-    async def get_by_id(self, job_id: str, session: AsyncSession | None = None) -> ExecutionJob | None:
-        async def _exec(s: AsyncSession) -> ExecutionJob | None:
-            stmt = select(ExecutionJobORM).where(ExecutionJobORM.id == job_id)
-            res = await s.execute(stmt)
-            orm = res.scalar_one_or_none()
-            return self._to_model(orm) if orm else None
-
-        return await self._run(session, _exec)
-
     async def list_jobs(
         self,
         run_id: str | None = None,
@@ -86,9 +83,6 @@ class JobRepository:
             return [self._to_model(orm) for orm in res.scalars().all()]
 
         return await self._run(session, _exec)
-
-    async def list_all(self, session: AsyncSession | None = None) -> list[ExecutionJob]:
-        return await self.list_jobs(session=session)
 
     async def claim_next_job(
         self, worker_id: str, browser: str = "chromium", session: AsyncSession | None = None

@@ -8,6 +8,7 @@ from qa_core.failure.models import FailureCategory
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_flaky_algorithm_synthetic_patterns():
     repo = RunHistoryRepository(min_samples_threshold=3)
 
@@ -64,6 +65,7 @@ async def test_flaky_algorithm_synthetic_patterns():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_flaky_and_history_api_endpoints(client: AsyncClient):
     # 1. Create project
     proj_res = await client.post("/api/projects", json={"name": "History Intelligence Suite"})

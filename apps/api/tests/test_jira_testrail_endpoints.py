@@ -5,6 +5,8 @@ import asyncio
 import pytest
 from httpx import AsyncClient
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_jira_integration_workflow(client: AsyncClient):

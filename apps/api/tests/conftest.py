@@ -1,5 +1,24 @@
-from pathlib import Path
+"""Shared API test harness.
 
+The suite runs on SQLite by default (fast, file-per-test). Setting
+``AI_QA_TEST_DATABASE_URL`` to a PostgreSQL URL runs the **same** tests against
+PostgreSQL, which is the production backend. Any behavioural difference between
+the two backends is a platform bug, not a test-environment quirk.
+
+No test may touch the developer database configured in ``settings.database_url``
+(``./runtime/ai_qa_platform.db``): every database reference is redirected to the
+per-test engine by :func:`redirect_database`.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import pytest
 import pytest_asyncio
 from app.main import app as fastapi_app
 from app.persistence import database as db_module
@@ -9,22 +28,98 @@ from app.settings import settings
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+POSTGRES_TEST_URL = os.environ.get("AI_QA_TEST_DATABASE_URL", "").strip()
+
+# Module-level database references that code binds with ``from ... import``.
+_REDIRECTED_NAMES = ("engine", "async_session_factory", "get_session")
+_APP_MODULE_PREFIXES = ("app", "worker")
+
+
+def using_postgres() -> bool:
+    return POSTGRES_TEST_URL.startswith("postgresql")
+
+
+def pytest_collection_modifyitems(config, items):  # noqa: ARG001
+    """PostgreSQL-only expectations must not silently pass on SQLite."""
+    if using_postgres():
+        return
+    skip = pytest.mark.skip(reason="requires AI_QA_TEST_DATABASE_URL pointing at PostgreSQL")
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip)
+
+
+def enable_sqlite_foreign_keys(engine) -> None:
+    """SQLite ignores ``ON DELETE CASCADE`` unless foreign keys are enforced.
+
+    PostgreSQL enforces them always, so without this pragma the same code path
+    behaves differently in tests than in production.
+    """
+    db_module.enable_sqlite_foreign_keys(engine)
+
+
+def create_test_engine(tmp_path: Path):
+    if using_postgres():
+        return create_async_engine(POSTGRES_TEST_URL, echo=False)
+    db_file = tmp_path / "test.db"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_file}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+    enable_sqlite_foreign_keys(engine)
+    return engine
+
+
+def _app_modules() -> list[Any]:
+    """Every loaded module of the application packages."""
+    modules = []
+    for module in list(sys.modules.values()):
+        name = getattr(module, "__name__", "")
+        if name.split(".")[0] in _APP_MODULE_PREFIXES:
+            modules.append(module)
+    return modules
+
+
+def redirect_database(engine, session_factory) -> dict[str, Any]:
+    """Point every module-level database reference at the test database.
+
+    Repositories and routers bind ``engine`` / ``async_session_factory`` /
+    ``get_session`` with ``from ... import`` at import time, so patching the
+    ``database`` module alone would leave most of the app on the real engine.
+
+    Returns the state needed by :func:`restore_database`.
+    """
+    replacements = {"engine": engine, "async_session_factory": session_factory, "get_session": session_factory}
+    originals = {name: getattr(db_module, name) for name in _REDIRECTED_NAMES}
+    for module in _app_modules():
+        for name, replacement in replacements.items():
+            if module.__dict__.get(name) is originals[name]:
+                setattr(module, name, replacement)
+    return {"originals": originals, "replacements": replacements}
+
+
+def restore_database(state: dict[str, Any]) -> None:
+    """Undo :func:`redirect_database`, including modules imported meanwhile."""
+    originals = state["originals"]
+    redirected_ids = {id(value) for value in state["replacements"].values()}
+    for module in _app_modules():
+        for name, original in originals.items():
+            if id(module.__dict__.get(name)) in redirected_ids:
+                setattr(module, name, original)
+
 
 @pytest_asyncio.fixture
 async def test_db_session(tmp_path: Path):
-    db_file = tmp_path / "test.db"
-    db_url = f"sqlite+aiosqlite:///{db_file}"
-    engine = create_async_engine(db_url, echo=False, connect_args={"check_same_thread": False})
-    async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    engine = create_test_engine(tmp_path)
 
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    orig_factory = getattr(db_module, "async_session_factory", None)
-    orig_get_session = getattr(db_module, "get_session", None)
+    async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-    db_module.async_session_factory = async_session
-    db_module.get_session = async_session
+    redirect_state = redirect_database(engine, async_session)
 
     async def override_get_db():
         async with async_session() as session:
@@ -35,12 +130,29 @@ async def test_db_session(tmp_path: Path):
 
     yield async_session
 
-    if orig_factory is not None:
-        db_module.async_session_factory = orig_factory
-    if orig_get_session is not None:
-        db_module.get_session = orig_get_session
     fastapi_app.dependency_overrides.clear()
+    restore_database(redirect_state)
     await engine.dispose()
+
+
+#: Credentials seeded by ``AuthService.ensure_default_users`` on first login.
+ROLE_CREDENTIALS: dict[str, tuple[str, str]] = {
+    "ADMIN": ("admin@ai-qa.local", "adminpassword"),
+    "QA_LEAD": ("lead@ai-qa.local", "password123"),
+    "QA_ENGINEER": ("engineer@ai-qa.local", "password123"),
+}
+
+
+async def login_token(ac: AsyncClient, email: str, password: str) -> str:
+    """Authenticate against the real login endpoint and return the bearer token."""
+    response = await ac.post("/api/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
+
+
+def bearer_client(token: str | None) -> AsyncClient:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test", headers=headers)
 
 
 @pytest_asyncio.fixture
@@ -52,4 +164,53 @@ async def client(test_db_session, tmp_path: Path):
 
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Route authorization is enforced for real: authenticate as the seeded administrator so
+        # every test exercises the same guarded path production uses.
+        email, password = ROLE_CREDENTIALS["ADMIN"]
+        ac.headers["Authorization"] = f"Bearer {await login_token(ac, email, password)}"
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def role_client(client):
+    """Async context manager yielding a client authenticated as a seeded role.
+
+    ``async with role_client("QA_LEAD") as lead: ...`` — used by the authorization tests to prove
+    denial paths instead of only the happy path.
+    """
+
+    @asynccontextmanager
+    async def _open(role: str):
+        email, password = ROLE_CREDENTIALS[role]
+        token = await login_token(client, email, password)
+        async with bearer_client(token) as ac:
+            yield ac
+
+    return _open
+
+
+@pytest_asyncio.fixture
+async def credentials_client(client):
+    """Async context manager yielding a client authenticated with explicit credentials.
+
+    For roles that are not seeded (VIEWER, or an operator-created account).
+    """
+
+    @asynccontextmanager
+    async def _open(email: str, password: str):
+        token = await login_token(client, email, password)
+        async with bearer_client(token) as ac:
+            yield ac
+
+    return _open
+
+
+@pytest_asyncio.fixture
+async def anonymous_client(test_db_session, tmp_path: Path):
+    """A client that never sends credentials."""
+    test_ws_dir = tmp_path / "workspaces"
+    test_ws_dir.mkdir(parents=True, exist_ok=True)
+    settings.workspace_storage_dir = test_ws_dir
+
+    async with bearer_client(None) as ac:
         yield ac

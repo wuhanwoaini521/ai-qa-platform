@@ -57,6 +57,7 @@ class RunStatus(str, Enum):
     RUNNING = "RUNNING"
     PASSED = "PASSED"
     FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
     ERROR = "ERROR"
     CANCELLED = "CANCELLED"
 
@@ -1079,6 +1080,11 @@ class TeamMember(EntityBase):
     created_at: datetime
 
 
+class AddMemberRequest(EntityBase):
+    user_id: str
+    role: str = "MEMBER"
+
+
 class Team(TeamBase):
     id: str
     member_count: int = 0
@@ -1193,6 +1199,19 @@ class ExecutionJobBase(EntityBase):
 
 class ExecutionJobCreate(ExecutionJobBase):
     pass
+
+
+class ClaimJobRequest(EntityBase):
+    worker_id: str
+    browser: str = "chromium"
+
+
+class CompleteJobRequest(EntityBase):
+    duration_ms: float = 0.0
+
+
+class FailJobRequest(EntityBase):
+    error_message: str
 
 
 class ExecutionJob(ExecutionJobBase):

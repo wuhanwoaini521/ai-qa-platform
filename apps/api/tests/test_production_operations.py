@@ -1,73 +1,69 @@
 from __future__ import annotations
 
 import pytest
-from app.main import app
-from app.persistence.database import check_db_health, init_db
+from app.persistence.database import check_db_health
 from app.services.metrics_service import metrics_service
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from worker.daemon import WorkerDaemon
 
 
-@pytest.fixture(autouse=True)
-async def setup_test_db():
-    await init_db()
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_health_check_endpoint(client: AsyncClient):
+    response = await client.get("/api/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] in ("healthy", "degraded")
+    assert data["service"] == "ai-qa-platform-api"
+    assert "version" in data
+    assert "uptime_seconds" in data
+    assert "checks" in data
+    assert "database" in data["checks"]
 
 
 @pytest.mark.asyncio
-async def test_health_check_endpoint():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] in ("healthy", "degraded")
-        assert data["service"] == "ai-qa-platform-api"
-        assert "version" in data
-        assert "uptime_seconds" in data
-        assert "checks" in data
-        assert "database" in data["checks"]
+@pytest.mark.integration
+async def test_liveness_probe(client: AsyncClient):
+    response = await client.get("/api/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "alive"}
 
 
 @pytest.mark.asyncio
-async def test_liveness_probe():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/health/live")
-        assert response.status_code == 200
-        assert response.json() == {"status": "alive"}
+@pytest.mark.integration
+async def test_readiness_probe(client: AsyncClient):
+    response = await client.get("/api/health/ready")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["database"] == "ok"
 
 
 @pytest.mark.asyncio
-async def test_readiness_probe():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/health/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ready"
-        assert data["database"] == "ok"
+@pytest.mark.integration
+async def test_prometheus_metrics_endpoint(client: AsyncClient):
+    # Trigger an API call first to increment metrics
+    await client.get("/api/health")
+
+    response = await client.get("/api/metrics")
+    assert response.status_code == 200
+    text = response.text
+    assert "ai_qa_platform_uptime_seconds" in text
+    assert "ai_qa_workers_total" in text
+    assert "ai_qa_jobs_status" in text
+    assert "ai_qa_http_requests_total" in text
 
 
 @pytest.mark.asyncio
-async def test_prometheus_metrics_endpoint():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # Trigger an API call first to increment metrics
-        await client.get("/api/health")
-
-        response = await client.get("/api/metrics")
-        assert response.status_code == 200
-        text = response.text
-        assert "ai_qa_platform_uptime_seconds" in text
-        assert "ai_qa_workers_total" in text
-        assert "ai_qa_jobs_status" in text
-        assert "ai_qa_http_requests_total" in text
-
-
-@pytest.mark.asyncio
-async def test_database_health_check():
+@pytest.mark.integration
+async def test_database_health_check(test_db_session):  # noqa: ARG001
     is_healthy = await check_db_health()
     assert is_healthy is True
 
 
 @pytest.mark.asyncio
-async def test_metrics_service_summary():
+@pytest.mark.integration
+async def test_metrics_service_summary(test_db_session):  # noqa: ARG001
     metrics_service.record_request("GET", "/api/test", 200, 0.05)
     summary = await metrics_service.get_summary_metrics()
     assert "uptime_seconds" in summary

@@ -5,13 +5,20 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_session
+from app.persistence import database
 from app.persistence.models import ArtifactORM, utc_now
 
 
 class ArtifactRepository:
-    def __init__(self, session_factory=get_session) -> None:
-        self.session_factory = session_factory
+    def __init__(self, session_factory=None) -> None:
+        self._session_factory = session_factory
+
+    @property
+    def session_factory(self):
+        if self._session_factory is not None:
+            return self._session_factory
+
+        return database.get_session
 
     async def create(
         self,

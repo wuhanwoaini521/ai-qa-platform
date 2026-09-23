@@ -52,7 +52,7 @@ class RunHistoryRepository:
             if project_id:
                 stmt = stmt.where(TestRunORM.project_id == project_id)
 
-            stmt = stmt.order_by(desc(TestExecutionORM.started_at), desc(TestExecutionORM.id)).limit(limit)
+            stmt = stmt.order_by(desc(TestExecutionORM.started_at).nulls_last(), desc(TestExecutionORM.id)).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

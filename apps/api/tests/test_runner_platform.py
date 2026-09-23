@@ -13,6 +13,7 @@ from qa_core.execution.runner_backend import LocalRunnerBackend, RunnerTriggerRe
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_local_runner_backend():
     backend = LocalRunnerBackend()
     health = await backend.check_health()
@@ -30,6 +31,7 @@ async def test_local_runner_backend():
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_jenkins_runner_backend_with_fake_server(monkeypatch):
     fake_server = FakeJenkinsServer(base_url="http://jenkins.mock.ci:8080", job_name="qa-e2e-suite")
     transport = httpx.MockTransport(fake_server.handle_request)
@@ -87,6 +89,7 @@ async def test_jenkins_runner_backend_with_fake_server(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_runner_profile_api_endpoints(client: AsyncClient):
     # 1. List initial runners
     runners_res = await client.get("/api/runners")

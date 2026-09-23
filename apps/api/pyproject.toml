@@ -13,13 +13,16 @@ dependencies = [
     "aiofiles>=24.1.0",
     "python-multipart>=0.0.12",
     "asyncpg>=0.30.0",
+    "httpx>=0.28.0",
     "project-model",
     "qa-core",
+    "integrations",
 ]
 
 [tool.uv.sources]
 project-model = { workspace = true }
 qa-core = { workspace = true }
+integrations = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

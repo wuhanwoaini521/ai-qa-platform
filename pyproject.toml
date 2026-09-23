@@ -42,3 +42,11 @@ ignore = ["E501"]
 testpaths = ["apps/api/tests", "packages/qa-core/tests", "packages/integrations/tests", "apps/worker/tests"]
 asyncio_mode = "auto"
 pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "apps/worker"]
+markers = [
+    "unit: fast, isolated test with no external dependency",
+    "integration: test spanning several layers (API, services, persistence)",
+    "postgres: requires AI_QA_TEST_DATABASE_URL pointing at PostgreSQL",
+    "security: authentication, authorisation, secret handling or sandboxing behaviour",
+    "e2e: end-to-end test spanning the whole stack",
+    "slow: test that takes a noticeable amount of time",
+]
