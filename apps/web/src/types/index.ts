@@ -530,3 +530,107 @@ export interface DashboardStats {
   recent_test_cases: TestCase[];
   recent_runs: TestRun[];
 }
+
+export interface BranchInfo {
+  name: string;
+  is_current: boolean;
+  commit_sha: string;
+  commit_message: string;
+}
+
+export interface GitCommitInfo {
+  sha: string;
+  message: string;
+  author_name: string;
+  author_email: string;
+  date: string;
+}
+
+export interface GitCommitRequest {
+  message: string;
+  author_name?: string;
+  author_email?: string;
+}
+
+export interface GitBranchCreateRequest {
+  branch_name: string;
+  checkout?: boolean;
+}
+
+export interface GitPushResult {
+  success: boolean;
+  branch: string;
+  remote: string;
+  message: string;
+}
+
+export type CheckStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED';
+
+export interface CheckRun {
+  id: string;
+  name: string;
+  status: CheckStatus;
+  conclusion?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  html_url?: string | null;
+  failure_summary?: string | null;
+  failure_logs?: string | null;
+}
+
+export interface PRChecksSummary {
+  pr_number: number;
+  pr_url: string;
+  head_branch: string;
+  overall_status: CheckStatus;
+  checks: CheckRun[];
+}
+
+export interface PullRequestInfo {
+  id: string;
+  number: number;
+  title: string;
+  body: string;
+  html_url: string;
+  state: string;
+  head_branch: string;
+  base_branch: string;
+  created_at: string;
+  updated_at: string;
+  checks_summary?: PRChecksSummary | null;
+}
+
+export interface PullRequestCreateRequest {
+  title: string;
+  body: string;
+  head_branch?: string;
+  base_branch?: string;
+  requirement_ids?: string[];
+  test_case_ids?: string[];
+}
+
+export interface PRSummarySuggestionRequest {
+  requirement_ids?: string[];
+  test_case_ids?: string[];
+  include_diff?: boolean;
+}
+
+export interface PRSummarySuggestionResponse {
+  title: string;
+  body: string;
+  summary_bullets: string[];
+}
+
+export interface PRDiagnosisRequest {
+  check_run_id: string;
+  failure_logs?: string;
+}
+
+export interface PRDiagnosisResponse {
+  classification: string;
+  summary: string;
+  root_cause: string;
+  suggested_fix: string;
+  affected_files: string[];
+}
+

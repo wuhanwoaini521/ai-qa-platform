@@ -627,3 +627,113 @@ class DashboardStats(BaseModel):
     recent_requirements: list[Requirement] = Field(default_factory=list)
     recent_test_cases: list[TestCase] = Field(default_factory=list)
     recent_runs: list[TestRun] = Field(default_factory=list)
+
+
+# --- Phase 8: Git, Branch, PR & GitHub Check Models ---
+class BranchInfo(BaseModel):
+    name: str
+    is_current: bool = False
+    commit_sha: str = ""
+    commit_message: str = ""
+
+
+class GitCommitInfo(BaseModel):
+    sha: str
+    message: str
+    author_name: str
+    author_email: str
+    date: str
+
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=500)
+    author_name: str | None = None
+    author_email: str | None = None
+
+
+class GitBranchCreateRequest(BaseModel):
+    branch_name: str = Field(..., min_length=1, max_length=150)
+    checkout: bool = True
+
+
+class GitPushResult(BaseModel):
+    success: bool
+    branch: str
+    remote: str = "origin"
+    message: str = ""
+
+
+class CheckStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class CheckRun(BaseModel):
+    id: str
+    name: str
+    status: CheckStatus
+    conclusion: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    html_url: str | None = None
+    failure_summary: str | None = None
+    failure_logs: str | None = None
+
+
+class PRChecksSummary(BaseModel):
+    pr_number: int
+    pr_url: str
+    head_branch: str
+    overall_status: CheckStatus
+    checks: list[CheckRun] = Field(default_factory=list)
+
+
+class PullRequestInfo(EntityBase):
+    id: str
+    number: int
+    title: str
+    body: str
+    html_url: str
+    state: str = "open"  # "open", "closed", "merged"
+    head_branch: str
+    base_branch: str = "main"
+    created_at: datetime
+    updated_at: datetime
+    checks_summary: PRChecksSummary | None = None
+
+
+class PullRequestCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=250)
+    body: str = Field(default="", max_length=10000)
+    head_branch: str | None = None
+    base_branch: str = "main"
+    requirement_ids: list[str] = Field(default_factory=list)
+    test_case_ids: list[str] = Field(default_factory=list)
+
+
+class PRSummarySuggestionRequest(BaseModel):
+    requirement_ids: list[str] = Field(default_factory=list)
+    test_case_ids: list[str] = Field(default_factory=list)
+    include_diff: bool = True
+
+
+class PRSummarySuggestionResponse(BaseModel):
+    title: str
+    body: str
+    summary_bullets: list[str] = Field(default_factory=list)
+
+
+class PRDiagnosisRequest(BaseModel):
+    check_run_id: str
+    failure_logs: str = ""
+
+
+class PRDiagnosisResponse(BaseModel):
+    classification: str  # "TEST_FAILURE", "LINT_FAILURE", "BUILD_FAILURE", "DEPENDENCY_FAILURE", "TYPE_FAILURE"
+    summary: str
+    root_cause: str
+    suggested_fix: str
+    affected_files: list[str] = Field(default_factory=list)

@@ -8,6 +8,16 @@ from integrations.contracts import (
     PRContext,
     TestRailIntegration,
 )
+from integrations.git_repository import (
+    GitRepository,
+    GitRepositoryProtocol,
+    GitSecurityError,
+)
+from integrations.github_adapter import (
+    FakePullRequestAdapter,
+    GitHubPullRequestAdapter,
+    PullRequestAdapter,
+)
 from integrations.jenkins_runner import (
     FakeJenkinsServer,
     JenkinsConfig,
@@ -24,4 +34,10 @@ __all__ = [
     "JenkinsConfig",
     "JenkinsRunnerBackend",
     "FakeJenkinsServer",
+    "GitRepository",
+    "GitRepositoryProtocol",
+    "GitSecurityError",
+    "PullRequestAdapter",
+    "FakePullRequestAdapter",
+    "GitHubPullRequestAdapter",
 ]

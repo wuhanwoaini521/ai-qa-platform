@@ -8,13 +8,17 @@ from pathlib import Path
 
 import aiofiles
 import aiofiles.os
+from integrations.git_repository import GitRepository
 from project_model.models import (
+    BranchInfo,
     CollectedTest,
     CollectionReport,
     FileNode,
     FileNodeType,
     GitChangedFile,
+    GitCommitInfo,
     GitDiffResult,
+    GitPushResult,
     ValidationIssue,
     ValidationReport,
     ValidationSeverity,
@@ -31,6 +35,7 @@ class WorkspaceService:
     def __init__(self, base_dir: Path | None = None) -> None:
         self.base_dir = (base_dir or settings.workspace_storage_dir).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.git_repo = GitRepository()
 
     def get_workspace_dir(self, workspace_id: str) -> Path:
         # Prevent traversal in workspace_id
@@ -253,91 +258,65 @@ def test_login_invalid_password(page: Page):
         else:
             target.unlink()
 
-    async def commit_changes(self, workspace_id: str, message: str) -> str:
+    async def get_current_branch(self, workspace_id: str) -> str:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            return "main"
+        return await self.git_repo.get_current_branch(ws_dir)
+
+    async def get_branches(self, workspace_id: str) -> list[BranchInfo]:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            return [BranchInfo(name="main", is_current=True)]
+        return await self.git_repo.get_branches(ws_dir)
+
+    async def create_branch(self, workspace_id: str, branch_name: str, checkout: bool = True) -> str:
         ws_dir = self.get_workspace_dir(workspace_id)
         if not (ws_dir / ".git").exists():
             raise RuntimeError("Workspace is not a Git repository.")
+        return await self.git_repo.create_branch(ws_dir, branch_name, checkout=checkout)
 
-        proc_add = await asyncio.create_subprocess_exec(
-            "git",
-            "add",
-            ".",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc_add.communicate()
+    async def switch_branch(self, workspace_id: str, branch_name: str) -> str:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            raise RuntimeError("Workspace is not a Git repository.")
+        return await self.git_repo.switch_branch(ws_dir, branch_name)
 
-        proc_commit = await asyncio.create_subprocess_exec(
-            "git",
-            "-c",
-            "user.name=AI QA Platform",
-            "-c",
-            "user.email=agent@ai-qa.local",
-            "commit",
-            "-m",
-            message,
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc_commit.communicate()
-        if proc_commit.returncode != 0:
-            raise RuntimeError(f"Commit failed: {stderr.decode() or stdout.decode()}")
-        return stdout.decode()
+    async def commit_changes(
+        self,
+        workspace_id: str,
+        message: str,
+        author_name: str = "AI QA Platform",
+        author_email: str = "agent@ai-qa.local",
+    ) -> str:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            raise RuntimeError("Workspace is not a Git repository.")
+        return await self.git_repo.commit(ws_dir, message=message, author_name=author_name, author_email=author_email)
+
+    async def push_branch(self, workspace_id: str, branch: str | None = None, remote: str = "origin") -> GitPushResult:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            raise RuntimeError("Workspace is not a Git repository.")
+        return await self.git_repo.push(ws_dir, branch=branch, remote=remote)
+
+    async def get_git_log(self, workspace_id: str, limit: int = 15) -> list[GitCommitInfo]:
+        ws_dir = self.get_workspace_dir(workspace_id)
+        if not (ws_dir / ".git").exists():
+            return []
+        return await self.git_repo.get_log(ws_dir, limit=limit)
 
     async def get_git_status(self, workspace_id: str) -> list[GitChangedFile]:
         ws_dir = self.get_workspace_dir(workspace_id)
         if not (ws_dir / ".git").exists():
             return []
+        return await self.git_repo.get_status(ws_dir)
 
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "status",
-            "--porcelain",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        changed: list[GitChangedFile] = []
-        for line in stdout.decode().splitlines():
-            if not line:
-                continue
-            status = line[:2].strip()
-            path = line[3:].strip()
-            changed.append(GitChangedFile(path=path, status=status, staged=" " not in line[:1]))
-        return changed
-
-    async def get_diff(self, workspace_id: str) -> GitDiffResult:
+    async def get_diff(self, workspace_id: str, staged: bool = False) -> GitDiffResult:
         ws_dir = self.get_workspace_dir(workspace_id)
         if not (ws_dir / ".git").exists():
             return GitDiffResult(diff="", changed_files=[])
-
-        changed_files = await self.get_git_status(workspace_id)
-
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "diff",
-            "HEAD",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        diff_text = stdout.decode()
-        if not diff_text:
-            proc2 = await asyncio.create_subprocess_exec(
-                "git",
-                "diff",
-                cwd=str(ws_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout2, _ = await proc2.communicate()
-            diff_text = stdout2.decode()
-
-        return GitDiffResult(diff=diff_text, changed_files=changed_files)
+        return await self.git_repo.get_diff(ws_dir, staged=staged)
 
     async def validate_workspace(self, workspace_id: str) -> ValidationReport:
         """Checks for Python syntax errors and basic lint diagnostics."""

@@ -7,6 +7,12 @@ import {
   ValidationIssue,
   CollectedTest,
   QAChatResponse,
+  BranchInfo,
+  GitCommitInfo,
+  PullRequestInfo,
+  PRChecksSummary,
+  CheckRun,
+  PRDiagnosisResponse,
 } from '../types';
 import { api } from '../api/client';
 import {
@@ -16,6 +22,10 @@ import {
   FileText,
   Save,
   GitBranch,
+  GitPullRequest,
+  GitCommit,
+  UploadCloud,
+  ExternalLink,
   RefreshCw,
   Play,
   Sparkles,
@@ -70,8 +80,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [loadingFile, setLoadingFile] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Sidebar Mode: 'files' | 'tests'
-  const [sidebarTab, setSidebarTab] = useState<'files' | 'tests'>('files');
+  // Sidebar Mode: 'files' | 'tests' | 'git' | 'pr'
+  const [sidebarTab, setSidebarTab] = useState<'files' | 'tests' | 'git' | 'pr'>('files');
   const [collectedTests, setCollectedTests] = useState<CollectedTest[]>([]);
   const [loadingTests, setLoadingTests] = useState<boolean>(false);
 
@@ -87,6 +97,28 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     newName?: string;
   } | null>(null);
   const [opInputText, setOpInputText] = useState<string>('');
+
+  // Source Control & Branch Workflow (Phase 8)
+  const [currentBranch, setCurrentBranch] = useState<string>('main');
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [recentCommits, setRecentCommits] = useState<GitCommitInfo[]>([]);
+  const [showBranchModal, setShowBranchModal] = useState<boolean>(false);
+  const [newBranchInput, setNewBranchInput] = useState<string>('');
+  const [isPushing, setIsPushing] = useState<boolean>(false);
+  const [pushStatusMessage, setPushStatusMessage] = useState<string | null>(null);
+  const [suggestingCommit, setSuggestingCommit] = useState<boolean>(false);
+
+  // Pull Request & GitHub Checks Workflow (Phase 8)
+  const [activePR, setActivePR] = useState<PullRequestInfo | null>(null);
+  const [prChecks, setPRChecks] = useState<PRChecksSummary | null>(null);
+  const [showPRModal, setShowPRModal] = useState<boolean>(false);
+  const [prTitleInput, setPRTitleInput] = useState<string>('');
+  const [prBodyInput, setPRBodyInput] = useState<string>('');
+  const [suggestingPR, setSuggestingPR] = useState<boolean>(false);
+  const [creatingPR, setCreatingPR] = useState<boolean>(false);
+  const [loadingChecks, setLoadingChecks] = useState<boolean>(false);
+  const [diagnosingCheckId, setDiagnosingCheckId] = useState<string | null>(null);
+  const [ciDiagnosisResult, setCIDiagnosisResult] = useState<PRDiagnosisResponse | null>(null);
 
   // Source Control & Commit
   const [diffResult, setDiffResult] = useState<GitDiffResult>({ diff: '', changed_files: [] });
@@ -185,10 +217,30 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     }
   };
 
+  const fetchGitData = async () => {
+    if (!currentProjectId) return;
+    try {
+      const [curBranch, branchList, commits, _status, diff] = await Promise.all([
+        api.getCurrentBranch(currentProjectId).catch(() => 'main'),
+        api.getGitBranches(currentProjectId).catch(() => []),
+        api.getGitLog(currentProjectId, 15).catch(() => []),
+        api.getGitStatus(currentProjectId).catch(() => []),
+        api.getWorkspaceDiff(currentProjectId).catch(() => ({ diff: '', changed_files: [] })),
+      ]);
+      setCurrentBranch(curBranch);
+      setBranches(branchList);
+      setRecentCommits(commits);
+      setDiffResult(diff);
+    } catch (err) {
+      console.error('Failed to fetch Git data', err);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
     fetchCollectedTests();
     handleValidateWorkspace();
+    fetchGitData();
   }, [currentProjectId]);
 
   useEffect(() => {
@@ -379,19 +431,142 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     }
   };
 
+  const handleCreateBranch = async () => {
+    if (!currentProjectId || !newBranchInput.trim()) return;
+    try {
+      await api.createBranch(currentProjectId, { branch_name: newBranchInput.trim(), checkout: true });
+      setNewBranchInput('');
+      setShowBranchModal(false);
+      await fetchGitData();
+      await fetchFiles();
+    } catch (err: any) {
+      alert(`Create branch error: ${err.message || err}`);
+    }
+  };
+
+  const handleSwitchBranch = async (targetBranch: string) => {
+    if (!currentProjectId || targetBranch === currentBranch) return;
+    try {
+      await api.switchBranch(currentProjectId, { branch_name: targetBranch });
+      await fetchGitData();
+      await fetchFiles();
+    } catch (err: any) {
+      alert(`Switch branch error: ${err.message || err}`);
+    }
+  };
+
+  const handleSuggestCommitMessage = async () => {
+    if (!currentProjectId || suggestingCommit) return;
+    try {
+      setSuggestingCommit(true);
+      const diff = await api.getWorkspaceDiff(currentProjectId);
+      if (diff.changed_files.length > 0) {
+        setCommitMessage(`feat(${currentBranch}): update automated test suites (${diff.changed_files.length} files)`);
+      } else {
+        setCommitMessage(`chore(${currentBranch}): workspace maintenance`);
+      }
+    } catch (err) {
+      console.error('Failed to suggest commit msg', err);
+    } finally {
+      setSuggestingCommit(false);
+    }
+  };
+
   const handleCommitChanges = async () => {
     if (!currentProjectId || !commitMessage.trim() || isCommitting) return;
     try {
       setIsCommitting(true);
       await api.commitWorkspace(currentProjectId, commitMessage.trim());
       setCommitMessage('');
-      const diff = await api.getWorkspaceDiff(currentProjectId);
-      setDiffResult(diff);
+      await fetchGitData();
       setShowDiffView(false);
     } catch (err: any) {
       alert(`Commit error: ${err.message || err}`);
     } finally {
       setIsCommitting(false);
+    }
+  };
+
+  const handlePushBranch = async () => {
+    if (!currentProjectId || isPushing) return;
+    try {
+      setIsPushing(true);
+      setPushStatusMessage('Pushing branch to origin...');
+      const res = await api.pushGitBranch(currentProjectId, currentBranch);
+      setPushStatusMessage(res.message);
+      await fetchGitData();
+    } catch (err: any) {
+      setPushStatusMessage(`Push error: ${err.message || err}`);
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
+  const handleOpenPRModal = async () => {
+    if (!currentProjectId) return;
+    try {
+      setShowPRModal(true);
+      setSuggestingPR(true);
+      const suggestion = await api.suggestPRSummary(currentProjectId, { include_diff: true });
+      setPRTitleInput(suggestion.title);
+      setPRBodyInput(suggestion.body);
+    } catch (err: any) {
+      setPRTitleInput(`feat(${currentBranch}): automated test suite coverage`);
+      setPRBodyInput(`## Quality Engineering PR\n\nAutomated tests for branch \`${currentBranch}\`.`);
+    } finally {
+      setSuggestingPR(false);
+    }
+  };
+
+  const handleCreatePR = async () => {
+    if (!currentProjectId || !prTitleInput.trim() || creatingPR) return;
+    try {
+      setCreatingPR(true);
+      const pr = await api.createPullRequest(currentProjectId, {
+        title: prTitleInput.trim(),
+        body: prBodyInput,
+        head_branch: currentBranch,
+        base_branch: 'main',
+      });
+      setActivePR(pr);
+      setShowPRModal(false);
+      setSidebarTab('pr');
+      if (pr.checks_summary) {
+        setPRChecks(pr.checks_summary);
+      }
+    } catch (err: any) {
+      alert(`PR creation error: ${err.message || err}`);
+    } finally {
+      setCreatingPR(false);
+    }
+  };
+
+  const handleRefreshPRChecks = async () => {
+    if (!currentProjectId || !activePR) return;
+    try {
+      setLoadingChecks(true);
+      const checks = await api.getPRChecks(currentProjectId, activePR.number);
+      setPRChecks(checks);
+    } catch (err) {
+      console.error('Failed to refresh PR checks', err);
+    } finally {
+      setLoadingChecks(false);
+    }
+  };
+
+  const handleDiagnoseCI = async (check: CheckRun) => {
+    if (!currentProjectId) return;
+    try {
+      setDiagnosingCheckId(check.id);
+      const diag = await api.diagnosePRFailure(currentProjectId, {
+        check_run_id: check.id,
+        failure_logs: check.failure_logs || check.failure_summary || 'CI check failure',
+      });
+      setCIDiagnosisResult(diag);
+    } catch (err: any) {
+      alert(`Diagnosis failed: ${err.message || err}`);
+    } finally {
+      setDiagnosingCheckId(null);
     }
   };
 
@@ -761,6 +936,126 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         </div>
       )}
 
+      {/* Branch Create Modal */}
+      {showBranchModal && (
+        <div className="modal-overlay">
+          <div className="modal-dialog" style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <GitBranch size={16} color="#3b82f6" /> Create Feature Branch
+              </h3>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={() => setShowBranchModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Branch Name (e.g. <code>qa/C12345-auth-test</code>):</label>
+                <input
+                  autoFocus
+                  type="text"
+                  className="form-control"
+                  value={newBranchInput}
+                  onChange={(e) => setNewBranchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateBranch();
+                    if (e.key === 'Escape') setShowBranchModal(false);
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>
+                Based on current branch: <code>{currentBranch}</code>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowBranchModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!newBranchInput.trim()}
+                onClick={handleCreateBranch}
+              >
+                Create & Switch Branch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pull Request Create Modal */}
+      {showPRModal && (
+        <div className="modal-overlay">
+          <div className="modal-dialog" style={{ maxWidth: '580px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <GitPullRequest size={16} color="#059669" /> Create Pull Request
+              </h3>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={() => setShowPRModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '16px' }}>
+              <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', color: '#475569' }}>
+                  Branch: <code>{currentBranch}</code> → <code>main</code>
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px', fontSize: '11px', gap: '4px' }}
+                  disabled={suggestingPR}
+                  onClick={handleOpenPRModal}
+                >
+                  <Sparkles size={11} color="#7c3aed" /> {suggestingPR ? 'Generating...' : 'Re-generate AI Summary'}
+                </button>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">PR Title:</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={prTitleInput}
+                  onChange={(e) => setPRTitleInput(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">PR Body (Markdown):</label>
+                <textarea
+                  rows={8}
+                  className="form-control"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                  value={prBodyInput}
+                  onChange={(e) => setPRBodyInput(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowPRModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ background: '#059669', borderColor: '#059669' }}
+                disabled={!prTitleInput.trim() || creatingPR}
+                onClick={handleCreatePR}
+              >
+                {creatingPR ? 'Creating PR...' : 'Create Pull Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Left Sidebar: File Explorer & Test Explorer */}
       <div className="studio-sidebar">
         {/* Project Selector inside studio */}
@@ -787,13 +1082,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           </button>
         </div>
 
-        {/* Sidebar View Switcher: Files vs Tests */}
+        {/* Sidebar View Switcher: Files vs Tests vs Git vs PR */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
           <button
             style={{
               flex: 1,
-              padding: '8px',
-              fontSize: '11px',
+              padding: '8px 4px',
+              fontSize: '10px',
               fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.5px',
@@ -810,8 +1105,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           <button
             style={{
               flex: 1,
-              padding: '8px',
-              fontSize: '11px',
+              padding: '8px 4px',
+              fontSize: '10px',
               fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.5px',
@@ -828,11 +1123,58 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           >
             Tests ({collectedTests.length})
           </button>
+          <button
+            style={{
+              flex: 1,
+              padding: '8px 4px',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              background: sidebarTab === 'git' ? '#ffffff' : 'transparent',
+              border: 'none',
+              borderBottom: sidebarTab === 'git' ? '2px solid var(--primary)' : 'none',
+              color: sidebarTab === 'git' ? 'var(--primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+            onClick={() => {
+              setSidebarTab('git');
+              fetchGitData();
+            }}
+          >
+            Git ({diffResult.changed_files.length})
+          </button>
+          <button
+            style={{
+              flex: 1,
+              padding: '8px 4px',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              background: sidebarTab === 'pr' ? '#ffffff' : 'transparent',
+              border: 'none',
+              borderBottom: sidebarTab === 'pr' ? '2px solid var(--primary)' : 'none',
+              color: sidebarTab === 'pr' ? 'var(--primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+            onClick={() => {
+              setSidebarTab('pr');
+              if (activePR) handleRefreshPRChecks();
+            }}
+          >
+            PR {activePR ? `#${activePR.number}` : ''}
+          </button>
         </div>
 
         {/* Action Header */}
         <div className="studio-sidebar-header">
-          <span>{sidebarTab === 'files' ? 'Workspace Files' : 'Pytest Explorer'}</span>
+          <span>
+            {sidebarTab === 'files' && 'Workspace Files'}
+            {sidebarTab === 'tests' && 'Pytest Explorer'}
+            {sidebarTab === 'git' && `Git: ${currentBranch}`}
+            {sidebarTab === 'pr' && (activePR ? `PR #${activePR.number}` : 'Pull Request')}
+          </span>
           <div style={{ display: 'flex', gap: '4px' }}>
             {sidebarTab === 'files' && (
               <>
@@ -858,12 +1200,36 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 </button>
               </>
             )}
+            {sidebarTab === 'git' && (
+              <button
+                className="icon-btn"
+                title="New Branch"
+                onClick={() => {
+                  setNewBranchInput(`qa/feature-${Date.now().toString().slice(-4)}`);
+                  setShowBranchModal(true);
+                }}
+              >
+                <Plus size={13} />
+              </button>
+            )}
+            {sidebarTab === 'pr' && activePR && (
+              <button
+                className="icon-btn"
+                title="Refresh Checks"
+                disabled={loadingChecks}
+                onClick={handleRefreshPRChecks}
+              >
+                <RefreshCw size={13} className={loadingChecks ? 'spin' : ''} />
+              </button>
+            )}
             <button
               className="icon-btn"
               title="Refresh"
               onClick={() => {
                 fetchFiles();
                 fetchCollectedTests();
+                fetchGitData();
+                if (activePR) handleRefreshPRChecks();
               }}
             >
               <RefreshCw size={13} />
@@ -871,9 +1237,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           </div>
         </div>
 
-        {/* Content: File Tree or Test Explorer */}
+        {/* Content Area for 4 Tabs */}
         <div className="studio-file-tree">
-          {sidebarTab === 'files' ? (
+          {sidebarTab === 'files' && (
             files.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
                 <p style={{ marginBottom: '10px' }}>Workspace is uninitialized.</p>
@@ -884,7 +1250,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             ) : (
               renderFileTree(files)
             )
-          ) : (
+          )}
+
+          {sidebarTab === 'tests' && (
             <div style={{ padding: '4px' }}>
               {loadingTests ? (
                 <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -940,81 +1308,333 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               )}
             </div>
           )}
-        </div>
 
-        {/* Source Control & Changes */}
-        <div style={{ borderTop: '1px solid var(--border-color)', background: '#f8fafc' }}>
-          <div
-            style={{
-              padding: '8px 12px',
-              fontSize: '11px',
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-            }}
-            onClick={() => setShowDiffView(!showDiffView)}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <GitBranch size={13} /> Changes ({diffResult.changed_files.length})
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--primary)' }}>
-              {showDiffView ? 'Hide Diff' : 'View Diff'}
-            </span>
-          </div>
-
-          {diffResult.changed_files.length > 0 && (
-            <div style={{ padding: '6px 10px', borderTop: '1px solid #e2e8f0' }}>
-              <div style={{ maxHeight: '90px', overflowY: 'auto', marginBottom: '6px' }}>
-                {diffResult.changed_files.map((cf, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-mono)',
-                      padding: '2px 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      color: '#334155',
-                      cursor: 'pointer',
+          {sidebarTab === 'git' && (
+            <div style={{ padding: '8px' }}>
+              {/* Branch Selector & Switcher */}
+              <div style={{ marginBottom: '10px', padding: '8px', background: '#f1f5f9', borderRadius: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>BRANCH</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '2px 6px', fontSize: '10px' }}
+                    onClick={() => {
+                      setNewBranchInput(`qa/C12345-suite-${Date.now().toString().slice(-4)}`);
+                      setShowBranchModal(true);
                     }}
-                    onClick={() => handleOpenFile(cf.path)}
                   >
-                    <span style={{ color: cf.status === 'M' ? '#d97706' : '#16a34a', fontWeight: 700 }}>
-                      {cf.status}
-                    </span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {cf.path}
-                    </span>
+                    <Plus size={10} /> New
+                  </button>
+                </div>
+                <select
+                  className="form-control"
+                  style={{ fontSize: '12px', padding: '4px' }}
+                  value={currentBranch}
+                  onChange={(e) => handleSwitchBranch(e.target.value)}
+                >
+                  {branches.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name} {b.is_current ? '(Current)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {currentBranch === 'main' && (
+                  <div style={{ fontSize: '10px', color: '#d97706', marginTop: '4px' }}>
+                    ⚠️ Note: Best practice is creating a <code>qa/...</code> feature branch before pushing.
                   </div>
-                ))}
+                )}
               </div>
 
-              {/* Quick Git Commit */}
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <input
-                  type="text"
-                  placeholder="Commit msg..."
+              {/* Changed Files Section */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>CHANGES ({diffResult.changed_files.length})</span>
+                  <button
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '10px' }}
+                    onClick={() => setShowDiffView(!showDiffView)}
+                  >
+                    {showDiffView ? 'Hide Diff' : 'View Diff'}
+                  </button>
+                </div>
+                {diffResult.changed_files.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+                    No uncommitted changes.
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: '110px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px' }}>
+                    {diffResult.changed_files.map((cf, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          fontSize: '11px',
+                          fontFamily: 'var(--font-mono)',
+                          padding: '2px 4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleOpenFile(cf.path)}
+                      >
+                        <span style={{ color: cf.status === 'M' ? '#d97706' : '#16a34a', fontWeight: 700 }}>
+                          {cf.status}
+                        </span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cf.path}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Commit Actions */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569' }}>COMMIT</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '2px 6px', fontSize: '10px', gap: '3px' }}
+                    disabled={suggestingCommit}
+                    onClick={handleSuggestCommitMessage}
+                    title="AI Suggested Commit Message"
+                  >
+                    <Sparkles size={10} color="#7c3aed" /> {suggestingCommit ? '...' : 'AI Suggest'}
+                  </button>
+                </div>
+                <textarea
+                  rows={2}
                   className="form-control"
-                  style={{ fontSize: '11px', padding: '3px 6px' }}
+                  style={{ fontSize: '11px', padding: '4px', resize: 'none', marginBottom: '4px' }}
+                  placeholder="Commit message..."
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCommitChanges();
-                  }}
                 />
                 <button
                   className="btn btn-primary btn-sm"
-                  style={{ padding: '3px 8px', fontSize: '11px' }}
+                  style={{ width: '100%', padding: '4px', fontSize: '11px' }}
                   disabled={!commitMessage.trim() || isCommitting}
                   onClick={handleCommitChanges}
                 >
-                  {isCommitting ? '...' : 'Commit'}
+                  <GitCommit size={12} /> {isCommitting ? 'Committing...' : 'Commit Changes'}
                 </button>
               </div>
+
+              {/* Push Branch */}
+              <div style={{ marginBottom: '12px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ width: '100%', padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  disabled={isPushing}
+                  onClick={handlePushBranch}
+                >
+                  <UploadCloud size={13} color="#2563eb" /> {isPushing ? 'Pushing...' : `Push Branch '${currentBranch}'`}
+                </button>
+                {pushStatusMessage && (
+                  <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', background: '#f8fafc', padding: '4px', borderRadius: '4px' }}>
+                    {pushStatusMessage}
+                  </div>
+                )}
+              </div>
+
+              {/* Create PR Shortcut */}
+              <div style={{ marginBottom: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ width: '100%', padding: '5px', fontSize: '11px', background: '#059669', borderColor: '#059669' }}
+                  onClick={handleOpenPRModal}
+                >
+                  <GitPullRequest size={13} /> Create Pull Request
+                </button>
+              </div>
+
+              {/* Recent Commits Log */}
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                  RECENT COMMITS
+                </div>
+                <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                  {recentCommits.length === 0 ? (
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>No commit history found.</div>
+                  ) : (
+                    recentCommits.map((c) => (
+                      <div
+                        key={c.sha}
+                        style={{
+                          padding: '4px 6px',
+                          borderBottom: '1px solid #f1f5f9',
+                          fontSize: '11px',
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.message}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#64748b' }}>
+                          <code>{c.sha.slice(0, 7)}</code>
+                          <span>{c.date.slice(0, 10)}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {sidebarTab === 'pr' && (
+            <div style={{ padding: '8px' }}>
+              {!activePR ? (
+                <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+                  <GitPullRequest size={32} color="#059669" style={{ margin: '0 auto 10px' }} />
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>
+                    Open Pull Request
+                  </h4>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    Connect your QA automation branch directly to GitHub PR workflow with automated validation checks.
+                  </p>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', padding: '6px', background: '#059669', borderColor: '#059669' }}
+                    onClick={handleOpenPRModal}
+                  >
+                    <Plus size={13} /> Create Pull Request
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {/* Active PR Header */}
+                  <div style={{ padding: '8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669' }}>
+                        PR #{activePR.number}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '12px',
+                          background:
+                            prChecks?.overall_status === 'PASSED'
+                              ? '#dcfce7'
+                              : prChecks?.overall_status === 'FAILED'
+                              ? '#fee2e2'
+                              : '#fef3c7',
+                          color:
+                            prChecks?.overall_status === 'PASSED'
+                              ? '#166534'
+                              : prChecks?.overall_status === 'FAILED'
+                              ? '#991b1b'
+                              : '#92400e',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {prChecks?.overall_status || 'OPEN'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', marginBottom: '6px' }}>
+                      {activePR.title}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>
+                        <code>{activePR.head_branch}</code> → <code>{activePR.base_branch}</code>
+                      </span>
+                      <a
+                        href={activePR.html_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '11px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
+                      >
+                        Open GitHub <ExternalLink size={10} />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* GitHub Actions Checks */}
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>GITHUB CHECKS</span>
+                      <button
+                        className="icon-btn"
+                        title="Refresh Checks"
+                        disabled={loadingChecks}
+                        onClick={handleRefreshPRChecks}
+                      >
+                        <RefreshCw size={11} className={loadingChecks ? 'spin' : ''} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {prChecks?.checks.map((check) => (
+                        <div
+                          key={check.id}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '11px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              {check.status === 'PASSED' && <CheckCircle2 size={12} color="#16a34a" />}
+                              {check.status === 'FAILED' && <AlertCircle size={12} color="#dc2626" />}
+                              {check.status === 'RUNNING' && <RefreshCw size={12} color="#d97706" className="spin" />}
+                              {check.status === 'QUEUED' && <AlertTriangle size={12} color="#64748b" />}
+                              <span style={{ fontWeight: 600, color: '#334155' }}>{check.name}</span>
+                            </div>
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: check.status === 'PASSED' ? '#16a34a' : check.status === 'FAILED' ? '#dc2626' : '#d97706' }}>
+                              {check.status}
+                            </span>
+                          </div>
+
+                          {check.status === 'FAILED' && (
+                            <div style={{ marginTop: '4px', borderTop: '1px dashed #f1f5f9', paddingTop: '4px' }}>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 6px', fontSize: '10px', gap: '3px' }}
+                                disabled={diagnosingCheckId === check.id}
+                                onClick={() => handleDiagnoseCI(check)}
+                              >
+                                <Sparkles size={10} color="#7c3aed" /> {diagnosingCheckId === check.id ? 'Diagnosing...' : 'AI Failure Diagnosis'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI CI Diagnosis Result Modal/Box */}
+                  {ciDiagnosisResult && (
+                    <div style={{ padding: '8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '11px', marginTop: '10px' }}>
+                      <div style={{ fontWeight: 700, color: '#991b1b', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>AI Diagnosis: {ciDiagnosisResult.classification}</span>
+                        <button
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b' }}
+                          onClick={() => setCIDiagnosisResult(null)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div style={{ color: '#7f1d1d', marginBottom: '4px' }}>{ciDiagnosisResult.summary}</div>
+                      <div style={{ fontSize: '10px', color: '#451a03', background: '#fffbeb', padding: '4px', borderRadius: '4px' }}>
+                        <strong>Suggested Fix:</strong> {ciDiagnosisResult.suggested_fix}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '12px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ width: '100%', padding: '4px', fontSize: '11px' }}
+                      onClick={handleOpenPRModal}
+                    >
+                      <Plus size={12} /> Create Another PR
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -4,6 +4,7 @@ import {
   AIUsageSummary,
   AutomationBinding,
   AutomationBindingCreate,
+  BranchInfo,
   CollectedTest,
   DashboardStats,
   FailureRecord,
@@ -11,11 +12,23 @@ import {
   FileNode,
   FlakyTestItem,
   GenerateAutomationResponse,
+  GitBranchCreateRequest,
+  GitChangedFile,
+  GitCommitInfo,
+  GitCommitRequest,
   GitDiffResult,
+  GitPushResult,
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
+  PRChecksSummary,
+  PRDiagnosisRequest,
+  PRDiagnosisResponse,
   Project,
   ProjectCreate,
+  PRSummarySuggestionRequest,
+  PRSummarySuggestionResponse,
+  PullRequestCreateRequest,
+  PullRequestInfo,
   QAChatRequest,
   QAChatResponse,
   Requirement,
@@ -289,6 +302,57 @@ export const api = {
   // QA Assistant Sidecar
   askQAAssistant: (data: QAChatRequest) =>
     request<QAChatResponse>('/qa-assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Git & Source Control Workflow (Phase 8)
+  getGitStatus: (workspaceId: string) =>
+    request<GitChangedFile[]>(`/workspaces/${workspaceId}/git/status`),
+  getGitBranches: (workspaceId: string) =>
+    request<BranchInfo[]>(`/workspaces/${workspaceId}/git/branches`),
+  getCurrentBranch: (workspaceId: string) =>
+    request<string>(`/workspaces/${workspaceId}/git/current-branch`),
+  createBranch: (workspaceId: string, data: GitBranchCreateRequest) =>
+    request<string>(`/workspaces/${workspaceId}/git/branch`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  switchBranch: (workspaceId: string, data: GitBranchCreateRequest) =>
+    request<string>(`/workspaces/${workspaceId}/git/switch-branch`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  commitGitChanges: (workspaceId: string, data: GitCommitRequest) =>
+    request<string>(`/workspaces/${workspaceId}/git/commit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  pushGitBranch: (workspaceId: string, branch?: string, remote = 'origin') =>
+    request<GitPushResult>(
+      `/workspaces/${workspaceId}/git/push?remote=${encodeURIComponent(remote)}${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`,
+      {
+        method: 'POST',
+      }
+    ),
+  getGitLog: (workspaceId: string, limit = 15) =>
+    request<GitCommitInfo[]>(`/workspaces/${workspaceId}/git/log?limit=${limit}`),
+
+  // Pull Request & GitHub Checks (Phase 8)
+  suggestPRSummary: (workspaceId: string, data: PRSummarySuggestionRequest) =>
+    request<PRSummarySuggestionResponse>(`/workspaces/${workspaceId}/pr/suggest-summary`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createPullRequest: (workspaceId: string, data: PullRequestCreateRequest) =>
+    request<PullRequestInfo>(`/workspaces/${workspaceId}/pr/create`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getPRChecks: (workspaceId: string, prNumber: number) =>
+    request<PRChecksSummary>(`/workspaces/${workspaceId}/pr/${prNumber}/checks`),
+  diagnosePRFailure: (workspaceId: string, data: PRDiagnosisRequest) =>
+    request<PRDiagnosisResponse>(`/workspaces/${workspaceId}/pr/diagnose`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),

@@ -2,6 +2,7 @@ from app.api.ai import router as ai_router
 from app.api.dashboard import router as dashboard_router
 from app.api.failures import router as failures_router
 from app.api.flaky import router as flaky_router
+from app.api.git_pr import router as git_pr_router
 from app.api.health import router as health_router
 from app.api.projects import router as projects_router
 from app.api.qa_assistant import router as qa_assistant_router
@@ -17,6 +18,7 @@ __all__ = [
     "dashboard_router",
     "failures_router",
     "flaky_router",
+    "git_pr_router",
     "health_router",
     "projects_router",
     "qa_assistant_router",

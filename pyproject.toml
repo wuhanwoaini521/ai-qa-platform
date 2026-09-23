@@ -39,6 +39,6 @@ select = ["E", "F", "I", "W"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/api/tests", "packages/qa-core/tests", "apps/worker/tests"]
+testpaths = ["apps/api/tests", "packages/qa-core/tests", "packages/integrations/tests", "apps/worker/tests"]
 asyncio_mode = "auto"
 pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "apps/worker"]

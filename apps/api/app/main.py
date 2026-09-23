@@ -10,6 +10,7 @@ from app.api import (
     dashboard_router,
     failures_router,
     flaky_router,
+    git_pr_router,
     health_router,
     projects_router,
     qa_assistant_router,
@@ -55,6 +56,7 @@ app.include_router(requirements_router, prefix="/api")
 app.include_router(test_designs_router, prefix="/api")
 app.include_router(test_cases_router, prefix="/api")
 app.include_router(workspaces_router, prefix="/api")
+app.include_router(git_pr_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(runners_router, prefix="/api")
 app.include_router(failures_router, prefix="/api")
