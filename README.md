@@ -11,7 +11,27 @@
 **AI QA Platform** is an independent, browser-based Quality Engineering platform designed to eliminate constant context-switching between IDEs, terminals, test case managers, CI runners, and AI chat interfaces.
 
 ```text
-Requirement → Test Design → Test Case Management → Automation Studio → AI Test Author → Code Editing → Validation → Test Execution → Failure Intelligence → AI Diagnosis → Locator Healing → Run History / Flaky
+Requirement
+   ↓
+Test Design
+   ↓
+Test Case
+   ↓
+AI / Manual Automation Authoring & Binding
+   ↓
+Code Editing in Automation Studio V2
+   ↓
+AST Syntax & Rule Validation
+   ↓
+Deterministic Pytest Execution & SSE Streaming
+   ↓
+Live Test Outcome & Failure Artifacts
+   ↓
+Failure Classification & AI Root-Cause Diagnosis
+   ↓
+Locator Repair Proposal & Diff Review
+   ↓
+Human-Approved Apply & Re-run Verification
 ```
 
 ---
@@ -21,14 +41,14 @@ Requirement → Test Design → Test Case Management → Automation Studio → A
 ```text
 ai-qa-platform/
 ├── apps/
-│   ├── web/                     # React 19 + TypeScript + Vite + Monaco Editor
-│   ├── api/                     # FastAPI + Pydantic + SQLAlchemy Async
+│   ├── web/                     # React 19 + TypeScript + Vite + Monaco Editor V2
+│   ├── api/                     # FastAPI + Pydantic + SQLAlchemy Async + SSE Bus
 │   └── worker/                  # Background test execution worker
 ├── packages/
-│   ├── qa-core/                 # Core testing contracts & deterministic fakes
-│   ├── project-model/           # Shared Pydantic domain models & schemas
+│   ├── qa-core/                 # Core testing contracts, PytestRunner, Classifier & Healer
+│   ├── project-model/           # Shared Pydantic domain models & database entities
 │   └── integrations/            # Third-party connectors (TestRail, GitHub)
-├── docs/                        # Full architecture & migration specifications
+├── docs/                        # Full architecture, execution & workflow specifications
 ├── runtime/                     # Isolated project workspaces & test artifacts
 └── scripts/                     # Unified dev, test, and lint commands
 ```
@@ -79,19 +99,41 @@ pnpm --filter @ai-qa/web build
 
 ---
 
-## Key Features in Phase 1
+## Complete QA Engineering Capabilities
 
-- **Project Management**: Initialize blank QA project scaffolds with standard `tests/`, `pages/`, `flows/`, `components/`, and `knowledge/` folders.
-- **Requirements & Test Design**: Define user stories, acceptance criteria, and multi-category test designs (`FUNCTIONAL`, `BOUNDARY`, `NEGATIVE`, `API`, `UI`).
-- **Test Case Management**: Structured business test cases with steps, preconditions, expected results, priority (`P0`-`P3`), and automation tracking.
-- **Automation Studio**: In-browser code editing powered by Monaco Editor, project file explorer, real-time dirty status tracking, `Cmd+S` save support, and Git working tree diff inspection.
-- **Safe Workspaces**: Hardened filesystem isolation preventing path traversal attacks.
-- **QA Core Contracts**: Clean protocol abstractions (`TestRunner`, `FailureAnalyzer`, `TestAuthor`, `LocatorHealer`, `BrowserExplorer`, `QAOrchestrator`) with offline fake implementations.
+- **Automation Studio V2**:
+  - Multi-tab Monaco editor with dirty tracking (`Cmd+S`, `Cmd+Shift+S`).
+  - Quick Open fuzzy file finder (`Cmd+P`).
+  - File operations: Create files/folders, rename, delete with confirmation.
+  - Python AST syntax validator & collapsible Problems panel with jump-to-line navigation.
+  - Pytest explorer tree with targeted single-test runner.
+  - Interactive QA Assistant sidecar (Explain, Generate Test Scaffold, Refactor to Page Object, Diagnose).
+  - Git working tree diff inspection & in-studio commits.
+- **Test Case & Automation Binding**:
+  - Bidirectional link between business test cases and executable pytest node IDs.
+  - AI automation code generator grounded on workspace Page Objects and knowledge rules.
+  - One-click save to workspace test files.
+- **Test Execution Platform**:
+  - Safe subprocess execution via `PytestRunner` (no `shell=True`).
+  - Real-time Server-Sent Events (SSE) event bus streaming stdout/stderr line-by-line.
+  - Test outcomes breakdown and execution duration metrics.
+  - Deterministic pass/fail verdict determined strictly by pytest exit codes.
+- **Failure Intelligence & Locator Self-Healing**:
+  - Failure taxonomy classification (`LOCATOR_CHANGED`, `TIMING_ISSUE`, `ASSERTION_FAILURE`, `ENVIRONMENT_ERROR`).
+  - Automated sensitive data redaction (passwords, tokens, API keys).
+  - Multi-candidate locator ranking and visual code diff preview.
+  - Proposal-only human-in-the-loop repair workflow with one-click code patching.
+  - Instant re-run verification of fixed tests.
 
 ---
 
 ## Documentation
 
+- [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
+- [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
+- [Test Execution Platform Architecture](docs/EXECUTION_PLATFORM.md)
+- [Failure Intelligence & Self-Healing](docs/FAILURE_INTELLIGENCE.md)
+- [QA Core Migration Audit](docs/QA_CORE_MIGRATION_AUDIT.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Product Domain Model](docs/PRODUCT_MODEL.md)
 - [Developer Guide](docs/DEVELOPMENT.md)

@@ -1,18 +1,63 @@
 import React, { useEffect, useState } from 'react';
-import { AutomationStatus, Project, TestCase, TestCaseCreate, TestCasePriority } from '../types';
+import {
+  AutomationBinding,
+  AutomationStatus,
+  GenerateAutomationResponse,
+  Project,
+  TestCase,
+  TestCaseCreate,
+  TestCasePriority,
+} from '../types';
 import { api } from '../api/client';
-import { Plus, CheckSquare, Tag, ChevronRight } from 'lucide-react';
+import {
+  Plus,
+  CheckSquare,
+  Tag,
+  ChevronRight,
+  Code2,
+  Sparkles,
+  Play,
+  ExternalLink,
+  Edit3,
+  CheckCircle,
+} from 'lucide-react';
 
 interface TestCasesPageProps {
   projects: Project[];
   selectedProjectId: string | null;
+  onNavigateToStudio?: (filePath: string) => void;
+  onNavigateToRuns?: (runId?: string) => void;
 }
 
-export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selectedProjectId }) => {
+export const TestCasesPage: React.FC<TestCasesPageProps> = ({
+  projects,
+  selectedProjectId,
+  onNavigateToStudio,
+  onNavigateToRuns,
+}) => {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState<TestCase | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Automation Binding & Generation State
+  const [selectedBinding, setSelectedBinding] = useState<AutomationBinding | null>(null);
+  const [isBindingModalOpen, setIsBindingModalOpen] = useState(false);
+  const [bindingFormData, setBindingFormData] = useState<{
+    test_file_path: string;
+    test_node_id: string;
+    status: AutomationStatus;
+  }>({
+    test_file_path: '',
+    test_node_id: '',
+    status: 'MANUAL',
+  });
+
+  const [generatedDraft, setGeneratedDraft] = useState<GenerateAutomationResponse | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [runningCase, setRunningCase] = useState(false);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<TestCaseCreate>({
@@ -33,8 +78,13 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
       setLoading(true);
       const data = await api.getTestCases(selectedProjectId || undefined);
       setTestCases(data);
-      if (data.length > 0 && !selectedCase) {
-        setSelectedCase(data[0]);
+      if (data.length > 0) {
+        const found = selectedCase ? data.find((c) => c.id === selectedCase.id) || data[0] : data[0];
+        setSelectedCase(found);
+        fetchBinding(found.id);
+      } else {
+        setSelectedCase(null);
+        setSelectedBinding(null);
       }
     } catch (err) {
       console.error('Failed to load test cases', err);
@@ -43,9 +93,38 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
     }
   };
 
+  const fetchBinding = async (caseId: string) => {
+    try {
+      const binding = await api.getAutomationBinding(caseId);
+      setSelectedBinding(binding);
+      if (binding) {
+        setBindingFormData({
+          test_file_path: binding.test_file_path,
+          test_node_id: binding.test_node_id,
+          status: binding.status,
+        });
+      } else {
+        setBindingFormData({
+          test_file_path: `tests/test_${caseId.slice(0, 8)}.py`,
+          test_node_id: `tests/test_${caseId.slice(0, 8)}.py::test_${caseId.slice(0, 8)}`,
+          status: 'MANUAL',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch binding', err);
+    }
+  };
+
   useEffect(() => {
     fetchTestCases();
   }, [selectedProjectId]);
+
+  const handleSelectCase = (tc: TestCase) => {
+    setSelectedCase(tc);
+    setGeneratedDraft(null);
+    setRunMessage(null);
+    fetchBinding(tc.id);
+  };
 
   const handleCreateTestCase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +161,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
       });
       setStepsText('');
       setTagsText('');
+      fetchBinding(created.id);
     } catch (err) {
       console.error('Failed to create test case', err);
     }
@@ -99,13 +179,98 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
     }
   };
 
+  const handleGenerateAutomation = async () => {
+    if (!selectedCase) return;
+    try {
+      setGenerating(true);
+      const draft = await api.generateAutomation(selectedCase.id, true);
+      setGeneratedDraft(draft);
+    } catch (err: any) {
+      alert(`Generation error: ${err.message || err}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveDraftToWorkspace = async () => {
+    if (!selectedCase || !generatedDraft || !selectedProjectId) return;
+    try {
+      setSavingDraft(true);
+      // Write file into workspace
+      await api.writeWorkspaceFile(
+        selectedProjectId,
+        generatedDraft.target_file,
+        generatedDraft.suggested_code
+      );
+      // Bind to test case
+      const nodeid = `${generatedDraft.target_file}::test_${selectedCase.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/(^_|_$)/g, '')}`;
+
+      const savedBinding = await api.saveAutomationBinding(selectedCase.id, {
+        test_file_path: generatedDraft.target_file,
+        test_node_id: nodeid,
+        status: 'AUTOMATED',
+        last_generated_code: generatedDraft.suggested_code,
+      });
+
+      setSelectedBinding(savedBinding);
+      await handleUpdateStatus(selectedCase.id, 'AUTOMATED');
+      alert(`Automation scaffold saved to ${generatedDraft.target_file} and bound to test case.`);
+    } catch (err: any) {
+      alert(`Failed to save draft to workspace: ${err.message || err}`);
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleSaveManualBinding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCase) return;
+    try {
+      const saved = await api.saveAutomationBinding(selectedCase.id, {
+        test_file_path: bindingFormData.test_file_path,
+        test_node_id: bindingFormData.test_node_id,
+        status: bindingFormData.status,
+      });
+      setSelectedBinding(saved);
+      await handleUpdateStatus(selectedCase.id, bindingFormData.status);
+      setIsBindingModalOpen(false);
+    } catch (err: any) {
+      alert(`Binding save error: ${err.message || err}`);
+    }
+  };
+
+  const handleRunTestCase = async () => {
+    if (!selectedCase || !selectedProjectId || runningCase) return;
+    try {
+      setRunningCase(true);
+      setRunMessage('Triggering execution run...');
+      const target = selectedBinding ? [selectedBinding.test_node_id] : undefined;
+      const run = await api.createTestRun({
+        project_id: selectedProjectId,
+        target_nodeids: target,
+        triggered_by: `Test Case: ${selectedCase.title}`,
+      });
+      setRunMessage(`Execution dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
+      if (onNavigateToRuns) {
+        setTimeout(() => onNavigateToRuns(run.id), 1200);
+      }
+    } catch (err: any) {
+      setRunMessage(`Execution error: ${err.message || err}`);
+    } finally {
+      setRunningCase(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Case Management</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Case & Automation Binding</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Platform test cases (business entities) linked to requirements and automation status.
+            Manage test cases, generate AI Playwright code, and link business tests to executable pytest node IDs.
           </p>
         </div>
         <button
@@ -152,7 +317,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
                     return (
                       <div
                         key={tc.id}
-                        onClick={() => setSelectedCase(tc)}
+                        onClick={() => handleSelectCase(tc)}
                         style={{
                           padding: '12px 16px',
                           borderBottom: '1px solid var(--border-color)',
@@ -189,24 +354,265 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
             </div>
           </div>
 
-          {/* Test Case Details */}
+          {/* Test Case Details & Automation Studio Binding */}
           {selectedCase ? (
-            <div className="card">
-              <div className="card-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <CheckSquare size={16} color="#16a34a" />
-                  <span className="card-title">{selectedCase.title}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card">
+                <div className="card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <CheckSquare size={16} color="#16a34a" />
+                    <span className="card-title">{selectedCase.title}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>
+                      {selectedCase.priority}
+                    </span>
+                    <select
+                      className="form-control"
+                      style={{ padding: '3px 8px', fontSize: '12px', width: '130px' }}
+                      value={selectedCase.automation_status}
+                      onChange={(e) =>
+                        handleUpdateStatus(selectedCase.id, e.target.value as AutomationStatus)
+                      }
+                    >
+                      <option value="MANUAL">MANUAL</option>
+                      <option value="DRAFT">DRAFT</option>
+                      <option value="AUTOMATED">AUTOMATED</option>
+                    </select>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>
-                    {selectedCase.priority}
-                  </span>
+                <div className="card-body">
+                  {selectedCase.preconditions && (
+                    <div style={{ marginBottom: '14px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Preconditions
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#334155', background: '#f8fafc', padding: '8px 12px', borderRadius: '4px' }}>
+                        {selectedCase.preconditions}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Test Steps ({selectedCase.steps.length})
+                    </div>
+                    {selectedCase.steps.length > 0 ? (
+                      <ol style={{ paddingLeft: '20px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {selectedCase.steps.map((st, i) => (
+                          <li key={i} style={{ color: '#1e293b' }}>
+                            {st}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No explicit steps recorded.</div>
+                    )}
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Expected Result
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#334155', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 12px', borderRadius: '4px' }}>
+                      {selectedCase.expected_result || 'No expected result specified.'}
+                    </div>
+                  </div>
+
+                  {selectedCase.tags.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Tags
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {selectedCase.tags.map((t, idx) => (
+                          <span key={idx} className="badge badge-draft">
+                            <Tag size={10} style={{ marginRight: '4px' }} /> {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Automation Binding Card */}
+              <div className="card">
+                <div className="card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Code2 size={16} color="#2563eb" />
+                    <span className="card-title">Automation Binding & Execution</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIsBindingModalOpen(true)}
+                    >
+                      <Edit3 size={13} /> {selectedBinding ? 'Edit Binding' : 'Configure Binding'}
+                    </button>
+                  </div>
+                </div>
+                <div className="card-body">
+                  {selectedBinding ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Target Test File</div>
+                          <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px' }}>
+                            {selectedBinding.test_file_path}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Pytest Node ID</div>
+                          <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {selectedBinding.test_node_id}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => onNavigateToStudio && onNavigateToStudio(selectedBinding.test_file_path)}
+                        >
+                          <ExternalLink size={13} /> Open in Studio
+                        </button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={runningCase}
+                          onClick={handleRunTestCase}
+                        >
+                          <Play size={13} /> {runningCase ? 'Running...' : 'Run Test Now'}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={generating}
+                          onClick={handleGenerateAutomation}
+                        >
+                          <Sparkles size={13} color="#9333ea" /> Re-generate AI Code
+                        </button>
+                      </div>
+
+                      {runMessage && (
+                        <div style={{ marginTop: '8px', padding: '8px 12px', background: '#eff6ff', borderRadius: '4px', fontSize: '12px', color: '#1d4ed8' }}>
+                          {runMessage}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '16px' }}>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                        This test case is currently manual and not yet bound to an automated test file.
+                      </p>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                        <button
+                          className="btn btn-primary"
+                          disabled={generating}
+                          onClick={handleGenerateAutomation}
+                        >
+                          <Sparkles size={15} /> {generating ? 'Generating Playwright Code...' : 'Generate Automation Scaffold'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Generated Code Preview */}
+                  {generatedDraft && (
+                    <div style={{ marginTop: '18px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                          AI Generated Test Scaffold ({generatedDraft.target_file})
+                        </div>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={savingDraft}
+                          onClick={handleSaveDraftToWorkspace}
+                        >
+                          <CheckCircle size={13} /> {savingDraft ? 'Saving to Workspace...' : 'Save & Bind to Workspace'}
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          background: '#0f172a',
+                          color: '#f8fafc',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '12px',
+                          overflowX: 'auto',
+                          maxHeight: '260px',
+                        }}
+                      >
+                        <pre>{generatedDraft.suggested_code}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card">
+              <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                Select a test case to view step details and automation bindings.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Manual Automation Binding Modal */}
+      {isBindingModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-dialog">
+            <form onSubmit={handleSaveManualBinding}>
+              <div className="modal-header">
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Configure Automation Binding</h3>
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  onClick={() => setIsBindingModalOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label">Test File Path *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-control"
+                    placeholder="e.g. tests/test_checkout.py"
+                    value={bindingFormData.test_file_path}
+                    onChange={(e) =>
+                      setBindingFormData({ ...bindingFormData, test_file_path: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Pytest Node ID *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-control"
+                    placeholder="e.g. tests/test_checkout.py::test_coupon_calculation"
+                    value={bindingFormData.test_node_id}
+                    onChange={(e) =>
+                      setBindingFormData({ ...bindingFormData, test_node_id: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Automation Status</label>
                   <select
                     className="form-control"
-                    style={{ padding: '3px 8px', fontSize: '12px', width: '130px' }}
-                    value={selectedCase.automation_status}
+                    value={bindingFormData.status}
                     onChange={(e) =>
-                      handleUpdateStatus(selectedCase.id, e.target.value as AutomationStatus)
+                      setBindingFormData({
+                        ...bindingFormData,
+                        status: e.target.value as AutomationStatus,
+                      })
                     }
                   >
                     <option value="MANUAL">MANUAL</option>
@@ -215,67 +621,20 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({ projects, selected
                   </select>
                 </div>
               </div>
-              <div className="card-body">
-                {selectedCase.preconditions && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Preconditions
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#334155', background: '#f8fafc', padding: '8px 12px', borderRadius: '4px' }}>
-                      {selectedCase.preconditions}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Test Steps ({selectedCase.steps.length})
-                  </div>
-                  {selectedCase.steps.length > 0 ? (
-                    <ol style={{ paddingLeft: '20px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {selectedCase.steps.map((st, i) => (
-                        <li key={i} style={{ color: '#1e293b' }}>
-                          {st}
-                        </li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No explicit steps recorded.</div>
-                  )}
-                </div>
-
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Expected Result
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#334155', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 12px', borderRadius: '4px' }}>
-                    {selectedCase.expected_result || 'No expected result specified.'}
-                  </div>
-                </div>
-
-                {selectedCase.tags.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Tags
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {selectedCase.tags.map((t, idx) => (
-                        <span key={idx} className="badge badge-draft">
-                          <Tag size={10} style={{ marginRight: '4px' }} /> {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsBindingModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Binding
+                </button>
               </div>
-            </div>
-          ) : (
-            <div className="card">
-              <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Select a test case to view step details.
-              </div>
-            </div>
-          )}
+            </form>
+          </div>
         </div>
       )}
 

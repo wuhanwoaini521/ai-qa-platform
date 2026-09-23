@@ -17,6 +17,10 @@ export const App: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
 
+  // Cross-page navigation state
+  const [studioTargetFile, setStudioTargetFile] = useState<string | null>(null);
+  const [runsTargetId, setRunsTargetId] = useState<string | null>(null);
+
   const fetchProjects = async () => {
     try {
       setLoadingProjects(true);
@@ -40,6 +44,20 @@ export const App: React.FC = () => {
     const created = await api.createProject(data);
     setProjects([created, ...projects]);
     setSelectedProjectId(created.id);
+  };
+
+  const handleNavigateToStudio = (filePath: string) => {
+    setStudioTargetFile(filePath);
+    setCurrentTab('automation');
+  };
+
+  const handleNavigateToRuns = (runId?: string) => {
+    if (runId) setRunsTargetId(runId);
+    setCurrentTab('runs');
+  };
+
+  const handleNavigateToFailures = () => {
+    setCurrentTab('failures');
   };
 
   const pageTitles: Record<NavTab, string> = {
@@ -98,6 +116,8 @@ export const App: React.FC = () => {
             <TestCasesPage
               projects={projects}
               selectedProjectId={selectedProjectId}
+              onNavigateToStudio={handleNavigateToStudio}
+              onNavigateToRuns={handleNavigateToRuns}
             />
           )}
 
@@ -106,12 +126,27 @@ export const App: React.FC = () => {
               projects={projects}
               selectedProjectId={selectedProjectId}
               onSelectProject={setSelectedProjectId}
+              onNavigateToRuns={handleNavigateToRuns}
+              initialOpenFilePath={studioTargetFile}
             />
           )}
 
-          {currentTab === 'runs' && <RunsPage />}
+          {currentTab === 'runs' && (
+            <RunsPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              initialRunId={runsTargetId}
+              onNavigateToFailures={handleNavigateToFailures}
+            />
+          )}
 
-          {currentTab === 'failures' && <FailuresPage />}
+          {currentTab === 'failures' && (
+            <FailuresPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onNavigateToRuns={handleNavigateToRuns}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -493,9 +493,46 @@ button, input, select, textarea {
 }
 
 .studio-assistant-pane {
-  width: 300px;
+  width: 320px;
   border-left: 1px solid var(--border-color);
   background: #fbfcfd;
   display: flex;
   flex-direction: column;
 }
+
+.tree-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.tree-node:hover .tree-actions {
+  display: flex;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  background-color: #e2e8f0;
+  color: var(--text-main);
+}
+
+.btn-danger {
+  background-color: var(--danger);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+

@@ -1,27 +1,513 @@
-import React from 'react';
-import { PlayCircle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Project, TestRun, TestRunCreate } from '../types';
+import { api } from '../api/client';
+import {
+  PlayCircle,
+  Plus,
+  RefreshCw,
+  Clock,
+  Terminal,
+  ChevronRight,
+  StopCircle,
+  Sparkles,
+} from 'lucide-react';
 
-export const RunsPage: React.FC = () => {
+interface RunsPageProps {
+  projects: Project[];
+  selectedProjectId: string | null;
+  initialRunId?: string | null;
+  onNavigateToFailures?: (failureId?: string) => void;
+}
+
+export const RunsPage: React.FC<RunsPageProps> = ({
+  projects,
+  selectedProjectId,
+  initialRunId,
+  onNavigateToFailures,
+}) => {
+  const currentProjectId = selectedProjectId || projects[0]?.id || null;
+
+  const [runs, setRuns] = useState<TestRun[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
+
+  // New Run Modal State
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [runFormData, setRunFormData] = useState<TestRunCreate>({
+    project_id: currentProjectId || '',
+    target_nodeids: [],
+    triggered_by: 'Web UI Manual Trigger',
+  });
+  const [targetNodeidsText, setTargetNodeidsText] = useState<string>('');
+  const [triggering, setTriggering] = useState<boolean>(false);
+
+  // Live SSE streaming ref
+  const unsubscribeSSERef = useRef<(() => void) | null>(null);
+  const terminalLogRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchRuns = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getTestRuns(currentProjectId || undefined);
+      setRuns(data);
+      if (data.length > 0 && !selectedRun) {
+        if (initialRunId) {
+          const match = data.find((r) => r.id === initialRunId);
+          if (match) {
+            handleSelectRun(match);
+            return;
+          }
+        }
+        handleSelectRun(data[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load runs', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRunDetail = async (runId: string) => {
+    try {
+      const run = await api.getTestRun(runId);
+      setSelectedRun(run);
+      // Update in list
+      setRuns((prev) => prev.map((r) => (r.id === run.id ? run : r)));
+    } catch (err) {
+      console.error(`Failed to fetch run detail for ${runId}`, err);
+    }
+  };
+
+  const handleSelectRun = (run: TestRun) => {
+    setSelectedRun(run);
+    fetchRunDetail(run.id);
+
+    // Clean up previous SSE
+    if (unsubscribeSSERef.current) {
+      unsubscribeSSERef.current();
+      unsubscribeSSERef.current = null;
+    }
+
+    // Connect SSE if run is still active
+    if (run.status === 'RUNNING' || run.status === 'QUEUED') {
+      const unsub = api.streamRunEvents(
+        run.id,
+        (event) => {
+          if (event.type === 'status') {
+            setSelectedRun((prev) => (prev ? { ...prev, status: event.status } : prev));
+          } else if (event.type === 'execution_update') {
+            setSelectedRun((prev) => {
+              if (!prev) return prev;
+              const exists = prev.executions.some((e) => e.id === event.execution.id);
+              const nextExecutions = exists
+                ? prev.executions.map((e) => (e.id === event.execution.id ? event.execution : e))
+                : [...prev.executions, event.execution];
+              return { ...prev, executions: nextExecutions };
+            });
+          } else if (event.type === 'log_chunk') {
+            setSelectedRun((prev) =>
+              prev ? { ...prev, log_output: prev.log_output + event.chunk } : prev
+            );
+          } else if (event.type === 'complete') {
+            fetchRunDetail(run.id);
+          }
+        },
+        () => {
+          // On error, poll once
+          fetchRunDetail(run.id);
+        }
+      );
+      unsubscribeSSERef.current = unsub;
+    }
+  };
+
+  useEffect(() => {
+    fetchRuns();
+    return () => {
+      if (unsubscribeSSERef.current) {
+        unsubscribeSSERef.current();
+      }
+    };
+  }, [currentProjectId]);
+
+  // Auto-scroll terminal log
+  useEffect(() => {
+    if (terminalLogRef.current) {
+      terminalLogRef.current.scrollTop = terminalLogRef.current.scrollHeight;
+    }
+  }, [selectedRun?.log_output]);
+
+  const handleCreateRun = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setTriggering(true);
+      const parsedTargets = targetNodeidsText
+        .split('\n')
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      const newRun = await api.createTestRun({
+        project_id: currentProjectId || runFormData.project_id,
+        target_nodeids: parsedTargets.length > 0 ? parsedTargets : undefined,
+        triggered_by: runFormData.triggered_by || 'Web UI Manual Trigger',
+      });
+
+      setRuns([newRun, ...runs]);
+      setIsModalOpen(false);
+      setTargetNodeidsText('');
+      handleSelectRun(newRun);
+    } catch (err: any) {
+      alert(`Failed to trigger execution run: ${err.message || err}`);
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  const handleCancelRun = async (runId: string) => {
+    try {
+      const updated = await api.cancelTestRun(runId);
+      setSelectedRun(updated);
+      setRuns(runs.map((r) => (r.id === runId ? updated : r)));
+    } catch (err: any) {
+      alert(`Cancel error: ${err.message || err}`);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PASSED':
+        return <span className="badge badge-ready">PASSED</span>;
+      case 'FAILED':
+        return <span className="badge badge-p0">FAILED</span>;
+      case 'RUNNING':
+        return (
+          <span className="badge badge-draft" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+            ● RUNNING
+          </span>
+        );
+      case 'QUEUED':
+        return <span className="badge badge-p2">QUEUED</span>;
+      case 'CANCELLED':
+        return <span className="badge badge-p3">CANCELLED</span>;
+      default:
+        return <span className="badge badge-draft">{status}</span>;
+    }
+  };
+
   return (
     <div>
-      <div style={{ marginBottom: '18px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Runs</h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Suite execution history, test run status, durations, and CI triggers.
-        </p>
-      </div>
-
-      <div className="card">
-        <div className="card-body" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <PlayCircle size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-            No Test Runs Executed
-          </div>
-          <p style={{ fontSize: '13px', maxWidth: '420px', margin: '0 auto' }}>
-            Execution Platform and Worker dispatching will be enabled in Phase 4. Test runs triggered via API or Studio will be aggregated here.
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <div>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Execution Platform</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            Real-time pytest execution runs, live SSE streaming, duration stats, and outcome logs.
           </p>
         </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary btn-sm" onClick={fetchRuns} title="Refresh runs">
+            <RefreshCw size={14} /> Refresh
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={projects.length === 0}
+            onClick={() => {
+              setRunFormData({
+                project_id: currentProjectId || projects[0]?.id || '',
+                triggered_by: 'Web UI Manual Trigger',
+              });
+              setIsModalOpen(true);
+            }}
+          >
+            <Plus size={16} /> New Test Run
+          </button>
+        </div>
       </div>
+
+      {projects.length === 0 ? (
+        <div className="card">
+          <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            Please select or create a project first before triggering test execution.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px' }}>
+          {/* Left: Execution Runs List */}
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Execution Runs ({runs.length})</span>
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {loading ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Loading runs...
+                </div>
+              ) : runs.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <PlayCircle size={36} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
+                  <p style={{ fontSize: '13px' }}>No test runs executed yet.</p>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ marginTop: '10px' }}
+                    onClick={() => setIsModalOpen(true)}
+                  >
+                    Trigger First Run
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {runs.map((r) => {
+                    const isSelected = selectedRun?.id === r.id;
+                    return (
+                      <div
+                        key={r.id}
+                        onClick={() => handleSelectRun(r)}
+                        style={{
+                          padding: '12px 16px',
+                          borderBottom: '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? '#eff6ff' : 'transparent',
+                          borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            {getStatusBadge(r.status)}
+                            <span style={{ fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                              #{r.id.slice(0, 8)}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              {r.triggered_by}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
+                            <span>
+                              Total: <b>{r.total_tests}</b> | Passed:{' '}
+                              <b style={{ color: '#16a34a' }}>{r.passed_tests}</b> | Failed:{' '}
+                              <b style={{ color: '#dc2626' }}>{r.failed_tests}</b>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <Clock size={11} /> {(r.duration_ms / 1000).toFixed(2)}s
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} color={isSelected ? '#2563eb' : '#94a3b8'} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Selected Run Detail & Live Stream */}
+          {selectedRun ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Summary Header */}
+              <div className="card">
+                <div className="card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {getStatusBadge(selectedRun.status)}
+                    <span className="card-title" style={{ fontFamily: 'var(--font-mono)' }}>
+                      Run #{selectedRun.id}
+                    </span>
+                  </div>
+                  {(selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED') && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ color: '#dc2626' }}
+                      onClick={() => handleCancelRun(selectedRun.id)}
+                    >
+                      <StopCircle size={13} /> Cancel Run
+                    </button>
+                  )}
+                </div>
+                <div className="card-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Total Tests</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '2px' }}>{selectedRun.total_tests}</div>
+                    </div>
+                    <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Passed</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>{selectedRun.passed_tests}</div>
+                    </div>
+                    <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>Failed</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#dc2626', marginTop: '2px' }}>{selectedRun.failed_tests}</div>
+                    </div>
+                    <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>Duration</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>{(selectedRun.duration_ms / 1000).toFixed(2)}s</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Individual Test Executions Table */}
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">Test Outcomes ({selectedRun.executions.length})</span>
+                  {selectedRun.failed_tests > 0 && onNavigateToFailures && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px' }}
+                      onClick={() => onNavigateToFailures()}
+                    >
+                      <Sparkles size={12} color="#9333ea" /> View Failures & Auto-Healing
+                    </button>
+                  )}
+                </div>
+                <div className="card-body" style={{ padding: 0 }}>
+                  {selectedRun.executions.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      Waiting for pytest execution items...
+                    </div>
+                  ) : (
+                    <table className="data-table" style={{ fontSize: '12px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '8px 12px' }}>Status</th>
+                          <th style={{ padding: '8px 12px' }}>Pytest Node ID</th>
+                          <th style={{ padding: '8px 12px' }}>Duration</th>
+                          <th style={{ padding: '8px 12px' }}>Error Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRun.executions.map((e) => (
+                          <tr key={e.id}>
+                            <td style={{ padding: '8px 12px' }}>{getStatusBadge(e.status)}</td>
+                            <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                              {e.nodeid}
+                            </td>
+                            <td style={{ padding: '8px 12px' }}>{(e.duration_ms / 1000).toFixed(2)}s</td>
+                            <td style={{ padding: '8px 12px', color: e.error_message ? '#dc2626' : 'var(--text-muted)' }}>
+                              {e.error_message || '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Terminal-Style Realtime Log Viewer */}
+              <div className="card">
+                <div className="card-header" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f8fafc' }}>
+                    <Terminal size={14} color="#38bdf8" />
+                    <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                      Execution Console Log
+                    </span>
+                  </div>
+                  {selectedRun.status === 'RUNNING' && (
+                    <span style={{ fontSize: '11px', color: '#38bdf8', animation: 'pulse 1.5s infinite' }}>
+                      ● Live SSE Streaming
+                    </span>
+                  )}
+                </div>
+                <div
+                  ref={terminalLogRef}
+                  style={{
+                    background: '#090d16',
+                    color: '#e2e8f0',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '12px',
+                    padding: '16px',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {selectedRun.log_output || 'Awaiting runner subprocess stream output...'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card">
+              <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                Select a test run to view real-time execution logs and outcome breakdown.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* New Test Run Modal */}
+      {isModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-dialog">
+            <form onSubmit={handleCreateRun}>
+              <div className="modal-header">
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Trigger New Execution Run</h3>
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label">Project *</label>
+                  <select
+                    className="form-control"
+                    value={runFormData.project_id}
+                    onChange={(e) => setRunFormData({ ...runFormData, project_id: e.target.value })}
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Triggered By</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. CI Pipeline, Studio Runner, Regression"
+                    value={runFormData.triggered_by}
+                    onChange={(e) =>
+                      setRunFormData({ ...runFormData, triggered_by: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Target Test Node IDs (Optional, leave blank to run full suite)</label>
+                  <textarea
+                    rows={4}
+                    className="form-control"
+                    placeholder="tests/test_cart.py&#10;tests/test_checkout.py::test_coupon_calculation"
+                    value={targetNodeidsText}
+                    onChange={(e) => setTargetNodeidsText(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={triggering}>
+                  <PlayCircle size={15} /> {triggering ? 'Starting Runner...' : 'Launch Execution'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

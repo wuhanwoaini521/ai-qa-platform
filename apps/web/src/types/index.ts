@@ -84,6 +84,7 @@ export interface TestCase {
   tags: string[];
   created_at: string;
   updated_at: string;
+  binding?: AutomationBinding | null;
 }
 
 export interface TestCaseCreate {
@@ -97,6 +98,34 @@ export interface TestCaseCreate {
   priority?: TestCasePriority;
   automation_status?: AutomationStatus;
   tags?: string[];
+}
+
+export interface AutomationBinding {
+  id: string;
+  test_case_id: string;
+  framework_type: FrameworkType;
+  test_file_path: string;
+  test_node_id: string;
+  status: AutomationStatus;
+  last_generated_code?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationBindingCreate {
+  framework_type?: FrameworkType;
+  test_file_path: string;
+  test_node_id: string;
+  status?: AutomationStatus;
+  last_generated_code?: string | null;
+}
+
+export interface GenerateAutomationResponse {
+  test_case_id: string;
+  target_file: string;
+  suggested_code: string;
+  grounded_knowledge: string[];
+  page_objects: string[];
 }
 
 export interface FileNode {
@@ -118,12 +147,144 @@ export interface GitDiffResult {
   changed_files: GitChangedFile[];
 }
 
+export interface ValidationIssue {
+  file: string;
+  line: number;
+  column: number;
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  rule_id: string;
+}
+
+export interface WorkspaceValidationResult {
+  is_valid: boolean;
+  error_count: number;
+  warning_count: number;
+  issues: ValidationIssue[];
+}
+
+export interface CollectedTest {
+  nodeid: string;
+  name: string;
+  path: string;
+  line: number;
+  markers: string[];
+  docstring: string;
+}
+
+export type TestRunStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
+
+export interface TestRun {
+  id: string;
+  project_id: string;
+  status: TestRunStatus;
+  total_tests: number;
+  passed_tests: number;
+  failed_tests: number;
+  skipped_tests: number;
+  error_tests: number;
+  duration_ms: number;
+  triggered_by: string;
+  target_nodeids?: string[];
+  log_output: string;
+  created_at: string;
+  updated_at: string;
+  executions: TestExecution[];
+}
+
+export interface TestRunCreate {
+  project_id: string;
+  target_nodeids?: string[];
+  triggered_by?: string;
+  timeout_seconds?: number;
+}
+
+export type TestExecutionStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
+
+export interface TestExecution {
+  id: string;
+  test_run_id: string;
+  test_case_id?: string | null;
+  nodeid: string;
+  status: TestExecutionStatus;
+  duration_ms: number;
+  stdout: string;
+  stderr: string;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type FailureCategory =
+  | 'LOCATOR_CHANGED'
+  | 'TIMING_ISSUE'
+  | 'ASSERTION_FAILURE'
+  | 'ENVIRONMENT_ERROR'
+  | 'UNKNOWN';
+
+export interface FailureRecord {
+  id: string;
+  project_id: string;
+  test_execution_id: string;
+  nodeid: string;
+  category: FailureCategory;
+  error_message: string;
+  stack_trace: string;
+  suggested_action: string;
+  is_resolved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CandidateLocator {
+  locator: string;
+  confidence: number;
+  strategy: string;
+  reason: string;
+}
+
+export interface LocatorRepairProposal {
+  target_file: string;
+  line_number: number;
+  broken_locator: string;
+  proposed_locator: string;
+  diff_preview: string;
+  candidates: CandidateLocator[];
+  confidence: number;
+  explanation: string;
+}
+
+export interface ApplyRepairRequest {
+  target_file: string;
+  old_locator: string;
+  new_locator: string;
+}
+
+export interface QAChatRequest {
+  message: string;
+  project_id?: string;
+  current_file?: string;
+  selected_code?: string;
+  context_type?: 'chat' | 'explain' | 'generate' | 'refactor' | 'diagnose';
+}
+
+export interface QAChatResponse {
+  reply: string;
+  code_snippet?: string | null;
+  suggested_actions: string[];
+}
+
 export interface DashboardStats {
   total_projects: number;
   total_requirements: number;
   total_test_cases: number;
   total_runs: number;
+  runs_today: number;
+  tests_executed_today: number;
+  pass_rate: number;
+  total_failures: number;
   recent_projects: Project[];
   recent_requirements: Requirement[];
   recent_test_cases: TestCase[];
+  recent_runs: TestRun[];
 }
