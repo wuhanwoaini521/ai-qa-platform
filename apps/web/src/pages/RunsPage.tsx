@@ -69,14 +69,17 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       ]);
       setRuns(data);
       setRunnerProfiles(profiles);
-      if (data.length > 0 && !selectedRun) {
-        if (initialRunId) {
-          const match = data.find((r) => r.id === initialRunId);
-          if (match) {
-            handleSelectRun(match);
-            return;
-          }
+      if (!selectedRun && initialRunId) {
+        const match = data.find((r) => r.id === initialRunId);
+        if (match) {
+          handleSelectRun(match);
+          return;
         }
+        // Deep link to a run that is not in the fetched window: load it directly.
+        await fetchRunDetail(initialRunId);
+        return;
+      }
+      if (data.length > 0 && !selectedRun) {
         handleSelectRun(data[0]);
       }
     } catch (err) {

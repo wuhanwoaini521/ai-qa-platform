@@ -24,18 +24,28 @@ import {
   ShieldCheck,
   History,
   Bug,
+  Code2,
   ExternalLink,
 } from 'lucide-react';
 
 interface FailuresPageProps {
   projects: Project[];
   selectedProjectId: string | null;
+  /** Deep-link target: when set, this failure is selected once the list resolves. */
+  initialFailureId?: string | null;
+  /** Lets the router shell mirror row selection into the URL. */
+  onSelectFailure?: (failureId: string) => void;
+  /** Opens the failing test file in the Automation Studio. */
+  onOpenInStudio?: (filePath: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
 }
 
 export const FailuresPage: React.FC<FailuresPageProps> = ({
   projects,
   selectedProjectId,
+  initialFailureId,
+  onSelectFailure,
+  onOpenInStudio,
   onNavigateToRuns,
 }) => {
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
@@ -79,7 +89,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setLoading(true);
       const data = await api.getFailures(currentProjectId || undefined);
       setFailures(data);
-      if (data.length > 0) {
+      const deepLinked = initialFailureId ? data.find((f) => f.id === initialFailureId) : undefined;
+      if (deepLinked) {
+        handleSelectFailure(deepLinked);
+      } else if (data.length > 0) {
         handleSelectFailure(data[0]);
       } else {
         setSelectedFailure(null);
@@ -327,7 +340,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     return (
                       <div
                         key={f.id}
-                        onClick={() => handleSelectFailure(f)}
+                        onClick={() => {
+                          handleSelectFailure(f);
+                          if (onSelectFailure) onSelectFailure(f.id);
+                        }}
                         style={{
                           padding: '12px 16px',
                           borderBottom: '1px solid var(--border-color)',
@@ -427,6 +443,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     >
                       <Bug size={13} color="#e11d48" /> Create Jira Bug Draft
                     </button>
+                    {onOpenInStudio && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => onOpenInStudio((selectedFailure.nodeid || '').split('::')[0])}
+                        title="Open the failing test file in the Automation Studio"
+                      >
+                        <Code2 size={13} /> Open Test in Studio
+                      </button>
+                    )}
                   </div>
 
                   {rerunMessage && (

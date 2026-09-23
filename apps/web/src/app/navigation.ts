@@ -1,0 +1,94 @@
+import { useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { NavTab } from '../components/Navigation';
+import { useProjectScope } from './ProjectScope';
+
+export function pathForTab(tab: NavTab, projectId: string | null): string {
+  switch (tab) {
+    case 'dashboard':
+      return '/';
+    case 'projects':
+      return '/projects';
+    case 'requirements':
+      return projectId ? `/projects/${projectId}/requirements` : '/requirements';
+    case 'test_cases':
+      return '/test-cases';
+    case 'automation':
+      return projectId ? `/projects/${projectId}/studio` : '/projects';
+    case 'runs':
+      return '/runs';
+    case 'flaky':
+      return '/flaky';
+    case 'failures':
+      return '/failures';
+    case 'quality':
+      return '/quality';
+    case 'security':
+      return '/security';
+    case 'workers':
+      return '/workers';
+  }
+}
+
+/** Rewrites the `:projectId` segment of a project-scoped path, keeping the rest of the route. */
+export function withProjectId(pathname: string, projectId: string | null): string {
+  if (!projectId) {
+    return pathname;
+  }
+  const match = /^\/projects\/[^/]+(?<rest>\/.*)?$/.exec(pathname);
+  if (match) {
+    return `/projects/${projectId}${match.groups?.rest ?? ''}`;
+  }
+  return pathname;
+}
+
+interface AppNavigation {
+  toTab: (tab: NavTab) => void;
+  toStudio: (filePath?: string) => void;
+  toRun: (runId?: string) => void;
+  toFailures: (failureId?: string) => void;
+}
+
+/**
+ * Route-aware replacement for the old `NavTab` state machine: every cross-page jump
+ * becomes a real URL so it survives refresh, sharing and back/forward.
+ */
+export function useAppNavigation(): AppNavigation {
+  const navigate = useNavigate();
+  const { selectedProjectId } = useProjectScope();
+
+  const toTab = useCallback(
+    (tab: NavTab) => {
+      navigate(pathForTab(tab, selectedProjectId));
+    },
+    [navigate, selectedProjectId]
+  );
+
+  const toStudio = useCallback(
+    (filePath?: string) => {
+      if (!selectedProjectId) {
+        navigate('/projects');
+        return;
+      }
+      const base = `/projects/${selectedProjectId}/studio`;
+      navigate(filePath ? `${base}/file/${filePath}` : base);
+    },
+    [navigate, selectedProjectId]
+  );
+
+  const toRun = useCallback(
+    (runId?: string) => {
+      navigate(runId ? `/runs/${runId}` : '/runs');
+    },
+    [navigate]
+  );
+
+  const toFailures = useCallback(
+    (failureId?: string) => {
+      navigate(failureId ? `/failures/${failureId}` : '/failures');
+    },
+    [navigate]
+  );
+
+  return useMemo(() => ({ toTab, toStudio, toRun, toFailures }), [toTab, toStudio, toRun, toFailures]);
+}

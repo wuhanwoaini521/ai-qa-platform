@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderGit2,
@@ -12,6 +13,7 @@ import {
   Shield,
   Server,
 } from 'lucide-react';
+import { useProjectScope } from '../app/ProjectScope';
 
 export type NavTab =
   | 'dashboard'
@@ -26,24 +28,40 @@ export type NavTab =
   | 'security'
   | 'workers';
 
-interface NavigationProps {
-  currentTab: NavTab;
-  onSelectTab: (tab: NavTab) => void;
+interface NavItem {
+  id: NavTab;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+  to: string;
+  end?: boolean;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab }) => {
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'projects', label: 'Projects', icon: FolderGit2 },
-    { id: 'requirements', label: 'Requirements', icon: FileText },
-    { id: 'test_cases', label: 'Test Cases', icon: CheckSquare },
-    { id: 'automation', label: 'Automation Studio', icon: Code2 },
-    { id: 'runs', label: 'Runs & Runners', icon: PlayCircle },
-    { id: 'workers', label: 'Distributed Workers', icon: Server },
-    { id: 'flaky', label: 'Flaky Intelligence', icon: Flame },
-    { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle },
-    { id: 'quality', label: 'Quality & Release', icon: ShieldCheck },
-    { id: 'security', label: 'Security & RBAC', icon: Shield },
+export const Navigation: React.FC = () => {
+  const { selectedProjectId } = useProjectScope();
+  const projectBase = selectedProjectId ? `/projects/${selectedProjectId}` : null;
+
+  const navItems: NavItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/', end: true },
+    { id: 'projects', label: 'Projects', icon: FolderGit2, to: '/projects', end: true },
+    {
+      id: 'requirements',
+      label: 'Requirements',
+      icon: FileText,
+      to: projectBase ? `${projectBase}/requirements` : '/requirements',
+    },
+    { id: 'test_cases', label: 'Test Cases', icon: CheckSquare, to: '/test-cases' },
+    {
+      id: 'automation',
+      label: 'Automation Studio',
+      icon: Code2,
+      to: projectBase ? `${projectBase}/studio` : '/projects',
+    },
+    { id: 'runs', label: 'Runs & Runners', icon: PlayCircle, to: '/runs' },
+    { id: 'workers', label: 'Distributed Workers', icon: Server, to: '/workers' },
+    { id: 'flaky', label: 'Flaky Intelligence', icon: Flame, to: '/flaky' },
+    { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle, to: '/failures' },
+    { id: 'quality', label: 'Quality & Release', icon: ShieldCheck, to: '/quality' },
+    { id: 'security', label: 'Security & RBAC', icon: Shield, to: '/security' },
   ];
 
   return (
@@ -59,16 +77,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       <nav className="sidebar-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentTab === item.id;
           return (
-            <div
+            <NavLink
               key={item.id}
-              className={`nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => onSelectTab(item.id as NavTab)}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <Icon size={16} />
               <span>{item.label}</span>
-            </div>
+            </NavLink>
           );
         })}
       </nav>
