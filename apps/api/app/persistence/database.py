@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 from typing import AsyncGenerator
 
 from app.settings import settings
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -12,12 +11,21 @@ class Base(DeclarativeBase):
 
 
 # SQLite / PostgreSQL compatible engine
-connect_args = {"check_same_thread": False} if "sqlite" in settings.database_url else {}
+is_sqlite = "sqlite" in settings.database_url.lower()
+
+engine_kwargs = {}
+if is_sqlite:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # PostgreSQL pooling parameters
+    engine_kwargs["pool_size"] = 20
+    engine_kwargs["max_overflow"] = 10
+    engine_kwargs["pool_pre_ping"] = True
 
 engine = create_async_engine(
     settings.database_url,
     echo=False,
-    connect_args=connect_args,
+    **engine_kwargs,
 )
 
 async_session_factory = async_sessionmaker(
@@ -44,3 +52,12 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+async def check_db_health() -> bool:
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+            return True
+    except Exception:
+        return False

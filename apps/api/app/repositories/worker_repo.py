@@ -12,8 +12,21 @@ from app.persistence.models import WorkerORM, utc_now
 
 
 class WorkerRepository:
-    def __init__(self, session_factory=get_session) -> None:
-        self.session_factory = session_factory
+    def __init__(self, session_or_factory=get_session) -> None:
+        if isinstance(session_or_factory, AsyncSession):
+            self._session: AsyncSession | None = session_or_factory
+            self.session_factory = None
+        else:
+            self._session = None
+            self.session_factory = session_or_factory
+
+    async def _run(self, session: AsyncSession | None, fn):
+        active_session = session or self._session
+        if active_session:
+            return await fn(active_session)
+        assert self.session_factory is not None
+        async with self.session_factory() as s:
+            return await fn(s)
 
     async def register_or_update(
         self, data: WorkerCreate, worker_id: str | None = None, session: AsyncSession | None = None
@@ -55,10 +68,7 @@ class WorkerRepository:
             await s.refresh(orm)
             return self._to_model(orm)
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def heartbeat(
         self,
@@ -80,10 +90,7 @@ class WorkerRepository:
             await s.refresh(orm)
             return self._to_model(orm)
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def get_by_id(self, worker_id: str, session: AsyncSession | None = None) -> Worker | None:
         async def _exec(s: AsyncSession) -> Worker | None:
@@ -92,10 +99,7 @@ class WorkerRepository:
             orm = res.scalar_one_or_none()
             return self._to_model(orm) if orm else None
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def list_all(self, session: AsyncSession | None = None) -> list[Worker]:
         async def _exec(s: AsyncSession) -> list[Worker]:
@@ -114,10 +118,7 @@ class WorkerRepository:
             await s.commit()
             return workers
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def delete(self, worker_id: str, session: AsyncSession | None = None) -> bool:
         async def _exec(s: AsyncSession) -> bool:
@@ -130,10 +131,7 @@ class WorkerRepository:
             await s.commit()
             return True
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     @staticmethod
     def _to_model(orm: WorkerORM) -> Worker:

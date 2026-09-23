@@ -1,78 +1,57 @@
-# AI QA Platform — Architecture
+# AI QA Platform — Complete Architecture Reference
 
-## System Overview
+The AI QA Platform is a deterministic, enterprise-grade AI QA Engineering Platform built on a Modular Monolith architecture.
 
-The **AI QA Platform** is a browser-based engineering platform designed to support the complete Quality Engineering lifecycle—from requirements analysis, test design, and test case management, to an integrated Automation Studio, execution orchestration, and failure intelligence.
+---
 
-```mermaid
-flowchart TD
-    subgraph UI ["Platform UI (React 19 + TypeScript + Vite)"]
-        Dashboard["Dashboard & Stats"]
-        Projects["Project Management"]
-        Reqs["Requirements & Test Design"]
-        Cases["Test Case Repository"]
-        Studio["Automation Studio (Monaco Editor + Git Diff)"]
-    end
+## 1. System Context & Component Architecture
 
-    subgraph API ["Platform API (FastAPI + Pydantic)"]
-        Routes["REST Endpoints (/api/...)"]
-        Services["Domain Services (Project, Requirement, TestCase, Workspace)"]
-        Repos["Repositories (SQLAlchemy Async)"]
-    end
-
-    subgraph Core ["QA Core & Engine (packages/qa-core)"]
-        Runner["TestRunner (Playwright / Pytest / Fake)"]
-        Analyzer["FailureAnalyzer (Root Cause Taxonomy)"]
-        Author["TestAuthor (AI Code Generation)"]
-        Healer["LocatorHealer (Self-healing Selectors)"]
-        Explorer["BrowserExplorer (AI Sessions)"]
-        Orchestrator["QAOrchestrator"]
-    end
-
-    subgraph Storage ["Persistence & Workspace Storage"]
-        DB[(SQLite / PostgreSQL DB)]
-        WorkspaceFS["runtime/workspaces/ (Git Workspaces)"]
-        ArtifactStore["runtime/artifacts/ (Screenshots / Traces)"]
-    end
-
-    subgraph Worker ["Execution Worker (apps/worker)"]
-        JobQueue["Job Queue & Dispatcher"]
-        JobExecutor["Background Job Runner"]
-    end
-
-    UI -->|HTTP / JSON| API
-    Routes --> Services
-    Services --> Repos
-    Services --> WorkspaceFS
-    Repos --> DB
-    Services --> Core
-    Worker --> JobQueue
-    Worker --> Core
-    Worker --> ArtifactStore
+```
+                                    ┌─────────────────────────────────────────────────────────────┐
+                                    │                     USER & INTEGRATIONS                     │
+                                    │  [Web SPA]   [Jira Sync]   [GitHub Webhooks]   [TestRail]   │
+                                    └──────────────────────────────┬──────────────────────────────┘
+                                                                   │ HTTP / SSE / REST
+┌──────────────────────────────────────────────────────────────────▼──────────────────────────────────────────────────────────────────┐
+│                                                      AI QA PLATFORM CORE API                                                        │
+├──────────────────────────┬──────────────────────────┬──────────────────────────┬──────────────────────────┬─────────────────────────┤
+│  PHASE 1-3: QA CORE      │  PHASE 4-7: EXECUTION    │  PHASE 8-9: WORKFLOWS    │  PHASE 10: QUALITY INTEL │  PHASE 11-13: ENTERPRISE│
+│  - Requirement & Design  │  - Pytest / Runner API   │  - GitHub PR Workflow    │  - Coverage Matrix       │  - RBAC & API Keys      │
+│  - Test Case & Bindings  │  - SSE Live Output       │  - Jira Bi-directional   │  - Change Impact Analyz  │  - Immutable Audit Log  │
+│  - Automation Studio V2  │  - Flaky Intelligence    │  - TestRail Sync         │  - Release Gating        │  - Distributed Workers  │
+│  - Real Pytest Migration │  - Failure Diagnostician │  - Jenkins Webhooks      │  - Quality Risk Radar    │  - Docker / Prometheus  │
+└────────────┬─────────────┴────────────┬─────────────┴────────────┬─────────────┴────────────┬─────────────┴────────────┬────────────┘
+             │                          │                          │                          │                          │
+┌────────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼────────────┐
+│      PostgreSQL DB       │ │   MinIO / S3 Storage   │ │   Distributed Workers  │ │  Multi-LLM AI Gateways │ │  External CI & Tools   │
+│ (Relational Data & RBAC) │ │ (Traces, DOM, Videos)  │ │ (Playwright Multi-Node)│ │ (OpenAI/Claude/Gemini) │ │ (GitHub/Jira/Jenkins)  │
+└──────────────────────────┘ └────────────────────────┘ └────────────────────────┘ └────────────────────────┘ └────────────────────────┘
 ```
 
 ---
 
-## Architectural Boundaries
+## 2. Phase-by-Phase Platform Capability Matrix
 
-1. **Frontend (`apps/web`)**:
-   - Single Page Application built on React, TypeScript, and Vite.
-   - Monaco Editor for in-browser editing of test automation suites, page object models, flows, and knowledge definitions.
-   - Desktop-first, engineering-focused UX with zero promotional bloat.
+| Phase | Subsystem | Key Capabilities |
+|---|---|---|
+| **Phase 1** | Platform Foundation | Project models, Test Design, Test Case, Automation code bindings |
+| **Phase 2** | Automation Studio V2 | Monaco Code Editor, Test Explorer tree, Problems panel, Git Diff view |
+| **Phase 3** | Real QA Core Migration | Seamless replacement of mock orchestrators with real Pytest runner |
+| **Phase 4** | Test Execution Platform | Real-time SSE live stream output, Execution Run records, Step telemetry |
+| **Phase 5** | Production AI Provider | Multi-provider router (OpenAI, Anthropic, Gemini, Mock), monthly budget limits, audit log |
+| **Phase 6** | Flaky & Failure Intelligence | Heuristic & AI root cause diagnosis, locator repair proposal, human review & apply |
+| **Phase 7** | Multi-Runner CI Platform | Jenkins CI build triggering, webhook callback listeners, runner dispatch |
+| **Phase 8** | GitHub / PR Workflow | PR test summary publisher, checks aggregator, GitHub PR auto-diagnostics |
+| **Phase 9** | Jira & TestRail Integration | Bi-directional requirement sync, preview-first bug creation, TestRail result sync |
+| **Phase 10** | Quality Intelligence & Gating | Multi-dimensional coverage score, risk radar matrix, change impact analysis, release gates |
+| **Phase 11** | Identity, RBAC & Security | 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API Key generator, secret masking |
+| **Phase 12** | Distributed Execution Grid | Scalable worker nodes, heartbeat liveness, browser capability matching, S3 artifact storage |
+| **Phase 13** | Production Deployment & Ops | Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks |
 
-2. **Backend API (`apps/api`)**:
-   - FastAPI modular monolith structure adhering strictly to the **Route → Service → Repository / QA Core** dependency layer.
-   - Direct database access and shell executions from route handlers are prohibited.
-   - SQLite as default local dev/test database with PostgreSQL compatibility through standard SQLAlchemy ORM.
+---
 
-3. **Workspace Subsystem (`runtime/workspaces/`)**:
-   - Isolates code checkouts per project.
-   - Built-in path traversal safeguards rejecting any `..` or absolute escape vectors.
-   - Integrated Git status and unified diff generation for studio source control visibility.
+## 3. Guiding Architectural Principles
 
-4. **QA Core (`packages/qa-core`)**:
-   - Protocol-driven abstractions defining the future migration boundary for execution engines, AI authors, locator healers, and failure analyzers.
-   - Deterministic fake implementations enabled out-of-the-box for offline integration testing.
-
-5. **Execution Worker (`apps/worker`)**:
-   - Asynchronous background worker foundation for test runs and AI diagnostic tasks.
+1. **Deterministic Test Oracles**: AI assists with test generation, locator repair proposals, and root cause analysis, but never fakes or overrides test execution results.
+2. **Preview-First Philosophy**: External modifications (Jira tickets, TestRail updates, locator modifications) require deterministic preview and human approval prior to mutation.
+3. **Modular Monolith**: Clean separation of packages (`qa-core`, `project-model`, `integrations`) ensuring high testability, local development speed, and ease of horizontal worker scaling.

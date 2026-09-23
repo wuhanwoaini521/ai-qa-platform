@@ -1,8 +1,7 @@
-from __future__ import annotations
-
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
@@ -33,6 +32,7 @@ from app.api import (
     workspaces_router,
 )
 from app.persistence.database import init_db
+from app.services.metrics_service import metrics_service
 from app.settings import settings
 
 
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AI QA Platform API",
-    version="0.3.0",
+    version="1.0.0",
     description="Production-oriented AI QA Intelligence Platform",
     lifespan=lifespan,
 )
@@ -58,6 +58,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def track_metrics_middleware(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    metrics_service.record_request(
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_seconds=duration,
+    )
+    return response
+
 
 # Include API Routers
 app.include_router(health_router, prefix="/api")

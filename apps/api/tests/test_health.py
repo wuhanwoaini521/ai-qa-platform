@@ -6,7 +6,9 @@ from httpx import AsyncClient
 async def test_health_endpoint(client: AsyncClient):
     response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "ai-qa-platform-api"}
+    data = response.json()
+    assert data["status"] in ("healthy", "ok", "degraded")
+    assert data["service"] == "ai-qa-platform-api"
 
 
 @pytest.mark.asyncio

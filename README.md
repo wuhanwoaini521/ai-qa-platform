@@ -1,143 +1,143 @@
 # AI QA Platform
 
-> A Browser-based AI Quality Engineering Platform covering the complete QA lifecycle.
+> An Enterprise-Grade, Browser-Based AI Quality Engineering Platform covering the complete QA lifecycle.
 
 [![CI](https://github.com/wuhanwoaini521/ai-qa-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/wuhanwoaini521/ai-qa-platform/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/wuhanwoaini521/ai-qa-platform)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
-## What It Is
+## 🎯 What It Is
 
-**AI QA Platform** is an independent, browser-based Quality Engineering platform designed to eliminate constant context-switching between IDEs, terminals, test case managers, CI runners, and AI chat interfaces.
+**AI QA Platform** is an end-to-end, deterministic Quality Engineering platform that eliminates constant context-switching between IDEs, terminals, test case management systems, CI runners, and AI chat interfaces.
 
 ```text
-Requirement
-   ↓
-Test Design
-   ↓
-Test Case
-   ↓
+Requirement Management (Jira / Local)
+      ↓
+Test Design & Scenario Generation
+      ↓
+Test Case Structuring & Matrix
+      ↓
 AI / Manual Automation Authoring & Binding
-   ↓
-Code Editing in Automation Studio V2
-   ↓
-AST Syntax & Rule Validation
-   ↓
-Deterministic Pytest Execution & SSE Streaming
-   ↓
-Live Test Outcome & Failure Artifacts
-   ↓
+      ↓
+Code Editing in Automation Studio V2 (Monaco + AST + Explorer)
+      ↓
+Distributed Test Runner Execution & Live SSE Streaming
+      ↓
+Live Test Outcome & Multi-Artifact Capture (Traces / DOM / Allure)
+      ↓
 Failure Classification & AI Root-Cause Diagnosis
-   ↓
-Locator Repair Proposal & Diff Review
-   ↓
-Human-Approved Apply & Re-run Verification
+      ↓
+Locator Repair Proposal & Human-Approved Diff Patching
+      ↓
+Quality Intelligence, Risk Radar & Release Gate Enforcement
+      ↓
+Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 ```
 
 ---
 
-## Architecture
+## 🚀 Key Platform Features (Phases 1 — 13)
+
+- **Phase 1: Platform Foundation** — Requirements, Test Designs, Test Cases, and Automation Binding models.
+- **Phase 2: Automation Studio V2** — Multi-tab Monaco editor with dirty tracking, AST syntax validator, Pytest explorer tree, and QA Assistant sidecar.
+- **Phase 3: Real QA Core Migration** — Real Pytest execution engine, safe subprocess sandboxing, and deterministic exit code verdicts.
+- **Phase 4: Test Execution Platform** — Real-time Server-Sent Events (SSE) live streaming of stdout/stderr and telemetry.
+- **Phase 5: Production AI Provider** — Pluggable multi-model inference router (OpenAI, Anthropic, Gemini, Mock) with monthly budgets and audit logs.
+- **Phase 6: Flaky & Failure Intelligence** — Heuristic & AI root cause diagnosis, locator repair proposal, human review & apply.
+- **Phase 7: Jenkins / Multi-Runner Platform** — Trigger remote Jenkins jobs and consume asynchronous test report webhooks.
+- **Phase 8: GitHub / PR Engineering Workflow** — Automated PR check run aggregation, PR test summary comments, and failure diagnosis.
+- **Phase 9: Jira & TestRail Integration** — Bi-directional requirement sync, preview-first bug creation, and TestRail case result publisher.
+- **Phase 10: Quality Intelligence & Gating** — Multi-dimensional coverage score, quality risk matrix, git change impact analysis, and release gates.
+- **Phase 11: Enterprise RBAC, Security & Audit** — 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API keys, and immutable security audit trails.
+- **Phase 12: Distributed Execution Platform** — Multi-node worker registry with heartbeat liveness, browser capability matching, and S3 artifact storage.
+- **Phase 13: Production Deployment & Operations** — Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks, and zero-downtime health probes.
+
+---
+
+## 🏗 System Architecture
 
 ```text
 ai-qa-platform/
 ├── apps/
-│   ├── web/                     # React 19 + TypeScript + Vite + Monaco Editor V2
-│   ├── api/                     # FastAPI + Pydantic + SQLAlchemy Async + SSE Bus
-│   └── worker/                  # Background test execution worker
+│   ├── web/                     # React 19 + TypeScript + Vite + Monaco Editor V2 + Nginx
+│   ├── api/                     # FastAPI + Pydantic + SQLAlchemy Async (Postgres/SQLite)
+│   └── worker/                  # Distributed Playwright test runner daemon
 ├── packages/
 │   ├── qa-core/                 # Core testing contracts, PytestRunner, Classifier & Healer
 │   ├── project-model/           # Shared Pydantic domain models & database entities
-│   └── integrations/            # Third-party connectors (TestRail, GitHub)
-├── docs/                        # Full architecture, execution & workflow specifications
+│   └── integrations/            # Connectors (GitHub, Jira, TestRail, Jenkins)
+├── docs/                        # Complete architecture, operations & workflow guides
 ├── runtime/                     # Isolated project workspaces & test artifacts
-└── scripts/                     # Unified dev, test, and lint commands
+├── scripts/                     # Unified dev, test, lint, backup, and deploy commands
+└── docker-compose.yml           # Complete containerized production stack
 ```
 
 ---
 
-## Quick Start
+## ⚡️ Quick Start
 
-### 1. Clone and Setup Environment
+### 1. Docker Compose (Production Stack)
 
 ```bash
+# Clone repository
 git clone git@github.com:wuhanwoaini521/ai-qa-platform.git
 cd ai-qa-platform
 
-# Install mise toolchain (Python 3.13, Node 24, uv, pnpm)
-mise trust
-mise install
+# Copy environment template
+cp .env.example .env
 
-# Install workspace dependencies
-mise exec -- uv sync --all-packages
-mise exec -- pnpm install
+# Deploy stack with 2 distributed test runner nodes
+./scripts/deploy.sh --build --scale-workers 2
 ```
 
-### 2. Start Local Development
+- **Web Application**: [http://localhost:3000](http://localhost:3000)
+- **API Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Prometheus Metrics**: [http://localhost:8000/api/metrics](http://localhost:8000/api/metrics)
+- **MinIO S3 Console**: [http://localhost:9001](http://localhost:9001)
+
+### 2. Local Development
 
 ```bash
+# Setup mise toolchain
+mise install
+mise exec -- uv sync --all-packages
+mise exec -- pnpm install
+
+# Start development servers
 ./scripts/dev
 ```
 
-- **Web Application**: [http://127.0.0.1:5173](http://127.0.0.1:5173)
-- **API Documentation**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **API Health Check**: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
-
 ---
 
-## Testing & Quality Assurance
+## 🧪 Testing & Validation
 
 ```bash
-# Run all backend unit/integration tests & frontend typecheck
+# Run backend pytest suite & frontend typecheck
 ./scripts/test
 
-# Run linters (ruff for Python, eslint for TypeScript)
+# Run linters (ruff + eslint)
 ./scripts/lint
 
-# Build frontend production bundle
-pnpm --filter @ai-qa/web build
+# Run production smoke test against running stack
+./scripts/prod_smoke_test.sh http://127.0.0.1:8000
 ```
 
 ---
 
-## Complete QA Engineering Capabilities
+## 📚 Complete Documentation
 
-- **Automation Studio V2**:
-  - Multi-tab Monaco editor with dirty tracking (`Cmd+S`, `Cmd+Shift+S`).
-  - Quick Open fuzzy file finder (`Cmd+P`).
-  - File operations: Create files/folders, rename, delete with confirmation.
-  - Python AST syntax validator & collapsible Problems panel with jump-to-line navigation.
-  - Pytest explorer tree with targeted single-test runner.
-  - Interactive QA Assistant sidecar (Explain, Generate Test Scaffold, Refactor to Page Object, Diagnose).
-  - Git working tree diff inspection & in-studio commits.
-- **Test Case & Automation Binding**:
-  - Bidirectional link between business test cases and executable pytest node IDs.
-  - AI automation code generator grounded on workspace Page Objects and knowledge rules.
-  - One-click save to workspace test files.
-- **Test Execution Platform**:
-  - Safe subprocess execution via `PytestRunner` (no `shell=True`).
-  - Real-time Server-Sent Events (SSE) event bus streaming stdout/stderr line-by-line.
-  - Test outcomes breakdown and execution duration metrics.
-  - Deterministic pass/fail verdict determined strictly by pytest exit codes.
-- **Failure Intelligence & Locator Self-Healing**:
-  - Failure taxonomy classification (`LOCATOR_CHANGED`, `TIMING_ISSUE`, `ASSERTION_FAILURE`, `ENVIRONMENT_ERROR`).
-  - Automated sensitive data redaction (passwords, tokens, API keys).
-  - Multi-candidate locator ranking and visual code diff preview.
-  - Proposal-only human-in-the-loop repair workflow with one-click code patching.
-  - Instant re-run verification of fixed tests.
-
----
-
-## Documentation
-
-- [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
-- [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
-- [Test Execution Platform Architecture](docs/EXECUTION_PLATFORM.md)
-- [Failure Intelligence & Self-Healing](docs/FAILURE_INTELLIGENCE.md)
-- [QA Core Migration Audit](docs/QA_CORE_MIGRATION_AUDIT.md)
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Product Domain Model](docs/PRODUCT_MODEL.md)
-- [Developer Guide](docs/DEVELOPMENT.md)
-- [Workspace & Storage Model](docs/WORKSPACE_MODEL.md)
-- [QA Core Specification](docs/QA_CORE.md)
-- [Legacy QA Framework Migration Map](docs/LEGACY_QA_FRAMEWORK_MIGRATION.md)
+- [Production Deployment Guide](docs/DEPLOYMENT.md)
+- [Operations & Monitoring Guide](docs/OPERATIONS.md)
+- [Backup & Disaster Recovery](docs/BACKUP_RESTORE.md)
+- [System Architecture](docs/ARCHITECTURE.md)
 - [Platform Roadmap](docs/ROADMAP.md)
+- [Quality Intelligence & Coverage](docs/QUALITY_INTELLIGENCE.md)
+- [Distributed Execution Architecture](docs/DISTRIBUTED_EXECUTION.md)
+- [Enterprise RBAC & Security](docs/RBAC.md)
+- [Jira & TestRail Integration](docs/JIRA_TESTRAIL.md)
+- [GitHub PR Engineering Workflow](docs/GITHUB_WORKFLOW.md)
+- [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
+- [Failure Intelligence & Self-Healing](docs/FAILURE_INTELLIGENCE.md)
+- [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)

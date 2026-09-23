@@ -11,8 +11,21 @@ from app.persistence.models import ExecutionJobORM, utc_now
 
 
 class JobRepository:
-    def __init__(self, session_factory=get_session) -> None:
-        self.session_factory = session_factory
+    def __init__(self, session_or_factory=get_session) -> None:
+        if isinstance(session_or_factory, AsyncSession):
+            self._session: AsyncSession | None = session_or_factory
+            self.session_factory = None
+        else:
+            self._session = None
+            self.session_factory = session_or_factory
+
+    async def _run(self, session: AsyncSession | None, fn):
+        active_session = session or self._session
+        if active_session:
+            return await fn(active_session)
+        assert self.session_factory is not None
+        async with self.session_factory() as s:
+            return await fn(s)
 
     async def create_job(self, data: ExecutionJobCreate, session: AsyncSession | None = None) -> ExecutionJob:
         job_id = str(uuid.uuid4())
@@ -41,10 +54,7 @@ class JobRepository:
             await s.refresh(orm)
             return self._to_model(orm)
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def get_by_id(self, job_id: str, session: AsyncSession | None = None) -> ExecutionJob | None:
         async def _exec(s: AsyncSession) -> ExecutionJob | None:
@@ -53,10 +63,7 @@ class JobRepository:
             orm = res.scalar_one_or_none()
             return self._to_model(orm) if orm else None
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def list_jobs(
         self,
@@ -78,10 +85,10 @@ class JobRepository:
             res = await s.execute(stmt)
             return [self._to_model(orm) for orm in res.scalars().all()]
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
+
+    async def list_all(self, session: AsyncSession | None = None) -> list[ExecutionJob]:
+        return await self.list_jobs(session=session)
 
     async def claim_next_job(
         self, worker_id: str, browser: str = "chromium", session: AsyncSession | None = None
@@ -105,10 +112,7 @@ class JobRepository:
             await s.refresh(orm)
             return self._to_model(orm)
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     async def update_job_status(
         self,
@@ -136,10 +140,7 @@ class JobRepository:
             await s.refresh(orm)
             return self._to_model(orm)
 
-        if session:
-            return await _exec(session)
-        async with self.session_factory() as s:
-            return await _exec(s)
+        return await self._run(session, _exec)
 
     @staticmethod
     def _to_model(orm: ExecutionJobORM) -> ExecutionJob:
