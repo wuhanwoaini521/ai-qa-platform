@@ -346,3 +346,27 @@ artifact storage while `ArtifactStorageService` is local-filesystem only (and `s
 Out of scope for Phase 13.5 (deliberately deferred): SSR/wasm Monaco alternatives, migrations/Alembic,
 Redis backplane for SSE/metrics (D6), multi-tenant routing. These are recorded as known limitations in
 `docs/RELEASE_READINESS.md` rather than silently left in the code.
+
+---
+
+## 10. Outcome (recorded after implementation)
+
+| Gate | Delivered | Where |
+|---|---|---|
+| 13.5.0 Audit | this document | — |
+| 13.5.1 Frontend modularization | studio/requirements/test-case pages split into 52 feature files; every page component is now composition + orchestration; `pages/*.tsx` are re-exports | `apps/web/src/features/**` |
+| 13.5.2 Router | react-router shell with the required routes, deep links, refresh and back/forward; `studioTargetFile`/`runsTargetId` replaced by URL params; per-route code splitting | `apps/web/src/app/**` |
+| 13.5.3 PostgreSQL | `backend-postgres` CI job (postgres:16) running the same suite; FK pragma, tz normalisation and NULLS ordering fixed in platform code; markers registered | `.github/workflows/ci.yml`, `apps/api/app/persistence/**` |
+| 13.5.4 Test architecture | suite grew from 71 to 170 (SQLite) / 173 (PostgreSQL) tests; authorization (35), parity (8), onboarding (12), metrics, recovery and security suites added; impossible-value assertions removed | `apps/api/tests/**`, `packages/**/tests/**` |
+| 13.5.5 Backend simplification | dead modules removed (`persistence/artifact_store.py`, `services/runner_backends.py`, unused metrics/job members); inline router DTOs moved to `project_model`; **pass-through services kept deliberately** — after the audit they carry the authorization/audit responsibility and the router→service→repository boundary is the documented architecture | `apps/api/app/**` |
+| 13.5.6 Domain models | `AutomationBinding`, `TestRunCreate` and `FailureRecord` contract drift fixed across API/web; AI DTO duplication left and recorded as an open gap | `apps/web/src/types/index.ts`, `docs/PILOT_GAP_ANALYSIS.md` O12 |
+| 13.5.7 Frontend API layer | `api/client.ts` remains the only network layer; ~10 endpoints that 404'd were corrected; the session token is attached centrally | `apps/web/src/api/client.ts` |
+| 13.5.8 Error/loading | ErrorBoundary, shared loading/error/empty states, sign-in gate that recovers from a stale token | `apps/web/src/components/**`, `apps/web/src/app/**` |
+| 13.5.9 Roadmap safety | auto-apply and autonomous-oracle items removed; wording normalised across eight docs; false S3/JWT/SecretStore claims corrected | `docs/ROADMAP.md` and the docs set |
+| 13.5.10 Dependencies | `clsx` and the worker's unused `project-model` removed; `integrations` and `pyyaml` declared where they are imported | `apps/web/package.json`, `apps/api/pyproject.toml`, `packages/qa-core/pyproject.toml` |
+| 13.5.11 Lazy integration loading | verified by `test_startup_without_credentials.py`: the API starts, serves and answers integration routes with no AI/Jira/TestRail/GitHub/Jenkins credentials, and the probes stay public | `apps/api/tests/test_startup_without_credentials.py` |
+| 13.5.12 Bundle | lazy routes + vendor/icon chunk split: entry 490 kB → 254 kB (gzip 123 kB → 77 kB); Monaco's CDN loader recorded as an open gap | `apps/web/vite.config.ts`, `docs/PILOT_GAP_ANALYSIS.md` O8 |
+
+Two audit findings turned out not to be exploits and are corrected in place: the D4 string-id traversal
+(`Path('../x').name` keeps the entry inside the base directory — the reachable variant is a symlink, now
+covered by a test) and the mid-scale claims that only appear with real data (see the pilot report).
