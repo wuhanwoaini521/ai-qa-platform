@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     ai_router,
     audit_router,
+    auth_router,
     dashboard_router,
     failures_router,
     flaky_router,
@@ -21,9 +22,11 @@ from app.api import (
     requirements_router,
     runners_router,
     runs_router,
+    teams_router,
     test_cases_router,
     test_designs_router,
     testrail_router,
+    users_router,
     workspaces_router,
 )
 from app.persistence.database import init_db
@@ -55,6 +58,9 @@ app.add_middleware(
 
 # Include API Routers
 app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
+app.include_router(teams_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(requirements_router, prefix="/api")

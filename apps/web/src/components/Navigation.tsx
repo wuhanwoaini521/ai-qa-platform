@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Flame,
   ShieldCheck,
+  Shield,
 } from 'lucide-react';
 
 export type NavTab =
@@ -20,7 +21,8 @@ export type NavTab =
   | 'runs'
   | 'flaky'
   | 'failures'
-  | 'quality';
+  | 'quality'
+  | 'security';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -38,6 +40,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
     { id: 'flaky', label: 'Flaky Intelligence', icon: Flame },
     { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle },
     { id: 'quality', label: 'Quality & Release', icon: ShieldCheck },
+    { id: 'security', label: 'Security & RBAC', icon: Shield },
   ];
 
   return (

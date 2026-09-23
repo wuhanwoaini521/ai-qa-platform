@@ -66,6 +66,18 @@ import {
   ReleaseCreate,
   ReleaseGateReport,
   ReleaseUpdate,
+  User,
+  UserCreate,
+  UserUpdate,
+  Team,
+  TeamCreate,
+  TeamMember,
+  TeamUpdate,
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreatedResponse,
+  LoginResponse,
+  SecurityAuditLogEntry,
   WorkspaceValidationResult,
 } from '../types';
 
@@ -449,6 +461,81 @@ export const api = {
     }),
   evaluateReleaseGate: (releaseId: string) =>
     request<ReleaseGateReport>(`/releases/${encodeURIComponent(releaseId)}/gate`),
+
+  // Identity, RBAC & Enterprise Security (Phase 11)
+  login: (email: string, password = 'password123') =>
+    request<LoginResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  getCurrentUserProfile: () => request<LoginResponse>('/auth/me'),
+  getApiKeys: () => request<ApiKey[]>('/auth/api-keys'),
+  createApiKey: (data: ApiKeyCreate) =>
+    request<ApiKeyCreatedResponse>('/auth/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteApiKey: (keyId: string) =>
+    request<{ success: boolean }>(`/auth/api-keys/${encodeURIComponent(keyId)}`, {
+      method: 'DELETE',
+    }),
+
+  // User Management (Phase 11)
+  getUsers: (limit = 100) => request<User[]>(`/users?limit=${limit}`),
+  getUser: (userId: string) => request<User>(`/users/${encodeURIComponent(userId)}`),
+  createUser: (data: UserCreate) =>
+    request<User>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateUser: (userId: string, data: UserUpdate) =>
+    request<User>(`/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteUser: (userId: string) =>
+    request<{ success: boolean }>(`/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    }),
+
+  // Team Management (Phase 11)
+  getTeams: (limit = 100) => request<Team[]>(`/teams?limit=${limit}`),
+  getTeam: (teamId: string) => request<Team>(`/teams/${encodeURIComponent(teamId)}`),
+  createTeam: (data: TeamCreate) =>
+    request<Team>('/teams', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateTeam: (teamId: string, data: TeamUpdate) =>
+    request<Team>(`/teams/${encodeURIComponent(teamId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteTeam: (teamId: string) =>
+    request<{ success: boolean }>(`/teams/${encodeURIComponent(teamId)}`, {
+      method: 'DELETE',
+    }),
+  addTeamMember: (teamId: string, userId: string, role = 'MEMBER') =>
+    request<TeamMember>(`/teams/${encodeURIComponent(teamId)}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, role }),
+    }),
+  removeTeamMember: (teamId: string, userId: string) =>
+    request<{ success: boolean }>(
+      `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: 'DELETE',
+      }
+    ),
+
+  // Security Audit (Phase 11)
+  getSecurityAudits: (actorId?: string, action?: string, limit = 50) => {
+    const params = new URLSearchParams();
+    if (actorId) params.append('actor_id', actorId);
+    if (action) params.append('action', action);
+    params.append('limit', String(limit));
+    return request<SecurityAuditLogEntry[]>(`/audit/security?${params.toString()}`);
+  },
 
   // SSE Event Stream for Live Test Runs
   streamRunEvents: (

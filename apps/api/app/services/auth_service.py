@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import base64
+import json
+import time
+
+from project_model.models import (
+    ROLE_PERMISSIONS,
+    ApiKey,
+    LoginResponse,
+    Permission,
+    User,
+    UserCreate,
+    UserRole,
+)
+
+from app.repositories.api_key_repo import ApiKeyRepository
+from app.repositories.security_audit_repo import SecurityAuditRepository
+from app.repositories.user_repo import UserRepository
+
+
+class AuthService:
+    def __init__(
+        self,
+        user_repo: UserRepository | None = None,
+        api_key_repo: ApiKeyRepository | None = None,
+        audit_repo: SecurityAuditRepository | None = None,
+    ) -> None:
+        self.user_repo = user_repo or UserRepository()
+        self.api_key_repo = api_key_repo or ApiKeyRepository()
+        self.audit_repo = audit_repo or SecurityAuditRepository()
+
+    async def ensure_default_users(self) -> None:
+        """Seed default admin, lead and engineer if they do not exist."""
+        # Seed default Admin
+        if not await self.user_repo.get_by_email("admin@ai-qa.local"):
+            await self.user_repo.create(
+                UserCreate(
+                    email="admin@ai-qa.local",
+                    full_name="Enterprise Admin",
+                    role=UserRole.ADMIN,
+                    password="adminpassword",
+                )
+            )
+        # Seed default Lead
+        if not await self.user_repo.get_by_email("lead@ai-qa.local"):
+            await self.user_repo.create(
+                UserCreate(
+                    email="lead@ai-qa.local",
+                    full_name="QA Lead",
+                    role=UserRole.QA_LEAD,
+                    password="password123",
+                )
+            )
+        # Seed default Engineer
+        if not await self.user_repo.get_by_email("engineer@ai-qa.local"):
+            await self.user_repo.create(
+                UserCreate(
+                    email="engineer@ai-qa.local",
+                    full_name="QA Engineer",
+                    role=UserRole.QA_ENGINEER,
+                    password="password123",
+                )
+            )
+
+    async def login(self, email: str, password: str, ip_address: str = "127.0.0.1") -> LoginResponse | None:
+        user = await self.user_repo.verify_password(email, password)
+        if not user or not user.is_active:
+            await self.audit_repo.log(
+                action="LOGIN",
+                actor_id=user.id if user else "anonymous",
+                actor_email=email,
+                target_resource="auth",
+                status="DENIED",
+                ip_address=ip_address,
+                details={"reason": "Invalid credentials or inactive user"},
+            )
+            return None
+
+        perms = [p.value for p in ROLE_PERMISSIONS.get(user.role, set())]
+        token_payload = {
+            "sub": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "exp": int(time.time()) + 86400 * 7,  # 7 days
+        }
+        token_str = base64.urlsafe_b64encode(json.dumps(token_payload).encode("utf-8")).decode("utf-8")
+
+        await self.audit_repo.log(
+            action="LOGIN",
+            actor_id=user.id,
+            actor_email=user.email,
+            target_resource="auth",
+            status="SUCCESS",
+            ip_address=ip_address,
+            details={"role": user.role.value},
+        )
+
+        return LoginResponse(
+            access_token=token_str,
+            token_type="bearer",
+            user=user,
+            permissions=sorted(perms),
+        )
+
+    async def authenticate_token_or_key(self, auth_header: str | None) -> tuple[User | None, list[str]]:
+        if not auth_header:
+            # Fallback to default admin in dev if no header provided
+            admin = await self.user_repo.get_by_email("admin@ai-qa.local")
+            if admin:
+                perms = [p.value for p in ROLE_PERMISSIONS.get(admin.role, set())]
+                return admin, sorted(perms)
+            return None, []
+
+        parts = auth_header.strip().split(" ")
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+            # 1. Check if token is raw API Key ("aqp_live_...")
+            if token.startswith("aqp_live_"):
+                api_key: ApiKey | None = await self.api_key_repo.get_by_raw_key(token)
+                if api_key:
+                    user = await self.user_repo.get_by_id(api_key.user_id)
+                    if user and user.is_active:
+                        perms = [p.value for p in ROLE_PERMISSIONS.get(user.role, set())]
+                        return user, sorted(perms)
+                return None, []
+
+            # 2. Decode standard payload
+            try:
+                decoded = json.loads(base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8"))
+                user_id = decoded.get("sub")
+                if user_id:
+                    user = await self.user_repo.get_by_id(user_id)
+                    if user and user.is_active:
+                        perms = [p.value for p in ROLE_PERMISSIONS.get(user.role, set())]
+                        return user, sorted(perms)
+            except Exception:
+                pass
+
+        # Check if direct email lookup or default user fallback
+        return None, []
+
+    def check_permission(self, user: User, permission: Permission) -> bool:
+        allowed = ROLE_PERMISSIONS.get(user.role, set())
+        return permission in allowed

@@ -1,5 +1,6 @@
 from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
+from app.api.auth import router as auth_router
 from app.api.dashboard import router as dashboard_router
 from app.api.failures import router as failures_router
 from app.api.flaky import router as flaky_router
@@ -13,14 +14,17 @@ from app.api.releases import router as releases_router
 from app.api.requirements import router as requirements_router
 from app.api.runners import router as runners_router
 from app.api.runs import router as runs_router
+from app.api.teams import router as teams_router
 from app.api.test_cases import router as test_cases_router
 from app.api.test_designs import router as test_designs_router
 from app.api.testrail import router as testrail_router
+from app.api.users import router as users_router
 from app.api.workspaces import router as workspaces_router
 
 __all__ = [
     "ai_router",
     "audit_router",
+    "auth_router",
     "dashboard_router",
     "failures_router",
     "flaky_router",
@@ -34,8 +38,10 @@ __all__ = [
     "requirements_router",
     "runners_router",
     "runs_router",
+    "teams_router",
     "test_cases_router",
     "test_designs_router",
     "testrail_router",
+    "users_router",
     "workspaces_router",
 ]

@@ -868,4 +868,101 @@ export interface ReleaseGateReport {
   verdict: string;
 }
 
+// --- Phase 11: Identity, RBAC & Enterprise Security ---
+export type UserRole = 'ADMIN' | 'QA_LEAD' | 'QA_ENGINEER' | 'VIEWER';
+
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  avatar_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserCreate {
+  email: string;
+  full_name: string;
+  role?: UserRole;
+  password?: string;
+  is_active?: boolean;
+}
+
+export interface UserUpdate {
+  email?: string;
+  full_name?: string;
+  role?: UserRole;
+  is_active?: boolean;
+  avatar_url?: string | null;
+}
+
+export interface TeamMember {
+  team_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  member_count: number;
+  members: TeamMember[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamCreate {
+  name: string;
+  description?: string;
+}
+
+export interface TeamUpdate {
+  name?: string;
+  description?: string;
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  name: string;
+  key_prefix: string;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  created_at: string;
+}
+
+export interface ApiKeyCreate {
+  name: string;
+  user_id?: string;
+  expires_at?: string | null;
+}
+
+export interface ApiKeyCreatedResponse extends ApiKey {
+  raw_api_key: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+  permissions: string[];
+}
+
+export interface SecurityAuditLogEntry {
+  id: string;
+  action: string;
+  actor_id: string;
+  actor_email: string;
+  target_resource: string;
+  ip_address: string;
+  status: string;
+  details: Record<string, any>;
+  created_at: string;
+}
+
+
 

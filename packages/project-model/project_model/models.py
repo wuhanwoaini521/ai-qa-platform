@@ -984,3 +984,148 @@ class ReleaseGateReport(BaseModel):
     quality_score: float
     blockers: list[str] = Field(default_factory=list)
     verdict: str = "PENDING"
+
+
+# --- Phase 11: Identity, RBAC, Audit & Enterprise Security Models ---
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    QA_LEAD = "QA_LEAD"
+    QA_ENGINEER = "QA_ENGINEER"
+    VIEWER = "VIEWER"
+
+
+class Permission(str, Enum):
+    PROJECT_READ = "project:read"
+    PROJECT_WRITE = "project:write"
+    REQUIREMENT_WRITE = "requirement:write"
+    TEST_CASE_WRITE = "test_case:write"
+    AUTOMATION_EDIT = "automation:edit"
+    RUN_EXECUTE = "run:execute"
+    RELEASE_GATE = "release:gate"
+    INTEGRATION_MANAGE = "integration:manage"
+    SECURITY_ADMIN = "security:admin"
+
+
+ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
+    UserRole.ADMIN: {p for p in Permission},
+    UserRole.QA_LEAD: {
+        Permission.PROJECT_READ,
+        Permission.PROJECT_WRITE,
+        Permission.REQUIREMENT_WRITE,
+        Permission.TEST_CASE_WRITE,
+        Permission.AUTOMATION_EDIT,
+        Permission.RUN_EXECUTE,
+        Permission.RELEASE_GATE,
+        Permission.INTEGRATION_MANAGE,
+    },
+    UserRole.QA_ENGINEER: {
+        Permission.PROJECT_READ,
+        Permission.REQUIREMENT_WRITE,
+        Permission.TEST_CASE_WRITE,
+        Permission.AUTOMATION_EDIT,
+        Permission.RUN_EXECUTE,
+    },
+    UserRole.VIEWER: {
+        Permission.PROJECT_READ,
+    },
+}
+
+
+class UserBase(EntityBase):
+    email: str = Field(..., min_length=3, max_length=255)
+    full_name: str = Field(..., min_length=1, max_length=255)
+    role: UserRole = UserRole.QA_ENGINEER
+    is_active: bool = True
+    avatar_url: str | None = None
+
+
+class UserCreate(UserBase):
+    password: str | None = None
+
+
+class UserUpdate(EntityBase):
+    email: str | None = None
+    full_name: str | None = None
+    role: UserRole | None = None
+    is_active: bool | None = None
+    avatar_url: str | None = None
+
+
+class User(UserBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class TeamBase(EntityBase):
+    name: str = Field(..., min_length=1, max_length=150)
+    description: str = ""
+
+
+class TeamCreate(TeamBase):
+    pass
+
+
+class TeamUpdate(EntityBase):
+    name: str | None = None
+    description: str | None = None
+
+
+class TeamMember(EntityBase):
+    team_id: str
+    user_id: str
+    role: str = "MEMBER"  # "LEAD", "MEMBER"
+    created_at: datetime
+
+
+class Team(TeamBase):
+    id: str
+    member_count: int = 0
+    members: list[TeamMember] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApiKeyBase(EntityBase):
+    name: str = Field(..., min_length=1, max_length=100)
+    user_id: str
+    expires_at: datetime | None = None
+
+
+class ApiKeyCreate(ApiKeyBase):
+    pass
+
+
+class ApiKey(ApiKeyBase):
+    id: str
+    key_prefix: str
+    last_used_at: datetime | None = None
+    created_at: datetime
+
+
+class ApiKeyCreatedResponse(ApiKey):
+    raw_api_key: str  # Only returned once on creation
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str = "password123"
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: User
+    permissions: list[str] = Field(default_factory=list)
+
+
+class SecurityAuditLogEntry(EntityBase):
+    id: str
+    action: str  # "LOGIN", "USER_CREATE", "ROLE_CHANGE", "API_KEY_CREATE", "RELEASE_APPROVED", "INTEGRATION_WRITE"
+    actor_id: str
+    actor_email: str
+    target_resource: str
+    ip_address: str = "127.0.0.1"
+    status: str = "SUCCESS"  # "SUCCESS", "DENIED", "FAILED"
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime

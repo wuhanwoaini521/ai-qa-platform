@@ -34,3 +34,15 @@ async def list_integration_audits(
         )
         for orm in orms
     ]
+
+
+@router.get("/security")
+async def list_security_audits(
+    actor_id: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    from app.repositories.security_audit_repo import SecurityAuditRepository
+
+    repo = SecurityAuditRepository()
+    return await repo.list_logs(actor_id=actor_id, action=action, limit=limit)

@@ -12,6 +12,7 @@ import { RunsPage } from './pages/RunsPage';
 import { FailuresPage } from './pages/FailuresPage';
 import { FlakyPage } from './pages/FlakyPage';
 import { QualityPage } from './pages/QualityPage';
+import { SecurityPage } from './pages/SecurityPage';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
     flaky: 'Flaky Intelligence & Stability',
     failures: 'Failure Intelligence & Healing',
     quality: 'Quality Intelligence & Release Gate',
+    security: 'Enterprise Security & RBAC',
   };
 
   return (
@@ -167,6 +169,8 @@ export const App: React.FC = () => {
               onNavigateToRuns={handleNavigateToRuns}
             />
           )}
+
+          {currentTab === 'security' && <SecurityPage />}
         </div>
       </div>
     </div>
