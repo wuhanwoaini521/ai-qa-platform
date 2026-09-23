@@ -1,3 +1,0 @@
-{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "setup", "outcome": "passed", "duration": 0.0021229320009297226, "xfail": false}
-{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "call", "outcome": "failed", "duration": 0.0002467619997332804, "xfail": false, "longrepr": "E   TimeoutError: Locator.wait_for: Timeout 30000ms exceeded waiting for locator(\"#checkout-submit\")"}
-{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "teardown", "outcome": "passed", "duration": 0.003668467001261888, "xfail": false}

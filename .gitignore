@@ -94,3 +94,5 @@ runtime/workspaces/*
 !runtime/workspaces/.gitkeep
 runtime/artifacts/*
 !runtime/artifacts/.gitkeep
+runtime/pytest-reports/*
+!runtime/pytest-reports/.gitkeep
