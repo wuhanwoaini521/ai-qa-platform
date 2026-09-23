@@ -42,6 +42,9 @@ class TestCaseRepository:
             priority=data.priority.value,
             automation_status=data.automation_status.value,
             tags=data.tags,
+            external_system=data.external_system,
+            external_case_id=data.external_case_id,
+            external_url=data.external_url,
             created_at=now,
             updated_at=now,
         )

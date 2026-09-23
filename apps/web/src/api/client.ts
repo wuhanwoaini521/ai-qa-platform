@@ -18,6 +18,13 @@ import {
   GitCommitRequest,
   GitDiffResult,
   GitPushResult,
+  IntegrationAuditEntry,
+  JiraBugDraft,
+  JiraBugDraftRequest,
+  JiraCreateBugRequest,
+  JiraCreateBugResponse,
+  JiraImportRequest,
+  JiraIssue,
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
   PRChecksSummary,
@@ -45,6 +52,10 @@ import {
   TestDesignCreate,
   TestDesignSuggestion,
   TestHistoryResponse,
+  TestRailCase,
+  TestRailPublishPreview,
+  TestRailPublishRequest,
+  TestRailPublishResponse,
   TestRun,
   TestRunCreate,
   WorkspaceValidationResult,
@@ -356,6 +367,47 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Jira Integration (Phase 9)
+  searchJiraIssues: (query = '', limit = 20) =>
+    request<JiraIssue[]>(`/jira/issues?query=${encodeURIComponent(query)}&limit=${limit}`),
+  getJiraIssue: (key: string) => request<JiraIssue>(`/jira/issues/${encodeURIComponent(key)}`),
+  importJiraIssues: (data: JiraImportRequest) =>
+    request<Requirement[]>('/jira/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  generateJiraBugDraft: (data: JiraBugDraftRequest) =>
+    request<JiraBugDraft>('/jira/bug-draft', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createJiraBug: (data: JiraCreateBugRequest) =>
+    request<JiraCreateBugResponse>('/jira/create-bug', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // TestRail Integration (Phase 9)
+  getTestRailCases: (suiteId = 'S101', limit = 50) =>
+    request<TestRailCase[]>(`/testrail/cases?suite_id=${encodeURIComponent(suiteId)}&limit=${limit}`),
+  getTestRailCase: (caseId: string) =>
+    request<TestRailCase>(`/testrail/cases/${encodeURIComponent(caseId)}`),
+  previewTestRailPublish: (runId: string, suiteId = 'S101') =>
+    request<TestRailPublishPreview>(
+      `/testrail/runs/${encodeURIComponent(runId)}/preview?suite_id=${encodeURIComponent(suiteId)}`
+    ),
+  publishTestRailResults: (data: TestRailPublishRequest) =>
+    request<TestRailPublishResponse>('/testrail/publish', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Integration Audit (Phase 9)
+  getIntegrationAudits: (system?: string, limit = 50) => {
+    const query = system ? `?system=${encodeURIComponent(system)}&limit=${limit}` : `?limit=${limit}`;
+    return request<IntegrationAuditEntry[]>(`/audit/integrations${query}`);
+  },
 
   // SSE Event Stream for Live Test Runs
   streamRunEvents: (

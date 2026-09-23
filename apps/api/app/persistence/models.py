@@ -86,6 +86,9 @@ class RequirementORM(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     acceptance_criteria: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(50), default="DRAFT", index=True)
+    external_system: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -131,6 +134,9 @@ class TestCaseORM(Base):
     priority: Mapped[str] = mapped_column(String(10), default="P1")
     automation_status: Mapped[str] = mapped_column(String(50), default="MANUAL", index=True)
     tags: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    external_system: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_case_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -302,3 +308,16 @@ class ExternalArtifactReferenceORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="external_artifacts")
+
+
+class IntegrationAuditORM(Base):
+    __tablename__ = "integration_audits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    system: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # JIRA, TESTRAIL, GITHUB, JENKINS
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # IMPORT_REQUIREMENT, CREATE_BUG, etc.
+    target_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(100), default="user")
+    status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)  # SUCCESS, FAILED, DRY_RUN
+    details: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)

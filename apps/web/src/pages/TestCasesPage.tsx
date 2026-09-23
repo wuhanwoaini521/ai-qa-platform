@@ -356,11 +356,16 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
                           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {tc.title}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
                             <span className={`badge badge-${tc.priority.toLowerCase()}`}>{tc.priority}</span>
                             <span className={`badge badge-${tc.automation_status.toLowerCase()}`}>
                               {tc.automation_status}
                             </span>
+                            {tc.external_case_id && (
+                              <span style={{ fontSize: '10px', background: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                                TestRail: {tc.external_case_id}
+                              </span>
+                            )}
                             {tc.tags && tc.tags.slice(0, 2).map((tag, idx) => (
                               <span key={idx} className="badge badge-draft" style={{ fontSize: '10px' }}>
                                 #{tag}
@@ -382,9 +387,19 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="card">
                 <div className="card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <CheckSquare size={16} color="#16a34a" />
                     <span className="card-title">{selectedCase.title}</span>
+                    {selectedCase.external_case_id && (
+                      <a
+                        href={selectedCase.external_url || `https://testrail.example.com/index.php?/cases/view/${selectedCase.external_case_id.replace(/^C/i, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '11px', background: '#ecfdf5', color: '#047857', padding: '2px 8px', borderRadius: '4px', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {selectedCase.external_case_id} <ExternalLink size={11} />
+                      </a>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>

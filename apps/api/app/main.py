@@ -7,11 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     ai_router,
+    audit_router,
     dashboard_router,
     failures_router,
     flaky_router,
     git_pr_router,
     health_router,
+    jira_router,
     projects_router,
     qa_assistant_router,
     requirements_router,
@@ -19,6 +21,7 @@ from app.api import (
     runs_router,
     test_cases_router,
     test_designs_router,
+    testrail_router,
     workspaces_router,
 )
 from app.persistence.database import init_db
@@ -57,6 +60,9 @@ app.include_router(test_designs_router, prefix="/api")
 app.include_router(test_cases_router, prefix="/api")
 app.include_router(workspaces_router, prefix="/api")
 app.include_router(git_pr_router, prefix="/api")
+app.include_router(jira_router, prefix="/api")
+app.include_router(testrail_router, prefix="/api")
+app.include_router(audit_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(runners_router, prefix="/api")
 app.include_router(failures_router, prefix="/api")

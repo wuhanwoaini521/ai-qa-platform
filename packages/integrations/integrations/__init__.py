@@ -23,6 +23,16 @@ from integrations.jenkins_runner import (
     JenkinsConfig,
     JenkinsRunnerBackend,
 )
+from integrations.jira_adapter import (
+    FakeJiraAdapter,
+    JiraAdapter,
+    RequirementManagementAdapter,
+)
+from integrations.testrail_adapter import (
+    FakeTestRailAdapter,
+    TestManagementAdapter,
+    TestRailAdapter,
+)
 
 __all__ = [
     "GitHubIntegration",
@@ -40,4 +50,10 @@ __all__ = [
     "PullRequestAdapter",
     "FakePullRequestAdapter",
     "GitHubPullRequestAdapter",
+    "RequirementManagementAdapter",
+    "FakeJiraAdapter",
+    "JiraAdapter",
+    "TestManagementAdapter",
+    "FakeTestRailAdapter",
+    "TestRailAdapter",
 ]

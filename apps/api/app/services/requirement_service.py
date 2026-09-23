@@ -23,6 +23,9 @@ class RequirementService:
             description=orm.description or "",
             acceptance_criteria=orm.acceptance_criteria or "",
             status=RequirementStatus(orm.status),
+            external_system=orm.external_system,
+            external_id=orm.external_id,
+            external_url=orm.external_url,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )

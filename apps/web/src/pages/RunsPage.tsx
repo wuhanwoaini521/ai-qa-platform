@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRun, TestRunCreate } from '../types';
+import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
 import { api } from '../api/client';
 import {
   PlayCircle,
@@ -13,6 +13,7 @@ import {
   Cpu,
   ExternalLink,
   FileCheck,
+  UploadCloud,
 } from 'lucide-react';
 
 interface RunsPageProps {
@@ -47,6 +48,13 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   });
   const [targetNodeidsText, setTargetNodeidsText] = useState<string>('');
   const [triggering, setTriggering] = useState<boolean>(false);
+
+  // TestRail Publish State (Phase 9)
+  const [isTestRailModalOpen, setIsTestRailModalOpen] = useState<boolean>(false);
+  const [testRailPreview, setTestRailPreview] = useState<TestRailPublishPreview | null>(null);
+  const [loadingTestRailPreview, setLoadingTestRailPreview] = useState<boolean>(false);
+  const [publishingTestRail, setPublishingTestRail] = useState<boolean>(false);
+  const [testRailPublishResult, setTestRailPublishResult] = useState<TestRailPublishResponse | null>(null);
 
   // Live SSE streaming ref
   const unsubscribeSSERef = useRef<(() => void) | null>(null);
@@ -187,6 +195,38 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       setRuns(runs.map((r) => (r.id === runId ? updated : r)));
     } catch (err: any) {
       alert(`Cancel error: ${err.message || err}`);
+    }
+  };
+
+  const handleOpenTestRailModal = async () => {
+    if (!selectedRun) return;
+    setIsTestRailModalOpen(true);
+    setLoadingTestRailPreview(true);
+    setTestRailPublishResult(null);
+    try {
+      const preview = await api.previewTestRailPublish(selectedRun.id, 'S101');
+      setTestRailPreview(preview);
+    } catch (err) {
+      console.error('Failed to preview TestRail publish', err);
+    } finally {
+      setLoadingTestRailPreview(false);
+    }
+  };
+
+  const handlePublishTestRail = async (confirmPublish: boolean) => {
+    if (!selectedRun) return;
+    setPublishingTestRail(true);
+    try {
+      const res = await api.publishTestRailResults({
+        run_id: selectedRun.id,
+        suite_id: 'S101',
+        confirm_publish: confirmPublish,
+      });
+      setTestRailPublishResult(res);
+    } catch (err) {
+      console.error('Failed to publish to TestRail', err);
+    } finally {
+      setPublishingTestRail(false);
     }
   };
 
@@ -339,15 +379,25 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       Runner: {selectedRun.runner_type || 'LOCAL'}
                     </span>
                   </div>
-                  {(selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED') && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ color: '#dc2626' }}
-                      onClick={() => handleCancelRun(selectedRun.id)}
-                    >
-                      <StopCircle size={13} /> Cancel Run
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {(selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED') ? (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: '#dc2626' }}
+                        onClick={() => handleCancelRun(selectedRun.id)}
+                      >
+                        <StopCircle size={13} /> Cancel Run
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleOpenTestRailModal}
+                        title="Publish test execution results to TestRail"
+                      >
+                        <UploadCloud size={13} color="#047857" /> Publish to TestRail
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="card-body">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
@@ -634,6 +684,154 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* TestRail Publish Preview Modal (Phase 9) */}
+      {isTestRailModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: '800px', width: '90%' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <UploadCloud size={18} color="#047857" />
+                <h3 className="modal-title">Publish Execution Results to TestRail</h3>
+              </div>
+              <button
+                className="btn btn-icon"
+                onClick={() => setIsTestRailModalOpen(false)}
+                style={{ padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {loadingTestRailPreview ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px', color: '#047857' }} />
+                  <p>Matching test executions against TestRail suite & mapping statuses...</p>
+                </div>
+              ) : testRailPreview ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {testRailPublishResult && (
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: '6px',
+                        backgroundColor: testRailPublishResult.published ? '#f0fdf4' : '#eff6ff',
+                        border: `1px solid ${testRailPublishResult.published ? '#86efac' : '#93c5fd'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: testRailPublishResult.published ? '#166534' : '#1e40af' }}>
+                          {testRailPublishResult.message}
+                        </div>
+                        {testRailPublishResult.testrail_run_id && (
+                          <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px', fontWeight: 600 }}>
+                            TestRail Run ID: {testRailPublishResult.testrail_run_id}
+                          </div>
+                        )}
+                      </div>
+                      <span className="badge badge-ready" style={{ fontSize: '11px' }}>
+                        {testRailPublishResult.published ? 'PUBLISHED' : 'DRY_RUN_OK'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Summary Metric Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Total Executed</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700 }}>{testRailPreview.total_tests}</div>
+                    </div>
+                    <div style={{ background: '#ecfdf5', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: '#047857', fontWeight: 600 }}>Mapped to TestRail</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#047857' }}>{testRailPreview.mapped_tests}</div>
+                    </div>
+                    <div style={{ background: '#fef3c7', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>Unmapped Tests</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#b45309' }}>{testRailPreview.unmapped_tests}</div>
+                    </div>
+                  </div>
+
+                  {/* Status Mapping Table */}
+                  <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                    <table className="data-table" style={{ fontSize: '12px' }}>
+                      <thead>
+                        <tr>
+                          <th>Test Node</th>
+                          <th>TestRail ID</th>
+                          <th>Pytest Status</th>
+                          <th>Mapped TR Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {testRailPreview.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                              {item.test_name}
+                            </td>
+                            <td>
+                              {item.external_case_id ? (
+                                <span style={{ fontWeight: 700, color: '#047857', background: '#ecfdf5', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
+                                  {item.external_case_id}
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Unmapped</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`badge badge-${item.pytest_status.toLowerCase() === 'passed' ? 'ready' : (item.pytest_status.toLowerCase() === 'failed' ? 'p0' : 'draft')}`} style={{ fontSize: '10px' }}>
+                                {item.pytest_status}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 600, color: item.mapped_testrail_status === 'Passed' ? '#16a34a' : (item.mapped_testrail_status === 'Failed' ? '#dc2626' : '#64748b') }}>
+                                {item.mapped_testrail_status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Failed to load TestRail publish preview.
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsTestRailModalOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!testRailPreview || publishingTestRail}
+                onClick={() => handlePublishTestRail(false)}
+              >
+                Dry-Run Preview
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!testRailPreview || publishingTestRail}
+                onClick={() => handlePublishTestRail(true)}
+              >
+                {publishingTestRail ? 'Publishing...' : 'Confirm & Publish to TestRail'}
+              </button>
+            </div>
           </div>
         </div>
       )}

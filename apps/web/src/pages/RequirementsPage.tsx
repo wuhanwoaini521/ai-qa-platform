@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  JiraIssue,
   Project,
   Requirement,
   RequirementAnalysisDTO,
@@ -22,6 +23,9 @@ import {
   HelpCircle,
   RefreshCw,
   ListChecks,
+  Download,
+  ExternalLink,
+  Search,
 } from 'lucide-react';
 
 interface RequirementsPageProps {
@@ -58,6 +62,14 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   // Manual Modals
   const [isReqModalOpen, setIsReqModalOpen] = useState(false);
   const [isDesignModalOpen, setIsDesignModalOpen] = useState(false);
+
+  // Jira Import Modal (Phase 9)
+  const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
+  const [jiraIssues, setJiraIssues] = useState<JiraIssue[]>([]);
+  const [jiraSearchQuery, setJiraSearchQuery] = useState('');
+  const [selectedJiraKeys, setSelectedJiraKeys] = useState<string[]>([]);
+  const [loadingJira, setLoadingJira] = useState(false);
+  const [importingJira, setImportingJira] = useState(false);
 
   const [reqFormData, setReqFormData] = useState<RequirementCreate>({
     project_id: selectedProjectId || (projects[0]?.id ?? ''),
@@ -251,6 +263,55 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
     }
   };
 
+  const handleOpenJiraModal = async () => {
+    setIsJiraModalOpen(true);
+    setLoadingJira(true);
+    try {
+      const issues = await api.searchJiraIssues();
+      setJiraIssues(issues);
+      setSelectedJiraKeys([]);
+    } catch (err) {
+      console.error('Failed to search Jira issues', err);
+    } finally {
+      setLoadingJira(false);
+    }
+  };
+
+  const handleSearchJira = async (q: string) => {
+    setJiraSearchQuery(q);
+    setLoadingJira(true);
+    try {
+      const issues = await api.searchJiraIssues(q);
+      setJiraIssues(issues);
+    } catch (err) {
+      console.error('Failed to search Jira issues', err);
+    } finally {
+      setLoadingJira(false);
+    }
+  };
+
+  const handleImportJira = async () => {
+    if (selectedJiraKeys.length === 0) return;
+    const projId = selectedProjectId || projects[0]?.id;
+    if (!projId) return;
+    setImportingJira(true);
+    try {
+      const imported = await api.importJiraIssues({
+        issue_keys: selectedJiraKeys,
+        project_id: projId,
+      });
+      setRequirements([...imported, ...requirements]);
+      if (imported.length > 0) {
+        setSelectedReq(imported[0]);
+      }
+      setIsJiraModalOpen(false);
+    } catch (err) {
+      console.error('Failed to import Jira issues', err);
+    } finally {
+      setImportingJira(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
@@ -260,19 +321,29 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
             AI-assisted requirement testability analysis, risk extraction, and dimensional test design generation.
           </p>
         </div>
-        <button
-          className="btn btn-primary"
-          disabled={projects.length === 0}
-          onClick={() => {
-            setReqFormData({
-              ...reqFormData,
-              project_id: selectedProjectId || projects[0]?.id || '',
-            });
-            setIsReqModalOpen(true);
-          }}
-        >
-          <Plus size={16} /> New Requirement
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            className="btn btn-secondary"
+            disabled={projects.length === 0}
+            onClick={handleOpenJiraModal}
+            title="Import user stories from Atlassian Jira"
+          >
+            <Download size={15} /> Import from Jira
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={projects.length === 0}
+            onClick={() => {
+              setReqFormData({
+                ...reqFormData,
+                project_id: selectedProjectId || projects[0]?.id || '',
+              });
+              setIsReqModalOpen(true);
+            }}
+          >
+            <Plus size={16} /> New Requirement
+          </button>
+        </div>
       </div>
 
       {projects.length === 0 ? (
@@ -320,8 +391,13 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {r.title}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                             <span className="status-pill status-pill-draft">{r.status}</span>
+                            {r.external_system === 'JIRA' && r.external_id && (
+                              <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                Jira: {r.external_id}
+                              </span>
+                            )}
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                               {new Date(r.created_at).toLocaleDateString()}
                             </span>
@@ -344,6 +420,16 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <FileText size={16} color="#2563eb" />
                     <span className="card-title">{selectedReq.title}</span>
+                    {selectedReq.external_system === 'JIRA' && selectedReq.external_id && (
+                      <a
+                        href={selectedReq.external_url || `https://jira.example.com/browse/${selectedReq.external_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        {selectedReq.external_id} <ExternalLink size={11} />
+                      </a>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button className="btn btn-secondary btn-sm" onClick={handleAnalyzeRequirementAI}>
@@ -862,6 +948,144 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Jira Import Modal (Phase 9) */}
+      {isJiraModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: '700px', width: '90%' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Download size={18} color="#0284c7" />
+                <h3 className="modal-title">Import User Stories from Jira</h3>
+              </div>
+              <button
+                className="btn btn-icon"
+                onClick={() => setIsJiraModalOpen(false)}
+                style={{ padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Search Jira issues by key, summary, or description..."
+                    value={jiraSearchQuery}
+                    onChange={(e) => handleSearchJira(e.target.value)}
+                    style={{ paddingLeft: '32px' }}
+                  />
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleSearchJira(jiraSearchQuery)}
+                  disabled={loadingJira}
+                >
+                  <RefreshCw size={14} className={loadingJira ? 'spin' : ''} /> Refresh
+                </button>
+              </div>
+
+              {loadingJira ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Fetching issues from Jira...
+                </div>
+              ) : jiraIssues.length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No Jira issues found matching the query.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' }}>
+                  {jiraIssues.map((issue) => {
+                    const isChecked = selectedJiraKeys.includes(issue.key);
+                    return (
+                      <div
+                        key={issue.key}
+                        onClick={() => {
+                          if (isChecked) {
+                            setSelectedJiraKeys(selectedJiraKeys.filter((k) => k !== issue.key));
+                          } else {
+                            setSelectedJiraKeys([...selectedJiraKeys, issue.key]);
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '12px',
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          border: isChecked ? '1px solid #38bdf8' : '1px solid var(--border-color)',
+                          backgroundColor: isChecked ? '#f0f9ff' : 'var(--bg-surface)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}} // Handled by outer div
+                          style={{ marginTop: '3px' }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '13px', color: '#0369a1' }}>
+                              {issue.key}
+                            </span>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                              {issue.summary}
+                            </span>
+                          </div>
+                          {issue.description && (
+                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {issue.description}
+                            </p>
+                          )}
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                            <span style={{ fontSize: '10px', background: '#e2e8f0', color: '#475569', padding: '1px 5px', borderRadius: '3px' }}>
+                              {issue.status}
+                            </span>
+                            <span style={{ fontSize: '10px', background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: '3px' }}>
+                              {issue.priority}
+                            </span>
+                            {issue.labels.map((lbl) => (
+                              <span key={lbl} style={{ fontSize: '10px', background: '#f1f5f9', color: '#64748b', padding: '1px 5px', borderRadius: '3px' }}>
+                                #{lbl}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginRight: 'auto' }}>
+                {selectedJiraKeys.length} selected
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsJiraModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={selectedJiraKeys.length === 0 || importingJira}
+                onClick={handleImportJira}
+              >
+                {importingJira ? 'Importing...' : `Import ${selectedJiraKeys.length} to Requirements`}
+              </button>
+            </div>
           </div>
         </div>
       )}

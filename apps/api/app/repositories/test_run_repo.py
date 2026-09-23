@@ -217,3 +217,9 @@ class TestRunRepository:
     async def get_failure_by_id(self, failure_id: str) -> FailureRecordORM | None:
         result = await self.session.execute(select(FailureRecordORM).where(FailureRecordORM.id == failure_id))
         return result.scalar_one_or_none()
+
+    async def list_executions(self, run_id: str) -> list[TestExecutionORM]:
+        result = await self.session.execute(
+            select(TestExecutionORM).where(TestExecutionORM.run_id == run_id).order_by(TestExecutionORM.started_at)
+        )
+        return list(result.scalars().all())

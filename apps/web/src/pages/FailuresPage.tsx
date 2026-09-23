@@ -4,6 +4,8 @@ import {
   FailureCategory,
   FailureRecurrenceItem,
   FailureRecord,
+  JiraBugDraft,
+  JiraCreateBugResponse,
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
   Project,
@@ -21,6 +23,8 @@ import {
   Zap,
   ShieldCheck,
   History,
+  Bug,
+  ExternalLink,
 } from 'lucide-react';
 
 interface FailuresPageProps {
@@ -56,6 +60,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   // Recurrence State
   const [recurrenceList, setRecurrenceList] = useState<FailureRecurrenceItem[]>([]);
   const [loadingRecurrence, setLoadingRecurrence] = useState<boolean>(false);
+
+  // Jira Bug Ticket State (Phase 9)
+  const [isJiraBugModalOpen, setIsJiraBugModalOpen] = useState<boolean>(false);
+  const [jiraBugDraft, setJiraBugDraft] = useState<JiraBugDraft | null>(null);
+  const [generatingJiraDraft, setGeneratingJiraDraft] = useState<boolean>(false);
+  const [creatingJiraBug, setCreatingJiraBug] = useState<boolean>(false);
+  const [jiraBugResult, setJiraBugResult] = useState<JiraCreateBugResponse | null>(null);
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
   const [repairApplied, setRepairApplied] = useState<boolean>(false);
@@ -198,6 +209,41 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setRerunMessage(`Re-run error: ${err.message || err}`);
     } finally {
       setRerunning(false);
+    }
+  };
+
+  const handleOpenJiraBugModal = async () => {
+    if (!selectedFailure) return;
+    setIsJiraBugModalOpen(true);
+    setGeneratingJiraDraft(true);
+    setJiraBugResult(null);
+    try {
+      const draft = await api.generateJiraBugDraft({
+        failure_id: selectedFailure.id,
+        project_key: 'QA',
+        issue_type: 'Bug',
+      });
+      setJiraBugDraft(draft);
+    } catch (err) {
+      console.error('Failed to generate Jira bug draft', err);
+    } finally {
+      setGeneratingJiraDraft(false);
+    }
+  };
+
+  const handleConfirmCreateJiraBug = async (confirmPublish: boolean) => {
+    if (!jiraBugDraft) return;
+    setCreatingJiraBug(true);
+    try {
+      const res = await api.createJiraBug({
+        draft: jiraBugDraft,
+        confirm_publish: confirmPublish,
+      });
+      setJiraBugResult(res);
+    } catch (err) {
+      console.error('Failed to create Jira bug', err);
+    } finally {
+      setCreatingJiraBug(false);
     }
   };
 
@@ -373,6 +419,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       onClick={handleRerunTest}
                     >
                       <Play size={13} /> {rerunning ? 'Re-running...' : 'Re-run Test Case'}
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleOpenJiraBugModal}
+                      title="Generate Jira bug ticket draft"
+                    >
+                      <Bug size={13} color="#e11d48" /> Create Jira Bug Draft
                     </button>
                   </div>
 
@@ -607,6 +660,166 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Jira Bug Ticket Creation Modal (Phase 9) */}
+      {isJiraBugModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: '750px', width: '90%' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bug size={18} color="#e11d48" />
+                <h3 className="modal-title">Create Jira Defect / Bug Ticket</h3>
+              </div>
+              <button
+                className="btn btn-icon"
+                onClick={() => setIsJiraBugModalOpen(false)}
+                style={{ padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {generatingJiraDraft ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Sparkles size={24} className="spin" style={{ margin: '0 auto 12px', color: '#e11d48' }} />
+                  <p>Synthesizing bug details, stack trace, and reproduction steps from failure artifacts...</p>
+                </div>
+              ) : jiraBugDraft ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {jiraBugResult && (
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: '6px',
+                        backgroundColor: jiraBugResult.published ? '#f0fdf4' : '#eff6ff',
+                        border: `1px solid ${jiraBugResult.published ? '#86efac' : '#93c5fd'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: jiraBugResult.published ? '#166534' : '#1e40af' }}>
+                          {jiraBugResult.message}
+                        </div>
+                        {jiraBugResult.url && (
+                          <a
+                            href={jiraBugResult.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ fontSize: '12px', color: '#2563eb', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}
+                          >
+                            Open Jira Issue {jiraBugResult.key} <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                      <span className="badge badge-draft" style={{ fontSize: '11px' }}>
+                        {jiraBugResult.status}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label className="form-label">Issue Summary</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={jiraBugDraft.summary}
+                      onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, summary: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Project Key</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={jiraBugDraft.project_key}
+                        onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, project_key: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Issue Type</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={jiraBugDraft.issue_type}
+                        onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, issue_type: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Priority</label>
+                      <select
+                        className="form-select"
+                        value={jiraBugDraft.priority}
+                        onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, priority: e.target.value })}
+                      >
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Description & Diagnostics</label>
+                    <textarea
+                      rows={5}
+                      className="form-textarea"
+                      value={jiraBugDraft.description}
+                      onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, description: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Reproduction Steps</label>
+                    <div style={{ background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '10px 12px' }}>
+                      <ol style={{ paddingLeft: '18px', margin: 0, fontSize: '12px', color: '#334155' }}>
+                        {jiraBugDraft.steps_to_reproduce.map((st, i) => (
+                          <li key={i}>{st}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Failed to prepare bug draft.
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsJiraBugModalOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!jiraBugDraft || creatingJiraBug}
+                onClick={() => handleConfirmCreateJiraBug(false)}
+              >
+                Validate (Dry-Run)
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!jiraBugDraft || creatingJiraBug}
+                onClick={() => handleConfirmCreateJiraBug(true)}
+              >
+                {creatingJiraBug ? 'Creating...' : 'Create Ticket in Jira'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

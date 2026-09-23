@@ -37,6 +37,9 @@ export interface Requirement {
   description: string;
   acceptance_criteria: string;
   status: RequirementStatus;
+  external_system?: string | null;
+  external_id?: string | null;
+  external_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +50,9 @@ export interface RequirementCreate {
   description?: string;
   acceptance_criteria?: string;
   status?: RequirementStatus;
+  external_system?: string | null;
+  external_id?: string | null;
+  external_url?: string | null;
 }
 
 export interface TestDesign {
@@ -82,6 +88,9 @@ export interface TestCase {
   priority: TestCasePriority;
   automation_status: AutomationStatus;
   tags: string[];
+  external_system?: string | null;
+  external_case_id?: string | null;
+  external_url?: string | null;
   created_at: string;
   updated_at: string;
   binding?: AutomationBinding | null;
@@ -98,6 +107,9 @@ export interface TestCaseCreate {
   priority?: TestCasePriority;
   automation_status?: AutomationStatus;
   tags?: string[];
+  external_system?: string | null;
+  external_case_id?: string | null;
+  external_url?: string | null;
 }
 
 export interface AutomationBinding {
@@ -632,5 +644,109 @@ export interface PRDiagnosisResponse {
   root_cause: string;
   suggested_fix: string;
   affected_files: string[];
+}
+
+// --- Phase 9: Jira, TestRail & Integration Audit ---
+export interface JiraIssue {
+  key: string;
+  summary: string;
+  description: string;
+  acceptance_criteria: string;
+  status: string;
+  priority: string;
+  labels: string[];
+  url: string;
+}
+
+export interface JiraImportRequest {
+  issue_keys: string[];
+  project_id: string;
+}
+
+export interface JiraBugDraftRequest {
+  failure_id: string;
+  project_key?: string;
+  issue_type?: string;
+}
+
+export interface JiraBugDraft {
+  summary: string;
+  project_key: string;
+  issue_type: string;
+  description: string;
+  priority: string;
+  environment: Record<string, string>;
+  steps_to_reproduce: string[];
+  expected_result: string;
+  actual_result: string;
+  error_trace: string;
+  failure_id: string;
+  run_id: string;
+  artifact_urls: string[];
+}
+
+export interface JiraCreateBugRequest {
+  draft: JiraBugDraft;
+  confirm_publish?: boolean;
+}
+
+export interface JiraCreateBugResponse {
+  key: string;
+  url: string;
+  status: string;
+  published: boolean;
+  message: string;
+}
+
+export interface TestRailCase {
+  id: string;
+  title: string;
+  section: string;
+  suite_id: string;
+  url: string;
+}
+
+export interface TestRailPublishPreviewItem {
+  test_nodeid: string;
+  test_name: string;
+  external_case_id?: string | null;
+  pytest_status: string;
+  mapped_testrail_status: string;
+  comment: string;
+}
+
+export interface TestRailPublishPreview {
+  run_id: string;
+  suite_id: string;
+  total_tests: number;
+  mapped_tests: number;
+  unmapped_tests: number;
+  items: TestRailPublishPreviewItem[];
+}
+
+export interface TestRailPublishRequest {
+  run_id: string;
+  suite_id?: string;
+  confirm_publish?: boolean;
+  status_mapping?: Record<string, string>;
+}
+
+export interface TestRailPublishResponse {
+  success: boolean;
+  published: boolean;
+  testrail_run_id?: string | null;
+  total_published: number;
+  message: string;
+}
+
+export interface IntegrationAuditEntry {
+  id: string;
+  system: string;
+  action: string;
+  target_id: string;
+  user_id: string;
+  status: string;
+  details: Record<string, unknown>;
+  created_at: string;
 }
 

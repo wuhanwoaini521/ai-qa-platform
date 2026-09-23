@@ -29,6 +29,9 @@ class TestCaseService:
             priority=TestCasePriority(orm.priority),
             automation_status=AutomationStatus(orm.automation_status),
             tags=orm.tags or [],
+            external_system=orm.external_system,
+            external_case_id=orm.external_case_id,
+            external_url=orm.external_url,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )

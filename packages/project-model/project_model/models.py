@@ -102,6 +102,9 @@ class RequirementBase(EntityBase):
     description: str = Field(default="", max_length=5000)
     acceptance_criteria: str = Field(default="", max_length=5000)
     status: RequirementStatus = Field(default=RequirementStatus.DRAFT)
+    external_system: str | None = Field(default=None, max_length=50)  # e.g. "JIRA"
+    external_id: str | None = Field(default=None, max_length=100)  # e.g. "EC-12345"
+    external_url: str | None = Field(default=None, max_length=500)
 
 
 class RequirementCreate(RequirementBase):
@@ -113,6 +116,9 @@ class RequirementUpdate(EntityBase):
     description: str | None = None
     acceptance_criteria: str | None = None
     status: RequirementStatus | None = None
+    external_system: str | None = None
+    external_id: str | None = None
+    external_url: str | None = None
 
 
 class Requirement(RequirementBase):
@@ -161,6 +167,9 @@ class TestCaseBase(EntityBase):
     priority: TestCasePriority = Field(default=TestCasePriority.P1)
     automation_status: AutomationStatus = Field(default=AutomationStatus.MANUAL)
     tags: list[str] = Field(default_factory=list)
+    external_system: str | None = Field(default=None, max_length=50)  # e.g. "TESTRAIL"
+    external_case_id: str | None = Field(default=None, max_length=100)  # e.g. "C12345"
+    external_url: str | None = Field(default=None, max_length=500)
 
 
 class TestCaseCreate(TestCaseBase):
@@ -177,6 +186,9 @@ class TestCaseUpdate(EntityBase):
     priority: TestCasePriority | None = None
     automation_status: AutomationStatus | None = None
     tags: list[str] | None = None
+    external_system: str | None = None
+    external_case_id: str | None = None
+    external_url: str | None = None
 
 
 class TestCase(TestCaseBase):
@@ -737,3 +749,112 @@ class PRDiagnosisResponse(BaseModel):
     root_cause: str
     suggested_fix: str
     affected_files: list[str] = Field(default_factory=list)
+
+
+# --- Phase 9: Jira, TestRail & Integration Audit Models ---
+class JiraIssue(BaseModel):
+    key: str  # e.g. "PROJ-1234"
+    summary: str
+    description: str = ""
+    acceptance_criteria: str = ""
+    status: str = "Open"
+    priority: str = "Medium"
+    labels: list[str] = Field(default_factory=list)
+    url: str = ""
+
+
+class JiraImportRequest(BaseModel):
+    issue_keys: list[str] = Field(..., min_length=1)
+    project_id: str
+
+
+class JiraBugDraftRequest(BaseModel):
+    failure_id: str
+    project_key: str = "QA"
+    issue_type: str = "Bug"
+
+
+class JiraBugDraft(BaseModel):
+    summary: str
+    project_key: str = "QA"
+    issue_type: str = "Bug"
+    description: str
+    priority: str = "High"
+    environment: dict[str, str] = Field(default_factory=dict)
+    steps_to_reproduce: list[str] = Field(default_factory=list)
+    expected_result: str = ""
+    actual_result: str = ""
+    error_trace: str = ""
+    failure_id: str
+    run_id: str
+    artifact_urls: list[str] = Field(default_factory=list)
+
+
+class JiraCreateBugRequest(BaseModel):
+    draft: JiraBugDraft
+    confirm_publish: bool = False  # Dry-run by default unless explicitly confirmed
+
+
+class JiraCreateBugResponse(BaseModel):
+    key: str
+    url: str
+    status: str
+    published: bool = False
+    message: str = ""
+
+
+class TestRailCase(BaseModel):
+    __test__ = False
+    id: str  # "C12345"
+    title: str
+    section: str = "General"
+    suite_id: str = "S1"
+    url: str = ""
+
+
+class TestRailPublishPreviewItem(BaseModel):
+    __test__ = False
+    test_nodeid: str
+    test_name: str
+    external_case_id: str | None = None
+    pytest_status: str
+    mapped_testrail_status: str  # e.g. "Passed", "Failed", "Blocked"
+    comment: str = ""
+
+
+class TestRailPublishPreview(BaseModel):
+    __test__ = False
+    run_id: str
+    suite_id: str
+    total_tests: int
+    mapped_tests: int
+    unmapped_tests: int
+    items: list[TestRailPublishPreviewItem] = Field(default_factory=list)
+
+
+class TestRailPublishRequest(BaseModel):
+    __test__ = False
+    run_id: str
+    suite_id: str = "S101"
+    confirm_publish: bool = False  # Dry-run by default
+    status_mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class TestRailPublishResponse(BaseModel):
+    __test__ = False
+    success: bool
+    published: bool
+    testrail_run_id: str | None = None
+    total_published: int = 0
+    message: str = ""
+
+
+class IntegrationAuditEntry(EntityBase):
+    id: str
+    system: str  # "JIRA", "TESTRAIL", "GITHUB", "JENKINS"
+    action: str  # "IMPORT_REQUIREMENT", "CREATE_BUG", "PUBLISH_RESULT"
+    target_id: str
+    user_id: str = "user"
+    status: str = "SUCCESS"  # "SUCCESS", "FAILED", "DRY_RUN"
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime

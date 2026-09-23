@@ -39,6 +39,9 @@ class RequirementRepository:
             description=data.description,
             acceptance_criteria=data.acceptance_criteria,
             status=data.status.value,
+            external_system=data.external_system,
+            external_id=data.external_id,
+            external_url=data.external_url,
             created_at=now,
             updated_at=now,
         )
