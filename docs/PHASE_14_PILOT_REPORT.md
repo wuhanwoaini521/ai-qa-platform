@@ -40,20 +40,32 @@ logical test sharing its function's mapping unless an explicit `.qa-platform-cas
 | Requested | Executed | Refused (reasons) |
 |---|---|---|
 | 2 live UI tests + 1 unit test | 1 unit test, **PASSED** in 5.3 s total | `requires the 'page' fixture`, `contains 'https://'` → `calls page.goto()` |
-| 69 `tests/unit/**` node ids | **69 executed, 69 passed** (1.15 s) | none |
+| 69 `tests/unit/**` node ids | **68 executed, 68 passed** (1.15 s) | 1 refused: `test_fake_browser_adapter_navigation_and_observation` calls `navigate()`/`fill()`/`click()` on a *fake* adapter — indistinguishable from a real browser statically, so the policy errs towards refusing (an operator can override with `allow_unsafe`) |
 
 Safety is enforced per test, not per marker (`-m smoke` in this repository would run live tests).
 
 ## 6. xdist and rerun modelling (Gate 14.8)
 
-- **xdist**: the same 69 unit tests with `-n 2` → 68 passed, 1 failed. The failure is the reference
-  project's own `test_worker_id_and_retry_index_resolution`, which asserts the worker id is
-  `master`/`none` and therefore fails under parallelism — a real finding about the *reference*
-  project, not a platform defect. Worker-prefixed progress lines (`[gw0] [ 91%] PASSED …`) are parsed
-  as logical tests.
-- **rerun**: two controlled tests with `--reruns 1` → **2 logical tests, 4 physical attempts, 2
-  reruns**; the flaky test is `PASSED` with `attempts=2, reruns=1` (never counted twice), the locator
-  test `FAILED` with `attempts=2, reruns=1`.
+- **xdist**: the same 68 executed unit tests run three ways, with identical logical counts:
+
+  | Mode | exit | logical | physical | passed | failed |
+  |---|---|---|---|---|---|
+  | sequential | 0 | 68 | 68 | 68 | 0 |
+  | `-n 1` | 1 | 68 | 68 | 67 | 1 |
+  | `-n 2` | 1 | 68 | 68 | 67 | 1 |
+
+  The single failure under parallelism is the reference project's own
+  `test_worker_id_and_retry_index_resolution`, which asserts the worker id is `master`/`none` — a real
+  finding about the *reference* project, not a platform defect. Each xdist worker writes its own report
+  file (a shared file would be truncated and interleaved), the controller does not write at all, and
+  previous runs' log files are cleared before each run.
+- **rerun**: two controlled tests with two retries allowed → **2 logical tests, 4 physical attempts,
+  2 reruns**; the flaky test is `PASSED` with `attempts=2, reruns=1` (never counted twice), the
+  locator test `FAILED` with `attempts=2, reruns=1`.
+
+  Run options are named (`n_workers`, `reruns`) rather than arbitrary flags: an earlier `extra_args`
+  passthrough allowed any pytest flag (`-c`, `--rootdir`, `-p`, `--junitxml`) to reach the project
+  process at `automation:edit` privilege and was removed.
 
 Rerun accounting no longer depends on parsing `RERUN` lines: the platform writes a small pytest
 plugin into the workspace that records one JSON line per attempt, because the reference project's own

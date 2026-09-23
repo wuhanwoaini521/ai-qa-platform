@@ -23,7 +23,10 @@ ENV_PATH = "QA_PLATFORM_REPORT_LOG"
 
 class QAReportPlugin:
     def __init__(self, path):
-        self._handle = open(path, "w", encoding="utf-8")
+        # With xdist every worker runs this plugin, so each one writes its own file: a shared file
+        # would be truncated by the next worker and interleaved by concurrent writes.
+        worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+        self._handle = open(f"{path}.{worker}", "a", encoding="utf-8")
 
     def pytest_runtest_logreport(self, report):
         record = {
@@ -51,6 +54,12 @@ class QAReportPlugin:
 def pytest_configure(config):
     path = os.environ.get(ENV_PATH)
     if not path:
+        return
+    # Under xdist only the workers record: the controller receives the same reports aggregated, so
+    # writing there as well would double every attempt.
+    parallel = bool(getattr(config.option, "numprocesses", None))
+    is_worker = hasattr(config, "workerinput")
+    if parallel and not is_worker:
         return
     config.pluginmanager.register(QAReportPlugin(path), PLUGIN_NAME)
 

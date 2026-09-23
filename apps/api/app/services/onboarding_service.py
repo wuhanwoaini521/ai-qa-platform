@@ -375,7 +375,11 @@ class OnboardingService:
 
     def _report_artifacts_dir(self, project_id: str) -> Path:
         """Platform-owned directory for pytest report logs, deliberately outside the workspace."""
-        base = (self.workspace_base_dir or Path("runtime/workspaces")).parent / "pytest-reports" / project_id
+        # Absolute: the report directory is passed to the project process through PYTHONPATH, and a
+        # relative entry would resolve against the workspace the child runs in.
+        base = (
+            (self.workspace_base_dir or Path("runtime/workspaces")).parent / "pytest-reports" / project_id
+        ).resolve()
         base.mkdir(parents=True, exist_ok=True)
         return base
 

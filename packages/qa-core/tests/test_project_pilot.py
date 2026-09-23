@@ -463,7 +463,9 @@ def test_report_plugin_source_records_every_attempt(tmp_path: Path):
     plugin.pytest_runtest_logreport(FakeReport("teardown", "passed"))
     plugin.close()
 
-    entries = [json_module.loads(line) for line in report_path.read_text().splitlines()]
+    # The plugin writes one file per worker (`<path>.main` when not under xdist).
+    written = report_path.parent / f"{report_path.name}.main"
+    entries = [json_module.loads(line) for line in written.read_text().splitlines()]
     assert [(entry["when"], entry["outcome"]) for entry in entries] == [
         ("setup", "passed"),
         ("call", "failed"),
@@ -478,7 +480,8 @@ def test_report_log_parsing_counts_attempts_not_tests(tmp_path: Path):
     from qa_core.onboarding import parse_report_log
 
     report = tmp_path / "report.jsonl"
-    report.write_text(
+    # The parser reads the per-worker files the plugin writes.
+    (tmp_path / "report.jsonl.main").write_text(
         "\n".join(
             json.dumps(entry)
             for entry in (
@@ -594,7 +597,7 @@ def test_report_log_maps_skips_and_xfails_without_fabricating_failures(tmp_path:
     from qa_core.onboarding import parse_report_log
 
     report = tmp_path / "report.jsonl"
-    report.write_text(
+    (tmp_path / "report.jsonl.main").write_text(
         "\n".join(
             json.dumps(entry)
             for entry in (

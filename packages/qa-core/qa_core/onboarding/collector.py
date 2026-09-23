@@ -281,12 +281,19 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
     interleaved between the node id and the outcome (the reference project does exactly that). Each
     `call`-phase report is one physical attempt, so reruns are visible without relying on `RERUN` lines.
     """
-    if not report_log.is_file():
+    sources = sorted(report_log.parent.glob(f"{report_log.name}.*")) or (
+        [report_log] if report_log.is_file() else []
+    )
+    if not sources:
         return None
 
     attempts: dict[str, list[tuple[str, float | None, str | None, bool]]] = {}
     order: list[str] = []
-    for line in report_log.read_text(encoding="utf-8", errors="replace").splitlines():
+    lines: list[str] = []
+    for source in sources:
+        lines.extend(source.read_text(encoding="utf-8", errors="replace").splitlines())
+
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -437,10 +444,15 @@ class QAProjectRunner:
         markers: list[str] | None = None,
         extra_args: list[str] | None = None,
     ) -> SuiteRunOutcome:
-        artifacts_dir = Path(self.artifacts_dir) if self.artifacts_dir else project_root / ARTIFACTS_DIR_NAME
+        # Resolved because the directory is exported to the child process through PYTHONPATH.
+        artifacts_dir = (
+            Path(self.artifacts_dir).resolve() if self.artifacts_dir else project_root / ARTIFACTS_DIR_NAME
+        )
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         report_log = artifacts_dir / REPORT_LOG_NAME
-        report_log.unlink(missing_ok=True)
+        # The plugin appends per worker, so every previous run's files must go, not just the base one.
+        for previous in artifacts_dir.glob(f"{REPORT_LOG_NAME}*"):
+            previous.unlink(missing_ok=True)
         plugin_name = write_plugin(artifacts_dir)
 
         command = self.contract.command_for_tests(nodeids=nodeids, markers=markers)
@@ -475,7 +487,8 @@ class QAProjectRunner:
                 counts = text_counts
             else:
                 logical, physical_attempts, reruns_total = structured_logical, structured_physical, structured_reruns
-                counts = {**text_counts, **structured_counts}
+                # The per-test log is authoritative; pytest's text summary is unreliable under xdist.
+                counts = structured_counts
         return SuiteRunOutcome(
             exit_code=result.exit_code,
             command=command,
