@@ -32,3 +32,30 @@ The platform enforces four hierarchical and capability-defined roles:
 ## 3. Team & Squad Organization
 
 Users can be organized into squads (e.g., *Frontend QA Squad*, *Payments Automation Squad*) with assigned squad roles (`LEAD`, `MEMBER`) for domain test ownership.
+
+---
+
+## 4. Enforcement
+
+Roles are enforced centrally, not per router. `apps/api/app/api/authz.py` declares one policy table
+(`RULES`, most specific prefix first) and a single application-level dependency
+(`authorize_request`, installed in `apps/api/app/main.py`) resolves the caller and checks the
+required permission for every non-public request.
+
+- **Public paths**: `/api/health*`, `/api/metrics`, `/api/auth/login` and the interactive docs. These
+  must stay reachable so container probes and the login round-trip work before any session exists.
+- **Authentication**: `Authorization: Bearer <token>` where the token is either the login token or an
+  API key (`aqp_live_...`). A missing or invalid credential is `401`.
+- **Authorization**: a valid credential without the required permission is `403`. The guard runs
+  *before* the route handler, so an unauthorised caller cannot reach any handler logic — including
+  with a valid-looking but non-existent resource id.
+- **Any-authenticated routes**: cluster infrastructure (`/api/workers`, `/api/jobs`) requires a valid
+  credential but no specific role, because workers and operators both need it. Artifact reads require
+  `project:read`; artifact writes require `automation:edit`.
+- **Unknown route families** fall back to `project:read` / `project:write` rather than to "no
+  authentication", so a newly added router cannot silently become an open endpoint.
+
+`AUTH_REQUIRED=false` is a development-only escape hatch: the API then treats every request as the
+seeded administrator. It is documented in `.env.example`, defaults to `true`, and is exercised by
+`apps/api/tests/test_authorization_rbac.py` (35 tests covering 401/403 denial paths, role
+separation and the policy table itself).

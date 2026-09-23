@@ -54,7 +54,16 @@ class WorkerDaemon:
     async def start(self) -> None:
         """Start the worker daemon lifecycle."""
         self._running = True
-        self._http_client = httpx.AsyncClient(base_url=self.api_url, timeout=30.0)
+        headers: dict[str, str] = {}
+        token = os.getenv("AI_QA_AUTH_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        else:
+            logger.warning(
+                "AI_QA_AUTH_TOKEN is not set: the API rejects worker requests with 401 unless "
+                "AUTH_REQUIRED=false. Create an API key (Security -> API Keys) and export it."
+            )
+        self._http_client = httpx.AsyncClient(base_url=self.api_url, timeout=30.0, headers=headers)
 
         logger.info(
             "Starting worker %s (Name: %s, Capabilities: %s, Concurrency: %d, API: %s)",

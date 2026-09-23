@@ -1,7 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
@@ -31,6 +31,7 @@ from app.api import (
     workers_router,
     workspaces_router,
 )
+from app.api.authz import authorize_request
 from app.persistence.database import init_db
 from app.services.metrics_service import metrics_service
 from app.settings import settings
@@ -48,6 +49,9 @@ app = FastAPI(
     version="1.0.0",
     description="Production-oriented AI QA Intelligence Platform",
     lifespan=lifespan,
+    # Single application-level authorization guard: authenticates every non-public request and
+    # enforces the resource policy table in app/api/authz.py.
+    dependencies=[Depends(authorize_request)],
 )
 
 # CORS middleware

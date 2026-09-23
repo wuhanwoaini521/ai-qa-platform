@@ -17,6 +17,7 @@ from project_model.models import (
 from app.repositories.api_key_repo import ApiKeyRepository
 from app.repositories.security_audit_repo import SecurityAuditRepository
 from app.repositories.user_repo import UserRepository
+from app.settings import settings
 
 
 class AuthService:
@@ -105,7 +106,11 @@ class AuthService:
 
     async def authenticate_token_or_key(self, auth_header: str | None) -> tuple[User | None, list[str]]:
         if not auth_header:
-            # Fallback to default admin in dev if no header provided
+            # Only reachable when AUTH_REQUIRED=false: development mode impersonates the seeded
+            # administrator so a local run works without a login round-trip. In every other
+            # configuration a missing header is an unauthenticated request.
+            if settings.auth_required:
+                return None, []
             admin = await self.user_repo.get_by_email("admin@ai-qa.local")
             if admin:
                 perms = [p.value for p in ROLE_PERMISSIONS.get(admin.role, set())]

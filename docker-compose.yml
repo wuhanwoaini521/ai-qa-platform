@@ -63,15 +63,25 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aiqa}:${POSTGRES_PASSWORD:-aiqa_secret_password}@postgres:5432/${POSTGRES_DB:-ai_qa_platform}
-      AI_PROVIDER: ${AI_PROVIDER:-mock}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_BUCKET_NAME: ai-qa-artifacts
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      SECURITY_JWT_SECRET: ${SECURITY_JWT_SECRET:-ai-qa-platform-super-secret-key-change-in-production}
+      # Route authorization: every non-probe route needs a bearer token.
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-in-production}
+      # AI provider: `fake` keeps the platform deterministic and offline.
+      QA_AI_PROVIDER: ${QA_AI_PROVIDER:-fake}
+      QA_AI_API_KEY: ${QA_AI_API_KEY:-}
+      QA_AI_BASE_URL: ${QA_AI_BASE_URL:-https://api.openai.com/v1}
+      QA_AI_MODEL: ${QA_AI_MODEL:-gpt-4o-mini}
+      # Integrations (optional; each falls back to a dry-run adapter when unset).
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      TESTRAIL_BASE_URL: ${TESTRAIL_BASE_URL:-}
+      TESTRAIL_EMAIL: ${TESTRAIL_EMAIL:-}
+      TESTRAIL_API_KEY: ${TESTRAIL_API_KEY:-}
+      JENKINS_BASE_URL: ${JENKINS_BASE_URL:-}
+      JENKINS_USER: ${JENKINS_USER:-}
+      JENKINS_API_TOKEN: ${JENKINS_API_TOKEN:-}
     ports:
       - "8000:8000"
     volumes:
@@ -93,6 +103,8 @@ services:
         condition: service_healthy
     environment:
       AI_QA_API_URL: http://api:8000
+      # Workers must authenticate; create an API key in the UI (Security → API Keys) and set it here.
+      AI_QA_AUTH_TOKEN: ${AI_QA_AUTH_TOKEN:-}
       WORKER_NAME: Docker-Runner
       MAX_CONCURRENCY: 4
       WORKER_CAPABILITIES: playwright,chromium,firefox,pytest,python3

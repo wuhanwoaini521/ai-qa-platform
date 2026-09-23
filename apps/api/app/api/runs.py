@@ -46,6 +46,17 @@ async def get_run(
     return run
 
 
+@router.post("/{run_id}/cancel", response_model=TestRun)
+async def cancel_run(
+    run_id: str,
+    service: TestRunService = Depends(get_run_service),
+):
+    run = await service.cancel_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Test Run not found")
+    return run
+
+
 @router.get("/{run_id}/events")
 async def stream_run_events(
     run_id: str,

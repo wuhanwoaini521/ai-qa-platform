@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     database_url: str = "sqlite+aiosqlite:///./runtime/ai_qa_platform.db"
+    # Route authorization is on by default: every route except the probes, `/api/metrics` and
+    # `/api/auth/login` needs a bearer token. Set AUTH_REQUIRED=false only for throwaway local runs —
+    # the API then treats every request as the seeded administrator (see app/api/authz.py).
+    auth_required: bool = True
     runtime_dir: Path = Path("./runtime")
     workspace_storage_dir: Path = Path("./runtime/workspaces")
     artifact_storage_dir: Path = Path("./runtime/artifacts")
