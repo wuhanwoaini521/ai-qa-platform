@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { FailureCategory, FailureRecord, LocatorRepairProposal, Project } from '../types';
+import {
+  AIFailureDiagnosisResponse,
+  FailureCategory,
+  FailureRecurrenceItem,
+  FailureRecord,
+  LocatorRepairProposal,
+  LocatorSemanticReviewResponse,
+  Project,
+} from '../types';
 import { api } from '../api/client';
 import {
   AlertTriangle,
@@ -11,6 +19,8 @@ import {
   Check,
   Activity,
   Zap,
+  ShieldCheck,
+  History,
 } from 'lucide-react';
 
 interface FailuresPageProps {
@@ -30,18 +40,22 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedFailure, setSelectedFailure] = useState<FailureRecord | null>(null);
 
-  // Diagnosis & Repair Proposal State
+  // Diagnosis State
   const [diagnosing, setDiagnosing] = useState<boolean>(false);
-  const [diagnosisResult, setDiagnosisResult] = useState<{
-    category: string;
-    diagnosis: string;
-    suggested_action: string;
-    confidence: number;
-  } | null>(null);
+  const [aiDiagnosis, setAiDiagnosis] = useState<AIFailureDiagnosisResponse | null>(null);
 
+  // Locator Repair Proposal State
   const [generatingProposal, setGeneratingProposal] = useState<boolean>(false);
   const [repairProposal, setRepairProposal] = useState<LocatorRepairProposal | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<string>('');
+
+  // Semantic Review State
+  const [reviewingSemantic, setReviewingSemantic] = useState<boolean>(false);
+  const [semanticReview, setSemanticReview] = useState<LocatorSemanticReviewResponse | null>(null);
+
+  // Recurrence State
+  const [recurrenceList, setRecurrenceList] = useState<FailureRecurrenceItem[]>([]);
+  const [loadingRecurrence, setLoadingRecurrence] = useState<boolean>(false);
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
   const [repairApplied, setRepairApplied] = useState<boolean>(false);
@@ -72,21 +86,36 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const handleSelectFailure = (f: FailureRecord) => {
     setSelectedFailure(f);
-    setDiagnosisResult(null);
+    setAiDiagnosis(null);
     setRepairProposal(null);
     setSelectedCandidate('');
-    setRepairApplied(f.is_resolved);
+    setSemanticReview(null);
+    setRepairApplied(false);
     setRerunMessage(null);
+    fetchRecurrence(f.id);
   };
 
-  const handleDiagnose = async () => {
+  const fetchRecurrence = async (failureId: string) => {
+    try {
+      setLoadingRecurrence(true);
+      const list = await api.getFailureRecurrence(failureId);
+      setRecurrenceList(list);
+    } catch (err) {
+      console.error('Failed to fetch recurrence', err);
+      setRecurrenceList([]);
+    } finally {
+      setLoadingRecurrence(false);
+    }
+  };
+
+  const handleDiagnoseAI = async () => {
     if (!selectedFailure) return;
     try {
       setDiagnosing(true);
-      const res = await api.diagnoseFailure(selectedFailure.id);
-      setDiagnosisResult(res);
+      const res = await api.diagnoseFailureAI(selectedFailure.id);
+      setAiDiagnosis(res);
     } catch (err: any) {
-      alert(`Diagnosis failed: ${err.message || err}`);
+      alert(`AI Diagnosis failed: ${err.message || err}`);
     } finally {
       setDiagnosing(false);
     }
@@ -98,13 +127,32 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setGeneratingProposal(true);
       const proposal = await api.generateRepairProposal(selectedFailure.id);
       setRepairProposal(proposal);
-      if (proposal.candidates.length > 0) {
-        setSelectedCandidate(proposal.candidates[0].locator);
+      setSemanticReview(null);
+      if (proposal.proposed_locator) {
+        setSelectedCandidate(proposal.proposed_locator);
       }
     } catch (err: any) {
       alert(`Failed to generate repair proposal: ${err.message || err}`);
     } finally {
       setGeneratingProposal(false);
+    }
+  };
+
+  const handleSemanticReview = async () => {
+    if (!selectedFailure || !repairProposal) return;
+    const chosenLocator = selectedCandidate || repairProposal.proposed_locator;
+    try {
+      setReviewingSemantic(true);
+      const review = await api.getSemanticLocatorReview(
+        selectedFailure.id,
+        repairProposal.old_locator,
+        chosenLocator
+      );
+      setSemanticReview(review);
+    } catch (err: any) {
+      alert(`Semantic review failed: ${err.message || err}`);
+    } finally {
+      setReviewingSemantic(false);
     }
   };
 
@@ -136,9 +184,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     try {
       setRerunning(true);
       setRerunMessage('Triggering verification re-run...');
+      const target = selectedFailure.nodeid || selectedFailure.test_nodeid;
       const run = await api.createTestRun({
         project_id: currentProjectId,
-        target_nodeids: [selectedFailure.nodeid],
+        target_nodeids: [target],
         triggered_by: `Re-run verification for failure #${selectedFailure.id.slice(0, 8)}`,
       });
       setRerunMessage(`Re-run dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
@@ -152,7 +201,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
-  const getCategoryBadge = (cat: FailureCategory) => {
+  const getCategoryBadge = (cat?: FailureCategory | string) => {
     switch (cat) {
       case 'LOCATOR_CHANGED':
         return (
@@ -307,9 +356,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     <button
                       className="btn btn-secondary btn-sm"
                       disabled={diagnosing}
-                      onClick={handleDiagnose}
+                      onClick={handleDiagnoseAI}
                     >
-                      <Zap size={13} color="#2563eb" /> {diagnosing ? 'Diagnosing...' : 'AI Root Cause Diagnosis'}
+                      <Zap size={13} color="#2563eb" /> {diagnosing ? 'Analyzing Root Cause...' : 'AI Root Cause Diagnosis'}
                     </button>
                     <button
                       className="btn btn-primary btn-sm"
@@ -335,32 +384,64 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 </div>
               </div>
 
-              {/* Diagnosis Result Card */}
-              {diagnosisResult && (
+              {/* AI Diagnosis Result Card (Evidence vs Hypotheses) */}
+              {aiDiagnosis && (
                 <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
                   <div className="card-header" style={{ background: '#eff6ff' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Activity size={16} color="#2563eb" />
                       <span className="card-title" style={{ color: '#1d4ed8' }}>
-                        AI Root Cause Analysis
+                        AI Root Cause Diagnosis ({aiDiagnosis.classification})
                       </span>
                     </div>
                     <span className="badge badge-ready" style={{ fontSize: '11px' }}>
-                      Confidence: {(diagnosisResult.confidence * 100).toFixed(0)}%
+                      Confidence: {(aiDiagnosis.confidence * 100).toFixed(0)}%
                     </span>
                   </div>
                   <div className="card-body">
-                    <p style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.6, marginBottom: '10px' }}>
-                      {diagnosisResult.diagnosis}
+                    <p style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.6, marginBottom: '12px' }}>
+                      <b>Root Cause:</b> {aiDiagnosis.root_cause}
                     </p>
-                    <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Recommended Next Step:
-                      </span>
-                      <p style={{ fontSize: '12px', color: '#0f172a', marginTop: '2px' }}>
-                        {diagnosisResult.suggested_action}
-                      </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      {/* Evidence */}
+                      <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                          Evidence Found:
+                        </span>
+                        <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#0f172a' }}>
+                          {aiDiagnosis.evidence.map((ev, i) => (
+                            <li key={i}>{ev}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Hypotheses */}
+                      <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                          Hypotheses:
+                        </span>
+                        <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#0f172a' }}>
+                          {aiDiagnosis.hypotheses.map((hyp, i) => (
+                            <li key={i}>{hyp}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
+
+                    {/* Recommended Actions */}
+                    {aiDiagnosis.recommended_actions.length > 0 && (
+                      <div style={{ background: '#f0fdf4', padding: '10px 12px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
+                          Recommended Remediations:
+                        </span>
+                        <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#14532d' }}>
+                          {aiDiagnosis.recommended_actions.map((act, i) => (
+                            <li key={i}>{act}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -375,79 +456,78 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         Locator Repair Proposal (Confidence: {(repairProposal.confidence * 100).toFixed(0)}%)
                       </span>
                     </div>
-                    {repairApplied ? (
-                      <span className="badge badge-ready">✓ Repair Applied</span>
-                    ) : (
+                    <div style={{ display: 'flex', gap: '8px' }}>
                       <button
-                        className="btn btn-primary btn-sm"
-                        style={{ background: '#16a34a', borderColor: '#16a34a' }}
-                        disabled={applyingRepair}
-                        onClick={handleApplyRepair}
+                        className="btn btn-secondary btn-sm"
+                        disabled={reviewingSemantic}
+                        onClick={handleSemanticReview}
                       >
-                        <Check size={13} /> {applyingRepair ? 'Applying...' : 'Apply Repair to Code'}
+                        <ShieldCheck size={13} color="#2563eb" /> {reviewingSemantic ? 'Reviewing...' : 'Semantic Equivalence Review'}
                       </button>
-                    )}
+                      {repairApplied ? (
+                        <span className="badge badge-ready">✓ Repair Applied</span>
+                      ) : (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                          disabled={applyingRepair}
+                          onClick={handleApplyRepair}
+                        >
+                          <Check size={13} /> {applyingRepair ? 'Applying...' : 'Apply Repair to Code'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="card-body">
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
                         <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>Broken Locator</div>
                         <code style={{ fontSize: '12px', color: '#b91c1c', wordBreak: 'break-all' }}>
-                          {repairProposal.broken_locator}
+                          {repairProposal.old_locator || repairProposal.broken_locator}
                         </code>
                       </div>
                       <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '4px', border: '1px solid #dcfce7' }}>
-                        <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>Proposed Replacement</div>
+                        <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>Proposed Replacement ({repairProposal.strategy})</div>
                         <code style={{ fontSize: '12px', color: '#15803d', wordBreak: 'break-all' }}>
                           {selectedCandidate || repairProposal.proposed_locator}
                         </code>
                       </div>
                     </div>
 
-                    {/* Candidate Ranking */}
-                    {repairProposal.candidates.length > 1 && (
-                      <div style={{ marginBottom: '14px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                          Candidate Ranking ({repairProposal.candidates.length} options)
+                    {/* Semantic Review Results Banner */}
+                    {semanticReview && (
+                      <div
+                        style={{
+                          marginBottom: '12px',
+                          padding: '10px 12px',
+                          borderRadius: '4px',
+                          background: semanticReview.is_semantically_equivalent ? '#f0fdf4' : '#fffbeb',
+                          border: `1px solid ${semanticReview.is_semantically_equivalent ? '#bbf7d0' : '#fde68a'}`,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: semanticReview.is_semantically_equivalent ? '#166534' : '#92400e' }}>
+                            {semanticReview.is_semantically_equivalent ? '✓ Semantically Equivalent Locator' : '⚠ Non-Equivalent / High-Risk Locator'}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Review Confidence: {(semanticReview.confidence * 100).toFixed(0)}%
+                          </span>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {repairProposal.candidates.map((cand, idx) => (
-                            <label
-                              key={idx}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '6px 10px',
-                                background: selectedCandidate === cand.locator ? '#eff6ff' : '#f8fafc',
-                                border: selectedCandidate === cand.locator ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                              }}
-                            >
-                              <input
-                                type="radio"
-                                name="candidate_locator"
-                                checked={selectedCandidate === cand.locator}
-                                onChange={() => setSelectedCandidate(cand.locator)}
-                              />
-                              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{cand.locator}</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                                  {cand.strategy} ({(cand.confidence * 100).toFixed(0)}%)
-                                </span>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
+                        <p style={{ fontSize: '12px', color: '#334155', margin: 0 }}>
+                          {semanticReview.explanation}
+                        </p>
+                        {semanticReview.risk_warning && (
+                          <p style={{ fontSize: '11px', color: '#dc2626', margin: '4px 0 0 0', fontWeight: 600 }}>
+                            Warning: {semanticReview.risk_warning}
+                          </p>
+                        )}
                       </div>
                     )}
 
                     {/* Diff Preview */}
                     <div>
                       <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Code Diff Preview ({repairProposal.target_file}:{repairProposal.line_number})
+                        Code Diff Preview ({repairProposal.file_path || repairProposal.target_file})
                       </div>
                       <div
                         style={{
@@ -461,12 +541,64 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           lineHeight: 1.5,
                         }}
                       >
-                        {repairProposal.diff_preview}
+                        {repairProposal.code_diff || repairProposal.diff_preview}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Similar Past Failures / Recurrence History */}
+              <div className="card">
+                <div className="card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <History size={15} color="#64748b" />
+                    <span className="card-title">Similar Past Failures ({recurrenceList.length})</span>
+                  </div>
+                </div>
+                <div className="card-body" style={{ padding: 0 }}>
+                  {loadingRecurrence ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      Checking past execution records...
+                    </div>
+                  ) : recurrenceList.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      No prior similar occurrences recorded in history for this failure signature.
+                    </div>
+                  ) : (
+                    <table className="data-table" style={{ fontSize: '11px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '6px 8px' }}>Category</th>
+                          <th style={{ padding: '6px 8px' }}>Run ID</th>
+                          <th style={{ padding: '6px 8px' }}>Recorded At</th>
+                          <th style={{ padding: '6px 8px' }}>Error Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recurrenceList.map((rec) => (
+                          <tr key={rec.failure_id}>
+                            <td style={{ padding: '6px 8px' }}>
+                              <span className="badge badge-draft" style={{ fontSize: '10px' }}>
+                                {rec.classification}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)' }}>
+                              #{rec.run_id.slice(0, 8)}
+                            </td>
+                            <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>
+                              {new Date(rec.created_at).toLocaleDateString()}
+                            </td>
+                            <td style={{ padding: '6px 8px', color: '#dc2626' }}>
+                              {rec.error_message ? rec.error_message.slice(0, 70) + '...' : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="card">

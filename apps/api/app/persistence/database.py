@@ -26,6 +26,8 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
 )
 
+get_session = async_session_factory
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
@@ -38,5 +40,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
+    import app.persistence.models  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

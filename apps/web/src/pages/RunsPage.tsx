@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Project, TestRun, TestRunCreate } from '../types';
+import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRun, TestRunCreate } from '../types';
 import { api } from '../api/client';
 import {
   PlayCircle,
@@ -10,6 +10,9 @@ import {
   ChevronRight,
   StopCircle,
   Sparkles,
+  Cpu,
+  ExternalLink,
+  FileCheck,
 } from 'lucide-react';
 
 interface RunsPageProps {
@@ -30,6 +33,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
+  const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
+  const [externalArtifacts, setExternalArtifacts] = useState<ExternalArtifactReference[]>([]);
 
   // New Run Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -37,6 +42,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     project_id: currentProjectId || '',
     target_nodeids: [],
     triggered_by: 'Web UI Manual Trigger',
+    runner_type: 'LOCAL',
+    runner_profile_id: undefined,
   });
   const [targetNodeidsText, setTargetNodeidsText] = useState<string>('');
   const [triggering, setTriggering] = useState<boolean>(false);
@@ -48,8 +55,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const fetchRuns = async () => {
     try {
       setLoading(true);
-      const data = await api.getTestRuns(currentProjectId || undefined);
+      const [data, profiles] = await Promise.all([
+        api.getTestRuns(currentProjectId || undefined),
+        api.getRunnerProfiles(currentProjectId || undefined),
+      ]);
       setRuns(data);
+      setRunnerProfiles(profiles);
       if (data.length > 0 && !selectedRun) {
         if (initialRunId) {
           const match = data.find((r) => r.id === initialRunId);
@@ -69,8 +80,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
   const fetchRunDetail = async (runId: string) => {
     try {
-      const run = await api.getTestRun(runId);
+      const [run, artifacts] = await Promise.all([
+        api.getTestRun(runId),
+        api.getExternalArtifacts(runId).catch(() => [] as ExternalArtifactReference[]),
+      ]);
       setSelectedRun(run);
+      setExternalArtifacts(artifacts);
       // Update in list
       setRuns((prev) => prev.map((r) => (r.id === run.id ? run : r)));
     } catch (err) {
@@ -150,6 +165,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         project_id: currentProjectId || runFormData.project_id,
         target_nodeids: parsedTargets.length > 0 ? parsedTargets : undefined,
         triggered_by: runFormData.triggered_by || 'Web UI Manual Trigger',
+        runner_type: runFormData.runner_type,
+        runner_profile_id: runFormData.runner_type === 'JENKINS' ? runFormData.runner_profile_id : undefined,
       });
 
       setRuns([newRun, ...runs]);
@@ -198,9 +215,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Execution Platform</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Execution & Runner Platform</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Real-time pytest execution runs, live SSE streaming, duration stats, and outcome logs.
+            Real-time pytest execution, multi-runner backend (Local, Jenkins), SSE live log streaming, and external artifact linking.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -214,6 +231,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               setRunFormData({
                 project_id: currentProjectId || projects[0]?.id || '',
                 triggered_by: 'Web UI Manual Trigger',
+                runner_type: 'LOCAL',
+                runner_profile_id: runnerProfiles[0]?.id,
               });
               setIsModalOpen(true);
             }}
@@ -278,15 +297,18 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                             <span style={{ fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
                               #{r.id.slice(0, 8)}
                             </span>
+                            <span className="badge badge-draft" style={{ fontSize: '10px' }}>
+                              {r.runner_type || 'LOCAL'}
+                            </span>
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              {r.triggered_by}
+                              {r.requested_by || r.triggered_by}
                             </span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
                             <span>
-                              Total: <b>{r.total_tests}</b> | Passed:{' '}
-                              <b style={{ color: '#16a34a' }}>{r.passed_tests}</b> | Failed:{' '}
-                              <b style={{ color: '#dc2626' }}>{r.failed_tests}</b>
+                              Total: <b>{r.total || r.total_tests}</b> | Passed:{' '}
+                              <b style={{ color: '#16a34a' }}>{r.passed !== undefined ? r.passed : r.passed_tests}</b> | Failed:{' '}
+                              <b style={{ color: '#dc2626' }}>{r.failed !== undefined ? r.failed : r.failed_tests}</b>
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <Clock size={11} /> {(r.duration_ms / 1000).toFixed(2)}s
@@ -313,6 +335,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     <span className="card-title" style={{ fontFamily: 'var(--font-mono)' }}>
                       Run #{selectedRun.id}
                     </span>
+                    <span className="badge badge-draft" style={{ fontSize: '11px' }}>
+                      Runner: {selectedRun.runner_type || 'LOCAL'}
+                    </span>
                   </div>
                   {(selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED') && (
                     <button
@@ -328,29 +353,91 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
                     <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Total Tests</div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '2px' }}>{selectedRun.total_tests}</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '2px' }}>{selectedRun.total !== undefined ? selectedRun.total : selectedRun.total_tests}</div>
                     </div>
                     <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '6px' }}>
                       <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Passed</div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>{selectedRun.passed_tests}</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>{selectedRun.passed !== undefined ? selectedRun.passed : selectedRun.passed_tests}</div>
                     </div>
                     <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '6px' }}>
                       <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>Failed</div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#dc2626', marginTop: '2px' }}>{selectedRun.failed_tests}</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#dc2626', marginTop: '2px' }}>{selectedRun.failed !== undefined ? selectedRun.failed : selectedRun.failed_tests}</div>
                     </div>
                     <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '6px' }}>
                       <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>Duration</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>{(selectedRun.duration_ms / 1000).toFixed(2)}s</div>
                     </div>
                   </div>
+
+                  {/* Runner metadata banner */}
+                  {selectedRun.external_build_url && (
+                    <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Cpu size={14} color="#64748b" />
+                        <span>External Jenkins Job: <b>{selectedRun.external_job_id || 'Jenkins Pipeline'}</b></span>
+                        {selectedRun.queue_duration_ms !== undefined && (
+                          <span style={{ color: 'var(--text-muted)' }}> (Queued: {(selectedRun.queue_duration_ms / 1000).toFixed(1)}s)</span>
+                        )}
+                      </div>
+                      <a
+                        href={selectedRun.external_build_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-secondary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                      >
+                        <ExternalLink size={12} /> Open in Jenkins
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* External Artifacts References Card */}
+              {externalArtifacts.length > 0 && (
+                <div className="card">
+                  <div className="card-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <FileCheck size={16} color="#16a34a" />
+                      <span className="card-title">External Test Reports & Artifacts ({externalArtifacts.length})</span>
+                    </div>
+                  </div>
+                  <div className="card-body" style={{ padding: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {externalArtifacts.map((art) => (
+                        <a
+                          key={art.id}
+                          href={art.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 12px',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            textDecoration: 'none',
+                            color: '#0f172a',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <ExternalLink size={13} color="#2563eb" />
+                          <span>{art.name} ({art.type})</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Individual Test Executions Table */}
               <div className="card">
                 <div className="card-header">
                   <span className="card-title">Test Outcomes ({selectedRun.executions.length})</span>
-                  {selectedRun.failed_tests > 0 && onNavigateToFailures && (
+                  {((selectedRun.failed ?? selectedRun.failed_tests ?? 0) > 0) && onNavigateToFailures && (
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ fontSize: '11px' }}
@@ -466,6 +553,48 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Runner Backend</label>
+                    <select
+                      className="form-control"
+                      value={runFormData.runner_type}
+                      onChange={(e) =>
+                        setRunFormData({
+                          ...runFormData,
+                          runner_type: e.target.value as RunnerType,
+                        })
+                      }
+                    >
+                      <option value="LOCAL">Local Runner (Pytest Subprocess)</option>
+                      <option value="JENKINS">Jenkins CI Runner</option>
+                    </select>
+                  </div>
+
+                  {runFormData.runner_type === 'JENKINS' && (
+                    <div className="form-group">
+                      <label className="form-label">Jenkins Profile</label>
+                      <select
+                        className="form-control"
+                        value={runFormData.runner_profile_id || ''}
+                        onChange={(e) =>
+                          setRunFormData({
+                            ...runFormData,
+                            runner_profile_id: e.target.value || undefined,
+                          })
+                        }
+                      >
+                        <option value="">Default Jenkins Runner</option>
+                        {runnerProfiles.map((prof) => (
+                          <option key={prof.id} value={prof.id}>
+                            {prof.name} ({prof.type})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">

@@ -324,14 +324,18 @@ name = "integrations"
 version = "0.1.0"
 source = { editable = "packages/integrations" }
 dependencies = [
+    { name = "httpx" },
     { name = "project-model" },
     { name = "pydantic" },
+    { name = "qa-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "project-model", editable = "packages/project-model" },
     { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "qa-core", editable = "packages/qa-core" },
 ]
 
 [[package]]
@@ -610,12 +614,14 @@ name = "qa-core"
 version = "0.1.0"
 source = { editable = "packages/qa-core" }
 dependencies = [
+    { name = "httpx" },
     { name = "project-model" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "project-model", editable = "packages/project-model" },
     { name = "pydantic", specifier = ">=2.9.0" },
 ]

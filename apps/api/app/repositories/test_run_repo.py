@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from project_model.models import RunStatus, TestRunCreate
 from sqlalchemy import desc, select
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.persistence.models import (
+    ExternalArtifactReferenceORM,
     FailureRecordORM,
     TestExecutionORM,
     TestRunORM,
@@ -16,11 +18,17 @@ from app.persistence.models import (
 
 
 class TestRunRepository:
+    __test__ = False
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def list_runs(self, project_id: str | None = None, limit: int = 50) -> list[TestRunORM]:
-        query = select(TestRunORM).options(selectinload(TestRunORM.executions)).order_by(desc(TestRunORM.created_at))
+        query = (
+            select(TestRunORM)
+            .options(selectinload(TestRunORM.executions), selectinload(TestRunORM.external_artifacts))
+            .order_by(desc(TestRunORM.created_at))
+        )
         if project_id:
             query = query.where(TestRunORM.project_id == project_id)
         result = await self.session.execute(query.limit(limit))
@@ -28,7 +36,9 @@ class TestRunRepository:
 
     async def get_by_id(self, run_id: str) -> TestRunORM | None:
         result = await self.session.execute(
-            select(TestRunORM).options(selectinload(TestRunORM.executions)).where(TestRunORM.id == run_id)
+            select(TestRunORM)
+            .options(selectinload(TestRunORM.executions), selectinload(TestRunORM.external_artifacts))
+            .where(TestRunORM.id == run_id)
         )
         return result.scalar_one_or_none()
 
@@ -41,6 +51,8 @@ class TestRunRepository:
             workspace_id=data.workspace_id,
             status=RunStatus.QUEUED.value,
             requested_by=data.requested_by,
+            runner_type=data.runner_type,
+            runner_profile_id=data.runner_profile_id,
             environment=data.environment,
             browser=data.browser,
             markers=data.markers,
@@ -54,6 +66,7 @@ class TestRunRepository:
             created_at=now,
         )
         orm.executions = []
+        orm.external_artifacts = []
         self.session.add(orm)
         await self.session.flush()
         return orm
@@ -68,6 +81,9 @@ class TestRunRepository:
         duration_ms: float | None = None,
         started_at=None,
         finished_at=None,
+        external_job_id: str | None = None,
+        external_build_url: str | None = None,
+        queue_duration_ms: float | None = None,
     ) -> TestRunORM | None:
         orm = await self.get_by_id(run_id)
         if not orm:
@@ -85,6 +101,12 @@ class TestRunRepository:
             orm.started_at = started_at
         if finished_at is not None:
             orm.finished_at = finished_at
+        if external_job_id is not None:
+            orm.external_job_id = external_job_id
+        if external_build_url is not None:
+            orm.external_build_url = external_build_url
+        if queue_duration_ms is not None:
+            orm.queue_duration_ms = queue_duration_ms
         await self.session.flush()
         return orm
 
@@ -94,6 +116,7 @@ class TestRunRepository:
         nodeid: str,
         status: RunStatus,
         duration_ms: float = 0.0,
+        retry_count: int = 0,
         error_message: str | None = None,
         stack_trace: str | None = None,
         failure_category: str | None = None,
@@ -107,12 +130,36 @@ class TestRunRepository:
             nodeid=nodeid,
             status=status.value,
             duration_ms=duration_ms,
+            retry_count=retry_count,
             error_message=error_message,
             stack_trace=stack_trace,
             failure_category=failure_category,
             artifact_paths=artifact_paths or [],
             started_at=now,
             finished_at=now,
+        )
+        self.session.add(orm)
+        await self.session.flush()
+        return orm
+
+    async def add_external_artifact(
+        self,
+        run_id: str,
+        name: str,
+        type: str,
+        url: str,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> ExternalArtifactReferenceORM:
+        art_id = f"art_{uuid.uuid4().hex[:12]}"
+        now = utc_now()
+        orm = ExternalArtifactReferenceORM(
+            id=art_id,
+            run_id=run_id,
+            name=name,
+            type=type,
+            url=url,
+            metadata_json=metadata_json or {},
+            created_at=now,
         )
         self.session.add(orm)
         await self.session.flush()

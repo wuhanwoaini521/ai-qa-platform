@@ -10,6 +10,7 @@ import { TestCasesPage } from './pages/TestCasesPage';
 import { AutomationStudioPage } from './pages/AutomationStudioPage';
 import { RunsPage } from './pages/RunsPage';
 import { FailuresPage } from './pages/FailuresPage';
+import { FlakyPage } from './pages/FlakyPage';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -66,8 +67,9 @@ export const App: React.FC = () => {
     requirements: 'Requirements & Design',
     test_cases: 'Test Cases',
     automation: 'Automation Studio',
-    runs: 'Execution Runs',
-    failures: 'Failure Intelligence',
+    runs: 'Execution Runs & Runners',
+    flaky: 'Flaky Intelligence & Stability',
+    failures: 'Failure Intelligence & Healing',
   };
 
   return (
@@ -137,6 +139,14 @@ export const App: React.FC = () => {
               selectedProjectId={selectedProjectId}
               initialRunId={runsTargetId}
               onNavigateToFailures={handleNavigateToFailures}
+            />
+          )}
+
+          {currentTab === 'flaky' && (
+            <FlakyPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onNavigateToRuns={handleNavigateToRuns}
             />
           )}
 

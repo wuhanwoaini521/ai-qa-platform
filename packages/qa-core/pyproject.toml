@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.9.0",
     "project-model",
+    "httpx>=0.28.0",
 ]
 
 [tool.uv.sources]

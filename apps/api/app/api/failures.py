@@ -1,9 +1,18 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from project_model.models import ApplyRepairRequest, FailureRecord
+from project_model.models import (
+    ApplyRepairRequest,
+    FailureRecord,
+    FailureRecurrenceItem,
+)
+from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.database import get_db
+from app.repositories.ai_repo import AIRepository
+from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.failure_service import FailureService
@@ -16,7 +25,15 @@ def get_failure_service(session: AsyncSession = Depends(get_db)) -> FailureServi
     run_repo = TestRunRepository(session)
     workspace_repo = WorkspaceRepository(session)
     workspace_service = WorkspaceService()
-    return FailureService(run_repo, workspace_repo, workspace_service)
+    history_repo = RunHistoryRepository(lambda: session)
+    ai_repo = AIRepository(lambda: session)
+    return FailureService(
+        run_repo=run_repo,
+        workspace_repo=workspace_repo,
+        workspace_service=workspace_service,
+        history_repo=history_repo,
+        ai_repo=ai_repo,
+    )
 
 
 @router.get("", response_model=list[FailureRecord])
@@ -48,6 +65,20 @@ async def diagnose_failure(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.post("/{failure_id}/diagnose-ai", response_model=FailureAnalysisResponse)
+async def diagnose_failure_ai(
+    failure_id: str,
+    service: FailureService = Depends(get_failure_service),
+):
+    """Diagnose failure root cause using AI reasoning with historical run context."""
+    try:
+        return await service.diagnose_failure_ai(failure_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI failure diagnosis failed: {e}")
+
+
 @router.post("/{failure_id}/repair-proposal", response_model=LocatorRepairProposal)
 async def generate_repair_proposal(
     failure_id: str,
@@ -55,6 +86,33 @@ async def generate_repair_proposal(
 ):
     try:
         return await service.generate_repair_proposal(failure_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{failure_id}/semantic-review", response_model=LocatorSemanticReview)
+async def review_semantic_repair(
+    failure_id: str,
+    candidate_locator: str | None = Query(default=None),
+    service: FailureService = Depends(get_failure_service),
+):
+    """Review proposed locator repair for semantic equivalence."""
+    try:
+        return await service.review_semantic_repair(failure_id, candidate_locator=candidate_locator)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Semantic review failed: {e}")
+
+
+@router.get("/{failure_id}/recurrence", response_model=list[FailureRecurrenceItem])
+async def get_failure_recurrence(
+    failure_id: str,
+    service: FailureService = Depends(get_failure_service),
+):
+    """Find previous similar failures for the same test nodeid and classification."""
+    try:
+        return await service.get_recurrence(failure_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

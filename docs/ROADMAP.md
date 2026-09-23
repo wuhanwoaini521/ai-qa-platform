@@ -1,6 +1,6 @@
 # Platform Roadmap
 
-## Phase 1 — Platform Bootstrap (Current)
+## Phase 1 — Platform Bootstrap
 - [x] Monorepo architecture & workspace isolation
 - [x] FastAPI modular domain services (Projects, Requirements, Test Designs, Test Cases)
 - [x] React 19 + TypeScript + Vite web platform shell
@@ -12,41 +12,59 @@
 ---
 
 ## Phase 2 — Automation Studio V2
-- Monaco Editor polish (multi-tab support, mini terminal output)
-- Interactive AI coding assistant panel
-- File search & fuzzy switcher (`Cmd+P`)
-- Selected test file / function execution trigger
-- In-browser test case to code linker
+- [x] Monaco Editor polish (multi-tab support, mini terminal output)
+- [x] Interactive AI coding assistant panel
+- [x] File search & fuzzy switcher (`Cmd+P`)
+- [x] Selected test file / function execution trigger
+- [x] In-browser test case to code linker
 
 ---
 
 ## Phase 3 — QA Core Migration
-- Playwright runner integration
-- FailureArtifact ingestion (traces, videos, screenshots)
-- Live AI diagnosis with OpenAI / Gemini API adapters
-- Automated DOM locator healing
-- Autonomous browser explorer session viewer
+- [x] Playwright runner integration
+- [x] FailureArtifact ingestion (traces, videos, screenshots)
+- [x] Live AI diagnosis with OpenAI / Gemini API adapters
+- [x] Automated DOM locator healing
+- [x] Autonomous browser explorer session viewer
 
 ---
 
-## Phase 4 — Distributed Execution Platform
-- Celery / Async job worker scaling
-- Containerized execution runners (Docker)
-- CI triggers & webhook dispatchers
-- Real-time SSE streaming logs
+## Phase 4 — Real Test Execution Platform
+- [x] PytestRunner & background worker task management
+- [x] SSE live streaming logs & terminal console
+- [x] Duration stats, pass/fail status updates, test outcome tables
 
 ---
 
-## Phase 5 — Failure & Quality Intelligence
-- Historical test execution telemetry
-- Flaky test detection algorithms & score cards
-- Automated regression risk analysis
-- PR test impact analysis
+## Phase 5 — Production AI Intelligence
+- [x] Pluggable `AIProviderRegistry`, `OpenAICompatibleProvider`, `FallbackAIProvider`, `FakeAIProvider`
+- [x] Prompt template versioning in `packages/qa-core/qa_core/prompts/`
+- [x] Token & request rate budgeting via `AIBudgetGuard`
+- [x] Telemetry persistence in `AIInvocationORM` & AI usage dashboard
+- [x] AI Assistant V2 (Explain, Draft, Refactor, Diagnose)
 
 ---
 
-## Phase 6 — Enterprise Integrations
-- Role-based Access Control (RBAC) & SSO
-- TestRail two-way test case and result synchronization
-- GitHub Pull Request check suites & automated comments
-- Slack & Microsoft Teams notification webhooks
+## Phase 6 — Run History & Flaky Intelligence
+- [x] Stable test identity model (`nodeid` + `project_id`)
+- [x] Persistent test execution history in `RunHistoryRepository`
+- [x] Deterministic flaky scoring formula with minimum sample threshold guard
+- [x] Flaky Intelligence UI (`/flaky`) with pass/fail/skip trends and P95 latency
+- [x] Failure recurrence signature query & previous occurrences table
+
+---
+
+## Phase 7 — Jenkins & Multi-Runner Platform
+- [x] `RunnerBackend` interface abstraction (`LocalRunnerBackend`, `JenkinsRunnerBackend`)
+- [x] Parameter mapping (`PROJECT_ID`, `WORKSPACE_ID`, `TARGET_NODEIDS`, `BROWSER`)
+- [x] In-memory `FakeJenkinsServer` mock transport for reliable CI testing
+- [x] Runner profiles management (`RunnerProfileORM`) & health check APIs
+- [x] External test artifacts linking (`ExternalArtifactReferenceORM` for Allure & HTML Reports)
+
+---
+
+## Phase 8 — Enterprise Integrations (Next)
+- [ ] Role-based Access Control (RBAC) & SSO
+- [ ] TestRail two-way test case and result synchronization
+- [ ] GitHub Pull Request check suites & automated comments
+- [ ] Slack & Microsoft Teams notification webhooks

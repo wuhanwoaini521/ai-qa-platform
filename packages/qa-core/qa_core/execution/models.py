@@ -36,3 +36,6 @@ class SuiteExecutionResult(BaseModel):
     duration_ms: float = 0.0
     results: list[SingleTestResult] = Field(default_factory=list)
     raw_logs: list[str] = Field(default_factory=list)
+
+
+TestSuiteResult = SuiteExecutionResult

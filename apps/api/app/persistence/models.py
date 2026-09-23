@@ -180,6 +180,11 @@ class TestRunORM(Base):
     workspace_id: Mapped[str] = mapped_column(String(36), index=True)
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", index=True)
     requested_by: Mapped[str] = mapped_column(String(100), default="user")
+    runner_type: Mapped[str] = mapped_column(String(50), default="LOCAL", index=True)
+    runner_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    external_job_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    external_build_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    queue_duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
     environment: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     browser: Mapped[str] = mapped_column(String(50), default="chromium")
     markers: Mapped[list[str]] = mapped_column(JsonList, default=list)
@@ -198,6 +203,9 @@ class TestRunORM(Base):
     executions: Mapped[list[TestExecutionORM]] = relationship(
         "TestExecutionORM", back_populates="run", cascade="all, delete-orphan", lazy="selectin"
     )
+    external_artifacts: Mapped[list[ExternalArtifactReferenceORM]] = relationship(
+        "ExternalArtifactReferenceORM", back_populates="run", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class TestExecutionORM(Base):
@@ -208,6 +216,7 @@ class TestExecutionORM(Base):
     nodeid: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", index=True)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     stack_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_category: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
@@ -245,3 +254,51 @@ class FailureRecordORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
     execution: Mapped[TestExecutionORM] = relationship("TestExecutionORM", back_populates="failure_record")
+
+
+class AIInvocationORM(Base):
+    __tablename__ = "ai_invocations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    fallback_used: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
+    error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class RunnerProfileORM(Base):
+    __tablename__ = "runner_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), default="LOCAL", index=True)  # "LOCAL", "JENKINS"
+    enabled: Mapped[bool] = mapped_column(default=True)
+    config: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class ExternalArtifactReferenceORM(Base):
+    __tablename__ = "external_artifact_references"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), default="ALLURE")  # ALLURE, HTML_REPORT, SCREENSHOT, TRACE, LOGS
+    url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="external_artifacts")

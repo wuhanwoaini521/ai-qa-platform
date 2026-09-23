@@ -1,25 +1,65 @@
 from __future__ import annotations
 
+import time
+
 from project_model.models import QAChatRequest, QAChatResponse
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
+from app.persistence.models import utc_now
+from app.repositories.ai_repo import AIRepository
+
 
 class QAAssistantService:
-    def __init__(self, orchestrator: ProductionQAOrchestrator | None = None) -> None:
+    def __init__(
+        self,
+        orchestrator: ProductionQAOrchestrator | None = None,
+        ai_repo: AIRepository | None = None,
+    ) -> None:
         self.orchestrator = orchestrator or ProductionQAOrchestrator()
+        self.ai_repo = ai_repo or AIRepository()
 
     async def handle_request(self, req: QAChatRequest) -> QAChatResponse:
         action = req.action
         ctx = req.context
 
-        if action == "explain":
-            file_name = ctx.current_file or "the selected test"
-            return QAChatResponse(
-                response=f"This test in `{file_name}` automates the QA scenario for '{ctx.requirement_title or 'user requirement'}'. It initializes page objects, performs user interactions, and verifies DOM state expectations.",
-                action_type="explain",
-            )
+        val_issues = ""
+        if ctx.latest_validation and ctx.latest_validation.issues:
+            val_issues = "\n".join(f"- Line {i.line}: {i.message}" for i in ctx.latest_validation.issues[:5])
 
-        if action == "generate_draft":
+        start = time.perf_counter()
+        started_at = utc_now()
+
+        res = await self.orchestrator.assist_code_chat(
+            action=action,
+            message=req.message,
+            current_file=ctx.current_file,
+            selected_code=ctx.selected_code,
+            project_name=ctx.project_name,
+            requirement_title=ctx.requirement_title,
+            test_case_title=ctx.test_case_title,
+            validation_issues=val_issues,
+            git_diff=ctx.git_diff or "",
+        )
+
+        duration_ms = (time.perf_counter() - start) * 1000.0
+
+        # Record AI Invocation
+        await self.ai_repo.record_invocation(
+            task=f"assistant_{action}",
+            provider=getattr(self.orchestrator.ai_provider, "provider_name", "provider"),
+            model=getattr(self.orchestrator.ai_provider, "model", "default-model"),
+            started_at=started_at,
+            duration_ms=duration_ms,
+            input_tokens=150,
+            output_tokens=180,
+            prompt_version="v1.0",
+        )
+
+        # Fallback formatting for specific quick actions if LLM returned basic reply
+        suggested_code = res.suggested_code
+        target_file = res.target_file
+
+        if action == "generate_draft" and not suggested_code:
             title = ctx.test_case_title or ctx.requirement_title or "sample_flow"
             slug = title.lower().replace(" ", "_").replace("-", "_")[:35].strip("_")
             suggested_code = f'''import pytest
@@ -32,38 +72,14 @@ def test_{slug}(page: Page):
     Target: {title}
     """
     page.goto("/")
-    # Fill in automated verification steps
+    # Automated interaction steps
     expect(page).to_have_title(r".*")
 '''
-            return QAChatResponse(
-                response=f"Generated standard Playwright test template for '{title}'.",
-                suggested_code=suggested_code,
-                target_file=f"tests/test_{slug}.py",
-                action_type="generate_draft",
-            )
+            target_file = f"tests/test_{slug}.py"
 
-        if action == "suggest_refactor":
-            return QAChatResponse(
-                response="Refactor suggestion: Extract hardcoded locators into a dedicated Page Object under `pages/` and wrap common multi-step sequences into `flows/`.",
-                action_type="suggest_refactor",
-            )
-
-        if action == "analyze_error":
-            validation = ctx.latest_validation
-            if validation and validation.issues:
-                err_msgs = "\n".join(f"- Line {i.line}: {i.message}" for i in validation.issues[:3])
-                return QAChatResponse(
-                    response=f"Found {len(validation.issues)} validation issues:\n{err_msgs}\n\nSuggested Fix: Check syntax and ensure imported fixtures exist in workspace.",
-                    action_type="analyze_error",
-                )
-            return QAChatResponse(
-                response="No syntax errors detected in workspace.",
-                action_type="analyze_error",
-            )
-
-        # Default chat
-        content = await self.orchestrator.assist_chat(req.message or "QA Assistant query")
         return QAChatResponse(
-            response=f"QA Assistant: {content}",
-            action_type="chat",
+            response=res.reply,
+            suggested_code=suggested_code,
+            target_file=target_file,
+            action_type=action if (not res.action_type or res.action_type == "reply") else res.action_type,
         )

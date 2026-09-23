@@ -9,6 +9,10 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  Flame,
+  RotateCcw,
+  Clock,
+  Sparkles,
 } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
 
@@ -46,23 +50,90 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PASSED':
-        return <span className="badge badge-ready">PASSED</span>;
+        return <span className="status-pill status-pill-passed">PASSED</span>;
       case 'FAILED':
-        return <span className="badge badge-p0">FAILED</span>;
+        return <span className="status-pill status-pill-failed">FAILED</span>;
       case 'RUNNING':
-        return (
-          <span className="badge badge-draft" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-            RUNNING
-          </span>
-        );
+        return <span className="status-pill status-pill-draft">RUNNING</span>;
       default:
-        return <span className="badge badge-draft">{status}</span>;
+        return <span className="status-pill status-pill-draft">{status}</span>;
     }
   };
 
   return (
     <div>
-      {/* Stat Cards Row 1: Asset Scale & Daily Activity */}
+      {/* Stat Cards Row 1: Core Quality & Intelligence KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Pass Rate Today
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 700, color: '#16a34a', marginTop: '4px' }}>
+                {stats?.pass_rate_today !== undefined ? `${stats.pass_rate_today.toFixed(1)}%` : '100%'}
+              </div>
+            </div>
+            <div style={{ padding: '10px', background: '#f0fdf4', borderRadius: '6px', color: '#16a34a' }}>
+              <Activity size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('flaky')}>
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Likely Flaky Tests
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 700, color: '#ea580c', marginTop: '4px' }}>
+                {stats?.flaky_tests_count ?? 0}
+              </div>
+            </div>
+            <div style={{ padding: '10px', background: '#fff7ed', borderRadius: '6px', color: '#ea580c' }}>
+              <Flame size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Rerun Recoveries
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 700, color: '#2563eb', marginTop: '4px' }}>
+                {stats?.rerun_recovery_count ?? 0}
+              </div>
+            </div>
+            <div style={{ padding: '10px', background: '#eff6ff', borderRadius: '6px', color: '#2563eb' }}>
+              <RotateCcw size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Avg Execution Time
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                {stats?.average_test_duration_ms
+                  ? stats.average_test_duration_ms > 1000
+                    ? `${(stats.average_test_duration_ms / 1000).toFixed(1)}s`
+                    : `${stats.average_test_duration_ms}ms`
+                  : '0.0s'}
+              </div>
+            </div>
+            <div style={{ padding: '10px', background: '#f3e8ff', borderRadius: '6px', color: '#9333ea' }}>
+              <Clock size={20} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stat Cards Row 2: Asset Scale */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
         <div className="card">
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -70,13 +141,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 QA Projects
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_projects ?? 0}
               </div>
             </div>
-            <div style={{ padding: '10px', background: '#eff6ff', borderRadius: '6px', color: '#2563eb' }}>
-              <FolderGit2 size={20} />
+            <FolderGit2 size={18} color="#64748b" />
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Requirements
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                {stats?.total_requirements ?? 0}
+              </div>
             </div>
+            <FileText size={18} color="#64748b" />
           </div>
         </div>
 
@@ -86,13 +169,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Test Cases
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_test_cases ?? 0}
               </div>
             </div>
-            <div style={{ padding: '10px', background: '#fef3c7', borderRadius: '6px', color: '#d97706' }}>
-              <CheckSquare size={20} />
-            </div>
+            <CheckSquare size={18} color="#64748b" />
           </div>
         </div>
 
@@ -100,31 +181,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Runs Today
+                Total Executions
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                {stats?.runs_today ?? stats?.total_runs ?? 0}
-              </div>
-            </div>
-            <div style={{ padding: '10px', background: '#f3e8ff', borderRadius: '6px', color: '#9333ea' }}>
-              <PlayCircle size={20} />
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Execution Pass Rate
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: '#16a34a', marginTop: '4px' }}>
-                {stats?.pass_rate !== undefined ? `${stats.pass_rate.toFixed(1)}%` : '100%'}
+              <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                {stats?.total_runs ?? 0}
               </div>
             </div>
-            <div style={{ padding: '10px', background: '#f0fdf4', borderRadius: '6px', color: '#16a34a' }}>
-              <Activity size={20} />
-            </div>
+            <PlayCircle size={18} color="#64748b" />
           </div>
         </div>
       </div>
@@ -146,8 +209,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   <tr>
                     <th>Status</th>
                     <th>Run ID</th>
-                    <th>Triggered By</th>
-                    <th>Tests (P/F)</th>
+                    <th>Runner</th>
+                    <th>Total</th>
                     <th>Duration</th>
                   </tr>
                 </thead>
@@ -163,11 +226,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         #{r.id.slice(0, 8)}
                       </td>
                       <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {r.triggered_by}
+                        {r.runner_type || 'LOCAL'}
                       </td>
                       <td style={{ fontSize: '12px' }}>
-                        <span style={{ color: '#16a34a', fontWeight: 600 }}>{r.passed_tests}</span> /{' '}
-                        <span style={{ color: '#dc2626', fontWeight: 600 }}>{r.failed_tests}</span>
+                        <span style={{ color: '#16a34a', fontWeight: 600 }}>{r.passed}</span> /{' '}
+                        <span style={{ color: '#dc2626', fontWeight: 600 }}>{r.failed}</span>
                       </td>
                       <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                         {(r.duration_ms / 1000).toFixed(2)}s
@@ -187,7 +250,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* QA Engineering Lifecycle Quick Access */}
         <div className="card">
           <div className="card-header">
-            <span className="card-title">QA Engineering Lifecycle</span>
+            <span className="card-title">QA Intelligence Architecture</span>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
@@ -196,25 +259,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               onClick={() => onNavigate('requirements')}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FileText size={16} color="#2563eb" />
+                <Sparkles size={16} color="#2563eb" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>1. Requirement & Design</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Acceptance criteria & test analysis</div>
-                </div>
-              </div>
-              <ArrowRight size={14} color="#94a3b8" />
-            </button>
-
-            <button
-              className="btn btn-secondary"
-              style={{ justifyContent: 'space-between', padding: '10px 14px' }}
-              onClick={() => onNavigate('test_cases')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <CheckSquare size={16} color="#16a34a" />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>2. Test Case & AI Authoring</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Generate scaffolds & automation bindings</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>1. AI Requirement & Design</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Risk analysis & test dimensional designs</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />
@@ -228,8 +276,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <PlayCircle size={16} color="#9333ea" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>3. Automation Studio V2</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Multi-tabs, AST linting & QA assistant</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>2. Automation Studio V2</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AST validation, live runner & sidecar</div>
+                </div>
+              </div>
+              <ArrowRight size={14} color="#94a3b8" />
+            </button>
+
+            <button
+              className="btn btn-secondary"
+              style={{ justifyContent: 'space-between', padding: '10px 14px' }}
+              onClick={() => onNavigate('flaky')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Flame size={16} color="#ea580c" />
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>3. Flaky Test Intelligence</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Deterministic scoring & transition analysis</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />
@@ -243,8 +306,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <AlertTriangle size={16} color="#dc2626" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>4. Failure Intelligence & Healing</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AI root-cause & locator self-repair</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>4. Failure AI & Self-Healing</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Root-cause diagnosis & semantic review</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />

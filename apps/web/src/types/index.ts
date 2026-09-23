@@ -172,47 +172,116 @@ export interface CollectedTest {
   docstring: string;
 }
 
+export type RunnerType = 'LOCAL' | 'JENKINS' | 'DOCKER' | 'GITHUB_ACTIONS';
+
+export interface RunnerProfile {
+  id: string;
+  project_id?: string | null;
+  name: string;
+  type: RunnerType;
+  enabled: boolean;
+  config: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RunnerProfileCreate {
+  project_id?: string | null;
+  name: string;
+  type: RunnerType;
+  enabled?: boolean;
+  config?: Record<string, any>;
+}
+
+export interface RunnerProfileUpdate {
+  name?: string;
+  enabled?: boolean;
+  config?: Record<string, any>;
+}
+
+export interface RunnerHealthStatus {
+  runner_id: string;
+  type: RunnerType;
+  status: 'AVAILABLE' | 'AUTH_ERROR' | 'UNAVAILABLE' | 'TIMEOUT' | 'DISABLED';
+  message: string;
+  base_url?: string | null;
+}
+
+export interface ExternalArtifactReference {
+  id: string;
+  run_id: string;
+  name: string;
+  type: string; // ALLURE, HTML_REPORT, SCREENSHOT, TRACE, LOGS
+  url: string;
+  metadata_json: Record<string, any>;
+  created_at: string;
+}
+
 export type TestRunStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
 
 export interface TestRun {
   id: string;
   project_id: string;
+  workspace_id: string;
   status: TestRunStatus;
-  total_tests: number;
-  passed_tests: number;
-  failed_tests: number;
-  skipped_tests: number;
-  error_tests: number;
+  requested_by: string;
+  triggered_by?: string;
+  runner_type?: string;
+  runner_profile_id?: string | null;
+  external_job_id?: string | null;
+  external_build_url?: string | null;
+  queue_duration_ms?: number;
+  environment: Record<string, string>;
+  browser: string;
+  markers: string[];
+  nodeids: string[];
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  cancelled: number;
+  total_tests?: number;
+  passed_tests?: number;
+  failed_tests?: number;
   duration_ms: number;
-  triggered_by: string;
-  target_nodeids?: string[];
-  log_output: string;
+  started_at: string | null;
+  finished_at: string | null;
   created_at: string;
-  updated_at: string;
   executions: TestExecution[];
+  external_artifacts?: ExternalArtifactReference[];
+  log_output?: string;
 }
 
 export interface TestRunCreate {
   project_id: string;
+  workspace_id?: string;
+  nodeids?: string[];
   target_nodeids?: string[];
+  markers?: string[];
+  environment?: Record<string, string>;
+  browser?: string;
+  requested_by?: string;
   triggered_by?: string;
-  timeout_seconds?: number;
+  runner_type?: RunnerType;
+  runner_profile_id?: string | null;
+  parameters?: Record<string, any>;
 }
 
 export type TestExecutionStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
 export interface TestExecution {
   id: string;
-  test_run_id: string;
-  test_case_id?: string | null;
+  run_id: string;
   nodeid: string;
-  status: TestExecutionStatus;
+  status: TestRunStatus;
   duration_ms: number;
-  stdout: string;
-  stderr: string;
+  retry_count?: number;
   error_message?: string | null;
-  created_at: string;
-  updated_at: string;
+  stack_trace?: string | null;
+  failure_category?: string | null;
+  artifact_paths: string[];
+  started_at?: string | null;
+  finished_at?: string | null;
 }
 
 export type FailureCategory =
@@ -224,54 +293,224 @@ export type FailureCategory =
 
 export interface FailureRecord {
   id: string;
-  project_id: string;
-  test_execution_id: string;
-  nodeid: string;
-  category: FailureCategory;
+  run_id: string;
+  execution_id: string;
+  test_nodeid: string;
+  nodeid?: string;
+  test_name: string;
+  classification: FailureCategory | string;
+  category?: FailureCategory;
+  exception_type: string;
   error_message: string;
   stack_trace: string;
-  suggested_action: string;
-  is_resolved: boolean;
+  failing_locator?: string | null;
+  screenshot_path?: string | null;
+  trace_path?: string | null;
+  dom_snapshot_path?: string | null;
+  console_logs: string[];
+  suggested_action?: string | null;
+  repair_proposal?: any | null;
+  is_resolved?: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export interface CandidateLocator {
-  locator: string;
+  selector?: string;
+  locator?: string;
   confidence: number;
   strategy: string;
-  reason: string;
+  reason?: string;
 }
 
 export interface LocatorRepairProposal {
-  target_file: string;
-  line_number: number;
-  broken_locator: string;
+  old_locator?: string;
+  broken_locator?: string;
   proposed_locator: string;
-  diff_preview: string;
-  candidates: CandidateLocator[];
   confidence: number;
-  explanation: string;
+  strategy: string;
+  reason?: string;
+  code_diff?: string;
+  diff_preview?: string;
+  file_path?: string | null;
+  target_file?: string;
+  line_number?: number;
+  candidates?: CandidateLocator[];
+  applied?: boolean;
 }
 
 export interface ApplyRepairRequest {
-  target_file: string;
-  old_locator: string;
-  new_locator: string;
+  file_path: string;
+  old_code: string;
+  new_code: string;
 }
 
 export interface QAChatRequest {
-  message: string;
+  action?: string;
+  message?: string;
   project_id?: string;
-  current_file?: string;
-  selected_code?: string;
-  context_type?: 'chat' | 'explain' | 'generate' | 'refactor' | 'diagnose';
+  current_file?: string | null;
+  selected_code?: string | null;
+  context_type?: string;
+  context?: {
+    project_id: string;
+    project_name?: string;
+    requirement_title?: string | null;
+    test_case_title?: string | null;
+    current_file?: string | null;
+    selected_code?: string | null;
+    open_files?: string[];
+    git_diff?: string | null;
+    latest_validation?: any | null;
+    latest_run_summary?: string | null;
+  };
 }
 
 export interface QAChatResponse {
-  reply: string;
+  response?: string;
+  reply?: string;
+  suggested_code?: string | null;
   code_snippet?: string | null;
-  suggested_actions: string[];
+  target_file?: string | null;
+  action_type?: string;
+  suggested_actions?: string[];
+}
+
+export type AIProviderHealth = 'AVAILABLE' | 'DISABLED' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'UNAVAILABLE';
+
+export interface AIStatusResponse {
+  provider: string;
+  status: AIProviderHealth;
+  message: string;
+  model: string;
+  base_url?: string | null;
+}
+
+export interface AIInvocationDTO {
+  id: string;
+  task: string;
+  provider: string;
+  model: string;
+  started_at: string;
+  duration_ms: number;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  retry_count: number;
+  fallback_used: boolean;
+  status: string;
+  error_type?: string | null;
+  prompt_version?: string | null;
+}
+
+export interface AIUsageSummary {
+  total_requests: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  invocations: AIInvocationDTO[];
+}
+
+export interface RequirementAnalysisDTO {
+  summary: string;
+  risks: string[];
+  ambiguities: string[];
+  suggested_test_dimensions: string[];
+}
+
+export interface TestDesignSuggestion {
+  title: string;
+  category: TestDesignCategory | string;
+  description: string;
+  risk: string;
+}
+
+export interface TestCaseGenerationItem {
+  title: string;
+  preconditions: string;
+  steps: string[];
+  expected_result: string;
+  priority: TestCasePriority | string;
+  tags: string[];
+}
+
+export type FlakyClassification = 'STABLE' | 'LIKELY_FLAKY' | 'PERSISTENT_FAILURE' | 'INSUFFICIENT_DATA';
+
+export interface FlakyScore {
+  sample_count: number;
+  failure_rate: number;
+  rerun_recovery_rate: number;
+  alternation_rate: number;
+  recent_instability: number;
+  score: number;
+  confidence: number;
+  classification: FlakyClassification;
+  main_failure_category?: string | null;
+  last_failure_at?: string | null;
+}
+
+export interface TestTrend {
+  sample_count: number;
+  pass_count: number;
+  fail_count: number;
+  skip_count: number;
+  average_duration_ms: number;
+  p95_duration_ms: number;
+  retry_count: number;
+  failure_categories: Record<string, number>;
+}
+
+export interface FlakyTestItem {
+  nodeid: string;
+  test_name: string;
+  project_id: string;
+  test_case_id?: string | null;
+  flaky_score: FlakyScore;
+  trend: TestTrend;
+}
+
+export interface TestHistoryItem {
+  id: string;
+  run_id: string;
+  nodeid: string;
+  status: TestRunStatus;
+  duration_ms: number;
+  retry_count: number;
+  failure_category?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+}
+
+export interface TestHistoryResponse {
+  nodeid: string;
+  project_id: string;
+  test_case_id?: string | null;
+  executions: TestHistoryItem[];
+  trend: TestTrend;
+  flaky_score: FlakyScore;
+}
+
+export interface FailureRecurrenceItem {
+  failure_id: string;
+  run_id: string;
+  nodeid: string;
+  test_name: string;
+  classification: string;
+  error_message: string;
+  created_at: string;
+}
+
+export interface AIFailureDiagnosisResponse {
+  classification: string;
+  root_cause: string;
+  evidence: string[];
+  hypotheses: string[];
+  recommended_actions: string[];
+  confidence: number;
+}
+
+export interface LocatorSemanticReviewResponse {
+  is_semantically_equivalent: boolean;
+  confidence: number;
+  explanation: string;
+  risk_warning?: string | null;
 }
 
 export interface DashboardStats {
@@ -281,8 +520,11 @@ export interface DashboardStats {
   total_runs: number;
   runs_today: number;
   tests_executed_today: number;
-  pass_rate: number;
+  pass_rate_today: number;
   total_failures: number;
+  flaky_tests_count: number;
+  rerun_recovery_count: number;
+  average_test_duration_ms: number;
   recent_projects: Project[];
   recent_requirements: Requirement[];
   recent_test_cases: TestCase[];

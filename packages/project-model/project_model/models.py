@@ -341,17 +341,6 @@ class QAChatResponse(BaseModel):
 
 
 # --- Test Execution & Run Models ---
-class TestRunCreate(BaseModel):
-    project_id: str
-    workspace_id: str
-    nodeids: list[str] = Field(default_factory=list)
-    markers: list[str] = Field(default_factory=list)
-    environment: dict[str, str] = Field(default_factory=dict)
-    browser: str = "chromium"
-    headless: bool = True
-    requested_by: str = "user"
-
-
 class TestExecution(EntityBase):
     id: str
     run_id: str
@@ -382,10 +371,30 @@ class TestRun(EntityBase):
     skipped: int = 0
     cancelled: int = 0
     duration_ms: float = 0.0
+    runner_type: str = "LOCAL"
+    runner_profile_id: str | None = None
+    external_job_id: str | None = None
+    external_build_url: str | None = None
+    queue_duration_ms: float = 0.0
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime
     executions: list[TestExecution] = Field(default_factory=list)
+    external_artifacts: list[ExternalArtifactReference] = Field(default_factory=list)
+
+
+class TestRunCreate(BaseModel):
+    project_id: str
+    workspace_id: str
+    nodeids: list[str] = Field(default_factory=list)
+    markers: list[str] = Field(default_factory=list)
+    environment: dict[str, str] = Field(default_factory=dict)
+    browser: str = "chromium"
+    headless: bool = True
+    requested_by: str = "user"
+    runner_type: str = "LOCAL"
+    runner_profile_id: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Failure Diagnosis & Repair Models ---
@@ -415,6 +424,192 @@ class ApplyRepairRequest(BaseModel):
     new_code: str
 
 
+# --- Phase 5: Production AI Models ---
+class AIProviderStatus(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    DISABLED = "DISABLED"
+    AUTH_ERROR = "AUTH_ERROR"
+    RATE_LIMITED = "RATE_LIMITED"
+    TIMEOUT = "TIMEOUT"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class AIStatusResponse(BaseModel):
+    provider: str
+    status: AIProviderStatus
+    message: str = ""
+    model: str = ""
+    base_url: str | None = None
+
+
+class AIInvocationDTO(EntityBase):
+    id: str
+    task: str
+    provider: str
+    model: str
+    started_at: datetime
+    duration_ms: float
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    retry_count: int = 0
+    fallback_used: bool = False
+    status: str = "SUCCESS"
+    error_type: str | None = None
+    prompt_version: str | None = None
+
+
+class AIUsageSummary(BaseModel):
+    total_requests: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    invocations: list[AIInvocationDTO] = Field(default_factory=list)
+
+
+class RequirementAnalysisDTO(BaseModel):
+    summary: str
+    risks: list[str] = Field(default_factory=list)
+    ambiguities: list[str] = Field(default_factory=list)
+    suggested_test_dimensions: list[str] = Field(default_factory=list)
+
+
+class TestDesignSuggestion(BaseModel):
+    title: str
+    category: str = "FUNCTIONAL"
+    description: str = ""
+    risk: str = "Medium"
+
+
+class TestCaseGenerationItem(BaseModel):
+    title: str
+    preconditions: str = ""
+    steps: list[str] = Field(default_factory=list)
+    expected_result: str = ""
+    priority: str = "P1"
+    tags: list[str] = Field(default_factory=list)
+
+
+# --- Phase 6: Run History & Flaky Intelligence Models ---
+class FlakyClassification(str, Enum):
+    STABLE = "STABLE"
+    LIKELY_FLAKY = "LIKELY_FLAKY"
+    PERSISTENT_FAILURE = "PERSISTENT_FAILURE"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+
+
+class FlakyScore(BaseModel):
+    sample_count: int = 0
+    failure_rate: float = 0.0
+    rerun_recovery_rate: float = 0.0
+    alternation_rate: float = 0.0
+    recent_instability: float = 0.0
+    score: float = 0.0
+    confidence: float = 0.0
+    classification: FlakyClassification = FlakyClassification.INSUFFICIENT_DATA
+    main_failure_category: str | None = None
+    last_failure_at: datetime | None = None
+
+
+class TestTrend(BaseModel):
+    sample_count: int = 0
+    pass_count: int = 0
+    fail_count: int = 0
+    skip_count: int = 0
+    average_duration_ms: float = 0.0
+    p95_duration_ms: float = 0.0
+    retry_count: int = 0
+    failure_categories: dict[str, int] = Field(default_factory=dict)
+
+
+class FlakyTestItem(BaseModel):
+    nodeid: str
+    test_name: str
+    project_id: str
+    test_case_id: str | None = None
+    flaky_score: FlakyScore
+    trend: TestTrend
+
+
+class TestHistoryItem(BaseModel):
+    id: str
+    run_id: str
+    nodeid: str
+    status: RunStatus
+    duration_ms: float
+    retry_count: int = 0
+    failure_category: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+
+
+class TestHistoryResponse(BaseModel):
+    nodeid: str
+    project_id: str
+    test_case_id: str | None = None
+    executions: list[TestHistoryItem] = Field(default_factory=list)
+    trend: TestTrend
+    flaky_score: FlakyScore
+
+
+class FailureRecurrenceItem(BaseModel):
+    failure_id: str
+    run_id: str
+    nodeid: str
+    test_name: str
+    classification: str
+    error_message: str
+    created_at: datetime
+
+
+# --- Phase 7: Runner Platform Models ---
+class RunnerType(str, Enum):
+    LOCAL = "LOCAL"
+    JENKINS = "JENKINS"
+    DOCKER = "DOCKER"
+    GITHUB_ACTIONS = "GITHUB_ACTIONS"
+
+
+class RunnerProfileBase(EntityBase):
+    project_id: str | None = None
+    name: str = Field(..., min_length=1, max_length=150)
+    type: RunnerType = RunnerType.LOCAL
+    enabled: bool = True
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunnerProfileCreate(RunnerProfileBase):
+    pass
+
+
+class RunnerProfileUpdate(EntityBase):
+    name: str | None = None
+    enabled: bool | None = None
+    config: dict[str, Any] | None = None
+
+
+class RunnerProfile(RunnerProfileBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RunnerHealthStatus(BaseModel):
+    runner_id: str
+    type: RunnerType
+    status: str  # AVAILABLE, AUTH_ERROR, UNAVAILABLE, TIMEOUT, DISABLED
+    message: str = ""
+    base_url: str | None = None
+
+
+class ExternalArtifactReference(EntityBase):
+    id: str
+    run_id: str
+    name: str
+    type: str  # ALLURE, HTML_REPORT, SCREENSHOT, TRACE, LOGS
+    url: str
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
 # --- Dashboard Stats ---
 class DashboardStats(BaseModel):
     total_projects: int = 0
@@ -425,6 +620,9 @@ class DashboardStats(BaseModel):
     tests_executed_today: int = 0
     pass_rate_today: float = 0.0
     total_failures: int = 0
+    flaky_tests_count: int = 0
+    rerun_recovery_count: int = 0
+    average_test_duration_ms: float = 0.0
     recent_projects: list[Project] = Field(default_factory=list)
     recent_requirements: list[Requirement] = Field(default_factory=list)
     recent_test_cases: list[TestCase] = Field(default_factory=list)

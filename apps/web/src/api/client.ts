@@ -1,24 +1,37 @@
 import {
-  ApplyRepairRequest,
+  AIFailureDiagnosisResponse,
+  AIStatusResponse,
+  AIUsageSummary,
   AutomationBinding,
   AutomationBindingCreate,
   CollectedTest,
   DashboardStats,
   FailureRecord,
+  FailureRecurrenceItem,
   FileNode,
+  FlakyTestItem,
   GenerateAutomationResponse,
   GitDiffResult,
   LocatorRepairProposal,
+  LocatorSemanticReviewResponse,
   Project,
   ProjectCreate,
   QAChatRequest,
   QAChatResponse,
   Requirement,
+  RequirementAnalysisDTO,
   RequirementCreate,
+  RunnerHealthStatus,
+  RunnerProfile,
+  RunnerProfileCreate,
+  RunnerProfileUpdate,
   TestCase,
   TestCaseCreate,
+  TestCaseGenerationItem,
   TestDesign,
   TestDesignCreate,
+  TestDesignSuggestion,
+  TestHistoryResponse,
   TestRun,
   TestRunCreate,
   WorkspaceValidationResult,
@@ -186,30 +199,92 @@ export const api = {
       method: 'POST',
     }),
 
-  // Failure Intelligence & Locator Healing
+  // Runners Platform (Gate 7)
+  getRunners: (projectId?: string) => {
+    const query = projectId ? `?project_id=${projectId}` : '';
+    return request<RunnerProfile[]>(`/runners${query}`);
+  },
+  getRunnerProfiles: (projectId?: string) => {
+    const query = projectId ? `?project_id=${projectId}` : '';
+    return request<RunnerProfile[]>(`/runners${query}`);
+  },
+  getRunner: (id: string) => request<RunnerProfile>(`/runners/${id}`),
+  createRunner: (data: RunnerProfileCreate) =>
+    request<RunnerProfile>('/runners', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createRunnerProfile: (data: RunnerProfileCreate) =>
+    request<RunnerProfile>('/runners', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateRunner: (id: string, data: RunnerProfileUpdate) =>
+    request<RunnerProfile>(`/runners/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteRunner: (id: string) =>
+    request<{ status: string; id: string }>(`/runners/${id}`, { method: 'DELETE' }),
+  checkRunnerHealth: (id: string) => request<RunnerHealthStatus>(`/runners/${id}/health`),
+  getRunnerHealth: (id: string) => request<RunnerHealthStatus>(`/runners/${id}/health`),
+  getExternalArtifacts: async (runId: string) => {
+    const run = await request<TestRun>(`/runs/${runId}`);
+    return run.external_artifacts || [];
+  },
+
+  // Failure Intelligence & Locator Healing (Phase 5 & 6)
   getFailures: (projectId?: string, limit = 50) => {
     const query = projectId ? `?project_id=${projectId}&limit=${limit}` : `?limit=${limit}`;
     return request<FailureRecord[]>(`/failures${query}`);
   },
   getFailure: (id: string) => request<FailureRecord>(`/failures/${id}`),
   diagnoseFailure: (id: string) =>
-    request<{
-      failure_id: string;
-      category: string;
-      diagnosis: string;
-      suggested_action: string;
-      confidence: number;
-    }>(`/failures/${id}/diagnose`, { method: 'POST' }),
+    request<FailureRecord>(`/failures/${id}/diagnose`, { method: 'POST' }),
+  diagnoseFailureAI: (id: string) =>
+    request<AIFailureDiagnosisResponse>(`/failures/${id}/diagnose-ai`, { method: 'POST' }),
   generateRepairProposal: (id: string) =>
     request<LocatorRepairProposal>(`/failures/${id}/repair-proposal`, { method: 'POST' }),
-  applyRepair: (id: string, data: ApplyRepairRequest) =>
-    request<{ status: string; failure_id: string; target_file: string }>(
-      `/failures/${id}/apply-repair`,
+  reviewSemanticRepair: (id: string, candidateLocator?: string) => {
+    const q = candidateLocator ? `?candidate_locator=${encodeURIComponent(candidateLocator)}` : '';
+    return request<LocatorSemanticReviewResponse>(`/failures/${id}/semantic-review${q}`, { method: 'POST' });
+  },
+  getSemanticLocatorReview: (id: string, _oldLocator?: string, candidateLocator?: string) => {
+    const q = candidateLocator ? `?candidate_locator=${encodeURIComponent(candidateLocator)}` : '';
+    return request<LocatorSemanticReviewResponse>(`/failures/${id}/semantic-review${q}`, { method: 'POST' });
+  },
+  getFailureRecurrence: (id: string) =>
+    request<FailureRecurrenceItem[]>(`/failures/${id}/recurrence`),
+  applyRepair: (id: string, data: any, workspaceId?: string) =>
+    request<{ status: string; file_path: string }>(
+      `/failures/${id}/apply-repair${workspaceId ? `?workspace_id=${workspaceId}` : ''}`,
       {
         method: 'POST',
         body: JSON.stringify(data),
       }
     ),
+
+  // Flaky Intelligence & History (Phase 6)
+  getFlakyTests: (projectId?: string, minScore = 0.0, classification?: string) => {
+    let query = `?min_score=${minScore}`;
+    if (projectId) query += `&project_id=${projectId}`;
+    if (classification) query += `&classification=${classification}`;
+    return request<FlakyTestItem[]>(`/flaky${query}`);
+  },
+  getTestHistory: (nodeid: string, projectId: string, limit = 20) =>
+    request<TestHistoryResponse>(
+      `/flaky/history?nodeid=${encodeURIComponent(nodeid)}&project_id=${projectId}&limit=${limit}`
+    ),
+
+  // Production AI Services (Phase 5)
+  getAIStatus: () => request<AIStatusResponse>('/ai/status'),
+  getAIUsage: (limit = 50) => request<AIUsageSummary>(`/ai/usage?limit=${limit}`),
+  analyzeRequirement: (requirementId: string) =>
+    request<RequirementAnalysisDTO>(`/ai/requirements/${requirementId}/analyze`, { method: 'POST' }),
+  generateTestDesigns: (requirementId: string) =>
+    request<TestDesignSuggestion[]>(`/ai/requirements/${requirementId}/generate-designs`, { method: 'POST' }),
+  generateTestCases: (testDesignId: string) =>
+    request<TestCaseGenerationItem[]>(`/ai/test-designs/${testDesignId}/generate-cases`, { method: 'POST' }),
 
   // QA Assistant Sidecar
   askQAAssistant: (data: QAChatRequest) =>

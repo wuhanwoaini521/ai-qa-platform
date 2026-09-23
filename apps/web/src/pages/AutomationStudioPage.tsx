@@ -470,8 +470,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         ...prev,
         {
           role: 'assistant',
-          text: resp.reply,
-          codeSnippet: resp.code_snippet,
+          text: resp.reply || resp.response || '',
+          codeSnippet: resp.code_snippet || resp.suggested_code,
           actions: resp.suggested_actions,
         },
       ]);

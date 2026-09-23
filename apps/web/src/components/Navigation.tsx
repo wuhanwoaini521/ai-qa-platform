@@ -7,6 +7,7 @@ import {
   Code2,
   PlayCircle,
   AlertTriangle,
+  Flame,
 } from 'lucide-react';
 
 export type NavTab =
@@ -16,6 +17,7 @@ export type NavTab =
   | 'test_cases'
   | 'automation'
   | 'runs'
+  | 'flaky'
   | 'failures';
 
 interface NavigationProps {
@@ -30,8 +32,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
     { id: 'requirements', label: 'Requirements', icon: FileText },
     { id: 'test_cases', label: 'Test Cases', icon: CheckSquare },
     { id: 'automation', label: 'Automation Studio', icon: Code2 },
-    { id: 'runs', label: 'Runs', icon: PlayCircle },
-    { id: 'failures', label: 'Failures', icon: AlertTriangle },
+    { id: 'runs', label: 'Runs & Runners', icon: PlayCircle },
+    { id: 'flaky', label: 'Flaky Intelligence', icon: Flame },
+    { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle },
   ];
 
   return (
@@ -41,7 +44,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
         <div>
           <div className="sidebar-brand-title">AI QA Platform</div>
         </div>
-        <span className="sidebar-brand-badge">v0.1</span>
+        <span className="sidebar-brand-badge">v0.3</span>
       </div>
 
       <nav className="sidebar-nav">
@@ -62,8 +65,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       </nav>
 
       <div className="sidebar-footer">
-        <span>Engine: qa-core</span>
-        <span>Local Dev</span>
+        <span>Engine: Production QA</span>
+        <span>AI Ready</span>
       </div>
     </aside>
   );
