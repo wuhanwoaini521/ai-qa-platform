@@ -671,6 +671,7 @@ dependencies = [
     { name = "httpx" },
     { name = "project-model" },
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -678,6 +679,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "project-model", editable = "packages/project-model" },
     { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]
