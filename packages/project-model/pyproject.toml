@@ -1,0 +1,12 @@
+[project]
+name = "project-model"
+version = "0.1.0"
+description = "Core Domain Models and Schemas for AI QA Platform"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
