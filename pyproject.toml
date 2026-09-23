@@ -40,6 +40,9 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "packages/qa-core/tests", "packages/integrations/tests", "apps/worker/tests"]
+# Imported QA projects and their runtimes live under runtime/: collecting them would execute
+# third-party test code (and fail on their dependencies) instead of the platform's own suite.
+norecursedirs = [".git", ".venv", "node_modules", "runtime", "dist", ".pytest_cache", ".ruff_cache"]
 asyncio_mode = "auto"
 pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "apps/worker"]
 markers = [

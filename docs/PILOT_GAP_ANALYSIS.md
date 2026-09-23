@@ -38,6 +38,13 @@ a recorded run, and every "open" row names the concrete limitation.
 | G20 | stale-run recovery used creation time and included Jenkins runs | a long-queued or CI-backed run could be cancelled while still running | staleness measured from `started_at`; Jenkins runs excluded | `test_abandoned_runs_are_recovered_and_never_stay_running` |
 | G21 | the Runs page consumed SSE event names the server never publishes | live execution updates never applied | client handles the published event types | `RunsPage.tsx` |
 
+## 1c. Fixed after the first pilot walk-through
+
+| # | Gap | Impact before | Fix | Evidence |
+|---|---|---|---|---|
+| G22 | an imported project was registered with a workspace path (`workspaces/imports/<slug>`) that no other component derives from a project id | opening the Studio for an imported project showed an **empty** workspace, offered to scaffold over it, and a run started from the UI executed that scaffold instead of the imported tests; clicking Run on the scaffold then failed with `ModuleNotFoundError: No module named 'playwright'` because the platform's own interpreter was used | the import now targets `<workspace base>/<project id>`, the invariant every file/git/run endpoint already relied on; the stray scaffold and the parallel `imports/` layout were removed | `test_imported_workspace_is_the_one_the_studio_and_file_apis_address`; verified over HTTP: the file API returns the imported tree and a single case runs from the project's own virtualenv |
+| G23 | a stray `pytest` invocation from the repository root collected generated workspaces under `runtime/` | the platform's own suite failed on third-party template files (`pages/login_page.py` importing playwright) | `norecursedirs` excludes `runtime/` (and caches/dist), so `pytest .` collects only the platform suite | `pytest . --collect-only -q` → 179 tests |
+
 ## 2. Still open (known limitations)
 
 | # | Limitation | Why it matters | Recommended next step |

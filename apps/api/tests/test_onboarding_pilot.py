@@ -311,3 +311,30 @@ async def test_runner_options_are_named_not_raw_flags(client: AsyncClient, tmp_p
     command = accepted.json()["outcome"]["command"]
     assert "-n" in command and "2" in command
     assert "--reruns" in command
+
+
+@pytest.mark.integration
+async def test_imported_workspace_is_the_one_the_studio_and_file_apis_address(client: AsyncClient, tmp_path: Path):
+    """The import must land where every other component looks for a project's workspace.
+
+    Otherwise the Studio shows an empty workspace for an imported project, offers to scaffold over it,
+    and a run from the UI executes that scaffold instead of the imported tests.
+    """
+    source = build_reference_repo(tmp_path / "reference-repo")
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(source)})
+    assert imported.status_code == 201, imported.text
+    project_id = imported.json()["project_id"]
+
+    fetched = await client.get(f"/api/onboarding/{project_id}")
+    workspace_path = Path(fetched.json()["workspace_path"])
+
+    # One project id, one workspace directory, and the file API sees the imported tree.
+    assert workspace_path.name == project_id
+    tree = await client.get(f"/api/workspaces/{project_id}/files")
+    assert tree.status_code == 200, tree.text
+    names = {node["name"] for node in tree.json()}
+    assert {"tests", "pages"} <= names
+
+    read = await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_sample.py")
+    assert read.status_code == 200, read.text
+    assert "def test_offline_math" in read.json()["content"]

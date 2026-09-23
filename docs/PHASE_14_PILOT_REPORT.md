@@ -11,13 +11,13 @@ hashed before and after and is byte-identical.
 | Step | Result |
 |---|---|
 | Preview | 146 files, 946,893 bytes, excluded: `.git`, `.venv`, `.pytest_cache`, `.ruff_cache`, `__pycache__`, `allure-results` |
-| Import | copied to `runtime/workspaces/imports/reference-qa-playwright-test`, project `proj_bb7e24d3a848`, workspace `ws_ed1d749b5fd3` |
+| Import | copied to `runtime/workspaces/<project id>` — the same path every other component derives from a project id — and registered in the `workspaces` table |
 | Source integrity | aggregate SHA-256 before `ac79db91196abd2eb81e56522d500e3c7fa6ab959e6c2f0c7365e238176787ba`, after **identical** |
 
 ## 2. Runtime isolation (Gate 14.4)
 
 `POST /api/onboarding/{id}/runtime` → `uv sync` inside
-`<workspace>/.qa-platform-runtime` (never the platform's own interpreter), exit 0 in 1.5 s:
+`<workspace>/.qa-platform-runtime` (never the platform's own interpreter), exit 0:
 Python 3.12.14, playwright 1.62.0, pytest 9.1.1, pytest-xdist 3.8.0, pytest-rerunfailures 16.6,
 allure-pytest, playwright 1.62.0.
 

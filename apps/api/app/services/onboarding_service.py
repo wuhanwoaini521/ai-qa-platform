@@ -46,7 +46,6 @@ from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 
 CONTRACT_FILENAME = ".qa-platform.yaml"
-IMPORTS_DIRNAME = "imports"
 
 #: A selection must look like `path/to/test_file.py::test_name[param]`. Anything else (a flag, a
 #: shell fragment, a glob) is rejected before it can reach the pytest command line.
@@ -146,7 +145,9 @@ class OnboardingService:
         source = Path(source_path).expanduser()
         if not source.is_dir():
             raise OnboardingError(f"Source repository not found: {source}")
-        destination = self._destination_for(source, project_name)
+        # The preview shows the layout an import would use, so it needs a project id; a stub keeps
+        # the preview read-only and the real, id-derived destination is chosen during the import.
+        destination = self._workspace_path_for("preview")
         importer = QAProjectImporter()
         plan = importer.plan(source, destination)
         detection = importer.detector.detect(source)
@@ -159,17 +160,24 @@ class OnboardingService:
         overwrite: bool = False,
     ) -> ImportedProject:
         source = Path(source_path).expanduser()
-        preview = await self.preview_import(source_path, project_name)
-        destination = Path(preview.plan.destination)
+        if not source.is_dir():
+            raise OnboardingError(f"Source repository not found: {source}")
+        detection = QAProjectImporter().detector.detect(source)
+
+        name = project_name or source.name
+        project = await self.project_repo.create(ProjectCreate(name=name[:115], description=f"Imported from {source}"))
+        # A project's workspace lives at `<base>/<project id>` for every project the platform creates.
+        # Importing to that path (instead of a readable but different directory) keeps the Studio,
+        # the file APIs, git and the runner addressing the same tree the import populated.
+        destination = self._workspace_path_for(project.id)
 
         importer = QAProjectImporter()
-        result = importer.execute(preview.plan, overwrite=overwrite)
+        plan = importer.plan(source, destination)
+        result = importer.execute(plan, overwrite=overwrite)
 
         # The contract is materialised inside the workspace so the operator can review and edit it.
         (destination / CONTRACT_FILENAME).write_text(render_contract(result.contract), encoding="utf-8")
 
-        name = project_name or source.name
-        project = await self.project_repo.create(ProjectCreate(name=name[:115], description=f"Imported from {source}"))
         # The imported workspace already contains the project's own files: never scaffold over them.
         workspace = await self.workspace_repo.create(
             WorkspaceCreate(project_id=project.id, branch="main"), path=str(destination)
@@ -185,7 +193,7 @@ class OnboardingService:
             copied_files=result.copied_files,
             copied_bytes=result.copied_bytes,
             excluded_dirs=result.excluded_dirs,
-            warnings=preview.detection.warnings,
+            warnings=detection.warnings,
         )
 
     async def get_imported_project(self, project_id: str) -> ImportedProject:
@@ -368,10 +376,11 @@ class OnboardingService:
 
     # --- helpers ----------------------------------------------------------------------------
 
-    def _destination_for(self, source: Path, project_name: str | None) -> Path:
-        base = self.imports_dir or ((self.workspace_base_dir or Path("runtime/workspaces")) / IMPORTS_DIRNAME)
-        slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", (project_name or source.name)).strip("-").lower() or "project"
-        return Path(base) / slug
+    def _workspace_path_for(self, project_id: str) -> Path:
+        """Where a project's workspace lives: the same derivation every other component uses."""
+        if self.imports_dir:
+            return Path(self.imports_dir) / project_id
+        return Path(self.workspace_base_dir or Path("runtime/workspaces")) / project_id
 
     def _report_artifacts_dir(self, project_id: str) -> Path:
         """Platform-owned directory for pytest report logs, deliberately outside the workspace."""
