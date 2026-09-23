@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=========================================="
+echo " Starting AI QA Platform in Dev Mode "
+echo "=========================================="
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "Checking environment dependencies..."
+mise exec -- uv sync --all-packages
+mise exec -- pnpm install
+
+echo "Starting Backend API (http://127.0.0.1:8000) and Frontend (http://127.0.0.1:5173)..."
+
+trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
+
+mise exec -- uv run uvicorn app.main:app --app-dir apps/api --reload --port 8000 &
+API_PID=$!
+
+mise exec -- pnpm --filter @ai-qa/web dev &
+WEB_PID=$!
+
+wait $API_PID $WEB_PID

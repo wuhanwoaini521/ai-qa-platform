@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "Linting Python code with ruff..."
+mise exec -- uv run ruff check .
+
+echo "Checking Python formatting..."
+mise exec -- uv run ruff format --check .
+
+echo "Linting Frontend..."
+mise exec -- pnpm --filter @ai-qa/web lint
+
+echo "All linters passed!"
