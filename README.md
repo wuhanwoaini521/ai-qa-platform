@@ -61,7 +61,7 @@ Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 ```text
 ai-qa-platform/
 ├── apps/
-│   ├── web/                     # React 19 + TypeScript + Vite + Monaco Editor V2 + Nginx
+│   ├── web/                     # React 19 + TypeScript + Vite + react-router + Monaco Editor V2 + Nginx
 │   ├── api/                     # FastAPI + Pydantic + SQLAlchemy Async (Postgres/SQLite)
 │   └── worker/                  # Distributed Playwright test runner daemon
 ├── packages/
@@ -88,11 +88,15 @@ cd ai-qa-platform
 # Copy environment template
 cp .env.example .env
 
+# Set a real APP_SECRET_KEY (openssl rand -hex 32) and keep AUTH_REQUIRED=true.
+
 # Deploy stack with 2 distributed test runner nodes
 ./scripts/deploy.sh --build --scale-workers 2
 ```
 
-- **Web Application**: [http://localhost:3000](http://localhost:3000)
+- **Web Application**: [http://localhost:3000](http://localhost:3000) — sign in with the seeded
+  administrator (`admin@ai-qa.local` / `adminpassword`; change it before exposing the platform)
+
 - **API Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Prometheus Metrics**: [http://localhost:8000/api/metrics](http://localhost:8000/api/metrics)
 - **MinIO S3 Console**: [http://localhost:9001](http://localhost:9001) *(provisioned by the stack; the API does not use it yet)*
@@ -142,3 +146,4 @@ mise exec -- pnpm install
 - [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
 - [Failure Intelligence & Human-Approved Repair](docs/FAILURE_INTELLIGENCE.md)
 - [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
+- [Architecture Stabilization Audit (Phase 13.5)](docs/ARCHITECTURE_STABILIZATION_AUDIT.md)

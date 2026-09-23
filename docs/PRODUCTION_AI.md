@@ -9,6 +9,9 @@ Key principles:
 3. **Structured Outputs & Schema Validation**: Prompts are version-controlled under `qa_core/prompts/` and parse strictly into Pydantic models.
 4. **Budget & Rate Limit Guards**: `AIBudgetGuard` enforces per-run request and token limits. Budget exhaustion degrades gracefully and never crashes test execution.
 5. **Observability & Auditing**: Every AI call records telemetry in `AIInvocationORM` (task, provider, model, latency, tokens, retry count, fallback status).
+6. **Fabricated AI output is always labelled**: when a configured provider fails, `FallbackAIProvider` serves the deterministic `FakeAIProvider` and marks the response `fallback_used=true` with `provider="fake"`. The invocation row persists that flag, so no consumer can mistake synthetic analysis for model output. AI output is never an input to a verdict.
+
+> **Configuration note:** the provider is selected with `QA_AI_PROVIDER` (`fake` by default). Setting `AI_PROVIDER`/`OPENAI_API_KEY` has no effect — see `.env.example` for the exact variable names.
 
 ---
 
