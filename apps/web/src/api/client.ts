@@ -58,6 +58,14 @@ import {
   TestRailPublishResponse,
   TestRun,
   TestRunCreate,
+  ImpactAnalysisRequest,
+  ImpactAnalysisResult,
+  QualityCoverageSummary,
+  QualityRiskMatrix,
+  Release,
+  ReleaseCreate,
+  ReleaseGateReport,
+  ReleaseUpdate,
   WorkspaceValidationResult,
 } from '../types';
 
@@ -408,6 +416,39 @@ export const api = {
     const query = system ? `?system=${encodeURIComponent(system)}&limit=${limit}` : `?limit=${limit}`;
     return request<IntegrationAuditEntry[]>(`/audit/integrations${query}`);
   },
+
+  // Quality Intelligence & Coverage (Phase 10)
+  getQualityCoverage: (projectId: string) =>
+    request<QualityCoverageSummary>(`/quality/${encodeURIComponent(projectId)}/coverage`),
+  getQualityRiskMatrix: (projectId: string) =>
+    request<QualityRiskMatrix>(`/quality/${encodeURIComponent(projectId)}/risks`),
+  analyzeImpact: (projectId: string, data: ImpactAnalysisRequest) =>
+    request<ImpactAnalysisResult>(`/quality/${encodeURIComponent(projectId)}/impact-analysis`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Releases & Release Gate (Phase 10)
+  getReleases: (projectId: string) =>
+    request<Release[]>(`/releases?project_id=${encodeURIComponent(projectId)}`),
+  getRelease: (releaseId: string) =>
+    request<Release>(`/releases/${encodeURIComponent(releaseId)}`),
+  createRelease: (data: ReleaseCreate) =>
+    request<Release>('/releases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateRelease: (releaseId: string, data: ReleaseUpdate) =>
+    request<Release>(`/releases/${encodeURIComponent(releaseId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteRelease: (releaseId: string) =>
+    request<{ success: boolean }>(`/releases/${encodeURIComponent(releaseId)}`, {
+      method: 'DELETE',
+    }),
+  evaluateReleaseGate: (releaseId: string) =>
+    request<ReleaseGateReport>(`/releases/${encodeURIComponent(releaseId)}/gate`),
 
   // SSE Event Stream for Live Test Runs
   streamRunEvents: (

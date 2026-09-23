@@ -11,6 +11,7 @@ import { AutomationStudioPage } from './pages/AutomationStudioPage';
 import { RunsPage } from './pages/RunsPage';
 import { FailuresPage } from './pages/FailuresPage';
 import { FlakyPage } from './pages/FlakyPage';
+import { QualityPage } from './pages/QualityPage';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -70,6 +71,7 @@ export const App: React.FC = () => {
     runs: 'Execution Runs & Runners',
     flaky: 'Flaky Intelligence & Stability',
     failures: 'Failure Intelligence & Healing',
+    quality: 'Quality Intelligence & Release Gate',
   };
 
   return (
@@ -152,6 +154,14 @@ export const App: React.FC = () => {
 
           {currentTab === 'failures' && (
             <FailuresPage
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onNavigateToRuns={handleNavigateToRuns}
+            />
+          )}
+
+          {currentTab === 'quality' && (
+            <QualityPage
               projects={projects}
               selectedProjectId={selectedProjectId}
               onNavigateToRuns={handleNavigateToRuns}

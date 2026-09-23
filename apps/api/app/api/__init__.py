@@ -8,6 +8,8 @@ from app.api.health import router as health_router
 from app.api.jira import router as jira_router
 from app.api.projects import router as projects_router
 from app.api.qa_assistant import router as qa_assistant_router
+from app.api.quality import router as quality_router
+from app.api.releases import router as releases_router
 from app.api.requirements import router as requirements_router
 from app.api.runners import router as runners_router
 from app.api.runs import router as runs_router
@@ -27,6 +29,8 @@ __all__ = [
     "jira_router",
     "projects_router",
     "qa_assistant_router",
+    "quality_router",
+    "releases_router",
     "requirements_router",
     "runners_router",
     "runs_router",

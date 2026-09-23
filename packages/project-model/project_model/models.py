@@ -858,3 +858,129 @@ class IntegrationAuditEntry(EntityBase):
     status: str = "SUCCESS"  # "SUCCESS", "FAILED", "DRY_RUN"
     details: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
+
+
+# --- Phase 10: Quality Intelligence, Coverage & Release Models ---
+class RequirementCoverageItem(BaseModel):
+    requirement_id: str
+    title: str
+    test_design_count: int = 0
+    test_case_count: int = 0
+    automated_case_count: int = 0
+    status: str = "DRAFT"
+    coverage_percentage: float = 0.0
+    has_automation: bool = False
+
+
+class QualityCoverageSummary(BaseModel):
+    total_requirements: int = 0
+    covered_requirements: int = 0
+    requirement_coverage_pct: float = 0.0
+    total_test_cases: int = 0
+    manual_cases: int = 0
+    draft_cases: int = 0
+    automated_cases: int = 0
+    automation_coverage_pct: float = 0.0
+    executed_cases_recent: int = 0
+    execution_coverage_pct: float = 0.0
+    requirement_details: list[RequirementCoverageItem] = Field(default_factory=list)
+
+
+class QualityRiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class QualityRiskItem(BaseModel):
+    id: str
+    area: str
+    risk_level: QualityRiskLevel = QualityRiskLevel.LOW
+    score: float = 0.0  # 0.0 to 100.0 (higher = riskier)
+    reasons: list[str] = Field(default_factory=list)
+    impacted_nodeids: list[str] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+
+
+class QualityRiskMatrix(BaseModel):
+    project_id: str
+    overall_quality_score: float = 100.0  # 0 to 100 (higher = healthier)
+    overall_risk_level: QualityRiskLevel = QualityRiskLevel.LOW
+    risks: list[QualityRiskItem] = Field(default_factory=list)
+    high_risk_count: int = 0
+    unautomated_p0_count: int = 0
+    flaky_test_count: int = 0
+
+
+class ImpactAnalysisRequest(BaseModel):
+    project_id: str
+    workspace_id: str | None = None
+    changed_files: list[str] = Field(default_factory=list)
+
+
+class ImpactAnalysisResult(BaseModel):
+    __test__ = False
+    changed_files: list[str] = Field(default_factory=list)
+    impacted_requirements: list[str] = Field(default_factory=list)
+    impacted_test_cases: list[str] = Field(default_factory=list)
+    recommended_regression_tests: list[str] = Field(default_factory=list)
+    confidence_score: float = 0.85
+    rationale: list[str] = Field(default_factory=list)
+
+
+class ReleaseStatus(str, Enum):
+    PLANNED = "PLANNED"
+    IN_QA = "IN_QA"
+    PASSED = "PASSED"
+    BLOCKED = "BLOCKED"
+    RELEASED = "RELEASED"
+
+
+class ReleaseBase(EntityBase):
+    project_id: str
+    version: str  # e.g. "v1.4.0"
+    name: str
+    description: str = ""
+    status: ReleaseStatus = ReleaseStatus.PLANNED
+    target_date: str = ""
+    pass_rate_threshold: float = 95.0
+    max_allowed_flaky: int = 0
+    quality_score: float = 0.0
+    blockers: list[str] = Field(default_factory=list)
+
+
+class ReleaseCreate(ReleaseBase):
+    pass
+
+
+class ReleaseUpdate(EntityBase):
+    name: str | None = None
+    description: str | None = None
+    status: ReleaseStatus | None = None
+    target_date: str | None = None
+    pass_rate_threshold: float | None = None
+    max_allowed_flaky: int | None = None
+    quality_score: float | None = None
+    blockers: list[str] | None = None
+
+
+class Release(ReleaseBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReleaseGateReport(BaseModel):
+    release_id: str
+    version: str
+    can_release: bool
+    pass_rate: float
+    pass_rate_met: bool
+    flaky_count: int
+    flaky_met: bool
+    unautomated_p0_count: int
+    unautomated_p0_met: bool
+    quality_score: float
+    blockers: list[str] = Field(default_factory=list)
+    verdict: str = "PENDING"

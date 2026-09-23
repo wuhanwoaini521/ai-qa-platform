@@ -321,3 +321,21 @@ class IntegrationAuditORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)  # SUCCESS, FAILED, DRY_RUN
     details: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class ReleaseORM(Base):
+    __tablename__ = "releases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    version: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(50), default="PLANNED", index=True)
+    target_date: Mapped[str] = mapped_column(String(50), default="")
+    pass_rate_threshold: Mapped[float] = mapped_column(Float, default=95.0)
+    max_allowed_flaky: Mapped[int] = mapped_column(Integer, default=0)
+    quality_score: Mapped[float] = mapped_column(Float, default=0.0)
+    blockers: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

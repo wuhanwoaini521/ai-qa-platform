@@ -52,6 +52,21 @@ class AutomationBindingRepository:
         await self.session.flush()
         return orm
 
+    async def list_all(self) -> list[AutomationBindingORM]:
+        result = await self.session.execute(select(AutomationBindingORM))
+        return list(result.scalars().all())
+
+    async def list_by_project(self, project_id: str) -> list[AutomationBindingORM]:
+        from app.persistence.models import TestCaseORM
+
+        stmt = (
+            select(AutomationBindingORM)
+            .join(TestCaseORM, AutomationBindingORM.test_case_id == TestCaseORM.id)
+            .where(TestCaseORM.project_id == project_id)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def delete_by_test_case_id(self, test_case_id: str) -> bool:
         existing = await self.get_by_test_case_id(test_case_id)
         if not existing:

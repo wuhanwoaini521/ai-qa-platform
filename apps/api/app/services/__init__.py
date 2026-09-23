@@ -6,6 +6,8 @@ from app.services.pr_service import PullRequestService
 from app.services.pr_service import PullRequestService as PRService
 from app.services.project_service import ProjectService
 from app.services.qa_assistant_service import QAAssistantService
+from app.services.quality_intelligence_service import QualityIntelligenceService
+from app.services.release_service import ReleaseService
 from app.services.requirement_service import RequirementService
 from app.services.test_case_service import TestCaseService
 from app.services.test_design_service import TestDesignService
@@ -22,6 +24,8 @@ __all__ = [
     "PullRequestService",
     "ProjectService",
     "QAAssistantService",
+    "QualityIntelligenceService",
+    "ReleaseService",
     "RequirementService",
     "SecurityException",
     "TestCaseService",

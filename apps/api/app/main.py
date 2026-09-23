@@ -16,6 +16,8 @@ from app.api import (
     jira_router,
     projects_router,
     qa_assistant_router,
+    quality_router,
+    releases_router,
     requirements_router,
     runners_router,
     runs_router,
@@ -63,6 +65,8 @@ app.include_router(git_pr_router, prefix="/api")
 app.include_router(jira_router, prefix="/api")
 app.include_router(testrail_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
+app.include_router(quality_router, prefix="/api")
+app.include_router(releases_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(runners_router, prefix="/api")
 app.include_router(failures_router, prefix="/api")

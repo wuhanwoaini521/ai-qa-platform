@@ -750,3 +750,122 @@ export interface IntegrationAuditEntry {
   created_at: string;
 }
 
+// --- Phase 10: Quality Intelligence, Coverage & Release Gate ---
+export interface RequirementCoverageItem {
+  requirement_id: string;
+  title: string;
+  test_design_count: number;
+  test_case_count: number;
+  automated_case_count: number;
+  status: string;
+  coverage_percentage: number;
+  has_automation: boolean;
+}
+
+export interface QualityCoverageSummary {
+  total_requirements: number;
+  covered_requirements: number;
+  requirement_coverage_pct: number;
+  total_test_cases: number;
+  manual_cases: number;
+  draft_cases: number;
+  automated_cases: number;
+  automation_coverage_pct: number;
+  executed_cases_recent: number;
+  execution_coverage_pct: number;
+  requirement_details: RequirementCoverageItem[];
+}
+
+export type QualityRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface QualityRiskItem {
+  id: string;
+  area: string;
+  risk_level: QualityRiskLevel;
+  score: number;
+  reasons: string[];
+  impacted_nodeids: string[];
+  recommended_actions: string[];
+}
+
+export interface QualityRiskMatrix {
+  project_id: string;
+  overall_quality_score: number;
+  overall_risk_level: QualityRiskLevel;
+  risks: QualityRiskItem[];
+  high_risk_count: number;
+  unautomated_p0_count: number;
+  flaky_test_count: number;
+}
+
+export interface ImpactAnalysisRequest {
+  project_id: string;
+  workspace_id?: string | null;
+  changed_files?: string[];
+}
+
+export interface ImpactAnalysisResult {
+  changed_files: string[];
+  impacted_requirements: string[];
+  impacted_test_cases: string[];
+  recommended_regression_tests: string[];
+  confidence_score: number;
+  rationale: string[];
+}
+
+export type ReleaseStatus = 'PLANNED' | 'IN_QA' | 'PASSED' | 'BLOCKED' | 'RELEASED';
+
+export interface Release {
+  id: string;
+  project_id: string;
+  version: string;
+  name: string;
+  description: string;
+  status: ReleaseStatus;
+  target_date: string;
+  pass_rate_threshold: number;
+  max_allowed_flaky: number;
+  quality_score: number;
+  blockers: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReleaseCreate {
+  project_id: string;
+  version: string;
+  name: string;
+  description?: string;
+  status?: ReleaseStatus;
+  target_date?: string;
+  pass_rate_threshold?: number;
+  max_allowed_flaky?: number;
+}
+
+export interface ReleaseUpdate {
+  name?: string;
+  description?: string;
+  status?: ReleaseStatus;
+  target_date?: string;
+  pass_rate_threshold?: number;
+  max_allowed_flaky?: number;
+  quality_score?: number;
+  blockers?: string[];
+}
+
+export interface ReleaseGateReport {
+  release_id: string;
+  version: string;
+  can_release: boolean;
+  pass_rate: number;
+  pass_rate_met: boolean;
+  flaky_count: number;
+  flaky_met: boolean;
+  unautomated_p0_count: number;
+  unautomated_p0_met: boolean;
+  quality_score: number;
+  blockers: string[];
+  verdict: string;
+}
+
+

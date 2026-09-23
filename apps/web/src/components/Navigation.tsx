@@ -8,6 +8,7 @@ import {
   PlayCircle,
   AlertTriangle,
   Flame,
+  ShieldCheck,
 } from 'lucide-react';
 
 export type NavTab =
@@ -18,7 +19,8 @@ export type NavTab =
   | 'automation'
   | 'runs'
   | 'flaky'
-  | 'failures';
+  | 'failures'
+  | 'quality';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -35,6 +37,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
     { id: 'runs', label: 'Runs & Runners', icon: PlayCircle },
     { id: 'flaky', label: 'Flaky Intelligence', icon: Flame },
     { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle },
+    { id: 'quality', label: 'Quality & Release', icon: ShieldCheck },
   ];
 
   return (
