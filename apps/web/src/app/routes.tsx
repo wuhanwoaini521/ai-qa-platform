@@ -94,7 +94,7 @@ const StudioRoute: React.FC = () => {
         navigate(`/projects/${nextProjectId}/studio`);
       }}
       onNavigateToRuns={nav.toRun}
-      initialOpenFilePath={splat ? decodeURIComponent(splat) : null}
+      initialOpenFilePath={splat ?? null}
     />
   );
 };

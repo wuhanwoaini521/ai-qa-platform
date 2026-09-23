@@ -43,7 +43,8 @@ export function withProjectId(pathname: string, projectId: string | null): strin
 }
 
 interface AppNavigation {
-  toTab: (tab: NavTab) => void;
+  /** `projectId` overrides the current selection, so a row action targets the row's project. */
+  toTab: (tab: NavTab, projectId?: string | null) => void;
   toStudio: (filePath?: string) => void;
   toRun: (runId?: string) => void;
   toFailures: (failureId?: string) => void;
@@ -58,8 +59,8 @@ export function useAppNavigation(): AppNavigation {
   const { selectedProjectId } = useProjectScope();
 
   const toTab = useCallback(
-    (tab: NavTab) => {
-      navigate(pathForTab(tab, selectedProjectId));
+    (tab: NavTab, projectId?: string | null) => {
+      navigate(pathForTab(tab, projectId ?? selectedProjectId));
     },
     [navigate, selectedProjectId]
   );
@@ -71,7 +72,8 @@ export function useAppNavigation(): AppNavigation {
         return;
       }
       const base = `/projects/${selectedProjectId}/studio`;
-      navigate(filePath ? `${base}/file/${filePath}` : base);
+      // Encode once here: react-router decodes route params before the page reads them.
+      navigate(filePath ? `${base}/file/${encodeURIComponent(filePath)}` : base);
     },
     [navigate, selectedProjectId]
   );

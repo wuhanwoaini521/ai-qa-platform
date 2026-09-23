@@ -46,6 +46,7 @@ class WorkerDaemon:
         self.poll_interval = poll_interval
 
         self._running = False
+        self._running_jobs: set[str] = set()
         self._http_client: httpx.AsyncClient | None = None
         self._orchestrator = FakeQAOrchestrator()
         self._heartbeat_task: asyncio.Task | None = None
@@ -96,13 +97,19 @@ class WorkerDaemon:
                 # Deregister / mark worker offline
                 await self._http_client.post(
                     f"/api/workers/{self.worker_id}/heartbeat",
-                    json={"status": "offline", "current_load": 0},
+                    json={"status": "OFFLINE", "current_load": 0},
                 )
             except Exception:
                 pass
             await self._http_client.aclose()
 
         logger.info("Worker daemon %s stopped.", self.worker_id)
+
+    def _local_ip(self) -> str:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return "127.0.0.1"
 
     async def _register(self) -> None:
         """Register worker node in the platform worker registry."""
@@ -111,11 +118,13 @@ class WorkerDaemon:
             resp = await self._http_client.post(
                 "/api/workers",
                 json={
-                    "worker_id": self.worker_id,
-                    "name": self.worker_name,
-                    "host": socket.gethostname(),
-                    "capabilities": self.capabilities,
+                    "hostname": self.worker_name,
+                    "ip_address": self._local_ip(),
+                    # The API matches jobs by browser, so runner capabilities are reported as browsers.
+                    "browsers": self.capabilities,
+                    "os": platform.system().lower(),
                     "max_concurrency": self.max_concurrency,
+                    "tags": [f"worker_id:{self.worker_id}"],
                 },
             )
             if resp.status_code in (200, 201):
@@ -131,9 +140,13 @@ class WorkerDaemon:
             try:
                 await asyncio.sleep(self.heartbeat_interval)
                 assert self._http_client is not None
+                jobs_running = len(self._running_jobs)
                 resp = await self._http_client.post(
                     f"/api/workers/{self.worker_id}/heartbeat",
-                    json={"status": "idle", "current_load": 0},
+                    json={
+                        "status": "BUSY" if jobs_running else "ONLINE",
+                        "current_load": jobs_running,
+                    },
                 )
                 if resp.status_code != 200:
                     logger.warning("Heartbeat non-200: %d", resp.status_code)
@@ -148,7 +161,11 @@ class WorkerDaemon:
             try:
                 job = await self._claim_job()
                 if job:
-                    await self._process_job(job)
+                    self._running_jobs.add(job["id"])
+                    try:
+                        await self._process_job(job)
+                    finally:
+                        self._running_jobs.discard(job["id"])
                 else:
                     await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:

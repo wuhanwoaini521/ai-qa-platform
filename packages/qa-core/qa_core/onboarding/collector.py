@@ -8,6 +8,7 @@ distinguishes *physical attempts* from *logical tests* so a rerun is never count
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import time
@@ -17,12 +18,17 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from qa_core.onboarding.contract import QAProjectContract
+from qa_core.onboarding.pytest_plugin import write_plugin
 
 #: `tests/unit/test_x.py::test_y` / `tests/unit/test_x.py::TestC::test_y[param-1]`
 NODEID_LINE = re.compile(r"^(?P<nodeid>[^\s:]+\.py::[^\s]+)$")
-#: `tests/unit/test_x.py::test_y PASSED [ 12%]`
-VERBOSE_RESULT = re.compile(
-    r"^(?P<nodeid>[^\s:]+\.py::[^\s]+)\s+(?P<outcome>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS|RERUN)\b"
+OUTCOMES = "PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS|RERUN"
+#: Classic format: `tests/unit/test_x.py::test_y PASSED [ 12%]`.
+VERBOSE_RESULT = re.compile(rf"^(?P<nodeid>[^\s:]+\.py::[^\s]+)\s+(?P<outcome>{OUTCOMES})\b")
+#: xdist format: the worker/percentage prefix comes first, e.g.
+#: `[gw1] [ 91%] PASSED tests/unit/test_x.py::test_y`.
+VERBOSE_RESULT_XDIST = re.compile(
+    rf"^(?:\[gw\d+\]\s+)?\[\s*\d+%\]\s+(?P<outcome>{OUTCOMES})\s+(?P<nodeid>[^\s:]+\.py::[^\s]+)"
 )
 #: `74 tests collected in 0.20s` / `12 tests collected, 2 errors in 1.2s`
 COLLECT_SUMMARY = re.compile(r"^(?P<count>\d+) tests? collected.*?(?P<errors>\d+) errors?", re.MULTILINE)
@@ -38,6 +44,11 @@ FAILURE_SECTION = re.compile(r"^_{5,} (?P<nodeid>[^\s]+) _{5,}$", re.MULTILINE)
 
 #: Plugins whose output formatting would break parsing; disabling them never changes test outcomes.
 PARSER_STABILITY_ARGS = ("-p", "no:sugar", "--no-header", "-p", "no:cacheprovider")
+
+#: Platform-owned directory inside an imported workspace for machine-readable run evidence.
+ARTIFACTS_DIR_NAME = ".qa-platform-artifacts"
+#: pytest's own structured report log (core `--report-log`), used as the authoritative source.
+REPORT_LOG_NAME = "pytest-report.jsonl"
 
 
 class CollectionStatus(str, Enum):
@@ -215,7 +226,8 @@ def parse_execution(stdout: str, stderr: str) -> tuple[list[LogicalTestOutcome],
     order: list[str] = []
     combined = f"{stdout}\n{stderr}"
     for line in combined.splitlines():
-        match = VERBOSE_RESULT.match(line.strip())
+        stripped = line.strip()
+        match = VERBOSE_RESULT.match(stripped) or VERBOSE_RESULT_XDIST.match(stripped)
         if not match:
             continue
         nodeid = match.group("nodeid")
@@ -260,6 +272,76 @@ def parse_execution(stdout: str, stderr: str) -> tuple[list[LogicalTestOutcome],
             outcome.failure_message = message
 
     return logical, counts, sum(len(item) for item in attempts_by_nodeid.values()), reruns_total
+
+
+def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, int] | None:
+    """Parse the platform plugin's JSONL report: the authoritative per-attempt record.
+
+    Text parsing of pytest's progress output is fragile because a project's own logging can be
+    interleaved between the node id and the outcome (the reference project does exactly that). Each
+    `call`-phase report is one physical attempt, so reruns are visible without relying on `RERUN` lines.
+    """
+    if not report_log.is_file():
+        return None
+
+    attempts: dict[str, list[tuple[str, float | None, str | None]]] = {}
+    order: list[str] = []
+    for line in report_log.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        nodeid = entry.get("nodeid")
+        when = entry.get("when")
+        outcome = entry.get("outcome")
+        if not nodeid or when not in ("call", "setup", "teardown"):
+            continue
+        # A passing setup/teardown is not an attempt; a failing one means the test never ran.
+        if when != "call" and outcome == "passed":
+            continue
+        if nodeid not in attempts:
+            attempts[nodeid] = []
+            order.append(nodeid)
+        longrepr = entry.get("longrepr")
+        message = str(longrepr).strip().splitlines()[-1] if longrepr else None
+        attempts[nodeid].append((f"{outcome}:{when}", entry.get("duration"), message))
+
+    if not order:
+        return None
+
+    outcomes: list[LogicalTestOutcome] = []
+    physical = 0
+    reruns_total = 0
+    for nodeid in order:
+        tries = attempts[nodeid]
+        physical += len(tries)
+        reruns = max(len(tries) - 1, 0)
+        reruns_total += reruns
+        outcome, _duration, message = tries[-1]
+        phase = outcome.split(":", 1)[1] if ":" in outcome else "call"
+        base = outcome.split(":", 1)[0]
+        if phase == "call":
+            status = {
+                "passed": RunStatus.PASSED,
+                "failed": RunStatus.FAILED,
+                "skipped": RunStatus.SKIPPED,
+            }.get(base, RunStatus.NOT_RUN)
+        else:
+            # Setup/teardown failure: the test body never produced a decisive result.
+            status = RunStatus.ERROR
+        outcomes.append(
+            LogicalTestOutcome(
+                nodeid=nodeid,
+                status=status,
+                attempts=len(tries),
+                reruns=reruns,
+                failure_message=message if status in (RunStatus.FAILED, RunStatus.ERROR) else None,
+            )
+        )
+    return outcomes, physical, reruns_total
 
 
 class QAProjectCollector:
@@ -319,18 +401,36 @@ class QAProjectRunner:
         markers: list[str] | None = None,
         extra_args: list[str] | None = None,
     ) -> SuiteRunOutcome:
+        artifacts_dir = project_root / ARTIFACTS_DIR_NAME
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        report_log = artifacts_dir / REPORT_LOG_NAME
+        report_log.unlink(missing_ok=True)
+        plugin_name = write_plugin(artifacts_dir)
+
         command = self.contract.command_for_tests(nodeids=nodeids, markers=markers)
+        command.extend(["-p", plugin_name])
         command.extend(PARSER_STABILITY_ARGS)
         command.extend(extra_args or [])
         interpreter = self.contract.runtime.resolve_interpreter(project_root)
+
+        environment = dict(self.contract.environment)
+        environment["QA_PLATFORM_REPORT_LOG"] = str(report_log)
+        existing_path = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = (
+            f"{artifacts_dir}{os.pathsep}{existing_path}" if existing_path else str(artifacts_dir)
+        )
+
         result = await run_project_command(
             command,
             project_root,
             interpreter,
-            environment=self.contract.environment,
+            environment=environment,
             timeout_sec=self.timeout_sec,
         )
         logical, counts, physical_attempts, reruns_total = parse_execution(result.stdout, result.stderr)
+        structured = parse_report_log(report_log)
+        if structured:
+            logical, physical_attempts, reruns_total = structured
         return SuiteRunOutcome(
             exit_code=result.exit_code,
             command=command,

@@ -53,13 +53,13 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Target Test File</div>
                 <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px' }}>
-                  {selectedBinding.test_file_path}
+                  {selectedBinding.file_path}
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Pytest Node ID</div>
                 <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedBinding.test_node_id}
+                  {selectedBinding.nodeid}
                 </div>
               </div>
             </div>
@@ -68,7 +68,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={() => onNavigateToStudio && onNavigateToStudio(selectedBinding.test_file_path)}
+                onClick={() => onNavigateToStudio && onNavigateToStudio(selectedBinding.file_path)}
               >
                 <ExternalLink size={13} /> Open in Studio
               </button>

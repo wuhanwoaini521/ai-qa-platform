@@ -9,7 +9,7 @@ interface ProjectsPageProps {
   onRefresh: () => void;
   onCreateProject: (data: ProjectCreate) => Promise<void>;
   onSelectProject: (id: string) => void;
-  onNavigate: (tab: NavTab) => void;
+  onNavigate: (tab: NavTab, projectId?: string | null) => void;
 }
 
 export const ProjectsPage: React.FC<ProjectsPageProps> = ({
@@ -123,7 +123,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           title="View Requirements"
                           onClick={() => {
                             onSelectProject(p.id);
-                            onNavigate('requirements');
+                            onNavigate('requirements', p.id);
                           }}
                         >
                           <FileText size={13} />
@@ -133,7 +133,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           title="Open in Automation Studio"
                           onClick={() => {
                             onSelectProject(p.id);
-                            onNavigate('automation');
+                            onNavigate('automation', p.id);
                           }}
                         >
                           <Code2 size={13} /> Studio

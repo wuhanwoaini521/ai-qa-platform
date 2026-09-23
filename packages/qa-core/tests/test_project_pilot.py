@@ -73,9 +73,9 @@ def test_inline_network_call():
     assert safe == ["tests/test_mixed.py::test_offline_calculation"]
     reasons = {verdict.nodeid: " ".join(verdict.reasons) for verdict in rejected}
     assert "requires the 'page' fixture" in reasons["tests/test_mixed.py::test_live_homepage"]
-    assert "goto(" in reasons["tests/test_mixed.py::test_live_homepage"]
+    assert "page.goto()" in reasons["tests/test_mixed.py::test_live_homepage"]
     assert "marked 'slow'" in reasons["tests/test_mixed.py::test_flagged_slow"]
-    assert "urllib" in reasons["tests/test_mixed.py::test_inline_network_call"]
+    assert "urlopen()" in reasons["tests/test_mixed.py::test_inline_network_call"]
 
 
 def test_safety_policy_rejects_tests_it_cannot_inspect(tmp_path: Path):
@@ -83,6 +83,31 @@ def test_safety_policy_rejects_tests_it_cannot_inspect(tmp_path: Path):
 
     assert verdict.safe is False
     assert "could not be inspected" in verdict.reasons[0]
+
+
+def test_safety_policy_inspects_parameterised_nodeids(tmp_path: Path):
+    write(
+        tmp_path / "tests" / "test_browser_matrix.py",
+        """
+import pytest
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("browser_name", ["chromium"])
+def test_open_homepage(browser_name):
+    assert browser_name == "chromium"
+
+
+def test_offline_helper():
+    assert True
+""".lstrip(),
+    )
+    policy = SafetyPolicy()
+
+    assert policy.verdict("tests/test_browser_matrix.py::test_offline_helper", tmp_path).safe is True
+    # A parametrised browser test resolves to its function, so the policy can still judge it.
+    verdict = policy.verdict("tests/test_browser_matrix.py::test_open_homepage[chromium]", tmp_path)
+    assert verdict.safe is True
 
 
 def test_safety_policy_handles_class_based_tests(tmp_path: Path):
@@ -202,18 +227,26 @@ FAILED tests/unit/test_flaky.py::test_always_fails - AssertionError: assert 1 ==
     assert counts["failed"] == 1
 
 
-def test_execution_counts_are_not_confused_by_xdist_style_output():
-    stdout = """
-[gw0] [ 50%] PASSED tests/unit/test_a.py::test_a
-[gw1] [100%] PASSED tests/unit/test_b.py::test_b
-2 passed in 1.00s
-""".strip()
+def test_execution_parses_xdist_worker_output_as_logical_tests():
+    # The node id line and the progress line are separate, exactly as xdist prints them.
+    stdout = "\n".join(
+        [
+            "tests/unit/test_a.py::test_a",
+            "[gw0] [ 50%] PASSED tests/unit/test_a.py::test_a",
+            "tests/unit/test_b.py::test_b",
+            "[gw1] [100%] FAILED tests/unit/test_b.py::test_b",
+            "2 passed, 1 failed in 1.00s",
+        ]
+    )
 
     logical, counts, physical, reruns = parse_execution(stdout, "")
 
-    assert logical == []
+    assert {item.nodeid: item.status.value for item in logical} == {
+        "tests/unit/test_a.py::test_a": "PASSED",
+        "tests/unit/test_b.py::test_b": "FAILED",
+    }
     assert counts["passed"] == 2
-    assert physical == 0
+    assert physical == 2
     assert reruns == 0
 
 
@@ -403,3 +436,72 @@ def test_import_refuses_to_overwrite_or_to_import_into_itself(tmp_path: Path):
         importer.execute(plan)
     with pytest.raises(Exception, match="must not be inside"):
         importer.plan(source, source / "workspaces")
+
+
+def test_report_plugin_source_records_every_attempt(tmp_path: Path):
+    """The plugin runs in the project's interpreter, so its source must be valid and testable here."""
+    import json as json_module
+
+    from qa_core.onboarding.pytest_plugin import PLUGIN_SOURCE
+
+    namespace: dict = {}
+    exec(compile(PLUGIN_SOURCE, "qa_platform_report_plugin.py", "exec"), namespace)  # noqa: S102
+    report_path = tmp_path / "report.jsonl"
+    plugin = namespace["QAReportPlugin"](report_path)
+
+    class FakeReport:
+        def __init__(self, when: str, outcome: str, longrepr=None):
+            self.nodeid = "tests/test_a.py::test_a"
+            self.when = when
+            self.outcome = outcome
+            self.duration = 0.5
+            self.longrepr = longrepr
+
+    plugin.pytest_runtest_logreport(FakeReport("setup", "passed"))
+    plugin.pytest_runtest_logreport(FakeReport("call", "failed", "AssertionError: nope"))
+    plugin.pytest_runtest_logreport(FakeReport("call", "passed"))
+    plugin.pytest_runtest_logreport(FakeReport("teardown", "passed"))
+    plugin.close()
+
+    entries = [json_module.loads(line) for line in report_path.read_text().splitlines()]
+    assert [(entry["when"], entry["outcome"]) for entry in entries] == [
+        ("setup", "passed"),
+        ("call", "failed"),
+        ("call", "passed"),
+        ("teardown", "passed"),
+    ]
+    assert entries[1]["longrepr"] == "AssertionError: nope"
+
+
+def test_report_log_parsing_counts_attempts_not_tests(tmp_path: Path):
+    """Two call attempts for one nodeid are one logical test with one rerun."""
+    from qa_core.onboarding import parse_report_log
+
+    report = tmp_path / "report.jsonl"
+    report.write_text(
+        "\n".join(
+            json.dumps(entry)
+            for entry in (
+                {"nodeid": "tests/a.py::test_flaky", "when": "setup", "outcome": "passed"},
+                {"nodeid": "tests/a.py::test_flaky", "when": "call", "outcome": "failed", "longrepr": "boom"},
+                {"nodeid": "tests/a.py::test_flaky", "when": "call", "outcome": "passed"},
+                {
+                    "nodeid": "tests/a.py::test_broken",
+                    "when": "setup",
+                    "outcome": "failed",
+                    "longrepr": "fixture error",
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    logical, physical, reruns = parse_report_log(report)
+
+    by_nodeid = {item.nodeid: item for item in logical}
+    assert by_nodeid["tests/a.py::test_flaky"].status.value == "PASSED"
+    assert by_nodeid["tests/a.py::test_flaky"].attempts == 2
+    assert by_nodeid["tests/a.py::test_flaky"].reruns == 1
+    assert by_nodeid["tests/a.py::test_broken"].status.value == "ERROR"
+    assert physical == 3
+    assert reruns == 1

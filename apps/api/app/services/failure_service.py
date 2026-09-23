@@ -118,10 +118,12 @@ class FailureService:
 
         duration_ms = (time.perf_counter() - start) * 1000.0
 
+        invocation = self.orchestrator.last_invocation_metadata()
         await self.ai_repo.record_invocation(
             task="failure_diagnosis",
-            provider=getattr(self.orchestrator.ai_provider, "provider_name", "provider"),
-            model=getattr(self.orchestrator.ai_provider, "model", "default-model"),
+            provider=invocation["provider"],
+            model=invocation["model"],
+            fallback_used=invocation["fallback_used"],
             started_at=started_at,
             duration_ms=duration_ms,
             input_tokens=220,
@@ -169,10 +171,12 @@ class FailureService:
 
         duration_ms = (time.perf_counter() - start) * 1000.0
 
+        invocation = self.orchestrator.last_invocation_metadata()
         await self.ai_repo.record_invocation(
             task="locator_review",
-            provider=getattr(self.orchestrator.ai_provider, "provider_name", "provider"),
-            model=getattr(self.orchestrator.ai_provider, "model", "default-model"),
+            provider=invocation["provider"],
+            model=invocation["model"],
+            fallback_used=invocation["fallback_used"],
             started_at=started_at,
             duration_ms=duration_ms,
             input_tokens=140,

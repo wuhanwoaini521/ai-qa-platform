@@ -23,7 +23,7 @@ The AI QA Platform is a deterministic, enterprise-grade AI QA Engineering Platfo
 └────────────┬─────────────┴────────────┬─────────────┴────────────┬─────────────┴────────────┬─────────────┴────────────┬────────────┘
              │                          │                          │                          │                          │
 ┌────────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼─────────────┐ ┌──────────▼────────────┐
-│      PostgreSQL DB       │ │   MinIO / S3 Storage   │ │   Distributed Workers  │ │  Multi-LLM AI Gateways │ │  External CI & Tools   │
+│      PostgreSQL DB       │ │  Local Artifact Store  │ │   Distributed Workers  │ │  Multi-LLM AI Gateways │ │  External CI & Tools   │
 │ (Relational Data & RBAC) │ │ (Traces, DOM, Videos)  │ │ (Playwright Multi-Node)│ │ (OpenAI/Claude/Gemini) │ │ (GitHub/Jira/Jenkins)  │
 └──────────────────────────┘ └────────────────────────┘ └────────────────────────┘ └────────────────────────┘ └────────────────────────┘
 ```
@@ -45,7 +45,7 @@ The AI QA Platform is a deterministic, enterprise-grade AI QA Engineering Platfo
 | **Phase 9** | Jira & TestRail Integration | Bi-directional requirement sync, preview-first bug creation, TestRail result sync |
 | **Phase 10** | Quality Intelligence & Gating | Multi-dimensional coverage score, risk radar matrix, change impact analysis, release gates |
 | **Phase 11** | Identity, RBAC & Security | 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API Key generator, secret masking |
-| **Phase 12** | Distributed Execution Grid | Scalable worker nodes, heartbeat liveness, browser capability matching, S3 artifact storage |
+| **Phase 12** | Distributed Execution Grid | Scalable worker nodes, heartbeat liveness, browser capability matching, local artifact storage |
 | **Phase 13** | Production Deployment & Ops | Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks |
 
 ---

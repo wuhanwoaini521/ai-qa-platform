@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 from app.api.authz import required_permission
+from conftest import ROLE_CREDENTIALS, login_token
 from httpx import AsyncClient
 from project_model.models import ROLE_PERMISSIONS, Permission, UserRole
 
@@ -187,3 +188,34 @@ def test_policy_table_covers_every_privileged_route_family():
     assert Permission.RELEASE_GATE not in ROLE_PERMISSIONS[UserRole.QA_ENGINEER]
     assert Permission.RELEASE_GATE not in ROLE_PERMISSIONS[UserRole.VIEWER]
     assert Permission.AUTOMATION_EDIT not in ROLE_PERMISSIONS[UserRole.VIEWER]
+
+
+async def test_run_event_stream_accepts_the_token_as_a_query_parameter(
+    client: AsyncClient, anonymous_client: AsyncClient
+):
+    """The browser's EventSource cannot send headers, so this one route reads the token from the URL."""
+    project = await client.post("/api/projects", json={"name": "SSE Authorization"})
+    run = await client.post(
+        "/api/runs", json={"project_id": project.json()["id"], "workspace_id": project.json()["id"]}
+    )
+    run_id = run.json()["id"]
+
+    # No credential at all is still rejected.
+    denied = await anonymous_client.get(f"/api/runs/{run_id}/events")
+    assert denied.status_code == 401
+
+    # A query token on any other route is not accepted.
+    other = await anonymous_client.get(f"/api/runs/{run_id}?access_token={'x' * 10}")
+    assert other.status_code == 401
+
+    # With a valid query token the stream opens and delivers its first event.
+    token = await login_token(client, *ROLE_CREDENTIALS["ADMIN"])
+    async with client.stream("GET", f"/api/runs/{run_id}/events?access_token={token}") as stream:
+        assert stream.status_code == 200
+        assert stream.headers["content-type"].startswith("text/event-stream")
+        first_line = ""
+        async for line in stream.aiter_lines():
+            if line.startswith("data:"):
+                first_line = line
+                break
+    assert '"type": "CONNECTED"' in first_line

@@ -112,24 +112,28 @@ export interface TestCaseCreate {
   external_url?: string | null;
 }
 
+export type AutomationBindingStatus = 'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'BROKEN';
+
 export interface AutomationBinding {
   id: string;
   test_case_id: string;
-  framework_type: FrameworkType;
-  test_file_path: string;
-  test_node_id: string;
-  status: AutomationStatus;
-  last_generated_code?: string | null;
+  workspace_id: string;
+  framework: FrameworkType;
+  /** Pytest node id, e.g. tests/test_login.py::test_login_flow */
+  nodeid: string;
+  file_path: string;
+  status: AutomationBindingStatus;
   created_at: string;
   updated_at: string;
 }
 
 export interface AutomationBindingCreate {
-  framework_type?: FrameworkType;
-  test_file_path: string;
-  test_node_id: string;
-  status?: AutomationStatus;
-  last_generated_code?: string | null;
+  test_case_id: string;
+  workspace_id: string;
+  nodeid: string;
+  file_path: string;
+  framework?: FrameworkType;
+  status?: AutomationBindingStatus;
 }
 
 export interface GenerateAutomationResponse {
@@ -266,14 +270,13 @@ export interface TestRun {
 
 export interface TestRunCreate {
   project_id: string;
-  workspace_id?: string;
+  /** The API keys a workspace by project id, so this is the project's workspace id. */
+  workspace_id: string;
   nodeids?: string[];
-  target_nodeids?: string[];
   markers?: string[];
   environment?: Record<string, string>;
   browser?: string;
   requested_by?: string;
-  triggered_by?: string;
   runner_type?: RunnerType;
   runner_profile_id?: string | null;
   parameters?: Record<string, any>;

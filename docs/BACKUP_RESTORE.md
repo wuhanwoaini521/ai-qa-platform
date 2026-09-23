@@ -8,7 +8,7 @@ This document defines backup strategies, retention policies, and disaster recove
 
 The platform stores two types of persistent state:
 1. **Relational Database (PostgreSQL / SQLite)**: Requirements, Test Designs, Test Cases, Quality Risks, Releases, RBAC Users/Teams, Security Audit Trails, Run Histories.
-2. **Object Storage (MinIO / S3)**: Playwright execution traces, screenshots, DOM snapshots, Allure reports, and failure artifacts.
+2. **Local Artifact Store** (`runtime/artifacts`, plus any `allure-results` inside imported workspaces): Playwright execution traces, screenshots, DOM snapshots, Allure reports, and failure artifacts. Object storage (S3/MinIO) is **not implemented**; see `docs/ARTIFACT_STORAGE.md`.
 
 ---
 
@@ -55,11 +55,13 @@ docker compose start api worker
 
 ---
 
-## 4. Artifact Storage Replication & Backup
+## 4. Artifact Storage Backup
 
-For MinIO / S3 object storage:
-- **AWS S3 / GCS**: Enable Cross-Region Replication (CRR) and Object Versioning.
-- **Self-Hosted MinIO**: Use `mc mirror` to continuously mirror `local/ai-qa-artifacts` to secondary remote storage:
-  ```bash
-  mc mirror --watch local/ai-qa-artifacts backup-s3/ai-qa-artifacts-dr
-  ```
+Artifacts live on the API host's filesystem (`artifact_storage_dir`, default `runtime/artifacts`), so any
+filesystem-level snapshot, volume snapshot or `rsync` job that covers that directory is sufficient:
+
+```bash
+rsync -a --delete runtime/artifacts/ /backup/ai-qa-artifacts/
+```
+
+Object-storage replication runbooks do not apply: there is no S3/MinIO client in the platform.

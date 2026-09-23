@@ -41,8 +41,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [runFormData, setRunFormData] = useState<TestRunCreate>({
     project_id: currentProjectId || '',
-    target_nodeids: [],
-    triggered_by: 'Web UI Manual Trigger',
+    workspace_id: currentProjectId || '',
+    nodeids: [],
+    requested_by: 'Web UI Manual Trigger',
     runner_type: 'LOCAL',
     runner_profile_id: undefined,
   });
@@ -172,10 +173,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const projectId = currentProjectId || runFormData.project_id;
       const newRun = await api.createTestRun({
-        project_id: currentProjectId || runFormData.project_id,
-        target_nodeids: parsedTargets.length > 0 ? parsedTargets : undefined,
-        triggered_by: runFormData.triggered_by || 'Web UI Manual Trigger',
+        project_id: projectId,
+        workspace_id: projectId,
+        nodeids: parsedTargets,
+        requested_by: runFormData.requested_by || 'Web UI Manual Trigger',
         runner_type: runFormData.runner_type,
         runner_profile_id: runFormData.runner_type === 'JENKINS' ? runFormData.runner_profile_id : undefined,
       });
@@ -271,9 +274,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
             className="btn btn-primary"
             disabled={projects.length === 0}
             onClick={() => {
+              const targetProjectId = currentProjectId || projects[0]?.id || '';
               setRunFormData({
-                project_id: currentProjectId || projects[0]?.id || '',
-                triggered_by: 'Web UI Manual Trigger',
+                project_id: targetProjectId,
+                workspace_id: targetProjectId,
+                nodeids: [],
+                requested_by: 'Web UI Manual Trigger',
                 runner_type: 'LOCAL',
                 runner_profile_id: runnerProfiles[0]?.id,
               });
@@ -656,9 +662,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     type="text"
                     className="form-control"
                     placeholder="e.g. CI Pipeline, Studio Runner, Regression"
-                    value={runFormData.triggered_by}
+                    value={runFormData.requested_by}
                     onChange={(e) =>
-                      setRunFormData({ ...runFormData, triggered_by: e.target.value })
+                      setRunFormData({ ...runFormData, requested_by: e.target.value })
                     }
                   />
                 </div>

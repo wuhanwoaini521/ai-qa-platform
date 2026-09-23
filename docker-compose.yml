@@ -17,39 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:RELEASE.2024-11-07T00-52-28Z
-    container_name: aiqa-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  minio-init:
-    image: minio/mc:RELEASE.2024-11-05T11-41-28Z
-    container_name: aiqa-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      /usr/bin/mc mb --ignore-existing local/ai-qa-artifacts;
-      /usr/bin/mc anonymous set download local/ai-qa-artifacts;
-      exit 0;
-      "
-
   api:
     build:
       context: .
@@ -58,8 +25,6 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aiqa}:${POSTGRES_PASSWORD:-aiqa_secret_password}@postgres:5432/${POSTGRES_DB:-ai_qa_platform}
@@ -126,5 +91,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
   runtime_data:

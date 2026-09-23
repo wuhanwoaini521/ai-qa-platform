@@ -2,14 +2,17 @@
 
 The platform must be able to say, before running anything, that a selected test does not touch the
 outside world. Marker names are not evidence: in the reference repository the `smoke` marker selects
-tests that drive a live public website. This policy inspects each test's own source and requires an
-explicit override before anything unsafe is executed.
+tests that drive a live public website.
+
+The policy analyses the test function's AST rather than its raw text, so a synthetic URL inside a
+fixture or an assertion is not mistaken for a network call, while a real `page.goto(...)` or
+`requests.get(...)` is always caught. Anything the policy cannot inspect is refused, and executing a
+flagged test requires an explicit override.
 """
 
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -20,29 +23,72 @@ BROWSER_FIXTURES = frozenset(
         "page",
         "browser",
         "browser_context",
-        "context",
         "browser_type",
         "api_request_context",
         "playwright",
     }
 )
 
-#: Call/attribute prefixes that imply outbound network or external writes.
-NETWORK_INDICATORS = (
-    "goto(",
-    "http://",
-    "https://",
-    "requests.",
-    "httpx.",
-    "urllib",
-    "urlopen",
-    "socket.",
-    "subprocess",
-    "os.system",
+#: Method names that reach outside the process.
+NETWORK_CALL_NAMES = frozenset(
+    {
+        "goto",
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "request",
+        "send",
+        "urlopen",
+        "connect",
+        "urlretrieve",
+        "fetch",
+    }
+)
+
+#: Receivers that make such a call a real outbound call.
+NETWORK_RECEIVERS = frozenset(
+    {
+        "page",
+        "browser",
+        "context",
+        "request",
+        "session",
+        "client",
+        "api_client",
+        "api_request_context",
+        "requests",
+        "httpx",
+        "urllib",
+        "aiohttp",
+        "playwright",
+        "response",
+        "resp",
+        "driver",
+    }
+)
+
+#: Calls that are unsafe unconditionally, whatever the receiver looks like.
+UNCONDITIONAL_UNSAFE_CALLS = frozenset(
+    {
+        "system",
+        "popen",
+        "run",
+        "call",
+        "check_call",
+        "check_output",
+        "urlopen",
+        "urlretrieve",
+        "connect",
+    }
 )
 
 #: Markers that mean "expensive and usually external".
 UNSAFE_MARKERS = frozenset({"slow", "e2e", "integration", "live"})
+
+URL_PREFIXES = ("http://", "https://", "ftp://")
 
 
 class SafetyVerdict(BaseModel):
@@ -67,32 +113,39 @@ class SafetyPolicy(BaseModel):
     ) -> SafetyVerdict:
         reasons: list[str] = []
 
-        source, _function_name = self._function_source(project_root, nodeid)
-        if source is None:
+        source_file, function = self._function_source(project_root, nodeid)
+        if function is None:
             reasons.append("test source could not be inspected")
             return SafetyVerdict(nodeid=nodeid, safe=False, reasons=reasons)
 
-        # Markers are read from the test's own decorators rather than from pytest's runtime
-        # resolution, because the policy has to be able to decide *before* anything is executed.
-        for marker in sorted({*(markers or []), *self._markers_from_source(source)}):
+        for marker in sorted({*(markers or []), *self._markers_from_source(function)}):
             if marker in self.unsafe_markers:
                 reasons.append(f"marked '{marker}'")
 
-        parameters = source.args.args + source.args.kwonlyargs + source.args.posonlyargs
-        names = {arg.arg for arg in parameters}
-        for fixture in sorted(names & self.browser_fixtures):
+        parameters = function.args.args + function.args.kwonlyargs + function.args.posonlyargs
+        for fixture in sorted({arg.arg for arg in parameters} & self.browser_fixtures):
             reasons.append(f"requires the '{fixture}' fixture")
 
-        body = ast.unparse(source)
-        for indicator in NETWORK_INDICATORS:
-            if indicator in body:
-                reasons.append(f"contains '{indicator}'")
+        if source_file is not None:
+            reasons.extend(self._module_level_reasons(source_file, function))
 
-        # A fixture requested through a helper (e.g. `def helper(page):`) still counts.
-        if "playwright" in body and "requires" not in " ".join(reasons):
-            reasons.append("references playwright")
+        for node in ast.walk(function):
+            if not isinstance(node, ast.Call):
+                continue
+            target = node.func
+            name = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", "")
+            receiver = (
+                ast.unparse(target.value).split(".")[0].split("[")[0] if isinstance(target, ast.Attribute) else None
+            )
 
-        return SafetyVerdict(nodeid=nodeid, safe=not reasons, reasons=reasons)
+            if name in UNCONDITIONAL_UNSAFE_CALLS:
+                reasons.append(f"calls {name}()")
+            elif name in NETWORK_CALL_NAMES and receiver in NETWORK_RECEIVERS:
+                reasons.append(f"calls {receiver}.{name}()")
+            elif name in NETWORK_CALL_NAMES and self._has_url_argument(node):
+                reasons.append(f"calls {name}() with an absolute URL")
+
+        return SafetyVerdict(nodeid=nodeid, safe=not reasons, reasons=dedupe(reasons))
 
     def split(
         self,
@@ -112,7 +165,41 @@ class SafetyPolicy(BaseModel):
                 rejected.append(verdict)
         return safe, rejected
 
+    def _has_url_argument(self, call: ast.Call) -> bool:
+        for argument in [*call.args, *call.keywords]:
+            value = argument.value if isinstance(argument, ast.keyword) else argument
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                if value.value.startswith(URL_PREFIXES):
+                    return True
+        return False
+
+    def _module_level_reasons(self, source_file: Path, function: ast.FunctionDef) -> list[str]:
+        """A test module that imports a browser driver is treated as browser-bound."""
+        try:
+            tree = ast.parse(source_file.read_text(encoding="utf-8", errors="replace"), filename=str(source_file))
+        except SyntaxError:
+            return []
+        reasons: list[str] = []
+        for node in tree.body:
+            text = ast.unparse(node) if not isinstance(node, ast.Import | ast.ImportFrom) else ""
+            if isinstance(node, ast.Import):
+                modules = {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                modules = {(node.module or "").split(".")[0]}
+            else:
+                modules = set()
+            if modules & {"playwright", "selenium", "requests", "httpx", "aiohttp"}:
+                reasons.append(
+                    f"module imports {', '.join(sorted(modules & {'playwright', 'selenium', 'requests', 'httpx', 'aiohttp'}))}"
+                )
+            if "autouse=True" in text and any(name in text for name in ("page", "browser")):
+                reasons.append("module has an autouse browser fixture")
+        _ = function
+        return dedupe(reasons)
+
     def _markers_from_source(self, source: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+        import re
+
         markers: set[str] = set()
         for decorator in source.decorator_list:
             text = ast.unparse(decorator)
@@ -121,7 +208,7 @@ class SafetyPolicy(BaseModel):
                 markers.add(match.group(1))
         return markers
 
-    def _function_source(self, project_root: Path, nodeid: str) -> tuple[ast.FunctionDef | None, str | None]:
+    def _function_source(self, project_root: Path, nodeid: str) -> tuple[Path | None, ast.FunctionDef | None]:
         file_part, _, test_part = nodeid.partition("::")
         path = project_root / file_part
         if not path.is_file():
@@ -129,10 +216,11 @@ class SafetyPolicy(BaseModel):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), filename=str(path))
         except SyntaxError:
-            return None, None
+            return path, None
 
-        parts = [part for part in test_part.split("::") if part and "[" not in part]
-        function_name = parts[-1] if parts else test_part
+        # `Class::test_name[param]` -> class "Class", function "test_name".
+        parts = [part for part in test_part.split("::") if part]
+        function_name = parts[-1].split("[")[0] if parts else test_part.split("[")[0]
         class_name = parts[0] if len(parts) > 1 else None
 
         for node in ast.walk(tree):
@@ -153,5 +241,13 @@ class SafetyPolicy(BaseModel):
                 )
                 if parent_class is None:
                     continue
-            return node, function_name
-        return None, function_name
+            return path, node
+        return path, None
+
+
+def dedupe(items: list[str]) -> list[str]:
+    seen: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen

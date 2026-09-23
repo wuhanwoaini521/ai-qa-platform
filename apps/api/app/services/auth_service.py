@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import time
 
@@ -17,7 +19,7 @@ from project_model.models import (
 from app.repositories.api_key_repo import ApiKeyRepository
 from app.repositories.security_audit_repo import SecurityAuditRepository
 from app.repositories.user_repo import UserRepository
-from app.settings import settings
+from app.settings import TOKEN_TTL_SECONDS, settings
 
 
 class AuthService:
@@ -79,13 +81,14 @@ class AuthService:
             return None
 
         perms = [p.value for p in ROLE_PERMISSIONS.get(user.role, set())]
-        token_payload = {
-            "sub": user.id,
-            "email": user.email,
-            "role": user.role.value,
-            "exp": int(time.time()) + 86400 * 7,  # 7 days
-        }
-        token_str = base64.urlsafe_b64encode(json.dumps(token_payload).encode("utf-8")).decode("utf-8")
+        token_str = self._issue_token(
+            {
+                "sub": user.id,
+                "email": user.email,
+                "role": user.role.value,
+                "exp": int(time.time()) + TOKEN_TTL_SECONDS,
+            }
+        )
 
         await self.audit_repo.log(
             action="LOGIN",
@@ -103,6 +106,33 @@ class AuthService:
             user=user,
             permissions=sorted(perms),
         )
+
+    def _issue_token(self, payload: dict) -> str:
+        """Sign the session token: the payload is base64url-encoded and HMAC-SHA256 signed."""
+        body = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
+        signature = hmac.new(settings.app_secret_key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest()
+        return f"{body}.{base64.urlsafe_b64encode(signature).decode('utf-8')}"
+
+    def _decode_token(self, token: str) -> dict | None:
+        """Verify signature and expiry. Returns the payload, or None if the token is not usable."""
+        body, _, signature = token.partition(".")
+        if not body or not signature:
+            return None
+        expected = hmac.new(settings.app_secret_key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest()
+        try:
+            provided = base64.urlsafe_b64decode(signature.encode("utf-8"))
+        except Exception:
+            return None
+        if not hmac.compare_digest(expected, provided):
+            return None
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(body.encode("utf-8")).decode("utf-8"))
+        except Exception:
+            return None
+        expires_at = payload.get("exp")
+        if isinstance(expires_at, int) and expires_at < int(time.time()):
+            return None
+        return payload
 
     async def authenticate_token_or_key(self, auth_header: str | None) -> tuple[User | None, list[str]]:
         if not auth_header:
@@ -130,17 +160,15 @@ class AuthService:
                         return user, sorted(perms)
                 return None, []
 
-            # 2. Decode standard payload
-            try:
-                decoded = json.loads(base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8"))
-                user_id = decoded.get("sub")
+            # 2. Verify and decode the signed session token
+            payload = self._decode_token(token)
+            if payload:
+                user_id = payload.get("sub")
                 if user_id:
                     user = await self.user_repo.get_by_id(user_id)
                     if user and user.is_active:
                         perms = [p.value for p in ROLE_PERMISSIONS.get(user.role, set())]
                         return user, sorted(perms)
-            except Exception:
-                pass
 
         # Check if direct email lookup or default user fallback
         return None, []

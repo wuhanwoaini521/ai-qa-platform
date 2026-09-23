@@ -39,6 +39,11 @@ PUBLIC_PATHS = (
 #: Public prefixes that also match sub-paths (``/api/health/live``, ``/api/health/ready``).
 PUBLIC_PREFIXES = ("/api/health",)
 
+#: Routes whose client cannot send an Authorization header. The browser's EventSource API has no
+#: header option, so the run-event stream accepts the same bearer token as an `access_token` query
+#: parameter. Only these exact shapes are allowed, to keep tokens out of ordinary request URLs.
+QUERY_TOKEN_SUFFIXES = ("/events",)
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -88,6 +93,11 @@ RULES: tuple[Rule, ...] = (
 DEFAULT_RULE = Rule("", Permission.PROJECT_READ, Permission.PROJECT_WRITE)
 
 
+def allows_query_token(path: str) -> bool:
+    """True for the small set of routes where a bearer token may arrive as a query parameter."""
+    return path.startswith("/api/runs/") and path.endswith(QUERY_TOKEN_SUFFIXES)
+
+
 def is_public_path(path: str) -> bool:
     if path in PUBLIC_PATHS:
         return True
@@ -111,7 +121,13 @@ async def get_current_user(request: Request) -> User:
     if cached is not None:
         return cached
 
-    user, _ = await auth_service.authenticate_token_or_key(request.headers.get("authorization"))
+    authorization = request.headers.get("authorization")
+    if not authorization and allows_query_token(request.url.path):
+        query_token = request.query_params.get("access_token")
+        if query_token:
+            authorization = f"Bearer {query_token}"
+
+    user, _ = await auth_service.authenticate_token_or_key(authorization)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -23,6 +23,7 @@ from qa_core.onboarding.collector import (
     parse_collection,
     parse_execution,
     parse_nodeid,
+    parse_report_log,
     run_project_command,
 )
 from qa_core.onboarding.contract import (
@@ -48,6 +49,7 @@ from qa_core.onboarding.importing import (
     ImportResult,
     QAProjectImporter,
 )
+from qa_core.onboarding.pytest_plugin import PLUGIN_SOURCE, write_plugin
 from qa_core.onboarding.runtime import (
     ProvisioningStatus,
     QARuntimeProvisioner,
@@ -94,6 +96,9 @@ __all__ = [
     "parse_collection",
     "parse_execution",
     "parse_nodeid",
+    "PLUGIN_SOURCE",
+    "parse_report_log",
     "render_contract",
     "run_project_command",
+    "write_plugin",
 ]

@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { api } from '../../../api/client';
-import { AutomationBinding, AutomationStatus, GenerateAutomationResponse, TestCase } from '../../../types';
+import {
+  AutomationBinding,
+  AutomationBindingStatus,
+  AutomationStatus,
+  GenerateAutomationResponse,
+  TestCase,
+} from '../../../types';
 import { useCaseHistory } from './useCaseHistory';
 
 export interface BindingFormData {
-  test_file_path: string;
-  test_node_id: string;
-  status: AutomationStatus;
+  file_path: string;
+  nodeid: string;
+  status: AutomationBindingStatus;
 }
 
 interface UseAutomationBindingOptions {
@@ -30,9 +36,9 @@ export function useAutomationBinding({
   const [selectedBinding, setSelectedBinding] = useState<AutomationBinding | null>(null);
   const [isBindingModalOpen, setIsBindingModalOpen] = useState(false);
   const [bindingFormData, setBindingFormData] = useState<BindingFormData>({
-    test_file_path: '',
-    test_node_id: '',
-    status: 'MANUAL',
+    file_path: '',
+    nodeid: '',
+    status: 'DRAFT',
   });
 
   const [generatedDraft, setGeneratedDraft] = useState<GenerateAutomationResponse | null>(null);
@@ -49,20 +55,20 @@ export function useAutomationBinding({
       setSelectedBinding(binding);
       if (binding) {
         setBindingFormData({
-          test_file_path: binding.test_file_path,
-          test_node_id: binding.test_node_id,
+          file_path: binding.file_path,
+          nodeid: binding.nodeid,
           status: binding.status,
         });
-        if (binding.test_node_id && selectedProjectId) {
-          fetchCaseHistory(binding.test_node_id, selectedProjectId);
+        if (binding.nodeid && selectedProjectId) {
+          fetchCaseHistory(binding.nodeid, selectedProjectId);
         } else {
           setCaseHistory(null);
         }
       } else {
         setBindingFormData({
-          test_file_path: `tests/test_${caseId.slice(0, 8)}.py`,
-          test_node_id: `tests/test_${caseId.slice(0, 8)}.py::test_${caseId.slice(0, 8)}`,
-          status: 'MANUAL',
+          file_path: `tests/test_${caseId.slice(0, 8)}.py`,
+          nodeid: `tests/test_${caseId.slice(0, 8)}.py::test_${caseId.slice(0, 8)}`,
+          status: 'DRAFT',
         });
         setCaseHistory(null);
       }
@@ -108,10 +114,11 @@ export function useAutomationBinding({
         .replace(/(^_|_$)/g, '')}`;
 
       const savedBinding = await api.saveAutomationBinding(selectedCase.id, {
-        test_file_path: generatedDraft.target_file,
-        test_node_id: nodeid,
-        status: 'AUTOMATED',
-        last_generated_code: generatedDraft.suggested_code,
+        test_case_id: selectedCase.id,
+        workspace_id: selectedProjectId,
+        nodeid,
+        file_path: generatedDraft.target_file,
+        status: 'ACTIVE',
       });
 
       setSelectedBinding(savedBinding);
@@ -129,12 +136,14 @@ export function useAutomationBinding({
     if (!selectedCase) return;
     try {
       const saved = await api.saveAutomationBinding(selectedCase.id, {
-        test_file_path: bindingFormData.test_file_path,
-        test_node_id: bindingFormData.test_node_id,
+        test_case_id: selectedCase.id,
+        workspace_id: selectedProjectId || '',
+        nodeid: bindingFormData.nodeid,
+        file_path: bindingFormData.file_path,
         status: bindingFormData.status,
       });
       setSelectedBinding(saved);
-      await updateCaseStatus(selectedCase.id, bindingFormData.status);
+      await updateCaseStatus(selectedCase.id, bindingFormData.status === 'DRAFT' ? 'DRAFT' : 'AUTOMATED');
       setIsBindingModalOpen(false);
     } catch (err) {
       alert(`Binding save error: ${errorText(err)}`);
@@ -146,11 +155,11 @@ export function useAutomationBinding({
     try {
       setRunningCase(true);
       setRunMessage('Triggering execution run...');
-      const target = selectedBinding ? [selectedBinding.test_node_id] : undefined;
       const run = await api.createTestRun({
         project_id: selectedProjectId,
-        target_nodeids: target,
-        triggered_by: `Test Case: ${selectedCase.title}`,
+        workspace_id: selectedProjectId,
+        nodeids: selectedBinding ? [selectedBinding.nodeid] : [],
+        requested_by: `Test Case: ${selectedCase.title}`,
       });
       setRunMessage(`Execution dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
       if (onNavigateToRuns) {

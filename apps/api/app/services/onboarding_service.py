@@ -208,6 +208,7 @@ class OnboardingService:
         markers: list[str] | None = None,
         allow_unsafe: bool = False,
         persist: bool = True,
+        extra_args: list[str] | None = None,
     ) -> PilotRunReport:
         imported = await self.get_imported_project(project_id)
         root = Path(imported.workspace_path)
@@ -238,12 +239,12 @@ class OnboardingService:
         # plugin is guaranteed to be importable), the platform owns the results directory: the run's
         # artifacts land inside the isolated workspace and can be imported afterwards. Without a
         # provisioned runtime the ambient interpreter is used and no project plugin may be assumed.
-        extra_args: list[str] = []
+        run_args: list[str] = list(extra_args or [])
         if imported.contract.has_plugin("allure") and imported.contract.runtime.virtualenv_dir:
             results_dir = root / (imported.contract.allure_results_dir or "allure-results")
-            extra_args = [f"--alluredir={results_dir}"]
+            run_args.append(f"--alluredir={results_dir}")
 
-        outcome = await QAProjectRunner(imported.contract).run(root, nodeids=safe or None, extra_args=extra_args)
+        outcome = await QAProjectRunner(imported.contract).run(root, nodeids=safe or None, extra_args=run_args)
 
         run_id: str | None = None
         if persist:

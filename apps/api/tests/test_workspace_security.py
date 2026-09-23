@@ -42,7 +42,7 @@ async def test_workspace_path_traversal_prevention(client: AsyncClient):
     bad_ws_id = "../../escaped_ws"
     bad_ws_res = await client.get(f"/api/workspaces/{bad_ws_id}/files")
     # Base dir validation handles this safely (either rejects 400/404 or isolates to empty dir)
-    assert bad_ws_res.status_code in (200, 400, 404)
+    assert bad_ws_res.status_code in (400, 404)
 
 
 @pytest.mark.unit

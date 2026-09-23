@@ -213,8 +213,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       const target = selectedFailure.test_nodeid;
       const run = await api.createTestRun({
         project_id: currentProjectId,
-        target_nodeids: [target],
-        triggered_by: `Re-run verification for failure #${selectedFailure.id.slice(0, 8)}`,
+        workspace_id: currentProjectId,
+        nodeids: [target],
+        requested_by: `Re-run verification for failure #${selectedFailure.id.slice(0, 8)}`,
       });
       setRerunMessage(`Re-run dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
       if (onNavigateToRuns) {

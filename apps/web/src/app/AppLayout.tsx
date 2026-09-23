@@ -10,7 +10,8 @@ import { withProjectId } from './navigation';
 const PAGE_TITLES: { match: (path: string) => boolean; title: string }[] = [
   { match: (p) => p === '/', title: 'Platform Overview' },
   { match: (p) => p.includes('/studio'), title: 'Automation Studio' },
-  { match: (p) => p.startsWith('/projects') || p.startsWith('/requirements'), title: 'Requirements & Design' },
+  { match: (p) => /^\/projects(\/[^/]+)?$/.test(p), title: 'QA Projects' },
+  { match: (p) => p.startsWith('/requirements') || p.includes('/requirements'), title: 'Requirements & Design' },
   { match: (p) => p.startsWith('/test-cases'), title: 'Test Cases' },
   { match: (p) => p.startsWith('/runs'), title: 'Execution Runs & Runners' },
   { match: (p) => p.startsWith('/flaky'), title: 'Flaky Intelligence & Stability' },

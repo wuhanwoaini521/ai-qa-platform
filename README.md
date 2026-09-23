@@ -99,7 +99,6 @@ cp .env.example .env
 
 - **API Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Prometheus Metrics**: [http://localhost:8000/api/metrics](http://localhost:8000/api/metrics)
-- **MinIO S3 Console**: [http://localhost:9001](http://localhost:9001) *(provisioned by the stack; the API does not use it yet)*
 
 ### 2. Local Development
 

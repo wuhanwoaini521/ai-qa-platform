@@ -26,7 +26,7 @@ The AI QA Platform production deployment consists of:
                ┌───────────────────┘       │    └────────────────────┐
                │                           │                         │
         ┌──────▼───────┐           ┌───────▼────────┐         ┌──────▼────────┐
-        │  PostgreSQL  │           │  MinIO / S3    │         │ Distributed   │
+        │  PostgreSQL  │           │ Artifact Store │         │ Distributed   │
         │  (Primary DB)│           │  (Artifacts)   │         │ Workers (xN)  │
         └──────────────┘           └────────────────┘         └───────────────┘
 ```
@@ -54,7 +54,6 @@ The stack exposes:
 - **Web Frontend**: `http://localhost:3000` (or `http://localhost:80`)
 - **Backend API & Swagger Docs**: `http://localhost:8000/docs`
 - **Prometheus Metrics**: `http://localhost:8000/api/metrics`
-- **MinIO S3 Console**: `http://localhost:9001` (user: `minioadmin`, pass: `minioadmin`)
 
 ---
 
@@ -65,12 +64,12 @@ Key variables to configure in `.env`:
 | Variable | Description | Production Recommended Value |
 |---|---|---|
 | `DATABASE_URL` | SQLAlchemy async connection string | `postgresql+asyncpg://user:pass@host:5432/db` |
-| `SECURITY_JWT_SECRET` | Secret key for signing user auth tokens | 64+ char random hexadecimal string |
-| `SECURITY_TOKEN_EXPIRE_MINUTES` | User session token lifetime | `1440` (24 hours) |
-| `S3_ENDPOINT_URL` | Object storage endpoint | `http://minio:9000` or AWS S3 URL |
-| `S3_BUCKET_NAME` | Bucket for storing test execution traces & artifacts | `ai-qa-artifacts` |
-| `AI_PROVIDER` | Active LLM inference provider | `openai`, `anthropic`, `gemini`, or `mock` |
-| `AI_MONTHLY_BUDGET_USD` | Monthly AI cost ceiling | `500.00` |
+| `AI_QA_AUTH_TOKEN` | Bearer token a distributed worker presents to the API | an API key created in the UI |
+| `AUTH_REQUIRED` | Require a bearer token on every non-probe route | `true` |
+| `APP_SECRET_KEY` | HMAC secret used to sign session tokens and encrypt stored secrets | 64-char random hex (`openssl rand -hex 32`) |
+| `QA_AI_PROVIDER` | Active LLM inference provider | `fake` (default) or `openai-compatible` |
+| `QA_AI_API_KEY` / `QA_AI_BASE_URL` / `QA_AI_MODEL` | Provider credentials and endpoint | provider-specific |
+| `GITHUB_TOKEN`, `JIRA_*`, `TESTRAIL_*`, `JENKINS_*` | Integration credentials (each integration falls back to a dry-run adapter when unset) | optional |
 | `MAX_CONCURRENCY` | Maximum concurrent tests per worker node | `4` - `8` (based on CPU/RAM) |
 
 ---

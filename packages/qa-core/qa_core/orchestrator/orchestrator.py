@@ -6,6 +6,7 @@ from pathlib import Path
 from qa_core.ai.budget import AIBudgetGuard
 from qa_core.ai.models import (
     AICompletionRequest,
+    AICompletionResponse,
     CodeAssistantResponse,
     FailureAnalysisResponse,
     LocatorSemanticReview,
@@ -36,6 +37,9 @@ class ProductionQAOrchestrator:
 
     def __init__(self, ai_provider=None, budget_guard: AIBudgetGuard | None = None) -> None:
         self.ai_provider = ai_provider or AIProviderRegistry.get_provider()
+        #: Metadata of the most recent provider call, so callers can record which provider actually
+        #: answered (the fallback wrapper serves a different provider than the configured one).
+        self.last_completion: AICompletionResponse | None = None
         self.budget_guard = budget_guard or AIBudgetGuard()
 
     async def analyze_requirement(
@@ -58,6 +62,7 @@ class ProductionQAOrchestrator:
             prompt_version=REQUIREMENT_ANALYSIS_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return RequirementAnalysisResponse.model_validate(res.structured_data)
 
@@ -89,6 +94,7 @@ class ProductionQAOrchestrator:
             prompt_version=TEST_DESIGN_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return TestDesignGenerationResponse.model_validate(res.structured_data)
 
@@ -137,6 +143,7 @@ class ProductionQAOrchestrator:
             prompt_version=TEST_CASE_GENERATION_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return TestCaseGenerationResponse.model_validate(res.structured_data)
 
@@ -218,6 +225,7 @@ class ProductionQAOrchestrator:
             prompt_version=FAILURE_DIAGNOSIS_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return FailureAnalysisResponse.model_validate(res.structured_data)
 
@@ -268,6 +276,7 @@ class ProductionQAOrchestrator:
             prompt_version=LOCATOR_REVIEW_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return LocatorSemanticReview.model_validate(res.structured_data)
 
@@ -276,6 +285,21 @@ class ProductionQAOrchestrator:
             confidence=0.85,
             explanation=f"Candidate selector '{proposed_locator}' preserves target element intent.",
         )
+
+    def last_invocation_metadata(self) -> dict:
+        """Provider, model and fallback status of the most recent provider response."""
+        completion = self.last_completion
+        if completion is None:
+            return {
+                "provider": getattr(self.ai_provider, "provider_name", "unknown"),
+                "model": "unresolved",
+                "fallback_used": False,
+            }
+        return {
+            "provider": completion.provider,
+            "model": completion.model,
+            "fallback_used": completion.fallback_used,
+        }
 
     async def assist_code_chat(
         self,
@@ -307,6 +331,7 @@ class ProductionQAOrchestrator:
             prompt_version=CODE_ASSISTANT_PROMPT.version,
         )
         res = await self.ai_provider.complete(req)
+        self.last_completion = res
         if res.structured_data:
             return CodeAssistantResponse.model_validate(res.structured_data)
 
@@ -320,4 +345,5 @@ class ProductionQAOrchestrator:
 
     async def assist_chat(self, prompt: str) -> str:
         res = await self.ai_provider.complete(AICompletionRequest(prompt=prompt))
+        self.last_completion = res
         return res.content

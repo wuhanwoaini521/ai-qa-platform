@@ -44,10 +44,12 @@ class QAAssistantService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         # Record AI Invocation
+        invocation = self.orchestrator.last_invocation_metadata()
         await self.ai_repo.record_invocation(
             task=f"assistant_{action}",
-            provider=getattr(self.orchestrator.ai_provider, "provider_name", "provider"),
-            model=getattr(self.orchestrator.ai_provider, "model", "default-model"),
+            provider=invocation["provider"],
+            model=invocation["model"],
+            fallback_used=invocation["fallback_used"],
             started_at=started_at,
             duration_ms=duration_ms,
             input_tokens=150,

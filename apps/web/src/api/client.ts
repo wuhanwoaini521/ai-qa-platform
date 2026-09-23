@@ -112,6 +112,15 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
+/** Appends the session token for the routes whose client cannot send an Authorization header. */
+function withAccessToken(path: string): string {
+  if (!authToken) {
+    return path;
+  }
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}access_token=${encodeURIComponent(authToken)}`;
+}
+
 /** Registers the handler invoked when the API rejects a request with 401. */
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   unauthorizedHandler = handler;
@@ -623,7 +632,7 @@ export const api = {
     onEvent: (event: any) => void,
     onError?: (err: any) => void
   ): (() => void) => {
-    const url = `${BASE_URL}/api/runs/${runId}/events`;
+    const url = `${BASE_URL}/api${withAccessToken(`/runs/${runId}/events`)}`;
     const eventSource = new EventSource(url);
 
     eventSource.onmessage = (event) => {

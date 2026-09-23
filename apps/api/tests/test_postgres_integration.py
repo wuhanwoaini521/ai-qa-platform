@@ -221,7 +221,9 @@ async def test_run_execution_failure_and_history_analytics(client: AsyncClient, 
     project = await _create_project(client, "Postgres Analytics Suite")
     project_id = project["id"]
 
-    base = datetime(2026, 3, 1, 9, 0, tzinfo=timezone.utc)
+    # Anchored to now: the dashboard reports 'today', so seeding a fixed past date would make
+    # those assertions either wrong or conditionally skipped.
+    base = datetime.now(timezone.utc) - timedelta(minutes=5)
     statuses = [RunStatus.PASSED, RunStatus.FAILED, RunStatus.PASSED, RunStatus.FAILED, RunStatus.PASSED]
 
     async with test_db_session() as session:
@@ -378,10 +380,9 @@ async def test_run_execution_failure_and_history_analytics(client: AsyncClient, 
     assert dashboard["flaky_tests_count"] == 1
     assert dashboard["rerun_recovery_count"] == 1
     assert dashboard["average_test_duration_ms"] == 1500.0
-    if datetime.now(timezone.utc).date() == base.astimezone(timezone.utc).date():
-        assert dashboard["runs_today"] == 1
-        assert dashboard["tests_executed_today"] == 3
-        assert dashboard["pass_rate_today"] == 66.7
+    assert dashboard["runs_today"] == 1
+    assert dashboard["tests_executed_today"] == 3
+    assert dashboard["pass_rate_today"] == 66.7
 
     # --- execution coverage needs test cases linked to executed nodeids ---
     await _create_test_case(
@@ -500,7 +501,8 @@ async def test_identity_workers_jobs_artifacts_and_audits(client: AsyncClient, t
     assert fetched_runner["name"] == "Local runner"
     health = (await client.get(f"/api/runners/{runner['id']}/health")).json()
     assert health["type"] == "LOCAL"
-    assert health["status"] in {"AVAILABLE", "UNAVAILABLE", "TIMEOUT", "AUTH_ERROR", "DISABLED"}
+    # The local backend reports availability from its own probe, so an unknown status is a defect.
+    assert health["status"] == "AVAILABLE"
 
     runner_orm = await RunnerProfileRepository().get_by_id(runner["id"])
     assert runner_orm.type == "LOCAL"

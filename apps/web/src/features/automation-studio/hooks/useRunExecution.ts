@@ -28,8 +28,9 @@ export const useRunExecution = ({ projectId, activeTabPath, onNavigateToRuns }: 
 
       const run = await api.createTestRun({
         project_id: projectId,
-        target_nodeids: target,
-        triggered_by: 'Automation Studio',
+        workspace_id: projectId,
+        nodeids: target ?? [],
+        requested_by: 'Automation Studio',
       });
 
       setLastRunResult(`Run #${run.id.slice(0, 8)} started with status: ${run.status}`);

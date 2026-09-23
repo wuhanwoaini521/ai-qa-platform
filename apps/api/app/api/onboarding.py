@@ -42,6 +42,9 @@ class RunSelectionRequest(BaseModel):
     #: Must be set explicitly to execute tests the safety policy flags (browser/network/slow).
     allow_unsafe: bool = False
     persist: bool = True
+    #: Extra pytest flags for the operator (for example the project's own xdist/rerun settings).
+    #: They are appended last, so they cannot silently override the platform's parsing-stability flags.
+    extra_args: list[str] = Field(default_factory=list)
 
 
 class CollectionResponse(BaseModel):
@@ -155,6 +158,7 @@ async def run_selection(
             markers=request.markers,
             allow_unsafe=request.allow_unsafe,
             persist=request.persist,
+            extra_args=request.extra_args,
         )
     except OnboardingError as error:
         raise _translate(error) from error

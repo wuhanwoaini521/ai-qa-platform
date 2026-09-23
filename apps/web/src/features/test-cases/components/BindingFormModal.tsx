@@ -1,5 +1,5 @@
 import React from 'react';
-import { AutomationStatus } from '../../../types';
+import { AutomationBindingStatus } from '../../../types';
 import { BindingFormData } from '../hooks/useAutomationBinding';
 
 interface BindingFormModalProps {
@@ -41,9 +41,9 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                     required
                     className="form-control"
                     placeholder="e.g. tests/test_checkout.py"
-                    value={bindingFormData.test_file_path}
+                    value={bindingFormData.file_path}
                     onChange={(e) =>
-                      setBindingFormData({ ...bindingFormData, test_file_path: e.target.value })
+                      setBindingFormData({ ...bindingFormData, file_path: e.target.value })
                     }
                   />
                 </div>
@@ -54,9 +54,9 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                     required
                     className="form-control"
                     placeholder="e.g. tests/test_checkout.py::test_coupon_calculation"
-                    value={bindingFormData.test_node_id}
+                    value={bindingFormData.nodeid}
                     onChange={(e) =>
-                      setBindingFormData({ ...bindingFormData, test_node_id: e.target.value })
+                      setBindingFormData({ ...bindingFormData, nodeid: e.target.value })
                     }
                   />
                 </div>
@@ -68,13 +68,14 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                     onChange={(e) =>
                       setBindingFormData({
                         ...bindingFormData,
-                        status: e.target.value as AutomationStatus,
+                        status: e.target.value as AutomationBindingStatus,
                       })
                     }
                   >
-                    <option value="MANUAL">MANUAL</option>
                     <option value="DRAFT">DRAFT</option>
-                    <option value="AUTOMATED">AUTOMATED</option>
+                    <option value="VALIDATED">VALIDATED</option>
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="BROKEN">BROKEN</option>
                   </select>
                 </div>
               </div>
