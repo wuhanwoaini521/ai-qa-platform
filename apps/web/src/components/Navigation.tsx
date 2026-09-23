@@ -10,6 +10,7 @@ import {
   Flame,
   ShieldCheck,
   Shield,
+  Server,
 } from 'lucide-react';
 
 export type NavTab =
@@ -22,7 +23,8 @@ export type NavTab =
   | 'flaky'
   | 'failures'
   | 'quality'
-  | 'security';
+  | 'security'
+  | 'workers';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -37,6 +39,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
     { id: 'test_cases', label: 'Test Cases', icon: CheckSquare },
     { id: 'automation', label: 'Automation Studio', icon: Code2 },
     { id: 'runs', label: 'Runs & Runners', icon: PlayCircle },
+    { id: 'workers', label: 'Distributed Workers', icon: Server },
     { id: 'flaky', label: 'Flaky Intelligence', icon: Flame },
     { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle },
     { id: 'quality', label: 'Quality & Release', icon: ShieldCheck },

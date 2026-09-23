@@ -964,5 +964,100 @@ export interface SecurityAuditLogEntry {
   created_at: string;
 }
 
+// --- Phase 12: Distributed Execution & Workers ---
+export type WorkerStatus = 'ONLINE' | 'BUSY' | 'OFFLINE' | 'LOST';
+
+export interface Worker {
+  id: string;
+  hostname: string;
+  ip_address: string;
+  status: WorkerStatus;
+  browsers: string[];
+  os: string;
+  max_concurrency: number;
+  current_load: number;
+  tags: string[];
+  last_heartbeat_at: string;
+  registered_at: string;
+}
+
+export interface WorkerCreate {
+  hostname: string;
+  ip_address?: string;
+  status?: WorkerStatus;
+  browsers?: string[];
+  os?: string;
+  max_concurrency?: number;
+  tags?: string[];
+}
+
+export interface WorkerHeartbeatRequest {
+  status?: WorkerStatus;
+  current_load?: number;
+  active_job_ids?: string[];
+}
+
+export type JobStatus = 'QUEUED' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface ExecutionJob {
+  id: string;
+  run_id: string;
+  project_id: string;
+  workspace_id: string;
+  nodeids: string[];
+  runner_type: string;
+  browser: string;
+  priority: number;
+  status: JobStatus;
+  assigned_worker_id?: string | null;
+  retry_count: number;
+  max_retries: number;
+  error_message?: string | null;
+  duration_ms: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionJobCreate {
+  run_id: string;
+  project_id: string;
+  workspace_id: string;
+  nodeids: string[];
+  runner_type?: string;
+  browser?: string;
+  priority?: number;
+}
+
+export interface ClusterStatusSummary {
+  total_workers: number;
+  online_workers: number;
+  busy_workers: number;
+  offline_workers: number;
+  total_concurrency_capacity: number;
+  used_concurrency: number;
+  queued_jobs_count: number;
+  running_jobs_count: number;
+  workers: Worker[];
+}
+
+export interface ArtifactUploadResponse {
+  artifact_id: string;
+  filename: string;
+  size_bytes: number;
+  content_type: string;
+  storage_type: string;
+  storage_url: string;
+}
+
+export interface ArtifactDownloadInfo {
+  artifact_id: string;
+  filename: string;
+  download_url: string;
+  expires_in_seconds: number;
+}
+
+
 
 

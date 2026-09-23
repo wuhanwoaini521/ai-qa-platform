@@ -78,6 +78,10 @@ import {
   ApiKeyCreatedResponse,
   LoginResponse,
   SecurityAuditLogEntry,
+  ClusterStatusSummary,
+  ExecutionJob,
+  Worker,
+  WorkerCreate,
   WorkspaceValidationResult,
 } from '../types';
 
@@ -536,6 +540,31 @@ export const api = {
     params.append('limit', String(limit));
     return request<SecurityAuditLogEntry[]>(`/audit/security?${params.toString()}`);
   },
+
+  // Distributed Execution & Workers (Phase 12)
+  getWorkers: () => request<Worker[]>('/workers'),
+  getClusterStatus: () => request<ClusterStatusSummary>('/workers/cluster-status'),
+  registerWorker: (data: WorkerCreate) =>
+    request<Worker>('/workers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteWorker: (workerId: string) =>
+    request<{ success: boolean }>(`/workers/${encodeURIComponent(workerId)}`, {
+      method: 'DELETE',
+    }),
+  getJobs: (runId?: string, projectId?: string, status?: string, limit = 100) => {
+    const params = new URLSearchParams();
+    if (runId) params.append('run_id', runId);
+    if (projectId) params.append('project_id', projectId);
+    if (status) params.append('status', status);
+    params.append('limit', String(limit));
+    return request<ExecutionJob[]>(`/jobs?${params.toString()}`);
+  },
+  cancelJob: (jobId: string) =>
+    request<ExecutionJob>(`/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+    }),
 
   // SSE Event Stream for Live Test Runs
   streamRunEvents: (

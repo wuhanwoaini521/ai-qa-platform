@@ -401,3 +401,55 @@ class SecurityAuditORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
     details: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+# --- Phase 12: Distributed Execution ORM Models ---
+class WorkerORM(Base):
+    __tablename__ = "workers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    ip_address: Mapped[str] = mapped_column(String(50), default="127.0.0.1")
+    status: Mapped[str] = mapped_column(String(50), default="ONLINE", index=True)  # ONLINE, BUSY, OFFLINE, LOST
+    browsers: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    os: Mapped[str] = mapped_column(String(50), default="linux")
+    max_concurrency: Mapped[int] = mapped_column(Integer, default=4)
+    current_load: Mapped[int] = mapped_column(Integer, default=0)
+    tags: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ExecutionJobORM(Base):
+    __tablename__ = "execution_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    nodeids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    runner_type: Mapped[str] = mapped_column(String(50), default="LOCAL")
+    browser: Mapped[str] = mapped_column(String(50), default="chromium")
+    priority: Mapped[int] = mapped_column(Integer, default=10, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="QUEUED", index=True)
+    assigned_worker_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=2)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class ArtifactORM(Base):
+    __tablename__ = "stored_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
+    storage_type: Mapped[str] = mapped_column(String(50), default="LOCAL")  # LOCAL, S3
+    storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

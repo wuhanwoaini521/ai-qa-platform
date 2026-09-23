@@ -368,6 +368,7 @@ class TestExecution(EntityBase):
 
 
 class TestRun(EntityBase):
+    __test__ = False
     id: str
     project_id: str
     workspace_id: str
@@ -1129,3 +1130,103 @@ class SecurityAuditLogEntry(EntityBase):
     status: str = "SUCCESS"  # "SUCCESS", "DENIED", "FAILED"
     details: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
+
+
+# --- Phase 12: Distributed Execution Platform Models ---
+class WorkerStatus(str, Enum):
+    ONLINE = "ONLINE"
+    BUSY = "BUSY"
+    OFFLINE = "OFFLINE"
+    LOST = "LOST"
+
+
+class WorkerBase(EntityBase):
+    hostname: str = Field(..., min_length=1, max_length=255)
+    ip_address: str = "127.0.0.1"
+    status: WorkerStatus = WorkerStatus.ONLINE
+    browsers: list[str] = Field(default_factory=lambda: ["chromium", "firefox", "webkit"])
+    os: str = "linux"
+    max_concurrency: int = 4
+    current_load: int = 0
+    tags: list[str] = Field(default_factory=list)
+
+
+class WorkerCreate(WorkerBase):
+    pass
+
+
+class Worker(WorkerBase):
+    id: str
+    last_heartbeat_at: datetime
+    registered_at: datetime
+
+
+class WorkerHeartbeatRequest(BaseModel):
+    status: WorkerStatus = WorkerStatus.ONLINE
+    current_load: int = 0
+    active_job_ids: list[str] = Field(default_factory=list)
+
+
+class JobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    ASSIGNED = "ASSIGNED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ExecutionJobBase(EntityBase):
+    run_id: str
+    project_id: str
+    workspace_id: str
+    nodeids: list[str] = Field(default_factory=list)
+    runner_type: str = "LOCAL"  # "LOCAL", "DOCKER", "WORKER"
+    browser: str = "chromium"
+    priority: int = 10  # higher number = higher priority
+    status: JobStatus = JobStatus.QUEUED
+    assigned_worker_id: str | None = None
+    retry_count: int = 0
+    max_retries: int = 2
+    error_message: str | None = None
+
+
+class ExecutionJobCreate(ExecutionJobBase):
+    pass
+
+
+class ExecutionJob(ExecutionJobBase):
+    id: str
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: float = 0.0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClusterStatusSummary(BaseModel):
+    total_workers: int = 0
+    online_workers: int = 0
+    busy_workers: int = 0
+    offline_workers: int = 0
+    total_concurrency_capacity: int = 0
+    used_concurrency: int = 0
+    queued_jobs_count: int = 0
+    running_jobs_count: int = 0
+    workers: list[Worker] = Field(default_factory=list)
+
+
+class ArtifactUploadResponse(BaseModel):
+    artifact_id: str
+    filename: str
+    size_bytes: int
+    content_type: str
+    storage_type: str  # "LOCAL", "S3"
+    storage_url: str
+
+
+class ArtifactDownloadInfo(BaseModel):
+    artifact_id: str
+    filename: str
+    download_url: str
+    expires_in_seconds: int = 3600
