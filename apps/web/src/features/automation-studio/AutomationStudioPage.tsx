@@ -1,0 +1,453 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Play, Save } from 'lucide-react';
+import { Project } from '../../types';
+import { FileOpModalState, SidebarTab } from './types';
+import { errorText } from './errorText';
+import { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
+import { useEditorTabs } from './hooks/useEditorTabs';
+import { useWorkspaceGit } from './hooks/useWorkspaceGit';
+import { useTestExplorer } from './hooks/useTestExplorer';
+import { useProblems } from './hooks/useProblems';
+import { useQAAssistant } from './hooks/useQAAssistant';
+import { useRunExecution } from './hooks/useRunExecution';
+import { MonacoEditorInstance, MonacoEditorPane } from './components/MonacoEditorPane';
+import { ProjectSelector } from './components/ProjectSelector';
+import { SidebarViewSwitcher } from './components/SidebarViewSwitcher';
+import { SidebarActionHeader } from './components/SidebarActionHeader';
+import { FileTree } from './components/FileTree';
+import { TestExplorer } from './components/TestExplorer';
+import { SourceControlPanel } from './components/SourceControlPanel';
+import { PullRequestPanel } from './components/PullRequestPanel';
+import { EditorTabs } from './components/EditorTabs';
+import { ProblemsPanel } from './components/ProblemsPanel';
+import { RunOutputPanel } from './components/RunOutputPanel';
+import { QAAssistantPanel } from './components/QAAssistantPanel';
+import { QuickOpen } from './components/QuickOpen';
+import { FileOpModal } from './components/FileOpModal';
+import { BranchModal } from './components/BranchModal';
+import { PullRequestModal } from './components/PullRequestModal';
+
+export interface AutomationStudioPageProps {
+  projects: Project[];
+  selectedProjectId: string | null;
+  onSelectProject: (id: string) => void;
+  onNavigateToRuns?: (runId?: string) => void;
+  initialOpenFilePath?: string | null;
+}
+
+export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
+  projects,
+  selectedProjectId,
+  onSelectProject,
+  onNavigateToRuns,
+  initialOpenFilePath,
+}) => {
+  const currentProjectId = selectedProjectId || projects[0]?.id || null;
+
+  // Cross-panel UI state (read/written by more than one panel)
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('files');
+  const [fileOpModal, setFileOpModal] = useState<FileOpModalState | null>(null);
+  const [opInputText, setOpInputText] = useState<string>('');
+  const [showQuickOpen, setShowQuickOpen] = useState<boolean>(false);
+  const [quickOpenQuery, setQuickOpenQuery] = useState<string>('');
+  const [quickOpenSelectedIndex, setQuickOpenSelectedIndex] = useState<number>(0);
+
+  // Monaco Editor Ref
+  const editorRef = useRef<MonacoEditorInstance | null>(null);
+
+  // Glue for two cross-hook cycles: Git branch ops refresh the file tree; the problems panel
+  // re-opens a file through the tab store.
+  const fetchFilesRef = useRef<() => Promise<void>>(async () => {});
+  const openFileRef = useRef<(path: string) => void>(() => {});
+
+  const git = useWorkspaceGit(currentProjectId, {
+    onWorkspaceFilesChanged: () => fetchFilesRef.current(),
+    onSelectPRTab: () => setSidebarTab('pr'),
+  });
+  const workspace = useWorkspaceFiles(currentProjectId, { onDiffLoaded: git.setDiffResult });
+  const tests = useTestExplorer(currentProjectId);
+  const problems = useProblems({ projectId: currentProjectId, openFile: (p) => openFileRef.current(p), editorRef });
+  const editor = useEditorTabs({
+    projectId: currentProjectId,
+    setLoadingFile: workspace.setLoadingFile,
+    hideDiffView: git.hideDiffView,
+    // Runs inside the save transaction: the diff is awaited, validation and the test
+    // collection are refreshed in the background — same ordering as before the split.
+    onAfterSave: async (path) => {
+      await git.refreshDiff();
+      problems.refreshIssuesInBackground();
+      if (path.includes('test_') || path.endsWith('.py')) {
+        tests.refreshTestsInBackground();
+      }
+    },
+    onAfterSaveAll: async () => {
+      await git.refreshDiff();
+      await problems.refreshIssues();
+    },
+  });
+  const assistant = useQAAssistant({
+    projectId: currentProjectId,
+    activeTab: editor.activeTab,
+    editorRef,
+    onInsertFallback: editor.updateContent,
+  });
+  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns });
+
+  fetchFilesRef.current = workspace.fetchFiles;
+  openFileRef.current = editor.openFile;
+
+  useEffect(() => {
+    workspace.fetchFiles();
+    tests.fetchCollectedTests();
+    problems.validateWorkspace();
+    git.fetchGitData();
+  }, [currentProjectId]);
+
+  useEffect(() => {
+    if (initialOpenFilePath) {
+      editor.openFile(initialOpenFilePath);
+    }
+  }, [initialOpenFilePath]);
+
+  // Keyboard Shortcuts (Cmd/Ctrl + S, Cmd/Ctrl + Shift + S, Cmd/Ctrl + P)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        setShowQuickOpen((prev) => !prev);
+        setQuickOpenQuery('');
+        setQuickOpenSelectedIndex(0);
+      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+        editor.saveAll();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        editor.saveActiveTab();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editor.saveActiveTab, editor.saveAll]);
+
+  const handleSelectSidebarTab = (tab: SidebarTab) => {
+    setSidebarTab(tab);
+    if (tab === 'tests') tests.fetchCollectedTests();
+    if (tab === 'git') git.fetchGitData();
+    if (tab === 'pr' && git.activePR) git.handleRefreshPRChecks();
+  };
+
+  const handleRefreshAll = () => {
+    workspace.fetchFiles();
+    tests.fetchCollectedTests();
+    git.fetchGitData();
+    if (git.activePR) git.handleRefreshPRChecks();
+  };
+
+  // File Operations Execution
+  const handleExecuteFileOp = async () => {
+    if (!currentProjectId || !fileOpModal) return;
+    const input = opInputText.trim();
+    if (!input && fileOpModal.type !== 'delete') return;
+
+    try {
+      if (fileOpModal.type === 'create_file') {
+        await workspace.createWorkspaceFile(input);
+        await workspace.fetchFiles();
+        editor.openFile(input);
+      } else if (fileOpModal.type === 'create_folder') {
+        await workspace.createWorkspaceDirectory(input);
+        await workspace.fetchFiles();
+      } else if (fileOpModal.type === 'rename' && fileOpModal.targetPath) {
+        await workspace.renameWorkspaceEntry(fileOpModal.targetPath, input);
+        await workspace.fetchFiles();
+        // Update tabs
+        editor.renameTab(fileOpModal.targetPath, input);
+      } else if (fileOpModal.type === 'delete' && fileOpModal.targetPath) {
+        await workspace.deleteWorkspaceEntry(fileOpModal.targetPath);
+        await workspace.fetchFiles();
+        editor.closeTab(fileOpModal.targetPath);
+      }
+    } catch (err) {
+      alert(`Error performing file operation: ${errorText(err)}`);
+    } finally {
+      setFileOpModal(null);
+      setOpInputText('');
+    }
+  };
+
+  const handleBootstrapWorkspace = async () => {
+    if (!currentProjectId) return;
+    try {
+      await workspace.bootstrapWorkspace();
+      await tests.fetchCollectedTests();
+    } catch (err) {
+      console.error('Failed to bootstrap workspace', err);
+    }
+  };
+
+  if (!currentProjectId || projects.length === 0) {
+    return (
+      <div className="card" style={{ margin: '20px' }}>
+        <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Please select or create a project first to open Automation Studio.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-container">
+      {/* Quick Open Dialog (Cmd+P) */}
+      {showQuickOpen && (
+        <QuickOpen
+          files={workspace.allFilePaths}
+          query={quickOpenQuery}
+          selectedIndex={quickOpenSelectedIndex}
+          onQueryChange={setQuickOpenQuery}
+          onSelectedIndexChange={setQuickOpenSelectedIndex}
+          onSelect={(path) => {
+            editor.openFile(path);
+            setShowQuickOpen(false);
+          }}
+          onClose={() => setShowQuickOpen(false)}
+        />
+      )}
+
+      {/* File Operation Modal */}
+      {fileOpModal && (
+        <FileOpModal
+          state={fileOpModal}
+          inputText={opInputText}
+          onInputChange={setOpInputText}
+          onClose={() => setFileOpModal(null)}
+          onConfirm={handleExecuteFileOp}
+        />
+      )}
+
+      {/* Branch Create Modal */}
+      {git.showBranchModal && (
+        <BranchModal
+          branchName={git.newBranchInput}
+          currentBranch={git.currentBranch}
+          onBranchNameChange={git.setNewBranchInput}
+          onClose={() => git.setShowBranchModal(false)}
+          onConfirm={git.handleCreateBranch}
+        />
+      )}
+
+      {/* Pull Request Create Modal */}
+      {git.showPRModal && (
+        <PullRequestModal
+          currentBranch={git.currentBranch}
+          title={git.prTitleInput}
+          body={git.prBodyInput}
+          suggesting={git.suggestingPR}
+          creating={git.creatingPR}
+          onTitleChange={git.setPRTitleInput}
+          onBodyChange={git.setPRBodyInput}
+          onClose={() => git.setShowPRModal(false)}
+          onRegenerate={git.handleOpenPRModal}
+          onCreate={git.handleCreatePR}
+        />
+      )}
+
+      {/* Left Sidebar: File Explorer & Test Explorer */}
+      <div className="studio-sidebar">
+        {/* Project Selector inside studio */}
+        <ProjectSelector
+          projects={projects}
+          currentProjectId={currentProjectId}
+          onSelectProject={onSelectProject}
+          onQuickOpen={() => setShowQuickOpen(true)}
+        />
+
+        {/* Sidebar View Switcher: Files vs Tests vs Git vs PR */}
+        <SidebarViewSwitcher
+          sidebarTab={sidebarTab}
+          testCount={tests.collectedTests.length}
+          changeCount={git.diffResult.changed_files.length}
+          activePRNumber={git.activePR ? git.activePR.number : null}
+          onSelectTab={handleSelectSidebarTab}
+        />
+
+        {/* Action Header */}
+        <SidebarActionHeader
+          sidebarTab={sidebarTab}
+          currentBranch={git.currentBranch}
+          activePRNumber={git.activePR ? git.activePR.number : null}
+          loadingChecks={git.loadingChecks}
+          onNewFile={() => {
+            setFileOpModal({ type: 'create_file' });
+            setOpInputText('tests/test_example.py');
+          }}
+          onNewFolder={() => {
+            setFileOpModal({ type: 'create_folder' });
+            setOpInputText('pages');
+          }}
+          onNewBranch={() => {
+            git.setNewBranchInput(`qa/feature-${Date.now().toString().slice(-4)}`);
+            git.setShowBranchModal(true);
+          }}
+          onRefreshChecks={git.handleRefreshPRChecks}
+          onRefreshAll={handleRefreshAll}
+        />
+
+        {/* Content Area for 4 Tabs */}
+        <div className="studio-file-tree">
+          {sidebarTab === 'files' && (
+            <FileTree
+              files={workspace.files}
+              expandedFolders={workspace.expandedFolders}
+              activeTabPath={editor.activeTabPath}
+              onToggleFolder={workspace.toggleFolder}
+              onOpenFile={editor.openFile}
+              onCreateFileInside={(dirPath) => {
+                setFileOpModal({ type: 'create_file', targetPath: dirPath });
+                setOpInputText(`${dirPath}/new_file.py`);
+              }}
+              onRename={(path) => {
+                setFileOpModal({ type: 'rename', targetPath: path });
+                setOpInputText(path);
+              }}
+              onDelete={(path) => setFileOpModal({ type: 'delete', targetPath: path })}
+              onBootstrapWorkspace={handleBootstrapWorkspace}
+            />
+          )}
+
+          {sidebarTab === 'tests' && (
+            <TestExplorer
+              tests={tests.collectedTests}
+              loading={tests.loadingTests}
+              runningTest={run.runningTest}
+              onOpenFile={editor.openFile}
+              onRunTest={run.runExecution}
+            />
+          )}
+
+          {sidebarTab === 'git' && (
+            <SourceControlPanel
+              currentBranch={git.currentBranch}
+              branches={git.branches}
+              recentCommits={git.recentCommits}
+              diffResult={git.diffResult}
+              showDiffView={git.showDiffView}
+              commitMessage={git.commitMessage}
+              isCommitting={git.isCommitting}
+              isPushing={git.isPushing}
+              pushStatusMessage={git.pushStatusMessage}
+              suggestingCommit={git.suggestingCommit}
+              onSwitchBranch={git.handleSwitchBranch}
+              onNewBranch={() => {
+                git.setNewBranchInput(`qa/C12345-suite-${Date.now().toString().slice(-4)}`);
+                git.setShowBranchModal(true);
+              }}
+              onToggleDiffView={() => git.setShowDiffView(!git.showDiffView)}
+              onOpenFile={editor.openFile}
+              onCommitMessageChange={git.setCommitMessage}
+              onSuggestCommit={git.handleSuggestCommitMessage}
+              onCommit={git.handleCommitChanges}
+              onPush={git.handlePushBranch}
+              onOpenPRModal={git.handleOpenPRModal}
+            />
+          )}
+
+          {sidebarTab === 'pr' && (
+            <PullRequestPanel
+              activePR={git.activePR}
+              prChecks={git.prChecks}
+              loadingChecks={git.loadingChecks}
+              diagnosingCheckId={git.diagnosingCheckId}
+              ciDiagnosisResult={git.ciDiagnosisResult}
+              onOpenPRModal={git.handleOpenPRModal}
+              onRefreshChecks={git.handleRefreshPRChecks}
+              onDiagnose={git.handleDiagnoseCI}
+              onDismissDiagnosis={() => git.setCIDiagnosisResult(null)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Center Panel: Multi-Tab Monaco Editor or Diff View */}
+      <div className="studio-editor-pane">
+        {/* Tab Bar */}
+        <div className="studio-editor-tabs">
+          <EditorTabs
+            tabs={editor.tabs}
+            activeTabPath={editor.activeTabPath}
+            showDiffView={git.showDiffView}
+            onSelectTab={editor.selectTab}
+            onCloseTab={editor.closeTab}
+          />
+
+          {/* Action Buttons in Editor Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {editor.activeTab && (
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={!editor.activeTab.isDirty || editor.saving}
+                onClick={editor.saveActiveTab}
+                title="Save current file (Cmd+S)"
+              >
+                <Save size={13} /> {editor.saving ? 'Saving...' : 'Save'}
+              </button>
+            )}
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={problems.validateWorkspace}
+              disabled={problems.validating}
+              title="Validate Python syntax & QA rules"
+            >
+              <CheckCircle2 size={13} color={problems.validationIssues.length === 0 ? '#16a34a' : '#ef4444'} />
+              {problems.validating ? 'Checking...' : `Problems (${problems.validationIssues.length})`}
+            </button>
+
+            {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={run.runningTest}
+                onClick={() => run.runExecution(editor.activeTab?.path)}
+                title="Execute tests in current file"
+              >
+                <Play size={13} /> {run.runningTest ? 'Running...' : 'Run Test'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Editor or Diff View Area */}
+        <MonacoEditorPane
+          activeTab={editor.activeTab}
+          loadingFile={workspace.loadingFile}
+          showDiffView={git.showDiffView}
+          diffResult={git.diffResult}
+          editorRef={editorRef}
+          onChange={editor.updateContent}
+        />
+
+        {/* Collapsible Bottom Problems Panel */}
+        <div style={{ borderTop: '1px solid var(--border-color)', background: '#ffffff' }}>
+          <ProblemsPanel
+            issues={problems.validationIssues}
+            expanded={problems.showProblemsPanel}
+            onToggle={() => problems.setShowProblemsPanel(!problems.showProblemsPanel)}
+            onJumpToIssue={problems.jumpToIssue}
+          />
+
+          {/* Quick Execution Log notification bar */}
+          <RunOutputPanel lastRunResult={run.lastRunResult} onNavigateToRuns={onNavigateToRuns} />
+        </div>
+      </div>
+
+      {/* Right Panel: Interactive QA Assistant Sidecar */}
+      <QAAssistantPanel
+        messages={assistant.assistantMessages}
+        input={assistant.assistantInput}
+        loading={assistant.assistantLoading}
+        onInputChange={assistant.setAssistantInput}
+        onSend={assistant.sendMessage}
+        onInsertSnippet={assistant.insertSnippet}
+      />
+    </div>
+  );
+};
