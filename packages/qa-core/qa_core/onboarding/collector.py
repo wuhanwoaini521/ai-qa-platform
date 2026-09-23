@@ -281,9 +281,7 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
     interleaved between the node id and the outcome (the reference project does exactly that). Each
     `call`-phase report is one physical attempt, so reruns are visible without relying on `RERUN` lines.
     """
-    sources = sorted(report_log.parent.glob(f"{report_log.name}.*")) or (
-        [report_log] if report_log.is_file() else []
-    )
+    sources = sorted(report_log.parent.glob(f"{report_log.name}.*")) or ([report_log] if report_log.is_file() else [])
     if not sources:
         return None
 
@@ -445,9 +443,7 @@ class QAProjectRunner:
         extra_args: list[str] | None = None,
     ) -> SuiteRunOutcome:
         # Resolved because the directory is exported to the child process through PYTHONPATH.
-        artifacts_dir = (
-            Path(self.artifacts_dir).resolve() if self.artifacts_dir else project_root / ARTIFACTS_DIR_NAME
-        )
+        artifacts_dir = Path(self.artifacts_dir).resolve() if self.artifacts_dir else project_root / ARTIFACTS_DIR_NAME
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         report_log = artifacts_dir / REPORT_LOG_NAME
         # The plugin appends per worker, so every previous run's files must go, not just the base one.
