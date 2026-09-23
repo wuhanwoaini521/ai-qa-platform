@@ -362,6 +362,10 @@ class OnboardingService:
             failed=counts.get("failed", 0) + counts.get("error", 0),
             skipped=counts.get("skipped", 0),
             duration_ms=outcome.duration_ms,
+            log_output=((outcome.stdout_tail or "") + ("\n" + outcome.stderr_tail if outcome.stderr_tail else ""))[
+                -20000:
+            ]
+            or None,
         )
         return run.id
 

@@ -1,9 +1,12 @@
+import logging
 from typing import AsyncGenerator
 
 from app.settings import settings
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
+logger = logging.getLogger("app.persistence")
 
 
 class Base(DeclarativeBase):
@@ -73,11 +76,40 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+#: Columns added after the first release. `create_all` creates missing tables but never alters an
+#: existing one, so an already-deployed database needs these added explicitly. This is a stopgap
+#: until the platform adopts a migration framework; the names are code constants, never user input.
+ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (("test_runs", "log_output", "TEXT"),)
+
+
+async def apply_additive_columns(conn) -> list[str]:
+    """Add columns that exist in the models but not yet in the database. Returns what it added."""
+    added: list[str] = []
+    sqlite = "sqlite" in settings.database_url.lower()
+    for table, column, ddl_type in ADDITIVE_COLUMNS:
+        if sqlite:
+            result = await conn.execute(text(f"PRAGMA table_info({table})"))
+            existing = {row[1] for row in result.fetchall()}
+        else:
+            result = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = :table"),
+                {"table": table},
+            )
+            existing = {row[0] for row in result.fetchall()}
+        if not existing or column in existing:
+            continue
+        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+        added.append(f"{table}.{column}")
+    return added
+
+
 async def init_db() -> None:
     import app.persistence.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for added in await apply_additive_columns(conn):
+            logger.warning("Added missing column %s (no migration framework yet)", added)
 
 
 async def check_db_health() -> bool:

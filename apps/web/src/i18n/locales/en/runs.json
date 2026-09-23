@@ -61,5 +61,6 @@
   "publishing": "Publishing...",
   "confirmPublish": "Confirm & Publish to TestRail",
   "triggerFailed": "Failed to trigger execution run: {{message}}",
-  "cancelFailed": "Cancel error: {{message}}"
+  "cancelFailed": "Cancel error: {{message}}",
+  "noConsoleOutput": "This run did not keep any console output."
 }

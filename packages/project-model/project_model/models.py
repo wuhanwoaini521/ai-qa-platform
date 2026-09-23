@@ -390,6 +390,8 @@ class TestRun(EntityBase):
     external_job_id: str | None = None
     external_build_url: str | None = None
     queue_duration_ms: float = 0.0
+    #: Runner console output for a finished run (empty while it is still streaming).
+    log_output: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime

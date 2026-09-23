@@ -614,7 +614,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     lineHeight: 1.6,
                   }}
                 >
-                  {selectedRun.log_output || t('awaitingStream')}
+                  {selectedRun.log_output ||
+                    (selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED'
+                      ? t('awaitingStream')
+                      : t('noConsoleOutput'))}
                 </div>
               </div>
             </div>

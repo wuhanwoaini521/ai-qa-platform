@@ -130,6 +130,7 @@ class TestRunService:
             skipped=orm.skipped,
             cancelled=orm.cancelled,
             duration_ms=orm.duration_ms,
+            log_output=getattr(orm, "log_output", None),
             started_at=orm.started_at,
             finished_at=orm.finished_at,
             created_at=orm.created_at,
@@ -286,6 +287,7 @@ class TestRunService:
                     skipped=skipped_count,
                     duration_ms=suite_result.duration_ms,
                     finished_at=finish_time,
+                    log_output="\n".join(suite_result.raw_logs)[-20000:] or None,
                 )
                 await session.commit()
 

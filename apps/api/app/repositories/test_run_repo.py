@@ -85,6 +85,7 @@ class TestRunRepository:
         external_job_id: str | None = None,
         external_build_url: str | None = None,
         queue_duration_ms: float | None = None,
+        log_output: str | None = None,
     ) -> TestRunORM | None:
         orm = await self.get_by_id(run_id)
         if not orm:
@@ -108,6 +109,8 @@ class TestRunRepository:
             orm.external_build_url = external_build_url
         if queue_duration_ms is not None:
             orm.queue_duration_ms = queue_duration_ms
+        if log_output is not None:
+            orm.log_output = log_output
         await self.session.flush()
         return orm
 

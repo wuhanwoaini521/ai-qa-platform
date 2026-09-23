@@ -179,3 +179,35 @@ async def test_apply_repair_refuses_a_patch_that_would_break_the_file(client: As
     assert "nothing was written" in refused.json()["detail"]
     unchanged = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_repair_broken.py")).json()
     assert unchanged["content"] == original
+
+
+@pytest.mark.integration
+async def test_imported_run_persists_its_console_output(client: AsyncClient, tmp_path):
+    """A finished run must still show what the runner printed, not an empty console."""
+    repo = tmp_path / "console-repo"
+    (repo / "tests" / "unit").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "console-probe"\nrequires-python = ">=3.11"\ndependencies = ["pytest"]\n',
+        encoding="utf-8",
+    )
+    (repo / "tests" / "unit" / "test_probe.py").write_text(
+        "def test_passes():\n    assert True\n\n\ndef test_fails():\n    assert False\n", encoding="utf-8"
+    )
+
+    imported = await client.post("/api/onboarding/import", json={"source_path": str(repo)})
+    assert imported.status_code == 201, imported.text
+    project_id = imported.json()["project_id"]
+
+    run = await client.post(
+        f"/api/onboarding/{project_id}/run",
+        json={"nodeids": ["tests/unit/test_probe.py::test_passes", "tests/unit/test_probe.py::test_fails"]},
+    )
+    assert run.status_code == 200, run.text
+    run_id = run.json()["run_id"]
+
+    fetched = await client.get(f"/api/runs/{run_id}")
+    assert fetched.status_code == 200, fetched.text
+    body = fetched.json()
+    assert body["status"] == "FAILED"
+    assert body["log_output"], "a finished run must keep the runner's console output"
+    assert "test_fails" in body["log_output"]
