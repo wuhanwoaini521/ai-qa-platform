@@ -71,5 +71,7 @@
   "alertProposalFailed": "Failed to generate repair proposal: {{error}}",
   "alertSemanticReviewFailed": "Semantic review failed: {{error}}",
   "alertApplyRepairFailed": "Failed to apply repair: {{error}}",
-  "alertRepairApplied": "Successfully patched locator in {{file}}"
+  "alertRepairApplied": "Successfully patched locator in {{file}}",
+  "alertRepairLocatorNotFound": "The locator {{locator}} was not found in {{file}} — the file may have changed since the failure was recorded.",
+  "noDiffAvailable": "No diff generated for this proposal."
 }

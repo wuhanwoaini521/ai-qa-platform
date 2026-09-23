@@ -186,20 +186,34 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   };
 
   const handleApplyRepair = async () => {
-    if (!selectedFailure || !repairProposal) return;
+    if (!selectedFailure || !repairProposal || !currentProjectId) return;
     const chosenLocator = selectedCandidate || repairProposal.proposed_locator;
+    const filePath = repairProposal.file_path || selectedFailure.test_nodeid.split('::')[0];
     try {
       setApplyingRepair(true);
-      await api.applyRepair(selectedFailure.id, {
-        target_file: repairProposal.target_file,
-        old_locator: repairProposal.broken_locator,
-        new_locator: chosenLocator,
-      });
+      // The API replaces `old_code` with `new_code` inside the workspace file, so the exact text
+      // must exist: check first and say so plainly instead of sending a patch that cannot apply.
+      const file = await api.readWorkspaceFile(currentProjectId, filePath);
+      if (!file.content.includes(repairProposal.old_locator)) {
+        alert(
+          t('alertRepairLocatorNotFound', {
+            file: filePath,
+            locator: repairProposal.old_locator,
+          })
+        );
+        return;
+      }
+
+      await api.applyRepair(
+        selectedFailure.id,
+        { file_path: filePath, old_code: repairProposal.old_locator, new_code: chosenLocator },
+        currentProjectId
+      );
       setRepairApplied(true);
       setResolvedFailureIds((prev) =>
         prev.includes(selectedFailure.id) ? prev : [...prev, selectedFailure.id]
       );
-      alert(t('alertRepairApplied', { file: repairProposal.target_file }));
+      alert(t('alertRepairApplied', { file: filePath }));
     } catch (err: any) {
       alert(t('alertApplyRepairFailed', { error: err.message || err }));
     } finally {
@@ -575,7 +589,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
                         <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>{t('brokenLocator')}</div>
                         <code style={{ fontSize: '12px', color: '#b91c1c', wordBreak: 'break-all' }}>
-                          {repairProposal.old_locator || repairProposal.broken_locator}
+                          {repairProposal.old_locator || repairProposal.old_locator}
                         </code>
                       </div>
                       <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '4px', border: '1px solid #dcfce7' }}>
@@ -626,7 +640,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     <div>
                       <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
                         {t('diffPreview', {
-                          file: repairProposal.file_path || repairProposal.target_file,
+                          file: repairProposal.file_path || repairProposal.file_path,
                         })}
                       </div>
                       <div
@@ -641,7 +655,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           lineHeight: 1.5,
                         }}
                       >
-                        {repairProposal.code_diff || repairProposal.diff_preview}
+                        {repairProposal.code_diff || t('noDiffAvailable')}
                       </div>
                     </div>
                   </div>

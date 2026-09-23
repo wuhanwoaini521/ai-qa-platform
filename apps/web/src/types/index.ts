@@ -326,6 +326,13 @@ export interface FailureRecord {
   created_at: string;
 }
 
+/** Body accepted by `POST /api/failures/{id}/apply-repair` (workspace_id goes in the query). */
+export interface ApplyRepairPayload {
+  file_path: string;
+  old_code: string;
+  new_code: string;
+}
+
 export interface CandidateLocator {
   selector?: string;
   locator?: string;
@@ -335,19 +342,18 @@ export interface CandidateLocator {
 }
 
 export interface LocatorRepairProposal {
-  old_locator?: string;
-  broken_locator?: string;
+  /** The locator currently in the code (the API's field name). */
+  old_locator: string;
   proposed_locator: string;
   confidence: number;
   strategy: string;
   reason?: string;
   code_diff?: string;
-  diff_preview?: string;
+  /** File the proposal targets; null when the failure has no bound workspace file. */
   file_path?: string | null;
-  target_file?: string;
-  line_number?: number;
+  /** Always false from the API: applying a repair is a separate, human-triggered call. */
+  applied: boolean;
   candidates?: CandidateLocator[];
-  applied?: boolean;
 }
 
 export interface ApplyRepairRequest {

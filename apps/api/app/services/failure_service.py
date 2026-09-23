@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import time
 
 from project_model.models import (
@@ -198,11 +199,45 @@ class FailureService:
         )
 
     async def apply_repair(self, workspace_id: str, payload: ApplyRepairRequest) -> dict[str, str]:
-        """Explicitly applies code repair diff upon user confirmation."""
+        """Apply a human-approved repair patch.
+
+        The replacement is validated before it is written: a locator that contains the quote character
+        used by the surrounding string (`"[data-testid=\"ok\"]"`) would otherwise produce a file that
+        no longer parses. If no safe form of the patch exists, nothing is written and the caller is
+        told why — the platform never leaves a workspace in a broken state.
+        """
         current_content = await self.workspace_service.read_file(workspace_id, payload.file_path)
         if payload.old_code not in current_content:
             raise ValueError(f"Original target code block not found in {payload.file_path}")
 
-        updated_content = current_content.replace(payload.old_code, payload.new_code, 1)
+        updated_content = self._patched_content(current_content, payload.file_path, payload.old_code, payload.new_code)
+        if updated_content is None:
+            raise ValueError(
+                f"The proposed patch would make {payload.file_path} invalid; nothing was written. "
+                "Review the locator and apply it manually."
+            )
+
         await self.workspace_service.write_file(workspace_id, payload.file_path, updated_content)
         return {"status": "applied", "file_path": payload.file_path}
+
+    def _patched_content(self, content: str, file_path: str, old_code: str, new_code: str) -> str | None:
+        """Replace `old_code` once, preferring a form that keeps the file parseable."""
+        index = content.find(old_code)
+        if index == -1:
+            return None
+        if not file_path.endswith(".py"):
+            return content[:index] + new_code + content[index + len(old_code) :]
+
+        opening_quote = content[index - 1] if index > 0 else ""
+        candidates = [new_code]
+        if opening_quote in ("'", '"') and opening_quote in new_code:
+            candidates.append(new_code.replace(opening_quote, f"\\{opening_quote}"))
+
+        for candidate in candidates:
+            updated = content[:index] + candidate + content[index + len(old_code) :]
+            try:
+                ast.parse(updated)
+            except SyntaxError:
+                continue
+            return updated
+        return None

@@ -71,5 +71,7 @@
   "alertProposalFailed": "生成修复提案失败：{{error}}",
   "alertSemanticReviewFailed": "语义审查失败：{{error}}",
   "alertApplyRepairFailed": "应用修复失败：{{error}}",
-  "alertRepairApplied": "已成功将定位器补丁写入 {{file}}"
+  "alertRepairApplied": "已成功将定位器补丁写入 {{file}}",
+  "alertRepairLocatorNotFound": "在 {{file}} 中找不到定位器 {{locator}}，该文件可能在失败记录之后已被修改。",
+  "noDiffAvailable": "该提案未生成 diff。"
 }

@@ -96,3 +96,86 @@ async def test_abandoned_runs_are_recovered_and_never_stay_running(client: Async
     # CANCELLED, not FAILED: the platform does not know the outcome and must not invent one.
     assert fetched.json()["status"] == "CANCELLED"
     assert fetched.json()["finished_at"] is not None
+
+
+async def _seed_locator_failure(client: AsyncClient, test_db_session, file_path: str, content: str, locator: str):
+    """Create a project with a real workspace file plus a failure record pointing at it."""
+    project = (
+        await client.post("/api/projects", json={"name": f"Repair {locator}", "bootstrap_workspace": True})
+    ).json()
+    project_id = project["id"]
+    written = await client.put(f"/api/workspaces/{project_id}/file", json={"path": file_path, "content": content})
+    assert written.status_code == 200, written.text
+
+    async with test_db_session() as session:
+        run_repo = TestRunRepository(session)
+        run = await run_repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        execution = await run_repo.add_execution(run_id=run.id, nodeid=f"{file_path}::test_x", status=RunStatus.FAILED)
+        failure = await run_repo.create_failure_record(
+            run_id=run.id,
+            execution_id=execution.id,
+            test_nodeid=f"{file_path}::test_x",
+            test_name="test_x",
+            classification="LOCATOR_CHANGED",
+            exception_type="TimeoutError",
+            error_message=f'Timeout waiting for locator("{locator}")',
+            stack_trace="",
+            failing_locator=locator,
+        )
+        await session.commit()
+        failure_id = failure.id
+    return project_id, failure_id
+
+
+@pytest.mark.integration
+async def test_apply_repair_keeps_the_file_parseable_when_the_locator_contains_quotes(
+    client: AsyncClient, test_db_session
+):
+    """Proposed locators such as [data-testid="submit"] must not break the surrounding string."""
+    original = 'def test_x():\n    selector = "#checkout-submit"\n    assert selector\n'
+    project_id, failure_id = await _seed_locator_failure(
+        client, test_db_session, "tests/test_repair.py", original, "#checkout-submit"
+    )
+
+    applied = await client.post(
+        f"/api/failures/{failure_id}/apply-repair",
+        params={"workspace_id": project_id},
+        json={
+            "file_path": "tests/test_repair.py",
+            "old_code": "#checkout-submit",
+            "new_code": '[data-testid="submit"]',
+        },
+    )
+    assert applied.status_code == 200, applied.text
+
+    patched = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_repair.py")).json()["content"]
+    compile(patched, "test_repair.py", "exec")  # the patched file must still be valid Python
+    assert '[data-testid=\\"submit\\"]' in patched
+    assert "#checkout-submit" not in patched
+
+    validation = await client.post(f"/api/workspaces/{project_id}/validate")
+    assert validation.json()["valid"] is True
+
+
+@pytest.mark.integration
+async def test_apply_repair_refuses_a_patch_that_would_break_the_file(client: AsyncClient, test_db_session):
+    original = 'def test_x():\n    selector = "#checkout-submit"\n    assert selector\n'
+    project_id, failure_id = await _seed_locator_failure(
+        client, test_db_session, "tests/test_repair_broken.py", original, "#checkout-submit"
+    )
+
+    refused = await client.post(
+        f"/api/failures/{failure_id}/apply-repair",
+        params={"workspace_id": project_id},
+        json={
+            "file_path": "tests/test_repair_broken.py",
+            "old_code": "#checkout-submit",
+            # A raw newline cannot live inside the surrounding quoted string, escaped or not.
+            "new_code": "first line\nsecond line",
+        },
+    )
+
+    assert refused.status_code == 400
+    assert "nothing was written" in refused.json()["detail"]
+    unchanged = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_repair_broken.py")).json()
+    assert unchanged["content"] == original

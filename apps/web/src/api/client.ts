@@ -1,4 +1,5 @@
 import {
+  ApplyRepairPayload,
   AIFailureDiagnosisResponse,
   AIStatusResponse,
   AIUsageSummary,
@@ -361,9 +362,9 @@ export const api = {
   },
   getFailureRecurrence: (id: string) =>
     request<FailureRecurrenceItem[]>(`/failures/${id}/recurrence`),
-  applyRepair: (id: string, data: any, workspaceId?: string) =>
+  applyRepair: (id: string, data: ApplyRepairPayload, workspaceId: string) =>
     request<{ status: string; file_path: string }>(
-      `/failures/${id}/apply-repair${workspaceId ? `?workspace_id=${workspaceId}` : ''}`,
+      `/failures/${id}/apply-repair?workspace_id=${encodeURIComponent(workspaceId)}`,
       {
         method: 'POST',
         body: JSON.stringify(data),

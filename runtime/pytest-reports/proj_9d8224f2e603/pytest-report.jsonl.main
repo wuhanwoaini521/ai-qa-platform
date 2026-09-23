@@ -1,3 +1,3 @@
-{"nodeid": "tests/unit/test_knowledge.py::test_load_page_knowledge", "when": "setup", "outcome": "passed", "duration": 0.0024446669995086268, "xfail": false}
-{"nodeid": "tests/unit/test_knowledge.py::test_load_page_knowledge", "when": "call", "outcome": "passed", "duration": 0.0033666859999357257, "xfail": false}
-{"nodeid": "tests/unit/test_knowledge.py::test_load_page_knowledge", "when": "teardown", "outcome": "passed", "duration": 0.002804294999805279, "xfail": false}
+{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "setup", "outcome": "passed", "duration": 0.0015001310021034442, "xfail": false}
+{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "call", "outcome": "failed", "duration": 0.00038821700218250044, "xfail": false, "longrepr": "E   TimeoutError: Locator.wait_for: Timeout 30000ms exceeded waiting for locator(\"#checkout-submit\")"}
+{"nodeid": "tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator", "when": "teardown", "outcome": "passed", "duration": 0.0040913529992394615, "xfail": false}
