@@ -1,0 +1,16 @@
+[project]
+name = "qa-core"
+version = "0.1.0"
+description = "QA Core Contracts, Testing Interfaces, and Execution Abstractions"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9.0",
+    "project-model",
+]
+
+[tool.uv.sources]
+project-model = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

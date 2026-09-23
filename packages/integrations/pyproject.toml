@@ -1,0 +1,16 @@
+[project]
+name = "integrations"
+version = "0.1.0"
+description = "Third-party Integrations and Connectors for AI QA Platform"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9.0",
+    "project-model",
+]
+
+[tool.uv.sources]
+project-model = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

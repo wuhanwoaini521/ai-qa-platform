@@ -1,0 +1,18 @@
+[project]
+name = "worker"
+version = "0.1.0"
+description = "Background QA Task and Test Execution Worker"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9.0",
+    "project-model",
+    "qa-core",
+]
+
+[tool.uv.sources]
+project-model = { workspace = true }
+qa-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
