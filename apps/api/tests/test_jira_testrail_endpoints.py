@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from app.repositories.test_run_repo import TestRunRepository
 from httpx import AsyncClient
+from project_model.models import RunStatus, TestRunCreate
 
 pytestmark = pytest.mark.integration
 
@@ -186,3 +188,37 @@ async def test_testrail_workflow(client: AsyncClient):
     assert pub_live.json()["success"] is True
     assert pub_live.json()["published"] is True
     assert "testrail_run_id" in pub_live.json()
+
+
+@pytest.mark.asyncio
+async def test_testrail_publish_preview_with_real_executions(client: AsyncClient, test_db_session):
+    """A run that actually executed tests must preview its results, not crash on a missing field."""
+    project = await client.post("/api/projects", json={"name": "TestRail Preview Suite"})
+    project_id = project.json()["id"]
+
+    async with test_db_session() as session:
+        run_repo = TestRunRepository(session)
+        run = await run_repo.create_run(
+            TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=["tests/test_a.py::test_ok"])
+        )
+        await run_repo.add_execution(run_id=run.id, nodeid="tests/test_a.py::test_ok", status=RunStatus.PASSED)
+        await run_repo.add_execution(
+            run_id=run.id,
+            nodeid="tests/test_b.py::test_broken",
+            status=RunStatus.FAILED,
+            error_message="AssertionError: boom",
+        )
+        await session.commit()
+        run_id = run.id
+
+    preview = await client.get(f"/api/testrail/runs/{run_id}/preview")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["total_tests"] == 2
+    assert body["unmapped_tests"] == 2  # nothing carries a TestRail case id yet
+    statuses = {item["test_name"]: item["mapped_testrail_status"] for item in body["items"]}
+    assert statuses == {"test_ok": "Passed", "test_broken": "Failed"}
+
+    dry_run = await client.post("/api/testrail/publish", json={"run_id": run_id, "confirm_publish": False})
+    assert dry_run.status_code == 200, dry_run.text
+    assert dry_run.json()["published"] is False

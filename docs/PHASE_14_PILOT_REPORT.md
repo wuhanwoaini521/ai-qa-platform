@@ -100,13 +100,20 @@ Seeded 20 projects / 1000 requirements / 10 000 test cases / 2000 runs / **100 0
 | `ContextSelector.select(...)` (AI context) | — | **9 ms**, 6 fragments, 8.4 KB | |
 | `GET /api/runs?project_id=…&limit=50` | 382–418 ms / **799 KB** | unchanged | *known gap*: listing runs eager-loads every execution |
 
-Defects found by running at scale (both were invisible in the small test fixtures):
+Defects found by running at scale (all three were invisible in the small test fixtures):
 
 1. `calculate_risk_matrix` read `flaky_score.flip_rate`, which does not exist on `FlakyScore` → HTTP
    500 for any project with flaky tests. Fixed to use `alternation_rate`.
 2. `list_flaky_tests` issued one query per distinct test. Replaced with a single window-function
    query (`ROW_NUMBER() OVER (PARTITION BY nodeid ORDER BY started_at DESC)`), portable across
    SQLite and PostgreSQL.
+3. `GET /api/failures?project_id=…` silently ignored the filter (`FailureService.list_failures`
+   took no arguments), so the Failures page showed every project's failures. The filter now joins
+   the failure's run and is covered by `test_failures_are_scoped_to_the_requested_project`.
+4. `GET /api/testrail/runs/{id}/preview` returned HTTP 500 as soon as a run had executions
+   (`TestExecutionORM` has `nodeid`, not `test_name`), so the TestRail publish preview had never
+   worked on real data. Fixed and covered by
+   `test_testrail_publish_preview_with_real_executions`.
 
 ## 11. Reliability (Gate 14.16)
 
@@ -155,3 +162,52 @@ Findings from running the workflow end to end in a browser, and their dispositio
 | Lint (ruff check + format, eslint) | clean |
 | Frontend typecheck + build | clean; entry chunk 254 kB (gzip 77 kB) |
 | GitHub Actions | `Backend Lint & Test`, `Backend Tests (PostgreSQL 16)`, `Frontend Lint & Build` — see `docs/RELEASE_READINESS.md` |
+
+## 15. Jenkins compatibility (Gate 14.14)
+
+The reference repository has **no Jenkinsfile** (`ls Jenkinsfile` → absent), so there is no real job
+contract to map against. What was verified instead:
+
+- the platform's parameter mapping against the fake Jenkins server:
+  job defaults (`REGION`, `NUM_PROCESSES`) merge with per-request parameters (platform values win),
+  `markers` and `nodeids` map onto the configured Jenkins parameter names
+  (`CASES_SPECIFIED`, `TARGET_TESTS`), and an empty selection adds no empty parameters
+  (`test_jenkins_parameter_mapping_matches_the_configured_job_contract`);
+- no enterprise Jenkins was triggered: the pilot never contacted a real CI system.
+
+**Not verified:** a real Jenkinsfile's parameter contract, credentials, and build-status polling.
+
+## 16. TestRail compatibility (Gate 14.15)
+
+The reference repository's own mapper (`integrations/test_management/mapping.py`, imported read-only
+with `PYTHONDONTWRITEBYTECODE=1`) was executed in its own virtualenv next to the platform's
+`NodeIdCaseMapper` on the same inputs:
+
+| Input | Reference mapper | Platform mapper | Match |
+|---|---|---|---|
+| `tests/test_c1001_login.py::test_login` | `C1001` | `C1001` | ✅ |
+| `tests/test_x.py::test_c2002_flow` | `C2002` | `C2002` | ✅ |
+| marker `testrail("C4242")` | `C4242` | `C4242` | ✅ |
+| marker `case_id='c777'` | **`Cc777`** | `C777` | ❌ reference defect |
+| explicit map `…::test_checkout_total → C9001` | `C9001` | `C9001` | ✅ |
+| unmapped test | `None` | `None` | ✅ |
+
+Equivalence holds on 5 of 6 cases; the single divergence is a normalisation bug in the *reference*
+project (it prefixes `C` to an already-prefixed lowercase id, producing `Cc777`), which the platform
+normalises to `C777`. One test → many cases and parameterised case mapping are supported through the
+explicit `.qa-platform-cases.yaml` and the marker/docstring/function-name extraction.
+
+Publishing remains **preview only**. Against the pilot run's two executions
+(`tests/unit/test_pilot_controlled.py`, one PASSED / one FAILED) the platform produced:
+
+```json
+{"total_tests": 2, "mapped_tests": 0, "unmapped_tests": 2,
+ "items": [{"test_name": "test_pilot_flaky_passes_on_retry", "mapped_testrail_status": "Passed", ...},
+           {"test_name": "test_pilot_locator_regression", "mapped_testrail_status": "Failed",
+            "comment": "… TimeoutError: Locator.wait_for: Timeout 30000ms exceeded …"}]}
+```
+
+and `POST /api/testrail/publish` with `confirm_publish=false` returned
+`{"success": true, "published": false, "total_published": 0}` — no result was written to any
+TestRail instance. Finding the preview crash (see §10) was a direct result of running it against
+real executions rather than an empty run.

@@ -38,9 +38,11 @@ def get_failure_service(session: AsyncSession = Depends(get_db)) -> FailureServi
 
 @router.get("", response_model=list[FailureRecord])
 async def list_failures(
+    project_id: str | None = Query(default=None, description="Only failures of this project's runs"),
+    limit: int = Query(default=50, ge=1, le=200),
     service: FailureService = Depends(get_failure_service),
 ):
-    return await service.list_failures()
+    return await service.list_failures(project_id=project_id, limit=limit)
 
 
 @router.get("/{failure_id}", response_model=FailureRecord)

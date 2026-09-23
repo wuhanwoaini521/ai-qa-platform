@@ -2,8 +2,9 @@ from datetime import timedelta
 
 import pytest
 from app.persistence.models import TestRunORM, utc_now
+from app.repositories.test_run_repo import TestRunRepository
 from httpx import AsyncClient
-from project_model.models import RunStatus
+from project_model.models import RunStatus, TestRunCreate
 
 pytestmark = pytest.mark.integration
 
@@ -94,3 +95,41 @@ async def test_abandoned_runs_are_recovered_and_never_stay_running(client: Async
     # CANCELLED, not FAILED: the platform does not know the outcome and must not invent one.
     assert fetched.json()["status"] == "CANCELLED"
     assert fetched.json()["finished_at"] is not None
+
+
+@pytest.mark.integration
+async def test_failures_are_scoped_to_the_requested_project(client: AsyncClient, test_db_session):
+    """A project filter must be honoured: failures from other projects are a cross-project leak."""
+    first = (await client.post("/api/projects", json={"name": "Failures Scope A"})).json()["id"]
+    second = (await client.post("/api/projects", json={"name": "Failures Scope B"})).json()["id"]
+
+    async with test_db_session() as session:
+        run_repo = TestRunRepository(session)
+        for index, project_id in enumerate((first, second)):
+            run = await run_repo.create_run(
+                TestRunCreate(
+                    project_id=project_id, workspace_id=project_id, nodeids=["tests/test_fails.py::test_fails"]
+                )
+            )
+            execution = await run_repo.add_execution(
+                run_id=run.id, nodeid="tests/test_fails.py::test_fails", status=RunStatus.FAILED
+            )
+            await run_repo.create_failure_record(
+                run_id=run.id,
+                execution_id=execution.id,
+                test_nodeid="tests/test_fails.py::test_fails",
+                test_name=f"test_fails_{index}",
+                classification="ASSERTION_FAILURE",
+                exception_type="AssertionError",
+                error_message="assert False",
+                stack_trace="",
+            )
+        # The repositories flush; the HTTP client uses its own session, so commit first.
+        await session.commit()
+
+    scoped = await client.get(f"/api/failures?project_id={first}")
+    unscoped = await client.get("/api/failures")
+
+    assert scoped.status_code == 200, scoped.text
+    assert [item["test_name"] for item in scoped.json()] == ["test_fails_0"]
+    assert len(unscoped.json()) == 2

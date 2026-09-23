@@ -137,3 +137,50 @@ async def test_runner_profile_api_endpoints(client: AsyncClient):
     del_res = await client.delete(f"/api/runners/{runner_id}")
     assert del_res.status_code == 200
     assert del_res.json()["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_jenkins_parameter_mapping_matches_the_configured_job_contract(monkeypatch):
+    """A real Jenkinsfile reads named parameters, so the mapping must be exact and observable."""
+    fake_server = FakeJenkinsServer(base_url="http://jenkins.mock.ci:8080", job_name="qa-e2e-suite")
+    transport = httpx.MockTransport(fake_server.handle_request)
+    orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: orig_client(transport=transport))
+
+    config = JenkinsConfig(
+        base_url="http://jenkins.mock.ci:8080",
+        job_name="qa-e2e-suite",
+        user="qa-agent",
+        api_token="token_secret_123",
+        # Job defaults, plus the mapping from platform fields to Jenkins parameter names.
+        default_parameters={"REGION": "EU", "NUM_PROCESSES": "4"},
+        parameter_mapping={"markers": "CASES_SPECIFIED", "nodeids": "TARGET_TESTS"},
+    )
+    backend = JenkinsRunnerBackend(config=config)
+
+    request = RunnerTriggerRequest(
+        run_id="run_jenkins_789",
+        project_id="proj_1",
+        markers=["smoke", "regression"],
+        nodeids=["tests/test_checkout.py::test_payment", "tests/test_cart.py::test_add_item"],
+        parameters={"NUM_PROCESSES": "8", "BROWSER": "chromium"},
+    )
+
+    # The mapping is applied before the request is sent, and platform values win over job defaults.
+    assert backend._apply_parameter_mapping(request) == {
+        "REGION": "EU",
+        "NUM_PROCESSES": "8",
+        "BROWSER": "chromium",
+        "CASES_SPECIFIED": "smoke and regression",
+        "TARGET_TESTS": "tests/test_checkout.py::test_payment tests/test_cart.py::test_add_item",
+    }
+
+    triggered = await backend.trigger(request)
+    assert triggered.status == RunStatus.RUNNING
+    assert triggered.external_job_id.startswith("queue:")
+
+    # A request with no selection must not invent empty parameters for the job.
+    empty_mapping = backend._apply_parameter_mapping(RunnerTriggerRequest(run_id="run_empty", project_id="proj_1"))
+    assert "CASES_SPECIFIED" not in empty_mapping
+    assert "TARGET_TESTS" not in empty_mapping

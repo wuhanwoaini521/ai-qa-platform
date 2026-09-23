@@ -219,10 +219,14 @@ class TestRunRepository:
         )
         return list(result.scalars().all())
 
-    async def list_failures(self, limit: int = 50) -> list[FailureRecordORM]:
-        result = await self.session.execute(
-            select(FailureRecordORM).order_by(desc(FailureRecordORM.created_at)).limit(limit)
-        )
+    async def list_failures(self, limit: int = 50, project_id: str | None = None) -> list[FailureRecordORM]:
+        query = select(FailureRecordORM).order_by(desc(FailureRecordORM.created_at))
+        if project_id:
+            # Failures carry a run id, so the project filter has to go through the run.
+            query = query.join(TestRunORM, FailureRecordORM.run_id == TestRunORM.id).where(
+                TestRunORM.project_id == project_id
+            )
+        result = await self.session.execute(query.limit(limit))
         return list(result.scalars().all())
 
     async def get_failure_by_id(self, failure_id: str) -> FailureRecordORM | None:

@@ -57,8 +57,8 @@ class FailureService:
             created_at=orm.created_at,
         )
 
-    async def list_failures(self) -> list[FailureRecord]:
-        orms = await self.run_repo.list_failures()
+    async def list_failures(self, project_id: str | None = None, limit: int = 50) -> list[FailureRecord]:
+        orms = await self.run_repo.list_failures(limit=limit, project_id=project_id)
         return [self._to_dto(orm) for orm in orms]
 
     async def get_failure(self, failure_id: str) -> FailureRecord | None:

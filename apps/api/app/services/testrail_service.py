@@ -50,7 +50,8 @@ class TestRailService:
             exec_dicts.append(
                 {
                     "nodeid": exc.nodeid,
-                    "test_name": exc.test_name,
+                    # Executions record a node id, not a title: the test name is its last segment.
+                    "test_name": exc.nodeid.split("::")[-1],
                     "status": exc.status,
                     "duration_ms": exc.duration_ms,
                     "error_message": exc.error_message or "",
