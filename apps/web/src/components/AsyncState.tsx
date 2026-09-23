@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 const blockStyle: React.CSSProperties = {
   padding: '32px',
@@ -11,9 +12,10 @@ interface LoadingStateProps {
   label?: string;
 }
 
-export const LoadingState: React.FC<LoadingStateProps> = ({ label = 'Loading...' }) => (
-  <div style={blockStyle}>{label}</div>
-);
+export const LoadingState: React.FC<LoadingStateProps> = ({ label }) => {
+  const { t } = useTranslation('common');
+  return <div style={blockStyle}>{label ?? t('loading')}</div>;
+};
 
 interface ErrorStateProps {
   title?: string;
@@ -21,17 +23,20 @@ interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-export const ErrorState: React.FC<ErrorStateProps> = ({ title = 'Something went wrong', message, onRetry }) => (
-  <div style={{ ...blockStyle, color: 'var(--danger-color, #ef4444)' }}>
-    <div style={{ fontWeight: 600, marginBottom: '6px' }}>{title}</div>
-    <div style={{ marginBottom: onRetry ? '12px' : 0 }}>{message}</div>
-    {onRetry && (
-      <button type="button" className="btn btn-secondary" onClick={onRetry}>
-        Retry
-      </button>
-    )}
-  </div>
-);
+export const ErrorState: React.FC<ErrorStateProps> = ({ title, message, onRetry }) => {
+  const { t } = useTranslation('common');
+  return (
+    <div style={{ ...blockStyle, color: 'var(--danger-color, #ef4444)' }}>
+      <div style={{ fontWeight: 600, marginBottom: '6px' }}>{title ?? t('errorTitle')}</div>
+      <div style={{ marginBottom: onRetry ? '12px' : 0 }}>{message}</div>
+      {onRetry && (
+        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          {t('retry')}
+        </button>
+      )}
+    </div>
+  );
+};
 
 interface EmptyStateProps {
   message: string;

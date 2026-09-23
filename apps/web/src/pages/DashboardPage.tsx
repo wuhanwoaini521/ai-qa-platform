@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { DashboardStats } from '../types';
 import {
@@ -24,6 +25,7 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
 }) => {
+  const { t } = useTranslation('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +46,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }, []);
 
   if (loading && !stats) {
-    return <div style={{ padding: '20px', color: '#64748b' }}>Loading platform overview...</div>;
+    return <div style={{ padding: '20px', color: '#64748b' }}>{t('loadingOverview')}</div>;
   }
 
   const getStatusBadge = (status: string) => {
@@ -68,7 +70,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Pass Rate Today
+                {t('passRateToday')}
               </div>
               <div style={{ fontSize: '26px', fontWeight: 700, color: '#16a34a', marginTop: '4px' }}>
                 {stats?.pass_rate_today !== undefined ? `${stats.pass_rate_today.toFixed(1)}%` : '100%'}
@@ -84,7 +86,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Likely Flaky Tests
+                {t('likelyFlakyTests')}
               </div>
               <div style={{ fontSize: '26px', fontWeight: 700, color: '#ea580c', marginTop: '4px' }}>
                 {stats?.flaky_tests_count ?? 0}
@@ -100,7 +102,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Rerun Recoveries
+                {t('rerunRecoveries')}
               </div>
               <div style={{ fontSize: '26px', fontWeight: 700, color: '#2563eb', marginTop: '4px' }}>
                 {stats?.rerun_recovery_count ?? 0}
@@ -116,7 +118,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Avg Execution Time
+                {t('avgExecutionTime')}
               </div>
               <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.average_test_duration_ms
@@ -139,7 +141,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                QA Projects
+                {t('qaProjects')}
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_projects ?? 0}
@@ -153,7 +155,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Requirements
+                {t('requirements')}
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_requirements ?? 0}
@@ -167,7 +169,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Test Cases
+                {t('testCases')}
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_test_cases ?? 0}
@@ -181,7 +183,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Total Executions
+                {t('totalExecutions')}
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 {stats?.total_runs ?? 0}
@@ -197,9 +199,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Recent Execution Runs */}
         <div className="card">
           <div className="card-header">
-            <span className="card-title">Recent Execution Runs</span>
+            <span className="card-title">{t('recentRuns')}</span>
             <button className="btn btn-secondary btn-sm" onClick={() => onNavigate('runs')}>
-              View All <ArrowRight size={13} />
+              {t('viewAll')} <ArrowRight size={13} />
             </button>
           </div>
           <div className="card-body" style={{ padding: 0 }}>
@@ -207,11 +209,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Status</th>
-                    <th>Run ID</th>
-                    <th>Runner</th>
-                    <th>Total</th>
-                    <th>Duration</th>
+                    <th>{t('common:status')}</th>
+                    <th>{t('runId')}</th>
+                    <th>{t('runner')}</th>
+                    <th>{t('common:total')}</th>
+                    <th>{t('common:duration')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -241,7 +243,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </table>
             ) : (
               <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No recent execution runs. Launch a test from Automation Studio or Test Cases to start tracking.
+                {t('noRecentRuns')}
               </div>
             )}
           </div>
@@ -250,7 +252,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* QA Engineering Lifecycle Quick Access */}
         <div className="card">
           <div className="card-header">
-            <span className="card-title">QA Intelligence Architecture</span>
+            <span className="card-title">{t('intelligenceArchitecture')}</span>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
@@ -261,8 +263,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Sparkles size={16} color="#2563eb" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>1. AI Requirement & Design</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Risk analysis & test dimensional designs</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{t('requirementStep')}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('requirementStepDescription')}</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />
@@ -276,8 +278,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <PlayCircle size={16} color="#9333ea" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>2. Automation Studio V2</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AST validation, live runner & sidecar</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{t('automationStep')}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('automationStepDescription')}</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />
@@ -291,8 +293,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Flame size={16} color="#ea580c" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>3. Flaky Test Intelligence</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Deterministic scoring & transition analysis</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{t('flakyStep')}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('flakyStepDescription')}</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />
@@ -306,8 +308,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <AlertTriangle size={16} color="#dc2626" />
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>4. Failure AI & Self-Healing</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Root-cause diagnosis & semantic review</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{t('failureStep')}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('failureStepDescription')}</div>
                 </div>
               </div>
               <ArrowRight size={14} color="#94a3b8" />

@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const REACT_RUNTIME = ['/node_modules/react/', '/node_modules/react-dom/', '/node_modules/react-router'];
+const I18N_RUNTIME = ['/node_modules/i18next', '/node_modules/react-i18next'];
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -16,11 +19,22 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Keep the framework runtime and the icon set in their own long-lived chunks; pages
-        // (including the lazy-loaded Automation Studio) build on top of them.
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          icons: ['lucide-react'],
+        // Split the long-lived runtime, the icon set and the translation dictionaries into their own
+        // cacheable chunks; feature chunks (including the lazy Automation Studio) build on top.
+        manualChunks(id: string) {
+          if (id.includes('/i18n/locales/')) {
+            return 'i18n-resources';
+          }
+          if (I18N_RUNTIME.some((prefix) => id.includes(prefix))) {
+            return 'vendor';
+          }
+          if (REACT_RUNTIME.some((prefix) => id.includes(prefix))) {
+            return 'vendor';
+          }
+          if (id.includes('/node_modules/lucide-react/')) {
+            return 'icons';
+          }
+          return undefined;
         },
       },
     },

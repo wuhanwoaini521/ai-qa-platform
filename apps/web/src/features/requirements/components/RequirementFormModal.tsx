@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Project, RequirementCreate, RequirementStatus } from '../../../types';
 
 interface RequirementFormModalProps {
@@ -47,6 +48,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
   onSubmit: handleCreateRequirement,
   onClose,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <>
       {isOpen && (
@@ -54,7 +56,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
           <div className="modal-card">
             <form onSubmit={handleCreateRequirement}>
               <div className="modal-header">
-                <h3>New Requirement</h3>
+                <h3>{t('requirementFormTitle')}</h3>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
@@ -65,7 +67,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
               </div>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Project *</label>
+                  <label className="form-label">{t('requirementFormProjectLabel')}</label>
                   <select
                     className="form-select"
                     value={reqFormData.project_id}
@@ -80,34 +82,34 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Title *</label>
+                  <label className="form-label">{t('requirementFormTitleLabel')}</label>
                   <input
                     type="text"
                     required
                     className="form-input"
-                    placeholder="e.g. User Authentication & Password Reset"
+                    placeholder={t('requirementFormTitlePlaceholder')}
                     value={reqFormData.title}
                     onChange={(e) => setReqFormData({ ...reqFormData, title: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Description</label>
+                  <label className="form-label">{t('common:description')}</label>
                   <textarea
                     rows={3}
                     className="form-textarea"
-                    placeholder="Detailed explanation of the feature or requirement..."
+                    placeholder={t('requirementFormDescriptionPlaceholder')}
                     value={reqFormData.description}
                     onChange={(e) => setReqFormData({ ...reqFormData, description: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Acceptance Criteria</label>
+                  <label className="form-label">{t('requirementFormAcceptanceCriteriaLabel')}</label>
                   <textarea
                     rows={3}
                     className="form-textarea"
-                    placeholder="Given ..., When ..., Then ..."
+                    placeholder={t('requirementFormAcceptanceCriteriaPlaceholder')}
                     value={reqFormData.acceptance_criteria}
                     onChange={(e) =>
                       setReqFormData({ ...reqFormData, acceptance_criteria: e.target.value })
@@ -116,7 +118,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Initial Status</label>
+                  <label className="form-label">{t('requirementFormInitialStatusLabel')}</label>
                   <select
                     className="form-select"
                     value={reqFormData.status}
@@ -137,10 +139,10 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   className="btn btn-secondary"
                   onClick={onClose}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Requirement
+                  {t('requirementFormSubmit')}
                 </button>
               </div>
             </form>

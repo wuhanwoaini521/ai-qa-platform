@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { AIStatusResponse, Project, RunnerProfile } from '../types';
 import { api } from '../api/client';
-import { FolderGit2, Sparkles, Cpu } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { SUPPORTED_LANGUAGES } from '../i18n';
+import { usePreferences } from '../app/Preferences';
+import { FolderGit2, Sparkles, Cpu, Languages } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -18,6 +21,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProject,
   actions,
 }) => {
+  const { t } = useTranslation('common');
+  const { language, setLanguage } = usePreferences();
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
 
@@ -48,9 +53,10 @@ export const Header: React.FC<HeaderProps> = ({
               className="form-control"
               style={{ width: '200px', padding: '4px 8px', fontSize: '12px' }}
               value={selectedProjectId || ''}
+              aria-label={t('project')}
               onChange={(e) => onSelectProject(e.target.value)}
             >
-              <option value="">All Projects</option>
+              <option value="">{t('allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -100,6 +106,35 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Cpu size={12} color="#64748b" />
           <span>Runners: {runnerProfiles.length > 0 ? `${runnerProfiles.length} Active` : 'Local'}</span>
+        </div>
+
+        <div
+          title={t('languageDescription')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '12px',
+            background: '#f8fafc',
+            color: '#475569',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          <Languages size={12} color="#64748b" />
+          <select
+            aria-label={t('language')}
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as (typeof SUPPORTED_LANGUAGES)[number]['code'])}
+            style={{ border: 'none', background: 'transparent', fontSize: '11px', color: '#475569' }}
+          >
+            {SUPPORTED_LANGUAGES.map((entry) => (
+              <option key={entry.code} value={entry.code}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="topbar-actions">{actions}</div>

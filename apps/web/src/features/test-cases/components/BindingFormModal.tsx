@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { AutomationBindingStatus } from '../../../types';
 import { BindingFormData } from '../hooks/useAutomationBinding';
 
@@ -17,6 +18,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
   onSubmit: handleSaveManualBinding,
   onClose,
 }) => {
+  const { t } = useTranslation('testCases');
   return (
     <>
       {isOpen && (
@@ -24,7 +26,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
           <div className="modal-dialog">
             <form onSubmit={handleSaveManualBinding}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Configure Automation Binding</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('bindingModalTitle')}</h3>
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', cursor: 'pointer' }}
@@ -35,7 +37,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">Test File Path *</label>
+                  <label className="form-label">{t('bindingModalFilePath')}</label>
                   <input
                     type="text"
                     required
@@ -48,7 +50,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Pytest Node ID *</label>
+                  <label className="form-label">{t('bindingModalNodeId')}</label>
                   <input
                     type="text"
                     required
@@ -61,7 +63,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Automation Status</label>
+                  <label className="form-label">{t('bindingModalStatus')}</label>
                   <select
                     className="form-control"
                     value={bindingFormData.status}
@@ -85,10 +87,10 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                   className="btn btn-secondary"
                   onClick={onClose}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Binding
+                  {t('bindingModalSave')}
                 </button>
               </div>
             </form>

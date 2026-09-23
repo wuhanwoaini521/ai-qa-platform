@@ -1,0 +1,12 @@
+{
+  "title": "Settings",
+  "subtitle": "Configure the interface language, the start page and the default project.",
+  "saved": "Settings saved",
+  "interface": "Interface",
+  "startPage": "Start page",
+  "startPageDescription": "Which page opens after sign-in",
+  "defaultProject": "Default project",
+  "defaultProjectDescription": "Pin the project selected when the app starts",
+  "defaultProjectNone": "Use the last used project",
+  "storageNote": "Settings are stored in this browser (localStorage), not on the server."
+}

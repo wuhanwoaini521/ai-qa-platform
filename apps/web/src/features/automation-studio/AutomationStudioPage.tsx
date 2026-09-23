@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, Play, Save } from 'lucide-react';
 import { Project } from '../../types';
 import { FileOpModalState, SidebarTab } from './types';
@@ -42,6 +43,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   onNavigateToRuns,
   initialOpenFilePath,
 }) => {
+  const { t } = useTranslation('studioShell');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   // Cross-panel UI state (read/written by more than one panel)
@@ -168,7 +170,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         editor.closeTab(fileOpModal.targetPath);
       }
     } catch (err) {
-      alert(`Error performing file operation: ${errorText(err)}`);
+      alert(t('error.fileOperation', { message: errorText(err) }));
     } finally {
       setFileOpModal(null);
       setOpInputText('');
@@ -189,7 +191,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     return (
       <div className="card" style={{ margin: '20px' }}>
         <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          Please select or create a project first to open Automation Studio.
+          {t('selectProjectFirst')}
         </div>
       </div>
     );
@@ -386,9 +388,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 className="btn btn-secondary btn-sm"
                 disabled={!editor.activeTab.isDirty || editor.saving}
                 onClick={editor.saveActiveTab}
-                title="Save current file (Cmd+S)"
+                title={t('editor.saveCurrentFile')}
               >
-                <Save size={13} /> {editor.saving ? 'Saving...' : 'Save'}
+                <Save size={13} /> {editor.saving ? t('editor.saving') : t('common:save')}
               </button>
             )}
 
@@ -396,10 +398,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               className="btn btn-secondary btn-sm"
               onClick={problems.validateWorkspace}
               disabled={problems.validating}
-              title="Validate Python syntax & QA rules"
+              title={t('editor.validateTooltip')}
             >
               <CheckCircle2 size={13} color={problems.validationIssues.length === 0 ? '#16a34a' : '#ef4444'} />
-              {problems.validating ? 'Checking...' : `Problems (${problems.validationIssues.length})`}
+              {problems.validating ? t('editor.checking') : t('editor.problems', { problemCount: problems.validationIssues.length })}
             </button>
 
             {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
@@ -407,9 +409,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 className="btn btn-primary btn-sm"
                 disabled={run.runningTest}
                 onClick={() => run.runExecution(editor.activeTab?.path)}
-                title="Execute tests in current file"
+                title={t('editor.runTestTooltip')}
               >
-                <Play size={13} /> {run.runningTest ? 'Running...' : 'Run Test'}
+                <Play size={13} /> {run.runningTest ? t('editor.running') : t('editor.runTest')}
               </button>
             )}
           </div>

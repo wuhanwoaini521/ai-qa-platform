@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 
 interface QuickOpenProps {
@@ -20,6 +21,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   onSelect,
   onClose,
 }) => {
+  const { t } = useTranslation('studioShell');
   // Filtered files for Quick Open
   const filteredQuickFiles = files.filter((p) =>
     p.toLowerCase().includes(query.toLowerCase())
@@ -39,7 +41,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             type="text"
             className="form-control"
             style={{ border: 'none', boxShadow: 'none', padding: '4px', fontSize: '14px' }}
-            placeholder="Search files by name... (Esc to close)"
+            placeholder={t('quickOpen.placeholder')}
             value={query}
             onChange={(e) => {
               onQueryChange(e.target.value);
@@ -66,7 +68,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         <div style={{ maxHeight: '280px', overflowY: 'auto', padding: '6px' }}>
           {filteredQuickFiles.length === 0 ? (
             <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-              No matching files found
+              {t('quickOpen.noMatches')}
             </div>
           ) : (
             filteredQuickFiles.map((p, idx) => (
@@ -87,7 +89,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                 onClick={() => onSelect(p)}
               >
                 <span>{p}</span>
-                <span style={{ fontSize: '10px', color: '#94a3b8' }}>File</span>
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>{t('quickOpen.fileLabel')}</span>
               </div>
             ))
           )}

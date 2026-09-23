@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronRight,
@@ -35,6 +36,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
   onDelete,
   onBootstrapWorkspace,
 }) => {
+  const { t } = useTranslation('studioShell');
   // Render file tree recursively
   const renderFileTree = (nodes: FileNode[], depth = 0): React.ReactNode => {
     return nodes.map((node) => {
@@ -58,7 +60,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
               <div className="tree-actions" onClick={(e) => e.stopPropagation()}>
                 <button
                   className="icon-btn"
-                  title="New File Inside"
+                  title={t('fileTree.newFileInside')}
                   onClick={() => onCreateFileInside(node.path)}
                 >
                   <Plus size={11} />
@@ -88,10 +90,10 @@ export const FileTree: React.FC<FileTreeProps> = ({
             </span>
           </div>
           <div className="tree-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="icon-btn" title="Rename" onClick={() => onRename(node.path)}>
+            <button className="icon-btn" title={t('fileTree.rename')} onClick={() => onRename(node.path)}>
               <Edit2 size={11} />
             </button>
-            <button className="icon-btn" title="Delete" onClick={() => onDelete(node.path)}>
+            <button className="icon-btn" title={t('common:delete')} onClick={() => onDelete(node.path)}>
               <Trash2 size={11} color="#ef4444" />
             </button>
           </div>
@@ -103,9 +105,9 @@ export const FileTree: React.FC<FileTreeProps> = ({
   if (files.length === 0) {
     return (
       <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-        <p style={{ marginBottom: '10px' }}>Workspace is uninitialized.</p>
+        <p style={{ marginBottom: '10px' }}>{t('fileTree.uninitialized')}</p>
         <button className="btn btn-primary btn-sm" onClick={onBootstrapWorkspace}>
-          Initialize Workspace
+          {t('fileTree.initializeWorkspace')}
         </button>
       </div>
     );

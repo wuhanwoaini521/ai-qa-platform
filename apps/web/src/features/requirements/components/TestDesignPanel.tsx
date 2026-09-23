@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layers, ListChecks, Plus, Sparkles } from 'lucide-react';
 import { TestDesign } from '../../../types';
 
@@ -15,40 +16,41 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
   onAddManualDesign,
   onGenerateCases,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <div className="card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Layers size={16} color="#16a34a" />
-          <span className="card-title">Test Designs ({testDesigns.length})</span>
+          <span className="card-title">{t('designsTitle', { total: testDesigns.length })}</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-primary btn-sm" onClick={onGenerateDesigns}>
             <Sparkles size={13} />
-            <span>AI Generate Designs</span>
+            <span>{t('designsGenerateDesigns')}</span>
           </button>
           <button
             className="btn btn-secondary btn-sm"
             onClick={onAddManualDesign}
           >
-            <Plus size={13} /> Add Manual Design
+            <Plus size={13} /> {t('designsAddManual')}
           </button>
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
         {testDesigns.length === 0 ? (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No test designs yet. Click <strong>AI Generate Designs</strong> to produce structured functional, boundary, and negative dimensions.
+            {t('designsEmptyBefore')}<strong>{t('designsEmptyAction')}</strong>{t('designsEmptyAfter')}
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Design Title</th>
-                <th>Category</th>
-                <th>Risk</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>{t('designsColumnTitle')}</th>
+                <th>{t('designsColumnCategory')}</th>
+                <th>{t('designsColumnRisk')}</th>
+                <th>{t('common:status')}</th>
+                <th>{t('common:actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -68,7 +70,7 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
                       onClick={() => onGenerateCases(td)}
                     >
                       <ListChecks size={12} />
-                      <span>AI Generate Cases</span>
+                      <span>{t('designsGenerateCases')}</span>
                     </button>
                   </td>
                 </tr>

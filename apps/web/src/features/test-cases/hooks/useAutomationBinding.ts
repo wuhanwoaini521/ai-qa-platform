@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/client';
 import {
   AutomationBinding,
@@ -33,6 +34,7 @@ export function useAutomationBinding({
   onNavigateToRuns,
   updateCaseStatus,
 }: UseAutomationBindingOptions) {
+  const { t } = useTranslation('testCases');
   const [selectedBinding, setSelectedBinding] = useState<AutomationBinding | null>(null);
   const [isBindingModalOpen, setIsBindingModalOpen] = useState(false);
   const [bindingFormData, setBindingFormData] = useState<BindingFormData>({
@@ -91,7 +93,7 @@ export function useAutomationBinding({
       const draft = await api.generateAutomation(selectedCase.id, true);
       setGeneratedDraft(draft);
     } catch (err) {
-      alert(`Generation error: ${errorText(err)}`);
+      alert(t('errorGeneration', { message: errorText(err) }));
     } finally {
       setGenerating(false);
     }
@@ -123,9 +125,9 @@ export function useAutomationBinding({
 
       setSelectedBinding(savedBinding);
       await updateCaseStatus(selectedCase.id, 'AUTOMATED');
-      alert(`Automation scaffold saved to ${generatedDraft.target_file} and bound to test case.`);
+      alert(t('errorSaveDraftSuccess', { file: generatedDraft.target_file }));
     } catch (err) {
-      alert(`Failed to save draft to workspace: ${errorText(err)}`);
+      alert(t('errorSaveDraftFailed', { message: errorText(err) }));
     } finally {
       setSavingDraft(false);
     }
@@ -146,7 +148,7 @@ export function useAutomationBinding({
       await updateCaseStatus(selectedCase.id, bindingFormData.status === 'DRAFT' ? 'DRAFT' : 'AUTOMATED');
       setIsBindingModalOpen(false);
     } catch (err) {
-      alert(`Binding save error: ${errorText(err)}`);
+      alert(t('errorBindingSaveFailed', { message: errorText(err) }));
     }
   };
 
@@ -154,19 +156,21 @@ export function useAutomationBinding({
     if (!selectedCase || !selectedProjectId || runningCase) return;
     try {
       setRunningCase(true);
-      setRunMessage('Triggering execution run...');
+      setRunMessage(t('runTriggering'));
       const run = await api.createTestRun({
         project_id: selectedProjectId,
         workspace_id: selectedProjectId,
         nodeids: selectedBinding ? [selectedBinding.nodeid] : [],
         requested_by: `Test Case: ${selectedCase.title}`,
       });
-      setRunMessage(`Execution dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
+      setRunMessage(
+        t('runDispatched', { runId: run.id.slice(0, 8), status: run.status })
+      );
       if (onNavigateToRuns) {
         setTimeout(() => onNavigateToRuns(run.id), 1200);
       }
     } catch (err) {
-      setRunMessage(`Execution error: ${errorText(err)}`);
+      setRunMessage(t('runError', { message: errorText(err) }));
     } finally {
       setRunningCase(false);
     }

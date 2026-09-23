@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Project, Requirement } from '../../types';
 import { useRequirements } from './hooks/useRequirements';
 import { useTestDesigns } from './hooks/useTestDesigns';
@@ -29,6 +30,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   initialRequirementId,
   onSelectRequirement,
 }) => {
+  const { t } = useTranslation('requirements');
   const reqForm = useRequirementFormModal(selectedProjectId || (projects[0]?.id ?? ''));
   const designForm = useTestDesignFormModal();
 
@@ -79,7 +81,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
       {projects.length === 0 ? (
         <div className="card">
           <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Please create a project first before creating requirements.
+            {t('pageNoProject')}
           </div>
         </div>
       ) : (
@@ -108,7 +110,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           ) : (
             <div className="card">
               <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Select a requirement to view details.
+                {t('pageSelectRequirement')}
               </div>
             </div>
           )}

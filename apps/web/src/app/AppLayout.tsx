@@ -1,33 +1,49 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Navigation } from '../components/Navigation';
 import { Header } from '../components/Header';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { LoadingState } from '../components/AsyncState';
+import { useTranslation } from 'react-i18next';
 import { useProjectScope } from './ProjectScope';
+import { usePreferences } from './Preferences';
 import { withProjectId } from './navigation';
 
-const PAGE_TITLES: { match: (path: string) => boolean; title: string }[] = [
-  { match: (p) => p === '/', title: 'Platform Overview' },
-  { match: (p) => p.includes('/studio'), title: 'Automation Studio' },
-  { match: (p) => /^\/projects(\/[^/]+)?$/.test(p), title: 'QA Projects' },
-  { match: (p) => p.startsWith('/requirements') || p.includes('/requirements'), title: 'Requirements & Design' },
-  { match: (p) => p.startsWith('/test-cases'), title: 'Test Cases' },
-  { match: (p) => p.startsWith('/runs'), title: 'Execution Runs & Runners' },
-  { match: (p) => p.startsWith('/flaky'), title: 'Flaky Intelligence & Stability' },
-  { match: (p) => p.startsWith('/failures'), title: 'Failure Intelligence & Healing' },
-  { match: (p) => p.startsWith('/quality'), title: 'Quality Intelligence & Release Gate' },
-  { match: (p) => p.startsWith('/security'), title: 'Enterprise Security & RBAC' },
-  { match: (p) => p.startsWith('/workers'), title: 'Distributed Workers & Cluster' },
+/** Title keys per route, resolved through i18n (`titles` namespace). */
+const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
+  { match: (p) => p === '/', titleKey: 'dashboard' },
+  { match: (p) => p.includes('/studio'), titleKey: 'automation' },
+  { match: (p) => /^\/projects(\/[^/]+)?$/.test(p), titleKey: 'projects' },
+  { match: (p) => p.startsWith('/requirements') || p.includes('/requirements'), titleKey: 'requirements' },
+  { match: (p) => p.startsWith('/test-cases'), titleKey: 'testCases' },
+  { match: (p) => p.startsWith('/runs'), titleKey: 'runs' },
+  { match: (p) => p.startsWith('/flaky'), titleKey: 'flaky' },
+  { match: (p) => p.startsWith('/failures'), titleKey: 'failures' },
+  { match: (p) => p.startsWith('/quality'), titleKey: 'quality' },
+  { match: (p) => p.startsWith('/security'), titleKey: 'security' },
+  { match: (p) => p.startsWith('/workers'), titleKey: 'workers' },
+  { match: (p) => p.startsWith('/settings'), titleKey: 'settings' },
 ];
 
 export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation('titles');
+  const { startPage } = usePreferences();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
 
+  // Land on the configured start page once, right after a fresh sign-in.
+  const landedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!landedRef.current && location.pathname === '/' && startPage !== '/') {
+      landedRef.current = true;
+      navigate(startPage, { replace: true });
+    }
+  }, [location.pathname, startPage, navigate]);
+
   const fullBleed = location.pathname.includes('/studio');
-  const title = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.title ?? 'AI QA Platform';
+  const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
+  const title = titleKey ? t(titleKey) : t('common:appName');
 
   const handleSelectProject = (projectId: string) => {
     selectProject(projectId);

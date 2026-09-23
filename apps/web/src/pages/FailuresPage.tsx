@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AIFailureDiagnosisResponse,
   FailureCategory,
@@ -48,6 +49,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   onOpenInStudio,
   onNavigateToRuns,
 }) => {
+  const { t } = useTranslation('failures');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [failures, setFailures] = useState<FailureRecord[]>([]);
@@ -142,7 +144,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       const res = await api.diagnoseFailureAI(selectedFailure.id);
       setAiDiagnosis(res);
     } catch (err: any) {
-      alert(`AI Diagnosis failed: ${err.message || err}`);
+      alert(t('alertDiagnoseFailed', { error: err.message || err }));
     } finally {
       setDiagnosing(false);
     }
@@ -159,7 +161,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         setSelectedCandidate(proposal.proposed_locator);
       }
     } catch (err: any) {
-      alert(`Failed to generate repair proposal: ${err.message || err}`);
+      alert(t('alertProposalFailed', { error: err.message || err }));
     } finally {
       setGeneratingProposal(false);
     }
@@ -177,7 +179,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       );
       setSemanticReview(review);
     } catch (err: any) {
-      alert(`Semantic review failed: ${err.message || err}`);
+      alert(t('alertSemanticReviewFailed', { error: err.message || err }));
     } finally {
       setReviewingSemantic(false);
     }
@@ -197,9 +199,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setResolvedFailureIds((prev) =>
         prev.includes(selectedFailure.id) ? prev : [...prev, selectedFailure.id]
       );
-      alert(`Successfully patched locator in ${repairProposal.target_file}`);
+      alert(t('alertRepairApplied', { file: repairProposal.target_file }));
     } catch (err: any) {
-      alert(`Failed to apply repair: ${err.message || err}`);
+      alert(t('alertApplyRepairFailed', { error: err.message || err }));
     } finally {
       setApplyingRepair(false);
     }
@@ -209,7 +211,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     if (!selectedFailure || !currentProjectId || rerunning) return;
     try {
       setRerunning(true);
-      setRerunMessage('Triggering verification re-run...');
+      setRerunMessage(t('rerunTriggering'));
       const target = selectedFailure.test_nodeid;
       const run = await api.createTestRun({
         project_id: currentProjectId,
@@ -217,12 +219,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         nodeids: [target],
         requested_by: `Re-run verification for failure #${selectedFailure.id.slice(0, 8)}`,
       });
-      setRerunMessage(`Re-run dispatched as Run #${run.id.slice(0, 8)} (${run.status})`);
+      setRerunMessage(
+        t('rerunDispatched', { runId: run.id.slice(0, 8), status: run.status })
+      );
       if (onNavigateToRuns) {
         setTimeout(() => onNavigateToRuns(run.id), 1200);
       }
     } catch (err: any) {
-      setRerunMessage(`Re-run error: ${err.message || err}`);
+      setRerunMessage(t('rerunError', { error: err.message || err }));
     } finally {
       setRerunning(false);
     }
@@ -298,20 +302,20 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Failure Intelligence & Locator Self-Healing</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('title')}</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Automated failure taxonomy classification, root-cause diagnosis, and human-in-the-loop locator healing.
+            {t('subtitle')}
           </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={fetchFailures}>
-          <RefreshCw size={14} /> Refresh Failures
+          <RefreshCw size={14} /> {t('refresh')}
         </button>
       </div>
 
       {projects.length === 0 ? (
         <div className="card">
           <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Please select or create a project first.
+            {t('noProject')}
           </div>
         </div>
       ) : (
@@ -319,21 +323,23 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           {/* Left: Failures List */}
           <div className="card">
             <div className="card-header">
-              <span className="card-title">Recorded Failures ({failures.length})</span>
+              <span className="card-title">
+                {t('recordedCount', { count: failures.length })}
+              </span>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
               {loading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Loading failures...
+                  {t('loading')}
                 </div>
               ) : failures.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <CheckCircle2 size={36} style={{ margin: '0 auto 8px', color: '#16a34a' }} />
                   <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Zero Unresolved Failures
+                    {t('emptyTitle')}
                   </p>
                   <p style={{ fontSize: '12px', marginTop: '4px' }}>
-                    All tests are passing or failures have been healed.
+                    {t('emptyBody')}
                   </p>
                 </div>
               ) : (
@@ -363,7 +369,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                             {getCategoryBadge(f.classification)}
                             {resolvedFailureIds.includes(f.id) && (
                               <span className="badge badge-ready" style={{ fontSize: '10px' }}>
-                                ✓ Resolved
+                                {t('resolved')}
                               </span>
                             )}
                           </div>
@@ -400,7 +406,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 <div className="card-body">
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Error Message
+                      {t('errorMessage')}
                     </div>
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', padding: '8px 12px', fontSize: '12px', color: '#991b1b', fontFamily: 'var(--font-mono)' }}>
                       {selectedFailure.error_message}
@@ -409,10 +415,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
                   <div>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Redacted Stack Trace
+                      {t('stackTrace')}
                     </div>
                     <div style={{ background: '#0f172a', color: '#f8fafc', padding: '10px 12px', borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--font-mono)', maxHeight: '140px', overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                      {selectedFailure.stack_trace || 'No stack trace captured.'}
+                      {selectedFailure.stack_trace || t('noStackTrace')}
                     </div>
                   </div>
 
@@ -423,36 +429,38 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       disabled={diagnosing}
                       onClick={handleDiagnoseAI}
                     >
-                      <Zap size={13} color="#2563eb" /> {diagnosing ? 'Analyzing Root Cause...' : 'AI Root Cause Diagnosis'}
+                      <Zap size={13} color="#2563eb" />{' '}
+                      {diagnosing ? t('diagnosing') : t('diagnoseAI')}
                     </button>
                     <button
                       className="btn btn-primary btn-sm"
                       disabled={generatingProposal}
                       onClick={handleGenerateProposal}
                     >
-                      <Sparkles size={13} /> {generatingProposal ? 'Generating Repair...' : 'Generate Locator Repair Proposal'}
+                      <Sparkles size={13} />{' '}
+                      {generatingProposal ? t('generatingProposal') : t('generateProposal')}
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
                       disabled={rerunning}
                       onClick={handleRerunTest}
                     >
-                      <Play size={13} /> {rerunning ? 'Re-running...' : 'Re-run Test Case'}
+                      <Play size={13} /> {rerunning ? t('rerunning') : t('rerun')}
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={handleOpenJiraBugModal}
-                      title="Generate Jira bug ticket draft"
+                      title={t('jiraDraftTitle')}
                     >
-                      <Bug size={13} color="#e11d48" /> Create Jira Bug Draft
+                      <Bug size={13} color="#e11d48" /> {t('createJiraDraft')}
                     </button>
                     {onOpenInStudio && (
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => onOpenInStudio(selectedFailure.test_nodeid.split('::')[0])}
-                        title="Open the failing test file in the Automation Studio"
+                        title={t('openInStudioTitle')}
                       >
-                        <Code2 size={13} /> Open Test in Studio
+                        <Code2 size={13} /> {t('openInStudio')}
                       </button>
                     )}
                   </div>
@@ -472,23 +480,23 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Activity size={16} color="#2563eb" />
                       <span className="card-title" style={{ color: '#1d4ed8' }}>
-                        AI Root Cause Diagnosis ({aiDiagnosis.classification})
+                        {t('diagnosisTitle', { classification: aiDiagnosis.classification })}
                       </span>
                     </div>
                     <span className="badge badge-ready" style={{ fontSize: '11px' }}>
-                      Confidence: {(aiDiagnosis.confidence * 100).toFixed(0)}%
+                      {t('confidence', { value: (aiDiagnosis.confidence * 100).toFixed(0) })}
                     </span>
                   </div>
                   <div className="card-body">
                     <p style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.6, marginBottom: '12px' }}>
-                      <b>Root Cause:</b> {aiDiagnosis.root_cause}
+                      <b>{t('rootCause')}</b> {aiDiagnosis.root_cause}
                     </p>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       {/* Evidence */}
                       <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                          Evidence Found:
+                          {t('evidence')}
                         </span>
                         <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#0f172a' }}>
                           {aiDiagnosis.evidence.map((ev, i) => (
@@ -500,7 +508,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       {/* Hypotheses */}
                       <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                          Hypotheses:
+                          {t('hypotheses')}
                         </span>
                         <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#0f172a' }}>
                           {aiDiagnosis.hypotheses.map((hyp, i) => (
@@ -514,7 +522,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     {aiDiagnosis.recommended_actions.length > 0 && (
                       <div style={{ background: '#f0fdf4', padding: '10px 12px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
-                          Recommended Remediations:
+                          {t('recommended')}
                         </span>
                         <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#14532d' }}>
                           {aiDiagnosis.recommended_actions.map((act, i) => (
@@ -534,7 +542,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Sparkles size={16} color="#16a34a" />
                       <span className="card-title" style={{ color: '#166534' }}>
-                        Locator Repair Proposal (Confidence: {(repairProposal.confidence * 100).toFixed(0)}%)
+                        {t('proposalTitle', {
+                          value: (repairProposal.confidence * 100).toFixed(0),
+                        })}
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -543,10 +553,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         disabled={reviewingSemantic}
                         onClick={handleSemanticReview}
                       >
-                        <ShieldCheck size={13} color="#2563eb" /> {reviewingSemantic ? 'Reviewing...' : 'Semantic Equivalence Review'}
+                        <ShieldCheck size={13} color="#2563eb" />{' '}
+                        {reviewingSemantic ? t('reviewing') : t('semanticReview')}
                       </button>
                       {repairApplied ? (
-                        <span className="badge badge-ready">✓ Repair Applied</span>
+                        <span className="badge badge-ready">{t('repairApplied')}</span>
                       ) : (
                         <button
                           className="btn btn-primary btn-sm"
@@ -554,7 +565,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           disabled={applyingRepair}
                           onClick={handleApplyRepair}
                         >
-                          <Check size={13} /> {applyingRepair ? 'Applying...' : 'Apply Repair to Code'}
+                          <Check size={13} /> {applyingRepair ? t('applying') : t('applyRepair')}
                         </button>
                       )}
                     </div>
@@ -562,13 +573,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   <div className="card-body">
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
-                        <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>Broken Locator</div>
+                        <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>{t('brokenLocator')}</div>
                         <code style={{ fontSize: '12px', color: '#b91c1c', wordBreak: 'break-all' }}>
                           {repairProposal.old_locator || repairProposal.broken_locator}
                         </code>
                       </div>
                       <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '4px', border: '1px solid #dcfce7' }}>
-                        <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>Proposed Replacement ({repairProposal.strategy})</div>
+                        <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>
+                          {t('proposedReplacement', { strategy: repairProposal.strategy })}
+                        </div>
                         <code style={{ fontSize: '12px', color: '#15803d', wordBreak: 'break-all' }}>
                           {selectedCandidate || repairProposal.proposed_locator}
                         </code>
@@ -588,10 +601,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                           <span style={{ fontSize: '12px', fontWeight: 700, color: semanticReview.is_semantically_equivalent ? '#166534' : '#92400e' }}>
-                            {semanticReview.is_semantically_equivalent ? '✓ Semantically Equivalent Locator' : '⚠ Non-Equivalent / High-Risk Locator'}
+                            {semanticReview.is_semantically_equivalent
+                              ? t('semanticallyEquivalent')
+                              : t('nonEquivalent')}
                           </span>
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            Review Confidence: {(semanticReview.confidence * 100).toFixed(0)}%
+                            {t('reviewConfidence', {
+                              value: (semanticReview.confidence * 100).toFixed(0),
+                            })}
                           </span>
                         </div>
                         <p style={{ fontSize: '12px', color: '#334155', margin: 0 }}>
@@ -599,7 +616,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         </p>
                         {semanticReview.risk_warning && (
                           <p style={{ fontSize: '11px', color: '#dc2626', margin: '4px 0 0 0', fontWeight: 600 }}>
-                            Warning: {semanticReview.risk_warning}
+                            {t('riskWarning', { warning: semanticReview.risk_warning })}
                           </p>
                         )}
                       </div>
@@ -608,7 +625,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     {/* Diff Preview */}
                     <div>
                       <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Code Diff Preview ({repairProposal.file_path || repairProposal.target_file})
+                        {t('diffPreview', {
+                          file: repairProposal.file_path || repairProposal.target_file,
+                        })}
                       </div>
                       <div
                         style={{
@@ -634,26 +653,28 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 <div className="card-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <History size={15} color="#64748b" />
-                    <span className="card-title">Similar Past Failures ({recurrenceList.length})</span>
+                    <span className="card-title">
+                      {t('recurrenceTitle', { count: recurrenceList.length })}
+                    </span>
                   </div>
                 </div>
                 <div className="card-body" style={{ padding: 0 }}>
                   {loadingRecurrence ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      Checking past execution records...
+                      {t('recurrenceLoading')}
                     </div>
                   ) : recurrenceList.length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      No prior similar occurrences recorded in history for this failure signature.
+                      {t('recurrenceEmpty')}
                     </div>
                   ) : (
                     <table className="data-table" style={{ fontSize: '11px' }}>
                       <thead>
                         <tr>
-                          <th style={{ padding: '6px 8px' }}>Category</th>
-                          <th style={{ padding: '6px 8px' }}>Run ID</th>
-                          <th style={{ padding: '6px 8px' }}>Recorded At</th>
-                          <th style={{ padding: '6px 8px' }}>Error Details</th>
+                          <th style={{ padding: '6px 8px' }}>{t('category')}</th>
+                          <th style={{ padding: '6px 8px' }}>{t('runId')}</th>
+                          <th style={{ padding: '6px 8px' }}>{t('recordedAt')}</th>
+                          <th style={{ padding: '6px 8px' }}>{t('errorDetails')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -684,7 +705,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           ) : (
             <div className="card">
               <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Select a test failure to perform AI root-cause diagnosis or generate locator repair proposals.
+                {t('selectPrompt')}
               </div>
             </div>
           )}
@@ -698,7 +719,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Bug size={18} color="#e11d48" />
-                <h3 className="modal-title">Create Jira Defect / Bug Ticket</h3>
+                <h3 className="modal-title">{t('jiraModalTitle')}</h3>
               </div>
               <button
                 className="btn btn-icon"
@@ -713,7 +734,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               {generatingJiraDraft ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Sparkles size={24} className="spin" style={{ margin: '0 auto 12px', color: '#e11d48' }} />
-                  <p>Synthesizing bug details, stack trace, and reproduction steps from failure artifacts...</p>
+                  <p>{t('jiraSynthesizing')}</p>
                 </div>
               ) : jiraBugDraft ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -740,7 +761,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                             rel="noreferrer"
                             style={{ fontSize: '12px', color: '#2563eb', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}
                           >
-                            Open Jira Issue {jiraBugResult.key} <ExternalLink size={12} />
+                            {t('openJiraIssue', { key: jiraBugResult.key })} <ExternalLink size={12} />
                           </a>
                         )}
                       </div>
@@ -751,7 +772,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   )}
 
                   <div className="form-group">
-                    <label className="form-label">Issue Summary</label>
+                    <label className="form-label">{t('issueSummary')}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -762,7 +783,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                     <div className="form-group">
-                      <label className="form-label">Project Key</label>
+                      <label className="form-label">{t('projectKey')}</label>
                       <input
                         type="text"
                         className="form-input"
@@ -771,7 +792,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Issue Type</label>
+                      <label className="form-label">{t('issueType')}</label>
                       <input
                         type="text"
                         className="form-input"
@@ -780,22 +801,22 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Priority</label>
+                      <label className="form-label">{t('common:priority')}</label>
                       <select
                         className="form-select"
                         value={jiraBugDraft.priority}
                         onChange={(e) => setJiraBugDraft({ ...jiraBugDraft, priority: e.target.value })}
                       >
-                        <option value="Critical">Critical</option>
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
+                        <option value="Critical">{t('priorityCritical')}</option>
+                        <option value="High">{t('priorityHigh')}</option>
+                        <option value="Medium">{t('priorityMedium')}</option>
+                        <option value="Low">{t('priorityLow')}</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Description & Diagnostics</label>
+                    <label className="form-label">{t('descriptionDiagnostics')}</label>
                     <textarea
                       rows={5}
                       className="form-textarea"
@@ -805,7 +826,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Reproduction Steps</label>
+                    <label className="form-label">{t('reproductionSteps')}</label>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '10px 12px' }}>
                       <ol style={{ paddingLeft: '18px', margin: 0, fontSize: '12px', color: '#334155' }}>
                         {jiraBugDraft.steps_to_reproduce.map((st, i) => (
@@ -817,7 +838,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 </div>
               ) : (
                 <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Failed to prepare bug draft.
+                  {t('jiraDraftFailed')}
                 </div>
               )}
             </div>
@@ -828,7 +849,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 className="btn btn-secondary"
                 onClick={() => setIsJiraBugModalOpen(false)}
               >
-                Close
+                {t('common:close')}
               </button>
               <button
                 type="button"
@@ -836,7 +857,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 disabled={!jiraBugDraft || creatingJiraBug}
                 onClick={() => handleConfirmCreateJiraBug(false)}
               >
-                Validate (Dry-Run)
+                {t('validateDryRun')}
               </button>
               <button
                 type="button"
@@ -844,7 +865,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 disabled={!jiraBugDraft || creatingJiraBug}
                 onClick={() => handleConfirmCreateJiraBug(true)}
               >
-                {creatingJiraBug ? 'Creating...' : 'Create Ticket in Jira'}
+                {creatingJiraBug ? t('creatingTicket') : t('createTicket')}
               </button>
             </div>
           </div>

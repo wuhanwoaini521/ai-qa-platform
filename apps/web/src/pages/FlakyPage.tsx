@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Flame,
   Filter,
@@ -21,6 +22,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
   selectedProjectId,
   onNavigateToRuns,
 }) => {
+  const { t } = useTranslation('flaky');
   const [flakyTests, setFlakyTests] = useState<FlakyTestItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedClassification, setSelectedClassification] = useState<string>('ALL');
@@ -75,14 +77,14 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
   const getClassificationBadge = (cls: string) => {
     switch (cls) {
       case 'LIKELY_FLAKY':
-        return <span className="status-pill status-pill-failed">Likely Flaky</span>;
+        return <span className="status-pill status-pill-failed">{t('classificationLikelyFlaky')}</span>;
       case 'PERSISTENT_FAILURE':
-        return <span className="status-pill status-pill-error">Persistent Failure</span>;
+        return <span className="status-pill status-pill-error">{t('classificationPersistentFailure')}</span>;
       case 'STABLE':
-        return <span className="status-pill status-pill-passed">Stable</span>;
+        return <span className="status-pill status-pill-passed">{t('classificationStable')}</span>;
       case 'INSUFFICIENT_DATA':
       default:
-        return <span className="status-pill status-pill-draft">Insufficient Data</span>;
+        return <span className="status-pill status-pill-draft">{t('classificationInsufficientData')}</span>;
     }
   };
 
@@ -91,14 +93,12 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       {/* Header & Metric Cards */}
       <div className="page-header">
         <div>
-          <h2>Flaky Test Intelligence & Stability</h2>
-          <p className="subtitle">
-            Deterministic instability scoring, transition alternations, and rerun recovery analytics.
-          </p>
+          <h2>{t('titles:flaky')}</h2>
+          <p className="subtitle">{t('subtitle')}</p>
         </div>
         <button className="btn btn-secondary" onClick={fetchFlakyTests} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'spinning' : ''} />
-          <span>Refresh Analytics</span>
+          <span>{t('refreshAnalytics')}</span>
         </button>
       </div>
 
@@ -109,7 +109,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <TrendingUp size={20} />
           </div>
           <div className="stat-info">
-            <span className="stat-label">Total Analyzed Tests</span>
+            <span className="stat-label">{t('kpiTotalAnalyzed')}</span>
             <span className="stat-value">{flakyTests.length}</span>
           </div>
         </div>
@@ -119,9 +119,9 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <Flame size={20} />
           </div>
           <div className="stat-info">
-            <span className="stat-label">Likely Flaky Tests</span>
+            <span className="stat-label">{t('kpiLikelyFlaky')}</span>
             <span className="stat-value">
-              {flakyTests.filter((t) => t.flaky_score.classification === 'LIKELY_FLAKY').length}
+              {flakyTests.filter((item) => item.flaky_score.classification === 'LIKELY_FLAKY').length}
             </span>
           </div>
         </div>
@@ -131,9 +131,9 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <AlertOctagon size={20} />
           </div>
           <div className="stat-info">
-            <span className="stat-label">Persistent Failures</span>
+            <span className="stat-label">{t('kpiPersistentFailures')}</span>
             <span className="stat-value">
-              {flakyTests.filter((t) => t.flaky_score.classification === 'PERSISTENT_FAILURE').length}
+              {flakyTests.filter((item) => item.flaky_score.classification === 'PERSISTENT_FAILURE').length}
             </span>
           </div>
         </div>
@@ -143,9 +143,9 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <CheckCircle2 size={20} />
           </div>
           <div className="stat-info">
-            <span className="stat-label">Stable Tests</span>
+            <span className="stat-label">{t('kpiStable')}</span>
             <span className="stat-value">
-              {flakyTests.filter((t) => t.flaky_score.classification === 'STABLE').length}
+              {flakyTests.filter((item) => item.flaky_score.classification === 'STABLE').length}
             </span>
           </div>
         </div>
@@ -159,7 +159,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <input
               type="text"
               className="form-input"
-              placeholder="Filter by test name or node ID..."
+              placeholder={t('filterPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ margin: 0 }}
@@ -168,30 +168,30 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Filter size={14} color="var(--text-muted)" />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Classification:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('classificationLabel')}</span>
             <select
               className="form-select"
               value={selectedClassification}
               onChange={(e) => setSelectedClassification(e.target.value)}
               style={{ width: 'auto', margin: 0 }}
             >
-              <option value="ALL">All Classifications</option>
-              <option value="LIKELY_FLAKY">Likely Flaky</option>
-              <option value="PERSISTENT_FAILURE">Persistent Failure</option>
-              <option value="STABLE">Stable</option>
-              <option value="INSUFFICIENT_DATA">Insufficient Data</option>
+              <option value="ALL">{t('classificationAll')}</option>
+              <option value="LIKELY_FLAKY">{t('classificationLikelyFlaky')}</option>
+              <option value="PERSISTENT_FAILURE">{t('classificationPersistentFailure')}</option>
+              <option value="STABLE">{t('classificationStable')}</option>
+              <option value="INSUFFICIENT_DATA">{t('classificationInsufficientData')}</option>
             </select>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Min Score:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('minScoreLabel')}</span>
             <select
               className="form-select"
               value={minScore}
               onChange={(e) => setMinScore(parseFloat(e.target.value))}
               style={{ width: 'auto', margin: 0 }}
             >
-              <option value={0.0}>0.0 (All)</option>
+              <option value={0.0}>{t('minScoreAll')}</option>
               <option value={0.2}>&ge; 0.20</option>
               <option value={0.4}>&ge; 0.40</option>
               <option value={0.6}>&ge; 0.60</option>
@@ -205,27 +205,27 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
         {loading ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
             <RefreshCw size={24} className="spinning" style={{ marginBottom: '0.75rem' }} />
-            <div>Calculating deterministic flaky scoring and execution history...</div>
+            <div>{t('calculating')}</div>
           </div>
         ) : filteredTests.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
             <CheckCircle2 size={36} color="var(--color-success)" style={{ marginBottom: '0.75rem' }} />
-            <h4>No unstable test executions matching current criteria</h4>
-            <p>All executed tests are operating with high stability index.</p>
+            <h4>{t('emptyTitle')}</h4>
+            <p>{t('emptyDescription')}</p>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Test Identifier</th>
-                <th>Classification</th>
-                <th>Flaky Score</th>
-                <th>Confidence</th>
-                <th>Samples</th>
-                <th>Fail Rate</th>
-                <th>Rerun Recover</th>
-                <th>Main Failure Root</th>
-                <th>Actions</th>
+                <th>{t('columnTestIdentifier')}</th>
+                <th>{t('columnClassification')}</th>
+                <th>{t('flakyScore')}</th>
+                <th>{t('columnConfidence')}</th>
+                <th>{t('columnSamples')}</th>
+                <th>{t('columnFailRate')}</th>
+                <th>{t('columnRerunRecover')}</th>
+                <th>{t('columnMainFailureRoot')}</th>
+                <th>{t('common:actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -293,7 +293,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </td>
                     <td>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {item.flaky_score.main_failure_category || 'None'}
+                        {item.flaky_score.main_failure_category || t('common:none')}
                       </span>
                     </td>
                     <td>
@@ -301,7 +301,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                         className="btn btn-secondary btn-sm"
                         onClick={() => handleOpenHistory(item.nodeid, item.project_id)}
                       >
-                        History
+                        {t('history')}
                       </button>
                     </td>
                   </tr>
@@ -318,13 +318,13 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
           <div className="modal-card" style={{ maxWidth: '850px' }}>
             <div className="modal-header">
               <div>
-                <h3>Test Quality & History Detail</h3>
+                <h3>{t('modalTitle')}</h3>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                   {selectedTestNodeId}
                 </div>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={() => setSelectedTestNodeId(null)}>
-                Close
+                {t('common:close')}
               </button>
             </div>
 
@@ -345,7 +345,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     }}
                   >
                     <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pass / Fail / Skip</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricPassFailSkip')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         <span style={{ color: 'var(--color-success)' }}>{testHistory.trend.pass_count}</span> /{' '}
                         <span style={{ color: 'var(--color-error)' }}>{testHistory.trend.fail_count}</span> /{' '}
@@ -354,7 +354,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </div>
 
                     <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Average Duration</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricAverageDuration')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.trend.average_duration_ms > 1000
                           ? `${(testHistory.trend.average_duration_ms / 1000).toFixed(2)}s`
@@ -363,7 +363,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </div>
 
                     <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>P95 Duration</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricP95Duration')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.trend.p95_duration_ms > 1000
                           ? `${(testHistory.trend.p95_duration_ms / 1000).toFixed(2)}s`
@@ -372,7 +372,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </div>
 
                     <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Flaky Score</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('flakyScore')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.flaky_score.score.toFixed(2)} ({testHistory.flaky_score.classification})
                       </div>
@@ -380,21 +380,21 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                   </div>
 
                   {/* Execution Timeline */}
-                  <h4 style={{ marginBottom: '0.75rem' }}>Last 20 Executions</h4>
+                  <h4 style={{ marginBottom: '0.75rem' }}>{t('last20Executions')}</h4>
                   {testHistory.executions.length === 0 ? (
                     <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      No prior executions logged for this test identifier.
+                      {t('noExecutions')}
                     </div>
                   ) : (
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th>Status</th>
-                          <th>Run ID</th>
-                          <th>Duration</th>
-                          <th>Retries</th>
-                          <th>Failure Category</th>
-                          <th>Error / Reason</th>
+                          <th>{t('common:status')}</th>
+                          <th>{t('columnRunId')}</th>
+                          <th>{t('common:duration')}</th>
+                          <th>{t('columnRetries')}</th>
+                          <th>{t('columnFailureCategory')}</th>
+                          <th>{t('columnErrorReason')}</th>
                         </tr>
                       </thead>
                       <tbody>

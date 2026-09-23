@@ -10,6 +10,9 @@ mise exec -- uv run ruff check .
 echo "Checking Python formatting..."
 mise exec -- uv run ruff format --check .
 
+echo "Checking translation parity..."
+mise exec -- python3 scripts/i18n_check.py
+
 echo "Linting Frontend..."
 mise exec -- pnpm --filter @ai-qa/web lint
 

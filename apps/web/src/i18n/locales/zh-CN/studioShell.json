@@ -1,0 +1,82 @@
+{
+  "selectProjectFirst": "请先选择或创建一个项目，然后再打开自动化工作室。",
+  "error": {
+    "fileOperation": "文件操作失败：{{message}}"
+  },
+  "editor": {
+    "saveCurrentFile": "保存当前文件（Cmd+S）",
+    "saving": "保存中...",
+    "validateTooltip": "校验 Python 语法与 QA 规则",
+    "checking": "检查中...",
+    "problems": "问题（{{problemCount}}）",
+    "runTestTooltip": "执行当前文件中的测试",
+    "running": "执行中...",
+    "runTest": "运行测试",
+    "gitDiffTitle": "Git 工作区差异",
+    "noUncommittedChanges": "工作区中没有未提交的改动。",
+    "loadingFile": "正在加载文件内容...",
+    "emptySelectFile": "从资源管理器中选择文件，或按",
+    "emptyHint": "编写 Playwright 测试套件、页面对象（Page Object）和测试夹具。"
+  },
+  "tabs": {
+    "noOpenTabs": "没有打开的标签页（按 Cmd+P 打开文件）"
+  },
+  "fileTree": {
+    "newFileInside": "在此目录中新建文件",
+    "rename": "重命名",
+    "uninitialized": "工作区尚未初始化。",
+    "initializeWorkspace": "初始化工作区"
+  },
+  "quickOpen": {
+    "placeholder": "按文件名搜索...（按 Esc 关闭）",
+    "noMatches": "未找到匹配的文件",
+    "fileLabel": "文件"
+  },
+  "fileOpModal": {
+    "createFileTitle": "新建文件",
+    "createFolderTitle": "新建文件夹",
+    "renameTitle": "重命名文件 / 目录",
+    "deleteTitle": "确认删除",
+    "deleteConfirmPrefix": "确定要永久删除",
+    "deleteConfirmSuffix": "吗？",
+    "filePathLabel": "相对于工作区根目录的文件路径：",
+    "directoryPathLabel": "相对于工作区根目录的目录路径：",
+    "newPathLabel": "新的相对路径："
+  },
+  "branchModal": {
+    "title": "创建功能分支",
+    "nameLabelPrefix": "分支名称（例如",
+    "nameLabelSuffix": "）：",
+    "basedOnPrefix": "基于当前分支：",
+    "createAndSwitch": "创建并切换分支"
+  },
+  "prModal": {
+    "createPullRequest": "创建拉取请求",
+    "branchPrefix": "分支：",
+    "generating": "生成中...",
+    "regenerate": "重新生成 AI 摘要",
+    "titleLabel": "PR 标题：",
+    "bodyLabel": "PR 描述（Markdown）：",
+    "creating": "正在创建拉取请求..."
+  },
+  "projectSelector": {
+    "quickOpen": "快速打开文件（Cmd+P）"
+  },
+  "sidebarView": {
+    "files": "文件",
+    "tests": "测试（{{testCount}}）",
+    "git": "Git（{{changeCount}}）",
+    "pr": "PR"
+  },
+  "sidebarHeader": {
+    "workspaceFiles": "工作区文件",
+    "pytestExplorer": "Pytest 测试列表",
+    "git": "Git：{{branch}}",
+    "pullRequest": "拉取请求",
+    "prWithNumber": "PR #{{number}}",
+    "newFile": "新建文件",
+    "newFolder": "新建文件夹",
+    "newBranch": "新建分支",
+    "refreshChecks": "刷新检查"
+  }
+}

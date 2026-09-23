@@ -1,0 +1,14 @@
+{
+  "dashboard": "Platform Overview",
+  "projects": "QA Projects",
+  "requirements": "Requirements & Design",
+  "testCases": "Test Cases",
+  "automation": "Automation Studio",
+  "runs": "Execution Runs & Runners",
+  "flaky": "Flaky Intelligence & Stability",
+  "failures": "Failure Intelligence & Healing",
+  "quality": "Quality Intelligence & Release Gate",
+  "security": "Enterprise Security & RBAC",
+  "workers": "Distributed Workers & Cluster",
+  "settings": "Settings"
+}

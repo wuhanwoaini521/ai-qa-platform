@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface RunOutputPanelProps {
   lastRunResult: string | null;
@@ -6,6 +7,8 @@ interface RunOutputPanelProps {
 }
 
 export const RunOutputPanel: React.FC<RunOutputPanelProps> = ({ lastRunResult, onNavigateToRuns }) => {
+  const { t } = useTranslation('studioPanels');
+
   if (!lastRunResult) return null;
 
   return (
@@ -28,7 +31,7 @@ export const RunOutputPanel: React.FC<RunOutputPanelProps> = ({ lastRunResult, o
           style={{ padding: '2px 6px', fontSize: '10px' }}
           onClick={() => onNavigateToRuns()}
         >
-          View in Execution Platform
+          {t('runOutput.viewInPlatform')}
         </button>
       )}
     </div>

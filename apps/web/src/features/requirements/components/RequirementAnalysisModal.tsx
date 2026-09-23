@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, HelpCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { RequirementAnalysisDTO } from '../../../types';
 
@@ -15,6 +16,7 @@ export const RequirementAnalysisModal: React.FC<RequirementAnalysisModalProps> =
   analysis: aiAnalysis,
   onClose,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <>
       {isOpen && (
@@ -23,30 +25,30 @@ export const RequirementAnalysisModal: React.FC<RequirementAnalysisModalProps> =
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={18} color="var(--color-primary)" />
-                <h3>AI Requirement Testability Analysis</h3>
+                <h3>{t('analysisTitle')}</h3>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={onClose}>
-                Close
+                {t('common:close')}
               </button>
             </div>
             <div className="modal-body">
               {analyzingReq ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <RefreshCw size={24} className="spinning" style={{ marginBottom: '0.75rem' }} />
-                  <div>Analyzing requirement testability dimensions...</div>
+                  <div>{t('analysisAnalyzing')}</div>
                 </div>
               ) : aiAnalysis ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                      Executive Testing Summary
+                      {t('analysisSummaryHeading')}
                     </h4>
                     <p style={{ marginTop: '0.25rem', fontSize: '0.9rem' }}>{aiAnalysis.summary}</p>
                   </div>
 
                   <div>
                     <h4 style={{ fontSize: '0.85rem', color: 'var(--color-error)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <AlertTriangle size={14} /> Identified Quality Risks
+                      <AlertTriangle size={14} /> {t('analysisRisksHeading')}
                     </h4>
                     <ul style={{ paddingLeft: '1.25rem', marginTop: '0.25rem', fontSize: '0.85rem' }}>
                       {aiAnalysis.risks.map((risk, idx) => (
@@ -57,7 +59,7 @@ export const RequirementAnalysisModal: React.FC<RequirementAnalysisModalProps> =
 
                   <div>
                     <h4 style={{ fontSize: '0.85rem', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <HelpCircle size={14} /> Ambiguities & Missing Specs
+                      <HelpCircle size={14} /> {t('analysisAmbiguitiesHeading')}
                     </h4>
                     <ul style={{ paddingLeft: '1.25rem', marginTop: '0.25rem', fontSize: '0.85rem' }}>
                       {aiAnalysis.ambiguities.map((amb, idx) => (
@@ -68,7 +70,7 @@ export const RequirementAnalysisModal: React.FC<RequirementAnalysisModalProps> =
 
                   <div>
                     <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                      Recommended Coverage Dimensions
+                      {t('analysisDimensionsHeading')}
                     </h4>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                       {aiAnalysis.suggested_test_dimensions.map((dim, idx) => (

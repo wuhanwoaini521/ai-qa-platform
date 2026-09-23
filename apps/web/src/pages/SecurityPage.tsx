@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Users,
   Shield,
@@ -21,6 +22,7 @@ import {
 import { api } from '../api/client';
 
 export const SecurityPage: React.FC = () => {
+  const { t } = useTranslation('security');
   const [activeTab, setActiveTab] = useState<'users' | 'teams' | 'keys' | 'audit'>('users');
 
   // Users State
@@ -213,28 +215,26 @@ export const SecurityPage: React.FC = () => {
       {/* Page Header */}
       <div className="page-header">
         <div>
-          <h2>Enterprise Security & RBAC</h2>
-          <p className="subtitle">
-            User directory, capability-based access control, service API keys, and immutable security audit trails.
-          </p>
+          <h2>{t('titles:security')}</h2>
+          <p className="subtitle">{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           {activeTab === 'users' && (
             <button className="btn btn-primary" onClick={() => setShowCreateUserModal(true)}>
               <Plus size={14} />
-              <span>Add User</span>
+              <span>{t('addUser')}</span>
             </button>
           )}
           {activeTab === 'teams' && (
             <button className="btn btn-primary" onClick={() => setShowCreateTeamModal(true)}>
               <Plus size={14} />
-              <span>Create Team</span>
+              <span>{t('createTeam')}</span>
             </button>
           )}
           {activeTab === 'keys' && (
             <button className="btn btn-primary" onClick={() => setShowCreateKeyModal(true)}>
               <Plus size={14} />
-              <span>Generate API Key</span>
+              <span>{t('generateApiKey')}</span>
             </button>
           )}
           <button
@@ -247,7 +247,7 @@ export const SecurityPage: React.FC = () => {
             }}
           >
             <RefreshCw size={14} />
-            <span>Refresh</span>
+            <span>{t('common:refresh')}</span>
           </button>
         </div>
       </div>
@@ -259,28 +259,28 @@ export const SecurityPage: React.FC = () => {
           onClick={() => setActiveTab('users')}
         >
           <Users size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Users & Roles ({users.length})
+          {t('tabs.users', { count: users.length })}
         </button>
         <button
           className={`tab-btn ${activeTab === 'teams' ? 'active' : ''}`}
           onClick={() => setActiveTab('teams')}
         >
           <Shield size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Teams & Squads ({teams.length})
+          {t('tabs.teams', { count: teams.length })}
         </button>
         <button
           className={`tab-btn ${activeTab === 'keys' ? 'active' : ''}`}
           onClick={() => setActiveTab('keys')}
         >
           <Key size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          API Keys ({apiKeys.length})
+          {t('tabs.keys', { count: apiKeys.length })}
         </button>
         <button
           className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
           onClick={() => setActiveTab('audit')}
         >
           <FileCheck size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Security Audit Trail ({auditLogs.length})
+          {t('tabs.audit', { count: auditLogs.length })}
         </button>
       </div>
 
@@ -288,21 +288,19 @@ export const SecurityPage: React.FC = () => {
       {activeTab === 'users' && (
         <div className="card">
           <div className="card-header">
-            <h3>Enterprise Users & Permissions</h3>
-            <span className="text-secondary text-sm">
-              Role permissions dictate access to test creation, automation runs, and release gate authorizations.
-            </span>
+            <h3>{t('users.title')}</h3>
+            <span className="text-secondary text-sm">{t('users.subtitle')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Full Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Created At</th>
-                  <th>Role Change</th>
+                  <th>{t('users.fullName')}</th>
+                  <th>{t('users.email')}</th>
+                  <th>{t('users.role')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('users.createdAt')}</th>
+                  <th>{t('users.roleChange')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,9 +312,9 @@ export const SecurityPage: React.FC = () => {
                       <td>{getRoleBadge(u.role)}</td>
                       <td>
                         {u.is_active ? (
-                          <span className="status-pill status-pill-passed">Active</span>
+                          <span className="status-pill status-pill-passed">{t('users.active')}</span>
                         ) : (
-                          <span className="status-pill status-pill-draft">Disabled</span>
+                          <span className="status-pill status-pill-draft">{t('users.disabled')}</span>
                         )}
                       </td>
                       <td>{new Date(u.created_at).toLocaleDateString()}</td>
@@ -338,7 +336,7 @@ export const SecurityPage: React.FC = () => {
                 ) : (
                   <tr>
                     <td colSpan={6} className="text-center text-secondary py-4">
-                      {loadingUsers ? 'Loading users...' : 'No users found.'}
+                      {loadingUsers ? t('users.loading') : t('users.empty')}
                     </td>
                   </tr>
                 )}
@@ -352,37 +350,37 @@ export const SecurityPage: React.FC = () => {
       {activeTab === 'teams' && (
         <div className="card">
           <div className="card-header">
-            <h3>QA Teams & Squads</h3>
-            <span className="text-secondary text-sm">
-              Organize QA engineers and test case ownership across domains.
-            </span>
+            <h3>{t('teams.title')}</h3>
+            <span className="text-secondary text-sm">{t('teams.subtitle')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Team Name</th>
-                  <th>Description</th>
-                  <th>Members</th>
-                  <th>Created</th>
+                  <th>{t('teams.name')}</th>
+                  <th>{t('common:description')}</th>
+                  <th>{t('teams.members')}</th>
+                  <th>{t('common:created')}</th>
                 </tr>
               </thead>
               <tbody>
                 {teams.length > 0 ? (
-                  teams.map((t) => (
-                    <tr key={t.id}>
-                      <td style={{ fontWeight: 600 }}>{t.name}</td>
-                      <td>{t.description || '--'}</td>
+                  teams.map((team) => (
+                    <tr key={team.id}>
+                      <td style={{ fontWeight: 600 }}>{team.name}</td>
+                      <td>{team.description || '--'}</td>
                       <td>
-                        <span className="status-pill status-pill-passed">{t.member_count} members</span>
+                        <span className="status-pill status-pill-passed">
+                          {t('teams.memberCount', { count: team.member_count })}
+                        </span>
                       </td>
-                      <td>{new Date(t.created_at).toLocaleDateString()}</td>
+                      <td>{new Date(team.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td colSpan={4} className="text-center text-secondary py-4">
-                      {loadingTeams ? 'Loading teams...' : 'No teams configured. Click "Create Team" to add one.'}
+                      {loadingTeams ? t('teams.loading') : t('teams.empty')}
                     </td>
                   </tr>
                 )}
@@ -396,20 +394,18 @@ export const SecurityPage: React.FC = () => {
       {activeTab === 'keys' && (
         <div className="card">
           <div className="card-header">
-            <h3>Service & CI/CD API Keys</h3>
-            <span className="text-secondary text-sm">
-              Authenticate Jenkins runners, GitHub Actions workflows, and external pipelines.
-            </span>
+            <h3>{t('keys.title')}</h3>
+            <span className="text-secondary text-sm">{t('keys.subtitle')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Key Name</th>
-                  <th>Key Prefix</th>
-                  <th>Last Used</th>
-                  <th>Created</th>
-                  <th>Actions</th>
+                  <th>{t('keys.name')}</th>
+                  <th>{t('keys.prefix')}</th>
+                  <th>{t('keys.lastUsed')}</th>
+                  <th>{t('common:created')}</th>
+                  <th>{t('common:actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -420,7 +416,7 @@ export const SecurityPage: React.FC = () => {
                       <td>
                         <code>{k.key_prefix}••••••••</code>
                       </td>
-                      <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never'}</td>
+                      <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : t('keys.never')}</td>
                       <td>{new Date(k.created_at).toLocaleDateString()}</td>
                       <td>
                         <button
@@ -429,7 +425,7 @@ export const SecurityPage: React.FC = () => {
                           onClick={() => handleDeleteApiKey(k.id)}
                         >
                           <Trash2 size={13} />
-                          <span>Revoke</span>
+                          <span>{t('keys.revoke')}</span>
                         </button>
                       </td>
                     </tr>
@@ -437,7 +433,7 @@ export const SecurityPage: React.FC = () => {
                 ) : (
                   <tr>
                     <td colSpan={5} className="text-center text-secondary py-4">
-                      {loadingKeys ? 'Loading API keys...' : 'No API keys generated.'}
+                      {loadingKeys ? t('keys.loading') : t('keys.empty')}
                     </td>
                   </tr>
                 )}
@@ -451,22 +447,20 @@ export const SecurityPage: React.FC = () => {
       {activeTab === 'audit' && (
         <div className="card">
           <div className="card-header">
-            <h3>Immutable Security Audit Trail</h3>
-            <span className="text-secondary text-sm">
-              Tamper-evident logs of logins, role updates, API key generations, and release gate actions.
-            </span>
+            <h3>{t('audit.title')}</h3>
+            <span className="text-secondary text-sm">{t('audit.subtitle')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Action</th>
-                  <th>Actor Email</th>
-                  <th>Target Resource</th>
-                  <th>Status</th>
-                  <th>IP Address</th>
-                  <th>Details</th>
+                  <th>{t('audit.timestamp')}</th>
+                  <th>{t('audit.action')}</th>
+                  <th>{t('audit.actorEmail')}</th>
+                  <th>{t('audit.targetResource')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('audit.ipAddress')}</th>
+                  <th>{t('common:details')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -500,7 +494,7 @@ export const SecurityPage: React.FC = () => {
                           className="btn btn-secondary btn-sm"
                           onClick={() => setSelectedAuditLog(log)}
                         >
-                          View
+                          {t('audit.view')}
                         </button>
                       </td>
                     </tr>
@@ -508,7 +502,7 @@ export const SecurityPage: React.FC = () => {
                 ) : (
                   <tr>
                     <td colSpan={7} className="text-center text-secondary py-4">
-                      {loadingAudit ? 'Loading security audit logs...' : 'No security audit entries recorded.'}
+                      {loadingAudit ? t('audit.loading') : t('audit.empty')}
                     </td>
                   </tr>
                 )}
@@ -523,7 +517,7 @@ export const SecurityPage: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
-              <h3>Add New User</h3>
+              <h3>{t('users.addTitle')}</h3>
               <button className="btn-icon" onClick={() => setShowCreateUserModal(false)}>
                 &times;
               </button>
@@ -531,47 +525,47 @@ export const SecurityPage: React.FC = () => {
             <form onSubmit={handleCreateUser}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Full Name *</label>
+                  <label>{t('users.fullNameLabel')}</label>
                   <input
                     type="text"
                     className="form-control"
                     required
-                    placeholder="Jane Doe"
+                    placeholder={t('users.fullNamePlaceholder')}
                     value={newUserFullName}
                     onChange={(e) => setNewUserFullName(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Email Address *</label>
+                  <label>{t('users.emailLabel')}</label>
                   <input
                     type="email"
                     className="form-control"
                     required
-                    placeholder="jane@company.com"
+                    placeholder={t('users.emailPlaceholder')}
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Role Assignment *</label>
+                  <label>{t('users.roleLabel')}</label>
                   <select
                     className="form-control"
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                   >
-                    <option value="QA_ENGINEER">QA ENGINEER (Author & Execute)</option>
-                    <option value="QA_LEAD">QA LEAD (Manage & Release Gate)</option>
-                    <option value="ADMIN">ADMIN (Full Platform Control)</option>
-                    <option value="VIEWER">VIEWER (Read-Only)</option>
+                    <option value="QA_ENGINEER">{t('users.roleQaEngineer')}</option>
+                    <option value="QA_LEAD">{t('users.roleQaLead')}</option>
+                    <option value="ADMIN">{t('users.roleAdmin')}</option>
+                    <option value="VIEWER">{t('users.roleViewer')}</option>
                   </select>
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateUserModal(false)}>
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingUser}>
-                  {creatingUser ? 'Creating...' : 'Create User'}
+                  {creatingUser ? t('creating') : t('users.create')}
                 </button>
               </div>
             </form>
@@ -584,7 +578,7 @@ export const SecurityPage: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
-              <h3>Create QA Team</h3>
+              <h3>{t('teams.createTitle')}</h3>
               <button className="btn-icon" onClick={() => setShowCreateTeamModal(false)}>
                 &times;
               </button>
@@ -592,22 +586,22 @@ export const SecurityPage: React.FC = () => {
             <form onSubmit={handleCreateTeam}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Team Name *</label>
+                  <label>{t('teams.nameLabel')}</label>
                   <input
                     type="text"
                     className="form-control"
                     required
-                    placeholder="Payments QA Squad"
+                    placeholder={t('teams.namePlaceholder')}
                     value={newTeamName}
                     onChange={(e) => setNewTeamName(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Description</label>
+                  <label>{t('common:description')}</label>
                   <textarea
                     className="form-control"
                     rows={3}
-                    placeholder="Responsible for checkout and payment gateway test automation."
+                    placeholder={t('teams.descriptionPlaceholder')}
                     value={newTeamDescription}
                     onChange={(e) => setNewTeamDescription(e.target.value)}
                   />
@@ -615,10 +609,10 @@ export const SecurityPage: React.FC = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateTeamModal(false)}>
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingTeam}>
-                  {creatingTeam ? 'Creating...' : 'Create Team'}
+                  {creatingTeam ? t('creating') : t('createTeam')}
                 </button>
               </div>
             </form>
@@ -631,7 +625,7 @@ export const SecurityPage: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
-              <h3>Generate Service API Key</h3>
+              <h3>{t('keys.generateTitle')}</h3>
               <button className="btn-icon" onClick={() => setShowCreateKeyModal(false)}>
                 &times;
               </button>
@@ -639,12 +633,12 @@ export const SecurityPage: React.FC = () => {
             <form onSubmit={handleCreateApiKey}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Key Description / Name *</label>
+                  <label>{t('keys.nameLabel')}</label>
                   <input
                     type="text"
                     className="form-control"
                     required
-                    placeholder="GitHub Actions CI Runner"
+                    placeholder={t('keys.namePlaceholder')}
                     value={newKeyName}
                     onChange={(e) => setNewKeyName(e.target.value)}
                   />
@@ -652,10 +646,10 @@ export const SecurityPage: React.FC = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateKeyModal(false)}>
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingKey}>
-                  {creatingKey ? 'Generating...' : 'Generate Key'}
+                  {creatingKey ? t('generating') : t('keys.generate')}
                 </button>
               </div>
             </form>
@@ -670,16 +664,14 @@ export const SecurityPage: React.FC = () => {
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={18} color="#10b981" />
-                <h3>API Key Generated Successfully</h3>
+                <h3>{t('keys.generatedTitle')}</h3>
               </div>
               <button className="btn-icon" onClick={() => setGeneratedKeyResult(null)}>
                 &times;
               </button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <p style={{ fontSize: '0.9rem', color: '#f59e0b' }}>
-                Please copy your API key now. You will not be able to view it again!
-              </p>
+              <p style={{ fontSize: '0.9rem', color: '#f59e0b' }}>{t('keys.generatedWarning')}</p>
               <div
                 style={{
                   display: 'flex',
@@ -696,13 +688,13 @@ export const SecurityPage: React.FC = () => {
                 </code>
                 <button className="btn btn-secondary btn-sm" onClick={handleCopyKey}>
                   {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                  <span>{copiedKey ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedKey ? t('common:copied') : t('common:copy')}</span>
                 </button>
               </div>
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button className="btn btn-primary" onClick={() => setGeneratedKeyResult(null)}>
-                Done
+                {t('keys.done')}
               </button>
             </div>
           </div>
@@ -714,29 +706,29 @@ export const SecurityPage: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '540px' }}>
             <div className="modal-header">
-              <h3>Audit Event Details</h3>
+              <h3>{t('audit.detailsTitle')}</h3>
               <button className="btn-icon" onClick={() => setSelectedAuditLog(null)}>
                 &times;
               </button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div>
-                <strong>Action:</strong> {selectedAuditLog.action}
+                <strong>{t('audit.actionLabel')}</strong> {selectedAuditLog.action}
               </div>
               <div>
-                <strong>Actor:</strong> {selectedAuditLog.actor_email} ({selectedAuditLog.actor_id})
+                <strong>{t('audit.actorLabel')}</strong> {selectedAuditLog.actor_email} ({selectedAuditLog.actor_id})
               </div>
               <div>
-                <strong>Target:</strong> <code>{selectedAuditLog.target_resource}</code>
+                <strong>{t('audit.targetLabel')}</strong> <code>{selectedAuditLog.target_resource}</code>
               </div>
               <div>
-                <strong>Status:</strong> {selectedAuditLog.status}
+                <strong>{t('audit.statusLabel')}</strong> {selectedAuditLog.status}
               </div>
               <div>
-                <strong>IP:</strong> {selectedAuditLog.ip_address}
+                <strong>{t('audit.ipLabel')}</strong> {selectedAuditLog.ip_address}
               </div>
               <div>
-                <strong>Payload Details:</strong>
+                <strong>{t('audit.payloadLabel')}</strong>
                 <pre
                   style={{
                     backgroundColor: 'var(--bg-subtle)',
@@ -753,7 +745,7 @@ export const SecurityPage: React.FC = () => {
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button className="btn btn-primary" onClick={() => setSelectedAuditLog(null)}>
-                Close
+                {t('common:close')}
               </button>
             </div>
           </div>

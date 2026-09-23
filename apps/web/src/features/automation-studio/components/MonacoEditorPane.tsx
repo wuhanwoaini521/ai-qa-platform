@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { FileCode } from 'lucide-react';
 import { GitDiffResult } from '../../../types';
@@ -36,6 +37,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   editorRef,
   onChange,
 }) => {
+  const { t } = useTranslation('studioShell');
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
   };
@@ -55,15 +57,15 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
           }}
         >
           <div style={{ marginBottom: '10px', color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase' }}>
-            Git Working Tree Diff
+            {t('editor.gitDiffTitle')}
           </div>
           <pre style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-            {diffResult.diff || 'No uncommitted changes detected in working tree.'}
+            {diffResult.diff || t('editor.noUncommittedChanges')}
           </pre>
         </div>
       ) : loadingFile ? (
         <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          Loading file content...
+          {t('editor.loadingFile')}
         </div>
       ) : activeTab ? (
         <Editor
@@ -96,9 +98,9 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
           }}
         >
           <FileCode size={40} style={{ opacity: 0.3, marginBottom: '12px' }} />
-          <div style={{ fontSize: '14px', fontWeight: 500 }}>Select a file from the explorer or press <code>Cmd+P</code></div>
+          <div style={{ fontSize: '14px', fontWeight: 500 }}>{t('editor.emptySelectFile')} <code>Cmd+P</code></div>
           <div style={{ fontSize: '12px', marginTop: '4px' }}>
-            Write Playwright test suites, Page Objects, and test fixtures.
+            {t('editor.emptyHint')}
           </div>
         </div>
       )}

@@ -1,0 +1,14 @@
+{
+  "dashboard": "平台总览",
+  "projects": "QA 项目",
+  "requirements": "需求与测试设计",
+  "testCases": "测试用例",
+  "automation": "自动化工作室",
+  "runs": "执行记录与运行器",
+  "flaky": "不稳定用例与稳定性",
+  "failures": "失败分析与定位修复",
+  "quality": "质量度量与发布准入",
+  "security": "企业安全与权限",
+  "workers": "分布式执行节点",
+  "settings": "系统设置"
+}

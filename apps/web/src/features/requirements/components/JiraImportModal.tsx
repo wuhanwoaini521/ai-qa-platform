@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download, RefreshCw, Search } from 'lucide-react';
 import { JiraIssue } from '../../../types';
 
@@ -27,6 +28,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
   onImport: handleImportJira,
   onClose,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <>
       {isOpen && (
@@ -35,7 +37,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Download size={18} color="#0284c7" />
-                <h3 className="modal-title">Import User Stories from Jira</h3>
+                <h3 className="modal-title">{t('jiraTitle')}</h3>
               </div>
               <button
                 className="btn btn-icon"
@@ -52,7 +54,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Search Jira issues by key, summary, or description..."
+                    placeholder={t('jiraSearchPlaceholder')}
                     value={jiraSearchQuery}
                     onChange={(e) => handleSearchJira(e.target.value)}
                     style={{ paddingLeft: '32px' }}
@@ -64,17 +66,17 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                   onClick={() => handleSearchJira(jiraSearchQuery)}
                   disabled={loadingJira}
                 >
-                  <RefreshCw size={14} className={loadingJira ? 'spin' : ''} /> Refresh
+                  <RefreshCw size={14} className={loadingJira ? 'spin' : ''} /> {t('common:refresh')}
                 </button>
               </div>
 
               {loadingJira ? (
                 <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Fetching issues from Jira...
+                  {t('jiraLoading')}
                 </div>
               ) : jiraIssues.length === 0 ? (
                 <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No Jira issues found matching the query.
+                  {t('jiraEmpty')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' }}>
@@ -138,14 +140,14 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
 
             <div className="modal-footer">
               <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginRight: 'auto' }}>
-                {selectedJiraKeys.length} selected
+                {t('jiraSelected', { total: selectedJiraKeys.length })}
               </span>
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={onClose}
               >
-                Cancel
+                {t('common:cancel')}
               </button>
               <button
                 type="button"
@@ -153,7 +155,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                 disabled={selectedJiraKeys.length === 0 || importingJira}
                 onClick={handleImportJira}
               >
-                {importingJira ? 'Importing...' : `Import ${selectedJiraKeys.length} to Requirements`}
+                {importingJira ? t('jiraImporting') : t('jiraImport', { total: selectedJiraKeys.length })}
               </button>
             </div>
           </div>

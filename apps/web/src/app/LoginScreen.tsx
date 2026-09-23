@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, setAuthToken } from '../api/client';
 import { LoginResponse } from '../types';
 
@@ -7,6 +8,7 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
+  const { t } = useTranslation('auth');
   const [email, setEmail] = useState<string>('admin@ai-qa.local');
   const [password, setPassword] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -21,7 +23,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
       setAuthToken(session.access_token);
       onAuthenticated(session);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      setError(err instanceof Error ? err.message : t('failed'));
     } finally {
       setSubmitting(false);
     }
@@ -44,11 +46,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
           <div className="sidebar-logo-icon">QA</div>
-          <div className="sidebar-brand-title">AI QA Platform</div>
+          <div className="sidebar-brand-title">{t('common:appName')}</div>
         </div>
 
         <label className="form-label" htmlFor="login-email">
-          Email
+          {t('email')}
         </label>
         <input
           id="login-email"
@@ -60,7 +62,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
         />
 
         <label className="form-label" htmlFor="login-password">
-          Password
+          {t('password')}
         </label>
         <input
           id="login-password"
@@ -79,13 +81,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
         )}
 
         <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting}>
-          {submitting ? 'Signing in...' : 'Sign in'}
+          {submitting ? t('submitting') : t('submit')}
         </button>
 
-        <div style={{ marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)' }}>
-          First run seeds <code>admin@ai-qa.local</code> / <code>adminpassword</code> and role-specific
-          accounts for lead and engineer. Change these before exposing the platform.
-        </div>
+        <div style={{ marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)' }}>{t('hint')}</div>
       </form>
     </div>
   );

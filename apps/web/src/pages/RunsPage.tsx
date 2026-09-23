@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
 import { TestExecution } from '../types';
 import { api } from '../api/client';
@@ -30,6 +31,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   initialRunId,
   onNavigateToFailures,
 }) => {
+  const { t } = useTranslation('runs');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [runs, setRuns] = useState<TestRun[]>([]);
@@ -215,7 +217,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       setTriggering(true);
       const parsedTargets = targetNodeidsText
         .split('\n')
-        .map((t) => t.trim())
+        .map((line) => line.trim())
         .filter(Boolean);
 
       const projectId = currentProjectId || runFormData.project_id;
@@ -233,7 +235,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       setTargetNodeidsText('');
       handleSelectRun(newRun);
     } catch (err: any) {
-      alert(`Failed to trigger execution run: ${err.message || err}`);
+      alert(t('triggerFailed', { message: err.message || err }));
     } finally {
       setTriggering(false);
     }
@@ -245,7 +247,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       setSelectedRun(updated);
       setRuns(runs.map((r) => (r.id === runId ? updated : r)));
     } catch (err: any) {
-      alert(`Cancel error: ${err.message || err}`);
+      alert(t('cancelFailed', { message: err.message || err }));
     }
   };
 
@@ -306,14 +308,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Execution & Runner Platform</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Real-time pytest execution, multi-runner backend (Local, Jenkins), SSE live log streaming, and external artifact linking.
-          </p>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('pageTitle')}</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('pageSubtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary btn-sm" onClick={fetchRuns} title="Refresh runs">
-            <RefreshCw size={14} /> Refresh
+          <button className="btn btn-secondary btn-sm" onClick={fetchRuns} title={t('refreshRuns')}>
+            <RefreshCw size={14} /> {t('common:refresh')}
           </button>
           <button
             className="btn btn-primary"
@@ -331,7 +331,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               setIsModalOpen(true);
             }}
           >
-            <Plus size={16} /> New Test Run
+            <Plus size={16} /> {t('newRun')}
           </button>
         </div>
       </div>
@@ -339,7 +339,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       {projects.length === 0 ? (
         <div className="card">
           <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Please select or create a project first before triggering test execution.
+            {t('noProject')}
           </div>
         </div>
       ) : (
@@ -347,23 +347,23 @@ export const RunsPage: React.FC<RunsPageProps> = ({
           {/* Left: Execution Runs List */}
           <div className="card">
             <div className="card-header">
-              <span className="card-title">Execution Runs ({runs.length})</span>
+              <span className="card-title">{t('listTitle', { count: runs.length })}</span>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
               {loading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Loading runs...
+                  {t('listLoading')}
                 </div>
               ) : runs.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <PlayCircle size={36} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-                  <p style={{ fontSize: '13px' }}>No test runs executed yet.</p>
+                  <p style={{ fontSize: '13px' }}>{t('listEmpty')}</p>
                   <button
                     className="btn btn-primary btn-sm"
                     style={{ marginTop: '10px' }}
                     onClick={() => setIsModalOpen(true)}
                   >
-                    Trigger First Run
+                    {t('listTriggerFirst')}
                   </button>
                 </div>
               ) : (
@@ -400,8 +400,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
                             <span>
-                              Total: <b>{r.total || r.total_tests}</b> | Passed:{' '}
-                              <b style={{ color: '#16a34a' }}>{r.passed !== undefined ? r.passed : r.passed_tests}</b> | Failed:{' '}
+                              {t('listTotal')}: <b>{r.total || r.total_tests}</b> | {t('listPassed')}:{' '}
+                              <b style={{ color: '#16a34a' }}>{r.passed !== undefined ? r.passed : r.passed_tests}</b> | {t('listFailed')}:{' '}
                               <b style={{ color: '#dc2626' }}>{r.failed !== undefined ? r.failed : r.failed_tests}</b>
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -427,10 +427,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {getStatusBadge(selectedRun.status)}
                     <span className="card-title" style={{ fontFamily: 'var(--font-mono)' }}>
-                      Run #{selectedRun.id}
+                      {t('runTitle', { id: selectedRun.id })}
                     </span>
                     <span className="badge badge-draft" style={{ fontSize: '11px' }}>
-                      Runner: {selectedRun.runner_type || 'LOCAL'}
+                      {t('runnerLabel', { type: selectedRun.runner_type || 'LOCAL' })}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -440,15 +440,15 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         style={{ color: '#dc2626' }}
                         onClick={() => handleCancelRun(selectedRun.id)}
                       >
-                        <StopCircle size={13} /> Cancel Run
+                        <StopCircle size={13} /> {t('cancelRun')}
                       </button>
                     ) : (
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={handleOpenTestRailModal}
-                        title="Publish test execution results to TestRail"
+                        title={t('publishTooltip')}
                       >
-                        <UploadCloud size={13} color="#047857" /> Publish to TestRail
+                        <UploadCloud size={13} color="#047857" /> {t('publishToTestRail')}
                       </button>
                     )}
                   </div>
@@ -456,19 +456,19 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 <div className="card-body">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
                     <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Total Tests</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('totalTests')}</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '2px' }}>{selectedRun.total !== undefined ? selectedRun.total : selectedRun.total_tests}</div>
                     </div>
                     <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Passed</div>
+                      <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>{t('detailPassed')}</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>{selectedRun.passed !== undefined ? selectedRun.passed : selectedRun.passed_tests}</div>
                     </div>
                     <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>Failed</div>
+                      <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>{t('detailFailed')}</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: '#dc2626', marginTop: '2px' }}>{selectedRun.failed !== undefined ? selectedRun.failed : selectedRun.failed_tests}</div>
                     </div>
                     <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>Duration</div>
+                      <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>{t('common:duration')}</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>{(selectedRun.duration_ms / 1000).toFixed(2)}s</div>
                     </div>
                   </div>
@@ -478,9 +478,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Cpu size={14} color="#64748b" />
-                        <span>External Jenkins Job: <b>{selectedRun.external_job_id || 'Jenkins Pipeline'}</b></span>
+                        <span>{t('externalJenkinsJob')} <b>{selectedRun.external_job_id || t('jenkinsDefaultJob')}</b></span>
                         {selectedRun.queue_duration_ms !== undefined && (
-                          <span style={{ color: 'var(--text-muted)' }}> (Queued: {(selectedRun.queue_duration_ms / 1000).toFixed(1)}s)</span>
+                          <span style={{ color: 'var(--text-muted)' }}> {t('queuedLabel', { seconds: (selectedRun.queue_duration_ms / 1000).toFixed(1) })}</span>
                         )}
                       </div>
                       <a
@@ -490,7 +490,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         className="btn btn-secondary btn-sm"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
                       >
-                        <ExternalLink size={12} /> Open in Jenkins
+                        <ExternalLink size={12} /> {t('openInJenkins')}
                       </a>
                     </div>
                   )}
@@ -503,7 +503,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <div className="card-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <FileCheck size={16} color="#16a34a" />
-                      <span className="card-title">External Test Reports & Artifacts ({externalArtifacts.length})</span>
+                      <span className="card-title">{t('artifactsTitle', { count: externalArtifacts.length })}</span>
                     </div>
                   </div>
                   <div className="card-body" style={{ padding: '12px' }}>
@@ -540,30 +540,30 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               {/* Individual Test Executions Table */}
               <div className="card">
                 <div className="card-header">
-                  <span className="card-title">Test Outcomes ({selectedRun.executions.length})</span>
+                  <span className="card-title">{t('outcomesTitle', { count: selectedRun.executions.length })}</span>
                   {((selectedRun.failed ?? selectedRun.failed_tests ?? 0) > 0) && onNavigateToFailures && (
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ fontSize: '11px' }}
                       onClick={() => onNavigateToFailures()}
                     >
-                      <Sparkles size={12} color="#9333ea" /> View Failures & Auto-Healing
+                      <Sparkles size={12} color="#9333ea" /> {t('viewFailures')}
                     </button>
                   )}
                 </div>
                 <div className="card-body" style={{ padding: 0 }}>
                   {selectedRun.executions.length === 0 ? (
                     <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      Waiting for pytest execution items...
+                      {t('waitingExecutions')}
                     </div>
                   ) : (
                     <table className="data-table" style={{ fontSize: '12px' }}>
                       <thead>
                         <tr>
-                          <th style={{ padding: '8px 12px' }}>Status</th>
-                          <th style={{ padding: '8px 12px' }}>Pytest Node ID</th>
-                          <th style={{ padding: '8px 12px' }}>Duration</th>
-                          <th style={{ padding: '8px 12px' }}>Error Details</th>
+                          <th style={{ padding: '8px 12px' }}>{t('common:status')}</th>
+                          <th style={{ padding: '8px 12px' }}>{t('pytestNodeId')}</th>
+                          <th style={{ padding: '8px 12px' }}>{t('common:duration')}</th>
+                          <th style={{ padding: '8px 12px' }}>{t('errorDetails')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -591,12 +591,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f8fafc' }}>
                     <Terminal size={14} color="#38bdf8" />
                     <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                      Execution Console Log
+                      {t('terminalTitle')}
                     </span>
                   </div>
                   {selectedRun.status === 'RUNNING' && (
                     <span style={{ fontSize: '11px', color: '#38bdf8', animation: 'pulse 1.5s infinite' }}>
-                      ● Live SSE Streaming
+                      {t('liveStreaming')}
                     </span>
                   )}
                 </div>
@@ -614,14 +614,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     lineHeight: 1.6,
                   }}
                 >
-                  {selectedRun.log_output || 'Awaiting runner subprocess stream output...'}
+                  {selectedRun.log_output || t('awaitingStream')}
                 </div>
               </div>
             </div>
           ) : (
             <div className="card">
               <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Select a test run to view real-time execution logs and outcome breakdown.
+                {t('emptySelection')}
               </div>
             </div>
           )}
@@ -634,7 +634,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
           <div className="modal-dialog">
             <form onSubmit={handleCreateRun}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Trigger New Execution Run</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('newRunTitle')}</h3>
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', cursor: 'pointer' }}
@@ -645,7 +645,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">Project *</label>
+                  <label className="form-label">{t('projectRequired')}</label>
                   <select
                     className="form-control"
                     value={runFormData.project_id}
@@ -661,7 +661,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">Runner Backend</label>
+                    <label className="form-label">{t('runnerBackend')}</label>
                     <select
                       className="form-control"
                       value={runFormData.runner_type}
@@ -672,14 +672,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         })
                       }
                     >
-                      <option value="LOCAL">Local Runner (Pytest Subprocess)</option>
-                      <option value="JENKINS">Jenkins CI Runner</option>
+                      <option value="LOCAL">{t('localRunner')}</option>
+                      <option value="JENKINS">{t('jenkinsRunner')}</option>
                     </select>
                   </div>
 
                   {runFormData.runner_type === 'JENKINS' && (
                     <div className="form-group">
-                      <label className="form-label">Jenkins Profile</label>
+                      <label className="form-label">{t('jenkinsProfile')}</label>
                       <select
                         className="form-control"
                         value={runFormData.runner_profile_id || ''}
@@ -690,7 +690,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                           })
                         }
                       >
-                        <option value="">Default Jenkins Runner</option>
+                        <option value="">{t('defaultJenkinsRunner')}</option>
                         {runnerProfiles.map((prof) => (
                           <option key={prof.id} value={prof.id}>
                             {prof.name} ({prof.type})
@@ -702,11 +702,11 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Triggered By</label>
+                  <label className="form-label">{t('triggeredBy')}</label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. CI Pipeline, Studio Runner, Regression"
+                    placeholder={t('triggeredByPlaceholder')}
                     value={runFormData.requested_by}
                     onChange={(e) =>
                       setRunFormData({ ...runFormData, requested_by: e.target.value })
@@ -715,7 +715,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Target Test Node IDs (Optional, leave blank to run full suite)</label>
+                  <label className="form-label">{t('targetNodeIds')}</label>
                   <textarea
                     rows={4}
                     className="form-control"
@@ -731,10 +731,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   className="btn btn-secondary"
                   onClick={() => setIsModalOpen(false)}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={triggering}>
-                  <PlayCircle size={15} /> {triggering ? 'Starting Runner...' : 'Launch Execution'}
+                  <PlayCircle size={15} /> {triggering ? t('startingRunner') : t('launchExecution')}
                 </button>
               </div>
             </form>
@@ -749,7 +749,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <UploadCloud size={18} color="#047857" />
-                <h3 className="modal-title">Publish Execution Results to TestRail</h3>
+                <h3 className="modal-title">{t('testrailTitle')}</h3>
               </div>
               <button
                 className="btn btn-icon"
@@ -764,7 +764,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               {loadingTestRailPreview ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px', color: '#047857' }} />
-                  <p>Matching test executions against TestRail suite & mapping statuses...</p>
+                  <p>{t('testrailMatching')}</p>
                 </div>
               ) : testRailPreview ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -786,7 +786,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         </div>
                         {testRailPublishResult.testrail_run_id && (
                           <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px', fontWeight: 600 }}>
-                            TestRail Run ID: {testRailPublishResult.testrail_run_id}
+                            {t('testrailRunId', { id: testRailPublishResult.testrail_run_id })}
                           </div>
                         )}
                       </div>
@@ -799,15 +799,15 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   {/* Summary Metric Cards */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
                     <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Total Executed</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('totalExecuted')}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700 }}>{testRailPreview.total_tests}</div>
                     </div>
                     <div style={{ background: '#ecfdf5', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: '#047857', fontWeight: 600 }}>Mapped to TestRail</div>
+                      <div style={{ fontSize: '11px', color: '#047857', fontWeight: 600 }}>{t('mappedToTestRail')}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color: '#047857' }}>{testRailPreview.mapped_tests}</div>
                     </div>
                     <div style={{ background: '#fef3c7', padding: '10px', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>Unmapped Tests</div>
+                      <div style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>{t('unmappedTests')}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color: '#b45309' }}>{testRailPreview.unmapped_tests}</div>
                     </div>
                   </div>
@@ -817,10 +817,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     <table className="data-table" style={{ fontSize: '12px' }}>
                       <thead>
                         <tr>
-                          <th>Test Node</th>
-                          <th>TestRail ID</th>
-                          <th>Pytest Status</th>
-                          <th>Mapped TR Status</th>
+                          <th>{t('testNode')}</th>
+                          <th>{t('testrailId')}</th>
+                          <th>{t('pytestStatus')}</th>
+                          <th>{t('mappedTrStatus')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -835,7 +835,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                                   {item.external_case_id}
                                 </span>
                               ) : (
-                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Unmapped</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{t('unmappedValue')}</span>
                               )}
                             </td>
                             <td>
@@ -856,7 +856,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 </div>
               ) : (
                 <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Failed to load TestRail publish preview.
+                  {t('previewFailed')}
                 </div>
               )}
             </div>
@@ -867,7 +867,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 className="btn btn-secondary"
                 onClick={() => setIsTestRailModalOpen(false)}
               >
-                Close
+                {t('common:close')}
               </button>
               <button
                 type="button"
@@ -875,7 +875,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 disabled={!testRailPreview || publishingTestRail}
                 onClick={() => handlePublishTestRail(false)}
               >
-                Dry-Run Preview
+                {t('dryRunPreview')}
               </button>
               <button
                 type="button"
@@ -883,7 +883,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 disabled={!testRailPreview || publishingTestRail}
                 onClick={() => handlePublishTestRail(true)}
               >
-                {publishingTestRail ? 'Publishing...' : 'Confirm & Publish to TestRail'}
+                {publishingTestRail ? t('publishing') : t('confirmPublish')}
               </button>
             </div>
           </div>

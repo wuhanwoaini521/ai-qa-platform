@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { TestDesignSuggestion } from '../../../types';
 
@@ -17,6 +18,7 @@ export const TestDesignGenerationModal: React.FC<TestDesignGenerationModalProps>
   onAdopt: handleAdoptDesign,
   onClose,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <>
       {isOpen && (
@@ -25,17 +27,17 @@ export const TestDesignGenerationModal: React.FC<TestDesignGenerationModalProps>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={18} color="var(--color-primary)" />
-                <h3>AI Generated Test Design Candidates</h3>
+                <h3>{t('designModalTitle')}</h3>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={onClose}>
-                Close
+                {t('common:close')}
               </button>
             </div>
             <div className="modal-body">
               {generatingDesigns ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <RefreshCw size={24} className="spinning" style={{ marginBottom: '0.75rem' }} />
-                  <div>Generating functional, boundary, negative, and API test designs...</div>
+                  <div>{t('designModalGenerating')}</div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -56,20 +58,20 @@ export const TestDesignGenerationModal: React.FC<TestDesignGenerationModalProps>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span className="status-pill status-pill-draft">{sug.category}</span>
                           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{sug.title}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Risk: {sug.risk}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('designModalRisk', { risk: sug.risk })}</span>
                         </div>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                           {sug.description}
                         </p>
                       </div>
                       <button className="btn btn-primary btn-sm" onClick={() => handleAdoptDesign(sug)}>
-                        Adopt Design
+                        {t('designModalAdopt')}
                       </button>
                     </div>
                   ))}
                   {suggestedDesigns.length === 0 && (
                     <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      All design candidates adopted or none generated.
+                      {t('designModalEmpty')}
                     </div>
                   )}
                 </div>

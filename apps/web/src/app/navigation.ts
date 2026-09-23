@@ -27,6 +27,8 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
       return '/security';
     case 'workers':
       return '/workers';
+    case 'settings':
+      return '/settings';
   }
 }
 

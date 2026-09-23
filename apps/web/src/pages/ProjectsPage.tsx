@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { Project, ProjectCreate, FrameworkType } from '../types';
 import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
@@ -19,6 +20,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   onSelectProject,
   onNavigate,
 }) => {
+  const { t } = useTranslation('projects');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<ProjectCreate>({
     name: '',
@@ -54,13 +56,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>QA Projects</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Manage test projects, workspace repositories, and automation frameworks.
-          </p>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('titles:projects')}</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('subtitle')}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          <Plus size={16} /> Create Project
+          <Plus size={16} /> {t('createProject')}
         </button>
       </div>
 
@@ -68,31 +68,31 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         <div className="card-body" style={{ padding: 0 }}>
           {loading ? (
             <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Loading projects...
+              {t('common:loadingProjects')}
             </div>
           ) : projects.length === 0 ? (
             <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
               <FolderGit2 size={36} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
               <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-                No projects found
+                {t('emptyTitle')}
               </div>
               <p style={{ fontSize: '13px', maxWidth: '400px', margin: '0 auto 16px' }}>
-                Create your first project to configure a Playwright or Pytest test suite with an automated workspace.
+                {t('emptyDescription')}
               </p>
               <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-                <Plus size={16} /> Create Project
+                <Plus size={16} /> {t('createProject')}
               </button>
             </div>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Project Name</th>
-                  <th>Framework</th>
-                  <th>Repository URL</th>
-                  <th>Branch</th>
-                  <th>Created</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                  <th>{t('columnName')}</th>
+                  <th>{t('columnFramework')}</th>
+                  <th>{t('columnRepositoryUrl')}</th>
+                  <th>{t('columnBranch')}</th>
+                  <th>{t('common:created')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common:actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,7 +110,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                       <span className="badge badge-draft">{p.framework_type}</span>
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                      {p.repository_url || <span style={{ color: 'var(--text-muted)' }}>Local Workspace</span>}
+                      {p.repository_url || <span style={{ color: 'var(--text-muted)' }}>{t('localWorkspace')}</span>}
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{p.default_branch}</td>
                     <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -120,7 +120,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                       <div style={{ display: 'inline-flex', gap: '6px' }}>
                         <button
                           className="btn btn-secondary btn-sm"
-                          title="View Requirements"
+                          title={t('viewRequirements')}
                           onClick={() => {
                             onSelectProject(p.id);
                             onNavigate('requirements', p.id);
@@ -130,13 +130,13 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                         </button>
                         <button
                           className="btn btn-primary btn-sm"
-                          title="Open in Automation Studio"
+                          title={t('openInAutomationStudio')}
                           onClick={() => {
                             onSelectProject(p.id);
                             onNavigate('automation', p.id);
                           }}
                         >
-                          <Code2 size={13} /> Studio
+                          <Code2 size={13} /> {t('studio')}
                         </button>
                       </div>
                     </td>
@@ -154,7 +154,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <div className="modal-dialog">
             <form onSubmit={handleSubmit}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Create New QA Project</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('modalTitle')}</h3>
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
@@ -165,34 +165,34 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">Project Name *</label>
+                  <label className="form-label">{t('modalNameLabel')}</label>
                   <input
                     type="text"
                     required
                     className="form-control"
-                    placeholder="e.g. Web E-Commerce Regression"
+                    placeholder={t('modalNamePlaceholder')}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Description</label>
+                  <label className="form-label">{t('common:description')}</label>
                   <textarea
                     rows={2}
                     className="form-control"
-                    placeholder="Describe the test scope and applications under test..."
+                    placeholder={t('modalDescriptionPlaceholder')}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Repository URL (Optional)</label>
+                  <label className="form-label">{t('modalRepositoryUrlLabel')}</label>
                   <input
                     type="url"
                     className="form-control"
-                    placeholder="https://github.com/org/repo (leave blank for local project)"
+                    placeholder={t('modalRepositoryUrlPlaceholder')}
                     value={formData.repository_url || ''}
                     onChange={(e) => setFormData({ ...formData, repository_url: e.target.value || null })}
                   />
@@ -200,7 +200,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">Framework Type</label>
+                    <label className="form-label">{t('modalFrameworkTypeLabel')}</label>
                     <select
                       className="form-control"
                       value={formData.framework_type}
@@ -208,14 +208,14 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                         setFormData({ ...formData, framework_type: e.target.value as FrameworkType })
                       }
                     >
-                      <option value="playwright_python">Playwright (Python)</option>
-                      <option value="pytest_api">Pytest (API Suite)</option>
-                      <option value="custom">Custom Framework</option>
+                      <option value="playwright_python">{t('frameworkPlaywrightPython')}</option>
+                      <option value="pytest_api">{t('frameworkPytestApi')}</option>
+                      <option value="custom">{t('frameworkCustom')}</option>
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Default Branch</label>
+                    <label className="form-label">{t('modalDefaultBranchLabel')}</label>
                     <input
                       type="text"
                       className="form-control"
@@ -235,7 +235,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                       }
                     />
                     <span>
-                      <strong>Bootstrap Blank QA Project</strong> (Creates <code>tests/</code>, <code>pages/</code>, <code>flows/</code>, <code>components/</code> workspace structure)
+                      <Trans
+                        ns="projects"
+                        i18nKey="modalBootstrapHint"
+                        components={{ strong: <strong />, code: <code /> }}
+                      />
                     </span>
                   </label>
                 </div>
@@ -247,10 +251,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   className="btn btn-secondary"
                   onClick={() => setIsModalOpen(false)}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create Project'}
+                  {submitting ? t('creating') : t('createProject')}
                 </button>
               </div>
             </form>

@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { setAuthToken, setUnauthorizedHandler, hasAuthToken } from './api/client';
 import { AppRoutes } from './app/routes';
 import { LoginScreen } from './app/LoginScreen';
+import { PreferencesProvider } from './app/Preferences';
 import { ProjectScopeProvider } from './app/ProjectScope';
 
 export const App: React.FC = () => {
@@ -24,9 +25,11 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
-      <ProjectScopeProvider>
-        <AppRoutes onSignOut={handleSignOut} />
-      </ProjectScopeProvider>
+      <PreferencesProvider>
+        <ProjectScopeProvider>
+          <AppRoutes onSignOut={handleSignOut} />
+        </ProjectScopeProvider>
+      </PreferencesProvider>
     </BrowserRouter>
   );
 };

@@ -60,3 +60,24 @@ pnpm --filter @ai-qa/web build
 - Workspace operations are restricted strictly to `runtime/workspaces/<id>`.
 - Any path traversal (`../`, absolute paths, symlink escapes) will trigger a `SecurityException` and return HTTP 400.
 - Runtime databases and test workspaces are excluded from Git commits via `.gitignore`.
+
+---
+
+## Internationalisation (zh-CN / en)
+
+The web UI ships in Chinese and English, with a switcher in the top bar and a settings page at
+`/settings` (language, sign-in landing page, default project).
+
+Conventions:
+
+- Translations live in `apps/web/src/i18n/locales/<language>/<namespace>.json`. Adding a namespace
+  means adding the two files — `apps/web/src/i18n/index.ts` discovers them with a glob and never has
+  to be edited.
+- A feature owns its own namespace (`dashboard`, `studioShell`, `runs`, …) so two contributors never
+  edit the same resource file. Shared vocabulary lives in `common` (`common:save`, `common:cancel`, …).
+- **Both languages must carry the same keys.** `./scripts/lint` runs `scripts/i18n_check.py`, which
+  compares every namespace key-by-key and fails on a missing translation.
+- Do not translate data: node ids, file paths, framework names, status values the API returns, log
+  and JSON output. Translate the labels around them.
+- Chinese copy should read like a QA engineer wrote it (`缺陷`/`用例`/`回归`), not like a machine
+  translation of the English string.

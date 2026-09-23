@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink, FileText, Sparkles } from 'lucide-react';
 import { Requirement, RequirementStatus } from '../../../types';
 
@@ -13,6 +14,7 @@ export const RequirementDetail: React.FC<RequirementDetailProps> = ({
   onAnalyze,
   onUpdateStatus,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <div className="card">
       <div className="card-header">
@@ -33,7 +35,7 @@ export const RequirementDetail: React.FC<RequirementDetailProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button className="btn btn-secondary btn-sm" onClick={onAnalyze}>
             <Sparkles size={13} color="var(--color-primary)" />
-            <span>AI Analyze</span>
+            <span>{t('detailAnalyze')}</span>
           </button>
           <select
             className="form-select"
@@ -50,16 +52,16 @@ export const RequirementDetail: React.FC<RequirementDetailProps> = ({
       <div className="card-body">
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-            Description
+            {t('common:description')}
           </div>
           <div style={{ fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap' }}>
-            {selectedReq.description || 'No description provided.'}
+            {selectedReq.description || t('detailDescriptionEmpty')}
           </div>
         </div>
 
         <div>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-            Acceptance Criteria
+            {t('detailAcceptanceCriteria')}
           </div>
           <div
             style={{
@@ -72,7 +74,7 @@ export const RequirementDetail: React.FC<RequirementDetailProps> = ({
               whiteSpace: 'pre-wrap',
             }}
           >
-            {selectedReq.acceptance_criteria || 'No acceptance criteria specified.'}
+            {selectedReq.acceptance_criteria || t('detailAcceptanceCriteriaEmpty')}
           </div>
         </div>
       </div>

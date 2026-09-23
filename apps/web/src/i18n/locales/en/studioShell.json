@@ -1,0 +1,82 @@
+{
+  "selectProjectFirst": "Please select or create a project first to open Automation Studio.",
+  "error": {
+    "fileOperation": "Error performing file operation: {{message}}"
+  },
+  "editor": {
+    "saveCurrentFile": "Save current file (Cmd+S)",
+    "saving": "Saving...",
+    "validateTooltip": "Validate Python syntax & QA rules",
+    "checking": "Checking...",
+    "problems": "Problems ({{problemCount}})",
+    "runTestTooltip": "Execute tests in current file",
+    "running": "Running...",
+    "runTest": "Run Test",
+    "gitDiffTitle": "Git Working Tree Diff",
+    "noUncommittedChanges": "No uncommitted changes detected in working tree.",
+    "loadingFile": "Loading file content...",
+    "emptySelectFile": "Select a file from the explorer or press",
+    "emptyHint": "Write Playwright test suites, Page Objects, and test fixtures."
+  },
+  "tabs": {
+    "noOpenTabs": "No open tabs (Press Cmd+P to open file)"
+  },
+  "fileTree": {
+    "newFileInside": "New File Inside",
+    "rename": "Rename",
+    "uninitialized": "Workspace is uninitialized.",
+    "initializeWorkspace": "Initialize Workspace"
+  },
+  "quickOpen": {
+    "placeholder": "Search files by name... (Esc to close)",
+    "noMatches": "No matching files found",
+    "fileLabel": "File"
+  },
+  "fileOpModal": {
+    "createFileTitle": "Create New File",
+    "createFolderTitle": "Create New Folder",
+    "renameTitle": "Rename File / Directory",
+    "deleteTitle": "Confirm Delete",
+    "deleteConfirmPrefix": "Are you sure you want to permanently delete",
+    "deleteConfirmSuffix": "?",
+    "filePathLabel": "File path relative to workspace root:",
+    "directoryPathLabel": "Directory path relative to workspace root:",
+    "newPathLabel": "New relative path:"
+  },
+  "branchModal": {
+    "title": "Create Feature Branch",
+    "nameLabelPrefix": "Branch Name (e.g.",
+    "nameLabelSuffix": "):",
+    "basedOnPrefix": "Based on current branch:",
+    "createAndSwitch": "Create & Switch Branch"
+  },
+  "prModal": {
+    "createPullRequest": "Create Pull Request",
+    "branchPrefix": "Branch:",
+    "generating": "Generating...",
+    "regenerate": "Re-generate AI Summary",
+    "titleLabel": "PR Title:",
+    "bodyLabel": "PR Body (Markdown):",
+    "creating": "Creating PR..."
+  },
+  "projectSelector": {
+    "quickOpen": "Quick Open File (Cmd+P)"
+  },
+  "sidebarView": {
+    "files": "Files",
+    "tests": "Tests ({{testCount}})",
+    "git": "Git ({{changeCount}})",
+    "pr": "PR"
+  },
+  "sidebarHeader": {
+    "workspaceFiles": "Workspace Files",
+    "pytestExplorer": "Pytest Explorer",
+    "git": "Git: {{branch}}",
+    "pullRequest": "Pull Request",
+    "prWithNumber": "PR #{{number}}",
+    "newFile": "New File",
+    "newFolder": "New Folder",
+    "newBranch": "New Branch",
+    "refreshChecks": "Refresh Checks"
+  }
+}

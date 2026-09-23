@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from '../i18n';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (this.state.error) {
       return (
         <div style={{ padding: '32px', textAlign: 'center' }}>
-          <div style={{ fontWeight: 600, marginBottom: '8px' }}>This view failed to render</div>
+          <div style={{ fontWeight: 600, marginBottom: '8px' }}>{i18n.t('renderFailed', { ns: 'errors' })}</div>
           <pre
             style={{
               whiteSpace: 'pre-wrap',
@@ -47,7 +48,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             {this.state.error.message}
           </pre>
           <button type="button" className="btn btn-primary" onClick={() => this.setState({ error: null })}>
-            Try again
+            {i18n.t('tryAgain', { ns: 'errors' })}
           </button>
         </div>
       );

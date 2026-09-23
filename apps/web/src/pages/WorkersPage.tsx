@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Server,
   Activity,
@@ -20,6 +21,7 @@ import {
 import { api } from '../api/client';
 
 export const WorkersPage: React.FC = () => {
+  const { t } = useTranslation('workers');
   const [activeTab, setActiveTab] = useState<'workers' | 'jobs'>('workers');
 
   // Cluster State
@@ -149,15 +151,13 @@ export const WorkersPage: React.FC = () => {
       {/* Page Header */}
       <div className="page-header">
         <div>
-          <h2>Distributed Execution Cluster</h2>
-          <p className="subtitle">
-            Autonomous multi-node workers, containerized execution engines, priority job queues, and artifact stores.
-          </p>
+          <h2>{t('title')}</h2>
+          <p className="subtitle">{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-primary" onClick={() => setShowRegisterModal(true)}>
             <Plus size={14} />
-            <span>Register Worker</span>
+            <span>{t('registerWorker')}</span>
           </button>
           <button
             className="btn btn-secondary"
@@ -167,7 +167,7 @@ export const WorkersPage: React.FC = () => {
             }}
           >
             <RefreshCw size={14} className={loadingCluster || loadingJobs ? 'spinning' : ''} />
-            <span>Refresh</span>
+            <span>{t('common:refresh')}</span>
           </button>
         </div>
       </div>
@@ -179,12 +179,17 @@ export const WorkersPage: React.FC = () => {
             <Server size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Cluster Workers</div>
+            <div className="stat-title">{t('statClusterWorkers')}</div>
             <div className="stat-value">
               {clusterSummary ? clusterSummary.total_workers : '--'}
             </div>
             <div className="stat-subtitle">
-              {clusterSummary ? `${clusterSummary.online_workers} online / ${clusterSummary.busy_workers} busy` : '0 workers'}
+              {clusterSummary
+                ? t('statOnlineBusy', {
+                    online: clusterSummary.online_workers,
+                    busy: clusterSummary.busy_workers,
+                  })
+                : t('statZeroWorkers')}
             </div>
           </div>
         </div>
@@ -194,14 +199,18 @@ export const WorkersPage: React.FC = () => {
             <Cpu size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Concurrency Capacity</div>
+            <div className="stat-title">{t('statConcurrencyCapacity')}</div>
             <div className="stat-value">
               {clusterSummary ? `${clusterSummary.used_concurrency} / ${clusterSummary.total_concurrency_capacity}` : '--'}
             </div>
             <div className="stat-subtitle">
               {clusterSummary && clusterSummary.total_concurrency_capacity > 0
-                ? `${Math.round((clusterSummary.used_concurrency / clusterSummary.total_concurrency_capacity) * 100)}% load`
-                : '0% load'}
+                ? t('statLoadPercent', {
+                    percent: Math.round(
+                      (clusterSummary.used_concurrency / clusterSummary.total_concurrency_capacity) * 100,
+                    ),
+                  })
+                : t('statZeroLoad')}
             </div>
           </div>
         </div>
@@ -211,11 +220,11 @@ export const WorkersPage: React.FC = () => {
             <Layers size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Queued Tasks</div>
+            <div className="stat-title">{t('statQueuedTasks')}</div>
             <div className="stat-value">
               {clusterSummary ? clusterSummary.queued_jobs_count : '--'}
             </div>
-            <div className="stat-subtitle">Waiting for worker dispatch</div>
+            <div className="stat-subtitle">{t('statQueuedTasksHint')}</div>
           </div>
         </div>
 
@@ -224,11 +233,11 @@ export const WorkersPage: React.FC = () => {
             <Activity size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Active Running Tasks</div>
+            <div className="stat-title">{t('statActiveTasks')}</div>
             <div className="stat-value">
               {clusterSummary ? clusterSummary.running_jobs_count : '--'}
             </div>
-            <div className="stat-subtitle">Currently executing</div>
+            <div className="stat-subtitle">{t('statActiveTasksHint')}</div>
           </div>
         </div>
       </div>
@@ -240,14 +249,14 @@ export const WorkersPage: React.FC = () => {
           onClick={() => setActiveTab('workers')}
         >
           <Server size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Cluster Workers ({workers.length})
+          {t('tabWorkers', { total: workers.length })}
         </button>
         <button
           className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`}
           onClick={() => setActiveTab('jobs')}
         >
           <Layers size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Distributed Job Queue ({jobs.length})
+          {t('tabJobs', { total: jobs.length })}
         </button>
       </div>
 
@@ -255,23 +264,21 @@ export const WorkersPage: React.FC = () => {
       {activeTab === 'workers' && (
         <div className="card">
           <div className="card-header">
-            <h3>Registered Runner Nodes</h3>
-            <span className="text-secondary text-sm">
-              Live heartbeat protocol monitors worker health and automatically quarantines lost runners.
-            </span>
+            <h3>{t('workersTitle')}</h3>
+            <span className="text-secondary text-sm">{t('workersHint')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Hostname</th>
-                  <th>IP Address</th>
-                  <th>Status</th>
-                  <th>Concurrency Load</th>
-                  <th>Supported Browsers</th>
-                  <th>OS</th>
-                  <th>Last Heartbeat</th>
-                  <th>Actions</th>
+                  <th>{t('colHostname')}</th>
+                  <th>{t('colIpAddress')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('colConcurrencyLoad')}</th>
+                  <th>{t('colSupportedBrowsers')}</th>
+                  <th>{t('colOs')}</th>
+                  <th>{t('colLastHeartbeat')}</th>
+                  <th>{t('common:actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -326,7 +333,7 @@ export const WorkersPage: React.FC = () => {
                           onClick={() => handleDeleteWorker(w.id)}
                         >
                           <Trash2 size={13} />
-                          <span>Deregister</span>
+                          <span>{t('deregister')}</span>
                         </button>
                       </td>
                     </tr>
@@ -334,7 +341,7 @@ export const WorkersPage: React.FC = () => {
                 ) : (
                   <tr>
                     <td colSpan={8} className="text-center text-secondary py-4">
-                      {loadingCluster ? 'Loading worker nodes...' : 'No workers registered yet. Click "Register Worker" to add a node.'}
+                      {loadingCluster ? t('loadingWorkers') : t('emptyWorkers')}
                     </td>
                   </tr>
                 )}
@@ -348,24 +355,22 @@ export const WorkersPage: React.FC = () => {
       {activeTab === 'jobs' && (
         <div className="card">
           <div className="card-header">
-            <h3>Distributed Execution Tasks</h3>
-            <span className="text-secondary text-sm">
-              Priority-based distributed task queue dispatching tests across available worker capacity.
-            </span>
+            <h3>{t('jobsTitle')}</h3>
+            <span className="text-secondary text-sm">{t('jobsHint')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Job ID</th>
-                  <th>Run ID</th>
-                  <th>Priority</th>
-                  <th>Browser</th>
-                  <th>Status</th>
-                  <th>Assigned Worker</th>
-                  <th>Test Count</th>
-                  <th>Duration</th>
-                  <th>Actions</th>
+                  <th>{t('colJobId')}</th>
+                  <th>{t('colRunId')}</th>
+                  <th>{t('common:priority')}</th>
+                  <th>{t('colBrowser')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('colAssignedWorker')}</th>
+                  <th>{t('colTestCount')}</th>
+                  <th>{t('common:duration')}</th>
+                  <th>{t('common:actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -380,12 +385,12 @@ export const WorkersPage: React.FC = () => {
                       <td>{job.browser}</td>
                       <td>{getJobStatusBadge(job.status)}</td>
                       <td>{job.assigned_worker_id ? <code>{job.assigned_worker_id.substring(0, 8)}</code> : '--'}</td>
-                      <td>{job.nodeids.length} tests</td>
+                      <td>{t('testCount', { total: job.nodeids.length })}</td>
                       <td>
                         {job.duration_ms > 0 ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Clock size={12} />
-                            <span>{(job.duration_ms / 1000).toFixed(1)}s</span>
+                            <span>{t('durationSeconds', { value: (job.duration_ms / 1000).toFixed(1) })}</span>
                           </div>
                         ) : (
                           '--'
@@ -399,7 +404,7 @@ export const WorkersPage: React.FC = () => {
                             onClick={() => handleCancelJob(job.id)}
                           >
                             <XCircle size={13} />
-                            <span>Cancel</span>
+                            <span>{t('common:cancel')}</span>
                           </button>
                         ) : (
                           <span className="text-secondary text-sm">--</span>
@@ -410,7 +415,7 @@ export const WorkersPage: React.FC = () => {
                 ) : (
                   <tr>
                     <td colSpan={9} className="text-center text-secondary py-4">
-                      {loadingJobs ? 'Loading jobs...' : 'No jobs queued or executing.'}
+                      {loadingJobs ? t('loadingJobs') : t('emptyJobs')}
                     </td>
                   </tr>
                 )}
@@ -425,7 +430,7 @@ export const WorkersPage: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
-              <h3>Register Worker Node</h3>
+              <h3>{t('registerTitle')}</h3>
               <button className="btn-icon" onClick={() => setShowRegisterModal(false)}>
                 &times;
               </button>
@@ -433,7 +438,7 @@ export const WorkersPage: React.FC = () => {
             <form onSubmit={handleRegisterWorker}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Node Hostname *</label>
+                  <label>{t('fieldHostname')}</label>
                   <input
                     type="text"
                     className="form-control"
@@ -444,7 +449,7 @@ export const WorkersPage: React.FC = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>IP Address</label>
+                  <label>{t('fieldIpAddress')}</label>
                   <input
                     type="text"
                     className="form-control"
@@ -454,7 +459,7 @@ export const WorkersPage: React.FC = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Max Concurrency Capacity</label>
+                  <label>{t('fieldMaxConcurrency')}</label>
                   <input
                     type="number"
                     min="1"
@@ -467,10 +472,10 @@ export const WorkersPage: React.FC = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowRegisterModal(false)}>
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={registering}>
-                  {registering ? 'Registering...' : 'Register Worker'}
+                  {registering ? t('registering') : t('registerWorker')}
                 </button>
               </div>
             </form>

@@ -1,5 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import {
   LayoutDashboard,
   FolderGit2,
@@ -12,6 +14,7 @@ import {
   ShieldCheck,
   Shield,
   Server,
+  Settings,
 } from 'lucide-react';
 import { useProjectScope } from '../app/ProjectScope';
 
@@ -26,42 +29,45 @@ export type NavTab =
   | 'failures'
   | 'quality'
   | 'security'
-  | 'workers';
+  | 'workers'
+  | 'settings';
 
 interface NavItem {
   id: NavTab;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ size?: number }>;
   to: string;
   end?: boolean;
 }
 
 export const Navigation: React.FC = () => {
+  const { t } = useTranslation('nav');
   const { selectedProjectId } = useProjectScope();
   const projectBase = selectedProjectId ? `/projects/${selectedProjectId}` : null;
 
   const navItems: NavItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/', end: true },
-    { id: 'projects', label: 'Projects', icon: FolderGit2, to: '/projects', end: true },
+    { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, to: '/', end: true },
+    { id: 'projects', labelKey: 'projects', icon: FolderGit2, to: '/projects', end: true },
     {
       id: 'requirements',
-      label: 'Requirements',
+      labelKey: 'requirements',
       icon: FileText,
       to: projectBase ? `${projectBase}/requirements` : '/requirements',
     },
-    { id: 'test_cases', label: 'Test Cases', icon: CheckSquare, to: '/test-cases' },
+    { id: 'test_cases', labelKey: 'testCases', icon: CheckSquare, to: '/test-cases' },
     {
       id: 'automation',
-      label: 'Automation Studio',
+      labelKey: 'automation',
       icon: Code2,
       to: projectBase ? `${projectBase}/studio` : '/projects',
     },
-    { id: 'runs', label: 'Runs & Runners', icon: PlayCircle, to: '/runs' },
-    { id: 'workers', label: 'Distributed Workers', icon: Server, to: '/workers' },
-    { id: 'flaky', label: 'Flaky Intelligence', icon: Flame, to: '/flaky' },
-    { id: 'failures', label: 'Failures & Healing', icon: AlertTriangle, to: '/failures' },
-    { id: 'quality', label: 'Quality & Release', icon: ShieldCheck, to: '/quality' },
-    { id: 'security', label: 'Security & RBAC', icon: Shield, to: '/security' },
+    { id: 'runs', labelKey: 'runs', icon: PlayCircle, to: '/runs' },
+    { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
+    { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
+    { id: 'failures', labelKey: 'failures', icon: AlertTriangle, to: '/failures' },
+    { id: 'quality', labelKey: 'quality', icon: ShieldCheck, to: '/quality' },
+    { id: 'security', labelKey: 'security', icon: Shield, to: '/security' },
+    { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
   ];
 
   return (
@@ -69,7 +75,7 @@ export const Navigation: React.FC = () => {
       <div className="sidebar-header">
         <div className="sidebar-logo-icon">QA</div>
         <div>
-          <div className="sidebar-brand-title">AI QA Platform</div>
+          <div className="sidebar-brand-title">{t('common:appName')}</div>
         </div>
         <span className="sidebar-brand-badge">v0.3</span>
       </div>
@@ -85,7 +91,7 @@ export const Navigation: React.FC = () => {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <Icon size={16} />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </NavLink>
           );
         })}
@@ -93,7 +99,7 @@ export const Navigation: React.FC = () => {
 
       <div className="sidebar-footer">
         <span>Engine: Production QA</span>
-        <span>AI Ready</span>
+        <span>{i18n.resolvedLanguage === 'zh-CN' ? '中文' : 'EN'}</span>
       </div>
     </aside>
   );

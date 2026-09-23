@@ -1,0 +1,72 @@
+{
+  "testExplorer": {
+    "collecting": "Collecting pytest tests...",
+    "noTestsPrefix": "No tests detected in",
+    "noTestsSuffix": "directory.",
+    "runThisTest": "Run this test"
+  },
+  "problems": {
+    "title": "Workspace Problems & Validation",
+    "issuesCount": "{{count}} issues",
+    "noErrors": "0 errors",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "allValid": "✓ All Python syntax and QA rules valid!",
+    "severity": "Severity",
+    "file": "File",
+    "line": "Line",
+    "message": "Message",
+    "ruleId": "Rule ID",
+    "error": "Error",
+    "warning": "Warning"
+  },
+  "sourceControl": {
+    "branch": "BRANCH",
+    "newBranch": "New",
+    "current": "(Current)",
+    "mainBranchNotePrefix": "⚠️ Note: Best practice is creating a",
+    "mainBranchNoteSuffix": "feature branch before pushing.",
+    "changes": "CHANGES ({{count}})",
+    "hideDiff": "Hide Diff",
+    "viewDiff": "View Diff",
+    "noChanges": "No uncommitted changes.",
+    "commit": "COMMIT",
+    "aiSuggest": "AI Suggest",
+    "aiSuggestTitle": "AI Suggested Commit Message",
+    "commitPlaceholder": "Commit message...",
+    "committing": "Committing...",
+    "commitChanges": "Commit Changes",
+    "pushing": "Pushing...",
+    "pushBranch": "Push Branch '{{branch}}'",
+    "createPR": "Create Pull Request",
+    "recentCommits": "RECENT COMMITS",
+    "noCommits": "No commit history found."
+  },
+  "pullRequest": {
+    "openTitle": "Open Pull Request",
+    "openDescription": "Connect your QA automation branch directly to GitHub PR workflow with automated validation checks.",
+    "create": "Create Pull Request",
+    "openGithub": "Open GitHub",
+    "checksTitle": "GITHUB CHECKS",
+    "refreshChecks": "Refresh Checks",
+    "diagnosing": "Diagnosing...",
+    "diagnose": "AI Failure Diagnosis",
+    "diagnosisTitle": "AI Diagnosis: {{classification}}",
+    "suggestedFix": "Suggested Fix:",
+    "createAnother": "Create Another PR"
+  },
+  "runOutput": {
+    "viewInPlatform": "View in Execution Platform"
+  },
+  "assistant": {
+    "title": "QA Assistant",
+    "groundingActive": "Grounding Active",
+    "explainCode": "Explain Code",
+    "generateTest": "Generate Test",
+    "refactorPo": "Refactor PO",
+    "diagnose": "Diagnose",
+    "insertCode": "Insert Code into Editor",
+    "reasoning": "QA Assistant is reasoning...",
+    "placeholder": "Ask QA assistant..."
+  }
+}

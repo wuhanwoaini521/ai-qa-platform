@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import { Project, TestCase } from '../../types';
 import { useTestCases } from './hooks/useTestCases';
@@ -27,6 +28,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   initialTestCaseId,
   onSelectTestCase,
 }) => {
+  const { t } = useTranslation('testCases');
   const form = useTestCaseFormModal(selectedProjectId || (projects[0]?.id ?? ''));
 
   // `binding` is only dereferenced once the case list loads, after both hooks are initialized.
@@ -81,9 +83,9 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Test Case & Automation Binding</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('pageTitle')}</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Manage test cases, generate AI Playwright code, and link business tests to executable pytest node IDs.
+            {t('pageSubtitle')}
           </p>
         </div>
         <button
@@ -91,14 +93,14 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           disabled={projects.length === 0}
           onClick={() => form.open(selectedProjectId || projects[0]?.id || '')}
         >
-          <Plus size={16} /> New Test Case
+          <Plus size={16} /> {t('newTestCase')}
         </button>
       </div>
 
       {projects.length === 0 ? (
         <div className="card">
           <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Please create a project first before adding test cases.
+            {t('createProjectFirst')}
           </div>
         </div>
       ) : (
@@ -138,7 +140,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           ) : (
             <div className="card">
               <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Select a test case to view step details and automation bindings.
+                {t('selectCase')}
               </div>
             </div>
           )}

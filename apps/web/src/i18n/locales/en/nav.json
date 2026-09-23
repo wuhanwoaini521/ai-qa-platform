@@ -1,0 +1,14 @@
+{
+  "dashboard": "Dashboard",
+  "projects": "Projects",
+  "requirements": "Requirements",
+  "testCases": "Test Cases",
+  "automation": "Automation Studio",
+  "runs": "Runs & Runners",
+  "workers": "Distributed Workers",
+  "flaky": "Flaky Intelligence",
+  "failures": "Failures & Healing",
+  "quality": "Quality & Release",
+  "security": "Security & RBAC",
+  "settings": "Settings"
+}

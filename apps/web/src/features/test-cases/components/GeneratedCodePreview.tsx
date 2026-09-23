@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle } from 'lucide-react';
 import { GenerateAutomationResponse } from '../../../types';
 
@@ -13,18 +14,19 @@ export const GeneratedCodePreview: React.FC<GeneratedCodePreviewProps> = ({
   savingDraft,
   onSaveDraftToWorkspace,
 }) => {
+  const { t } = useTranslation('testCases');
   return (
     <div style={{ marginTop: '18px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
-          AI Generated Test Scaffold ({generatedDraft.target_file})
+          {t('codeTitle', { file: generatedDraft.target_file })}
         </div>
         <button
           className="btn btn-primary btn-sm"
           disabled={savingDraft}
           onClick={onSaveDraftToWorkspace}
         >
-          <CheckCircle size={13} /> {savingDraft ? 'Saving to Workspace...' : 'Save & Bind to Workspace'}
+          <CheckCircle size={13} /> {savingDraft ? t('codeSaving') : t('codeSave')}
         </button>
       </div>
       <div

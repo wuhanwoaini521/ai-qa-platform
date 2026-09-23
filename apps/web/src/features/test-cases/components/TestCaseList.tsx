@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { TestCase } from '../../../types';
 
@@ -15,19 +16,20 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
   selectedCase,
   onSelect,
 }) => {
+  const { t } = useTranslation('testCases');
   return (
     <div className="card">
       <div className="card-header">
-        <span className="card-title">Test Cases ({testCases.length})</span>
+        <span className="card-title">{t('listTitle', { total: testCases.length })}</span>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
         {loading ? (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Loading test cases...
+            {t('listLoading')}
           </div>
         ) : testCases.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No test cases found.
+            {t('listEmpty')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TestDesignCategory, TestDesignCreate } from '../../../types';
 
 interface TestDesignFormModalProps {
@@ -47,6 +48,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
   onSubmit: handleCreateTestDesign,
   onClose,
 }) => {
+  const { t } = useTranslation('requirements');
   return (
     <>
       {isOpen && (
@@ -54,7 +56,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
           <div className="modal-card">
             <form onSubmit={handleCreateTestDesign}>
               <div className="modal-header">
-                <h3>Add Test Design</h3>
+                <h3>{t('designFormTitle')}</h3>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
@@ -65,12 +67,12 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
               </div>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Design Title *</label>
+                  <label className="form-label">{t('designFormTitleLabel')}</label>
                   <input
                     type="text"
                     required
                     className="form-input"
-                    placeholder="e.g. Boundary Test: Negative Input Handling"
+                    placeholder={t('designFormTitlePlaceholder')}
                     value={designFormData.title}
                     onChange={(e) => setDesignFormData({ ...designFormData, title: e.target.value })}
                   />
@@ -78,7 +80,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">Category</label>
+                    <label className="form-label">{t('designFormCategoryLabel')}</label>
                     <select
                       className="form-select"
                       value={designFormData.category}
@@ -99,7 +101,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Risk Level</label>
+                    <label className="form-label">{t('designFormRiskLabel')}</label>
                     <select
                       className="form-select"
                       value={designFormData.risk}
@@ -114,11 +116,11 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Design Details</label>
+                  <label className="form-label">{t('designFormDetailsLabel')}</label>
                   <textarea
                     rows={3}
                     className="form-textarea"
-                    placeholder="Describe specific scenario permutations..."
+                    placeholder={t('designFormDetailsPlaceholder')}
                     value={designFormData.description}
                     onChange={(e) =>
                       setDesignFormData({ ...designFormData, description: e.target.value })
@@ -133,10 +135,10 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   className="btn btn-secondary"
                   onClick={onClose}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Design
+                  {t('designFormSubmit')}
                 </button>
               </div>
             </form>

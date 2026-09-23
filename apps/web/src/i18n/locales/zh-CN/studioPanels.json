@@ -1,0 +1,72 @@
+{
+  "testExplorer": {
+    "collecting": "正在收集 pytest 测试...",
+    "noTestsPrefix": "未在",
+    "noTestsSuffix": "目录中检测到测试。",
+    "runThisTest": "运行此测试"
+  },
+  "problems": {
+    "title": "工作区问题与校验",
+    "issuesCount": "{{count}} 个问题",
+    "noErrors": "0 个错误",
+    "collapse": "收起",
+    "expand": "展开",
+    "allValid": "✓ Python 语法与 QA 规则校验全部通过！",
+    "severity": "级别",
+    "file": "文件",
+    "line": "行号",
+    "message": "信息",
+    "ruleId": "规则 ID",
+    "error": "错误",
+    "warning": "警告"
+  },
+  "sourceControl": {
+    "branch": "分支",
+    "newBranch": "新建",
+    "current": "（当前）",
+    "mainBranchNotePrefix": "⚠️ 提示：推送前建议先创建",
+    "mainBranchNoteSuffix": "特性分支。",
+    "changes": "变更 ({{count}})",
+    "hideDiff": "隐藏差异",
+    "viewDiff": "查看差异",
+    "noChanges": "没有未提交的变更。",
+    "commit": "提交",
+    "aiSuggest": "AI 建议",
+    "aiSuggestTitle": "AI 生成的提交信息",
+    "commitPlaceholder": "提交信息...",
+    "committing": "提交中...",
+    "commitChanges": "提交变更",
+    "pushing": "推送中...",
+    "pushBranch": "推送分支 '{{branch}}'",
+    "createPR": "创建 Pull Request",
+    "recentCommits": "最近提交",
+    "noCommits": "未找到提交历史。"
+  },
+  "pullRequest": {
+    "openTitle": "发起 Pull Request",
+    "openDescription": "将 QA 自动化分支直接接入 GitHub PR 流程，并自动执行校验检查。",
+    "create": "创建 Pull Request",
+    "openGithub": "在 GitHub 中打开",
+    "checksTitle": "GITHUB 检查",
+    "refreshChecks": "刷新检查",
+    "diagnosing": "诊断中...",
+    "diagnose": "AI 失败诊断",
+    "diagnosisTitle": "AI 诊断：{{classification}}",
+    "suggestedFix": "建议修复：",
+    "createAnother": "再创建一个 PR"
+  },
+  "runOutput": {
+    "viewInPlatform": "在执行平台中查看"
+  },
+  "assistant": {
+    "title": "QA 助手",
+    "groundingActive": "已启用知识库关联",
+    "explainCode": "解释代码",
+    "generateTest": "生成测试",
+    "refactorPo": "重构为 PO",
+    "diagnose": "诊断",
+    "insertCode": "插入代码到编辑器",
+    "reasoning": "QA 助手正在推理...",
+    "placeholder": "向 QA 助手提问..."
+  }
+}

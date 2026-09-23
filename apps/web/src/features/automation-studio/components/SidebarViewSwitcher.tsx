@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { SidebarTab } from '../types';
 
 interface SidebarViewSwitcherProps {
@@ -29,19 +30,22 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   changeCount,
   activePRNumber,
   onSelectTab,
-}) => (
-  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
-    <button style={tabButtonStyle(sidebarTab === 'files')} onClick={() => onSelectTab('files')}>
-      Files
-    </button>
-    <button style={tabButtonStyle(sidebarTab === 'tests')} onClick={() => onSelectTab('tests')}>
-      Tests ({testCount})
-    </button>
-    <button style={tabButtonStyle(sidebarTab === 'git')} onClick={() => onSelectTab('git')}>
-      Git ({changeCount})
-    </button>
-    <button style={tabButtonStyle(sidebarTab === 'pr')} onClick={() => onSelectTab('pr')}>
-      PR {activePRNumber ? `#${activePRNumber}` : ''}
-    </button>
-  </div>
-);
+}) => {
+  const { t } = useTranslation('studioShell');
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
+      <button style={tabButtonStyle(sidebarTab === 'files')} onClick={() => onSelectTab('files')}>
+        {t('sidebarView.files')}
+      </button>
+      <button style={tabButtonStyle(sidebarTab === 'tests')} onClick={() => onSelectTab('tests')}>
+        {t('sidebarView.tests', { testCount })}
+      </button>
+      <button style={tabButtonStyle(sidebarTab === 'git')} onClick={() => onSelectTab('git')}>
+        {t('sidebarView.git', { changeCount })}
+      </button>
+      <button style={tabButtonStyle(sidebarTab === 'pr')} onClick={() => onSelectTab('pr')}>
+        {t('sidebarView.pr')} {activePRNumber ? `#${activePRNumber}` : ''}
+      </button>
+    </div>
+  );
+};

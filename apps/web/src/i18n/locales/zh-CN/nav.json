@@ -1,0 +1,14 @@
+{
+  "dashboard": "总览",
+  "projects": "项目管理",
+  "requirements": "需求与设计",
+  "testCases": "测试用例",
+  "automation": "自动化工作室",
+  "runs": "执行与运行器",
+  "workers": "分布式执行节点",
+  "flaky": "不稳定用例分析",
+  "failures": "失败分析与修复",
+  "quality": "质量与发布",
+  "security": "安全与权限",
+  "settings": "系统设置"
+}

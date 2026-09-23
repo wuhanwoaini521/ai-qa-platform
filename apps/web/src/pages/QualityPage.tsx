@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   ShieldCheck,
   Target,
@@ -31,6 +33,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   selectedProjectId,
   onNavigateToRuns,
 }) => {
+  const { t } = useTranslation('quality');
   const [activeTab, setActiveTab] = useState<'coverage' | 'risks' | 'impact' | 'releases'>('coverage');
 
   // Coverage & Risks state
@@ -140,16 +143,16 @@ export const QualityPage: React.FC<QualityPageProps> = ({
     }
   };
 
-  const getRiskBadge = (level: QualityRiskLevel) => {
+  const getRiskBadge = (level: QualityRiskLevel, translate: TFunction) => {
     switch (level) {
       case 'LOW':
-        return <span className="status-pill status-pill-passed">Low Risk</span>;
+        return <span className="status-pill status-pill-passed">{translate('riskLevelLow')}</span>;
       case 'MEDIUM':
-        return <span className="status-pill status-pill-warning">Medium Risk</span>;
+        return <span className="status-pill status-pill-warning">{translate('riskLevelMedium')}</span>;
       case 'HIGH':
-        return <span className="status-pill status-pill-failed">High Risk</span>;
+        return <span className="status-pill status-pill-failed">{translate('riskLevelHigh')}</span>;
       case 'CRITICAL':
-        return <span className="status-pill status-pill-error">Critical Risk</span>;
+        return <span className="status-pill status-pill-error">{translate('riskLevelCritical')}</span>;
       default:
         return <span className="status-pill">{level}</span>;
     }
@@ -160,19 +163,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       {/* Page Header */}
       <div className="page-header">
         <div>
-          <h2>Quality Intelligence & Release Gate</h2>
-          <p className="subtitle">
-            Multi-dimensional QA coverage, risk matrix, regression impact analysis, and automated release gates.
-          </p>
+          <h2>{t('titles:quality')}</h2>
+          <p className="subtitle">{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-secondary" onClick={fetchQualityData} disabled={loadingMetrics}>
             <RefreshCw size={14} className={loadingMetrics ? 'spinning' : ''} />
-            <span>Refresh</span>
+            <span>{t('common:refresh')}</span>
           </button>
           <button className="btn btn-primary" onClick={() => setShowCreateReleaseModal(true)}>
             <Plus size={14} />
-            <span>New Release</span>
+            <span>{t('newRelease')}</span>
           </button>
         </div>
       </div>
@@ -184,12 +185,12 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <ShieldCheck size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Overall Quality Health</div>
+            <div className="stat-title">{t('metricQualityHealth')}</div>
             <div className="stat-value">
               {riskMatrix ? `${riskMatrix.overall_quality_score}/100` : '--'}
             </div>
             <div className="stat-subtitle">
-              {riskMatrix && getRiskBadge(riskMatrix.overall_risk_level)}
+              {riskMatrix && getRiskBadge(riskMatrix.overall_risk_level, t)}
             </div>
           </div>
         </div>
@@ -199,12 +200,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <Target size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Requirement Coverage</div>
+            <div className="stat-title">{t('metricRequirementCoverage')}</div>
             <div className="stat-value">
               {coverage ? `${coverage.requirement_coverage_pct}%` : '--'}
             </div>
             <div className="stat-subtitle">
-              {coverage ? `${coverage.covered_requirements} / ${coverage.total_requirements} requirements` : '0 covered'}
+              {coverage
+                ? t('requirementsCoverageCount', {
+                    covered: coverage.covered_requirements,
+                    total: coverage.total_requirements,
+                  })
+                : t('requirementsCoveredZero')}
             </div>
           </div>
         </div>
@@ -214,12 +220,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <Zap size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">Automation Coverage</div>
+            <div className="stat-title">{t('metricAutomationCoverage')}</div>
             <div className="stat-value">
               {coverage ? `${coverage.automation_coverage_pct}%` : '--'}
             </div>
             <div className="stat-subtitle">
-              {coverage ? `${coverage.automated_cases} automated / ${coverage.total_test_cases} cases` : '0 cases'}
+              {coverage
+                ? t('casesAutomatedCount', {
+                    automated: coverage.automated_cases,
+                    total: coverage.total_test_cases,
+                  })
+                : t('casesZero')}
             </div>
           </div>
         </div>
@@ -229,12 +240,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <AlertTriangle size={20} />
           </div>
           <div className="stat-details">
-            <div className="stat-title">High Risk Areas</div>
+            <div className="stat-title">{t('metricHighRiskAreas')}</div>
             <div className="stat-value">
               {riskMatrix ? riskMatrix.high_risk_count : '--'}
             </div>
             <div className="stat-subtitle">
-              {riskMatrix ? `${riskMatrix.unautomated_p0_count} P0 unautomated` : '0 risks'}
+              {riskMatrix
+                ? t('p0Unautomated', { value: riskMatrix.unautomated_p0_count })
+                : t('risksZero')}
             </div>
           </div>
         </div>
@@ -246,25 +259,25 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           className={`tab-btn ${activeTab === 'coverage' ? 'active' : ''}`}
           onClick={() => setActiveTab('coverage')}
         >
-          Requirement Coverage Details
+          {t('tabCoverage')}
         </button>
         <button
           className={`tab-btn ${activeTab === 'risks' ? 'active' : ''}`}
           onClick={() => setActiveTab('risks')}
         >
-          Quality Risk Matrix ({riskMatrix?.risks.length || 0})
+          {t('tabRisks', { value: riskMatrix?.risks.length || 0 })}
         </button>
         <button
           className={`tab-btn ${activeTab === 'impact' ? 'active' : ''}`}
           onClick={() => setActiveTab('impact')}
         >
-          Git Impact & Regression Selector
+          {t('tabImpact')}
         </button>
         <button
           className={`tab-btn ${activeTab === 'releases' ? 'active' : ''}`}
           onClick={() => setActiveTab('releases')}
         >
-          Releases & Gate Reports ({releases.length})
+          {t('tabReleases', { value: releases.length })}
         </button>
       </div>
 
@@ -272,22 +285,20 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       {activeTab === 'coverage' && (
         <div className="card">
           <div className="card-header">
-            <h3>Requirement Coverage Breakdown</h3>
-            <span className="text-secondary text-sm">
-              Coverage computed from test design count, test case count, and automated script bindings.
-            </span>
+            <h3>{t('coverageTitle')}</h3>
+            <span className="text-secondary text-sm">{t('coverageHint')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Requirement Title</th>
-                  <th>Status</th>
-                  <th>Test Designs</th>
-                  <th>Total Cases</th>
-                  <th>Automated</th>
-                  <th>Coverage %</th>
-                  <th>Has Automation</th>
+                  <th>{t('colRequirementTitle')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('colTestDesigns')}</th>
+                  <th>{t('colTotalCases')}</th>
+                  <th>{t('colAutomated')}</th>
+                  <th>{t('colCoveragePct')}</th>
+                  <th>{t('colHasAutomation')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -332,9 +343,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       </td>
                       <td>
                         {item.has_automation ? (
-                          <span className="status-pill status-pill-passed">Yes</span>
+                          <span className="status-pill status-pill-passed">{t('common:yes')}</span>
                         ) : (
-                          <span className="status-pill status-pill-failed">No</span>
+                          <span className="status-pill status-pill-failed">{t('common:no')}</span>
                         )}
                       </td>
                     </tr>
@@ -342,7 +353,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 ) : (
                   <tr>
                     <td colSpan={7} className="text-center text-secondary py-4">
-                      No requirement coverage data available.
+                      {t('coverageEmpty')}
                     </td>
                   </tr>
                 )}
@@ -356,10 +367,8 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       {activeTab === 'risks' && (
         <div className="card">
           <div className="card-header">
-            <h3>Identified Quality Risks</h3>
-            <span className="text-secondary text-sm">
-              Deterministic risks synthesized from unautomated P0 tests, flaky failure rates, and recurring defects.
-            </span>
+            <h3>{t('risksTitle')}</h3>
+            <span className="text-secondary text-sm">{t('risksHint')}</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
             {riskMatrix && riskMatrix.risks.length > 0 ? (
@@ -376,15 +385,15 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{risk.area}</span>
-                      {getRiskBadge(risk.risk_level)}
+                      {getRiskBadge(risk.risk_level, t)}
                     </div>
                     <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
-                      Risk Score: {risk.score}
+                      {t('riskScore', { value: risk.score })}
                     </div>
                   </div>
 
                   <div style={{ margin: '8px 0' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Reasons:</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('riskReasons')}</div>
                     <ul style={{ margin: '4px 0 8px 1.2rem', fontSize: '0.9rem' }}>
                       {risk.reasons.map((r, i) => (
                         <li key={i}>{r}</li>
@@ -395,7 +404,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   {risk.recommended_actions.length > 0 && (
                     <div style={{ marginTop: '8px', backgroundColor: 'var(--bg-base)', padding: '8px 12px', borderRadius: '6px' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '4px' }}>
-                        Recommended Actions:
+                        {t('riskRecommendedActions')}
                       </div>
                       <ul style={{ margin: '0 0 0 1.2rem', fontSize: '0.85rem' }}>
                         {risk.recommended_actions.map((act, i) => (
@@ -407,7 +416,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 </div>
               ))
             ) : (
-              <div className="text-center text-secondary py-4">No risk items identified. System quality is optimal!</div>
+              <div className="text-center text-secondary py-4">{t('risksEmpty')}</div>
             )}
           </div>
         </div>
@@ -417,20 +426,18 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       {activeTab === 'impact' && (
         <div className="card" style={{ padding: '1.5rem' }}>
           <div style={{ marginBottom: '1.5rem' }}>
-            <h3>Code Change Impact Analysis & Regression Selector</h3>
-            <p className="text-secondary text-sm">
-              Input modified file paths to analyze affected requirements and test cases, and automatically select targeted regression suites.
-            </p>
+            <h3>{t('impactTitle')}</h3>
+            <p className="text-secondary text-sm">{t('impactHint')}</p>
           </div>
 
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.9rem' }}>
-              Changed File Paths (one per line):
+              {t('impactChangedFilesLabel')}
             </label>
             <textarea
               className="form-control"
               rows={4}
-              placeholder="e.g.&#10;apps/api/app/api/auth.py&#10;apps/api/app/services/checkout_service.py"
+              placeholder={t('impactChangedFilesPlaceholder')}
               value={changedFilesText}
               onChange={(e) => setChangedFilesText(e.target.value)}
               style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%' }}
@@ -442,7 +449,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 disabled={loadingImpact}
               >
                 <Zap size={14} className={loadingImpact ? 'spinning' : ''} />
-                <span>{loadingImpact ? 'Analyzing Impact...' : 'Analyze Impact & Select Tests'}</span>
+                <span>{loadingImpact ? t('impactAnalyzing') : t('impactAnalyze')}</span>
               </button>
             </div>
           </div>
@@ -457,14 +464,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h4>Impact Analysis Results</h4>
+                <h4>{t('impactResultsTitle')}</h4>
                 <span className="status-pill status-pill-passed">
-                  Confidence: {Math.round(impactResult.confidence_score * 100)}%
+                  {t('impactConfidence', { value: Math.round(impactResult.confidence_score * 100) })}
                 </span>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Analysis Rationale:</div>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('impactRationale')}</div>
                 <ul style={{ margin: '4px 0 10px 1.2rem', fontSize: '0.9rem' }}>
                   {impactResult.rationale.map((r, i) => (
                     <li key={i}>{r}</li>
@@ -475,19 +482,19 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
-                    Impacted Requirements ({impactResult.impacted_requirements.length})
+                    {t('impactRequirements', { value: impactResult.impacted_requirements.length })}
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    {impactResult.impacted_requirements.join(', ') || 'None identified'}
+                    {impactResult.impacted_requirements.join(', ') || t('impactNoneIdentified')}
                   </div>
                 </div>
 
                 <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
-                    Impacted Test Cases ({impactResult.impacted_test_cases.length})
+                    {t('impactTestCases', { value: impactResult.impacted_test_cases.length })}
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    {impactResult.impacted_test_cases.join(', ') || 'None identified'}
+                    {impactResult.impacted_test_cases.join(', ') || t('impactNoneIdentified')}
                   </div>
                 </div>
               </div>
@@ -495,7 +502,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                    Recommended Regression Suite ({impactResult.recommended_regression_tests.length} tests)
+                    {t('impactRecommendedSuite', {
+                      value: impactResult.recommended_regression_tests.length,
+                    })}
                   </div>
                   {onNavigateToRuns && impactResult.recommended_regression_tests.length > 0 && (
                     <button
@@ -503,7 +512,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       onClick={() => onNavigateToRuns()}
                     >
                       <PlayCircle size={14} />
-                      <span>Execute in Runner</span>
+                      <span>{t('impactExecuteInRunner')}</span>
                     </button>
                   )}
                 </div>
@@ -534,23 +543,21 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       {activeTab === 'releases' && (
         <div className="card">
           <div className="card-header">
-            <h3>Release Pipelines & Gate Evaluations</h3>
-            <span className="text-secondary text-sm">
-              Deterministic release gates requiring pass rate thresholds, 0 unautomated P0s, and flaky constraints.
-            </span>
+            <h3>{t('releasesTitle')}</h3>
+            <span className="text-secondary text-sm">{t('releasesHint')}</span>
           </div>
           <div className="table-responsive">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Version</th>
-                  <th>Release Name</th>
-                  <th>Status</th>
-                  <th>Target Date</th>
-                  <th>Pass Rate Threshold</th>
-                  <th>Quality Score</th>
-                  <th>Blockers</th>
-                  <th>Actions</th>
+                  <th>{t('colVersion')}</th>
+                  <th>{t('colReleaseName')}</th>
+                  <th>{t('common:status')}</th>
+                  <th>{t('colTargetDate')}</th>
+                  <th>{t('colPassRateThreshold')}</th>
+                  <th>{t('colQualityScore')}</th>
+                  <th>{t('colBlockers')}</th>
+                  <th>{t('common:actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,9 +584,11 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       <td>{rel.quality_score > 0 ? `${rel.quality_score}/100` : '--'}</td>
                       <td>
                         {rel.blockers && rel.blockers.length > 0 ? (
-                          <span className="status-pill status-pill-failed">{rel.blockers.length} blockers</span>
+                          <span className="status-pill status-pill-failed">
+                            {t('blockersCount', { value: rel.blockers.length })}
+                          </span>
                         ) : (
-                          <span className="status-pill status-pill-passed">0 blockers</span>
+                          <span className="status-pill status-pill-passed">{t('blockersZero')}</span>
                         )}
                       </td>
                       <td>
@@ -589,7 +598,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                           disabled={evaluatingGateId === rel.id}
                         >
                           <ShieldCheck size={14} className={evaluatingGateId === rel.id ? 'spinning' : ''} />
-                          <span>{evaluatingGateId === rel.id ? 'Evaluating...' : 'Evaluate Gate'}</span>
+                          <span>{evaluatingGateId === rel.id ? t('gateEvaluating') : t('gateEvaluate')}</span>
                         </button>
                       </td>
                     </tr>
@@ -597,7 +606,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 ) : (
                   <tr>
                     <td colSpan={8} className="text-center text-secondary py-4">
-                      No releases registered yet. Click &quot;New Release&quot; to define a release version.
+                      {t('releasesEmpty', { action: t('newRelease') })}
                     </td>
                   </tr>
                 )}
@@ -612,7 +621,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h3>Create New Release</h3>
+              <h3>{t('createReleaseTitle')}</h3>
               <button className="btn-icon" onClick={() => setShowCreateReleaseModal(false)}>
                 &times;
               </button>
@@ -620,7 +629,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <form onSubmit={handleCreateRelease}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Version Tag (e.g. v1.4.0) *</label>
+                  <label>{t('createReleaseVersionLabel')}</label>
                   <input
                     type="text"
                     className="form-control"
@@ -631,18 +640,18 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label>Release Name *</label>
+                  <label>{t('createReleaseNameLabel')}</label>
                   <input
                     type="text"
                     className="form-control"
                     required
-                    placeholder="Q3 Major Release"
+                    placeholder={t('createReleaseNamePlaceholder')}
                     value={newReleaseName}
                     onChange={(e) => setNewReleaseName(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Target Release Date</label>
+                  <label>{t('createReleaseTargetDateLabel')}</label>
                   <input
                     type="date"
                     className="form-control"
@@ -651,7 +660,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label>Pass Rate Threshold (%)</label>
+                  <label>{t('createReleaseThresholdLabel')}</label>
                   <input
                     type="number"
                     min="0"
@@ -665,10 +674,10 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateReleaseModal(false)}>
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingRelease}>
-                  {creatingRelease ? 'Creating...' : 'Create Release'}
+                  {creatingRelease ? t('createReleaseSubmitting') : t('createReleaseSubmit')}
                 </button>
               </div>
             </form>
@@ -683,7 +692,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShieldCheck size={20} color={selectedGateReport.can_release ? '#10b981' : '#ef4444'} />
-                <h3>Release Gate Report: {selectedGateReport.version}</h3>
+                <h3>{t('gateReportTitle', { version: selectedGateReport.version })}</h3>
               </div>
               <button className="btn-icon" onClick={() => setSelectedGateReport(null)}>
                 &times;
@@ -705,20 +714,20 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               >
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
-                    Gate Verdict: {selectedGateReport.verdict}
+                    {t('gateVerdict', { verdict: selectedGateReport.verdict })}
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    Quality Score: {selectedGateReport.quality_score}/100
+                    {t('gateQualityScore', { score: selectedGateReport.quality_score })}
                   </div>
                 </div>
                 <div>
                   {selectedGateReport.can_release ? (
                     <span className="status-pill status-pill-passed" style={{ fontSize: '0.9rem', padding: '4px 10px' }}>
-                      READY TO RELEASE
+                      {t('gateReadyToRelease')}
                     </span>
                   ) : (
                     <span className="status-pill status-pill-failed" style={{ fontSize: '0.9rem', padding: '4px 10px' }}>
-                      RELEASE BLOCKED
+                      {t('gateReleaseBlocked')}
                     </span>
                   )}
                 </div>
@@ -726,7 +735,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
 
               {/* Gate Checks Breakdown */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Evaluation Checks:</div>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{t('gateChecks')}</div>
 
                 <div
                   style={{
@@ -737,14 +746,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
-                  <span>Pass Rate (Actual: {selectedGateReport.pass_rate}%)</span>
+                  <span>{t('gatePassRate', { value: selectedGateReport.pass_rate })}</span>
                   {selectedGateReport.pass_rate_met ? (
                     <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={14} /> Passed
+                      <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
                     <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <XCircle size={14} /> Failed
+                      <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
                 </div>
@@ -758,14 +767,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
-                  <span>Flaky Tests Constraint (Found: {selectedGateReport.flaky_count})</span>
+                  <span>{t('gateFlakyConstraint', { value: selectedGateReport.flaky_count })}</span>
                   {selectedGateReport.flaky_met ? (
                     <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={14} /> Passed
+                      <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
                     <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <XCircle size={14} /> Failed
+                      <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
                 </div>
@@ -779,14 +788,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
-                  <span>Unautomated P0 Tests (Found: {selectedGateReport.unautomated_p0_count})</span>
+                  <span>{t('gateP0Constraint', { value: selectedGateReport.unautomated_p0_count })}</span>
                   {selectedGateReport.unautomated_p0_met ? (
                     <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={14} /> Passed
+                      <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
                     <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <XCircle size={14} /> Failed
+                      <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
                 </div>
@@ -796,7 +805,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               {selectedGateReport.blockers.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#ef4444', marginBottom: '6px' }}>
-                    Blocking Issues ({selectedGateReport.blockers.length}):
+                    {t('gateBlockingIssues', { value: selectedGateReport.blockers.length })}
                   </div>
                   <ul style={{ margin: '0 0 0 1.2rem', fontSize: '0.85rem' }}>
                     {selectedGateReport.blockers.map((b, i) => (
@@ -810,7 +819,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button className="btn btn-primary" onClick={() => setSelectedGateReport(null)}>
-                Close Report
+                {t('gateCloseReport')}
               </button>
             </div>
           </div>

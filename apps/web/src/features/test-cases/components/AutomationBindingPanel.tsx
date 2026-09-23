@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Code2, Edit3, ExternalLink, Play, Sparkles } from 'lucide-react';
 import { AutomationBinding, GenerateAutomationResponse } from '../../../types';
 import { GeneratedCodePreview } from './GeneratedCodePreview';
@@ -30,19 +31,20 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
   onGenerateAutomation,
   onSaveDraftToWorkspace,
 }) => {
+  const { t } = useTranslation('testCases');
   return (
     <div className="card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Code2 size={16} color="#2563eb" />
-          <span className="card-title">Automation Binding & Execution</span>
+          <span className="card-title">{t('bindingTitle')}</span>
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           <button
             className="btn btn-secondary btn-sm"
             onClick={onOpenBindingModal}
           >
-            <Edit3 size={13} /> {selectedBinding ? 'Edit Binding' : 'Configure Binding'}
+            <Edit3 size={13} /> {selectedBinding ? t('bindingEdit') : t('bindingConfigure')}
           </button>
         </div>
       </div>
@@ -51,13 +53,13 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
               <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Target Test File</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('bindingTargetFile')}</div>
                 <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px' }}>
                   {selectedBinding.file_path}
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Pytest Node ID</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('bindingNodeId')}</div>
                 <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedBinding.nodeid}
                 </div>
@@ -70,21 +72,21 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
                 className="btn btn-secondary btn-sm"
                 onClick={() => onNavigateToStudio && onNavigateToStudio(selectedBinding.file_path)}
               >
-                <ExternalLink size={13} /> Open in Studio
+                <ExternalLink size={13} /> {t('common:openInStudio')}
               </button>
               <button
                 className="btn btn-primary btn-sm"
                 disabled={runningCase}
                 onClick={onRunTestCase}
               >
-                <Play size={13} /> {runningCase ? 'Running...' : 'Run Test Now'}
+                <Play size={13} /> {runningCase ? t('bindingRunning') : t('bindingRunNow')}
               </button>
               <button
                 className="btn btn-secondary btn-sm"
                 disabled={generating}
                 onClick={onGenerateAutomation}
               >
-                <Sparkles size={13} color="#9333ea" /> Re-generate AI Code
+                <Sparkles size={13} color="#9333ea" /> {t('bindingRegenerate')}
               </button>
             </div>
 
@@ -97,7 +99,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
         ) : (
           <div style={{ textAlign: 'center', padding: '16px' }}>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-              This test case is currently manual and not yet bound to an automated test file.
+              {t('bindingManualHint')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
               <button
@@ -105,7 +107,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
                 disabled={generating}
                 onClick={onGenerateAutomation}
               >
-                <Sparkles size={15} /> {generating ? 'Generating Playwright Code...' : 'Generate Automation Scaffold'}
+                <Sparkles size={15} /> {generating ? t('bindingGenerating') : t('bindingGenerate')}
               </button>
             </div>
           </div>

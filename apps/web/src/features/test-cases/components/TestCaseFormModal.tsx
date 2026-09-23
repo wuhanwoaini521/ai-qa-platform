@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AutomationStatus, Project, TestCaseCreate, TestCasePriority } from '../../../types';
 
 interface TestCaseFormModalProps {
@@ -77,6 +78,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
   onSubmit: handleCreateTestCase,
   onClose,
 }) => {
+  const { t } = useTranslation('testCases');
   return (
     <>
       {isOpen && (
@@ -84,7 +86,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
           <div className="modal-dialog">
             <form onSubmit={handleCreateTestCase}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>New Test Case</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('formTitle')}</h3>
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
@@ -95,7 +97,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">Project *</label>
+                  <label className="form-label">{t('formProject')}</label>
                   <select
                     className="form-control"
                     value={formData.project_id}
@@ -110,12 +112,12 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Test Case Title *</label>
+                  <label className="form-label">{t('formCaseTitle')}</label>
                   <input
                     type="text"
                     required
                     className="form-control"
-                    placeholder="e.g. Verify checkout calculation with 10% coupon"
+                    placeholder={t('formCaseTitlePlaceholder')}
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   />
@@ -123,7 +125,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">Priority</label>
+                    <label className="form-label">{t('common:priority')}</label>
                     <select
                       className="form-control"
                       value={formData.priority}
@@ -131,15 +133,15 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                         setFormData({ ...formData, priority: e.target.value as TestCasePriority })
                       }
                     >
-                      <option value="P0">P0 - Blocker</option>
-                      <option value="P1">P1 - Critical</option>
-                      <option value="P2">P2 - Major</option>
-                      <option value="P3">P3 - Minor</option>
+                      <option value="P0">{t('formPriorityP0')}</option>
+                      <option value="P1">{t('formPriorityP1')}</option>
+                      <option value="P2">{t('formPriorityP2')}</option>
+                      <option value="P3">{t('formPriorityP3')}</option>
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Automation Status</label>
+                    <label className="form-label">{t('formAutomationStatus')}</label>
                     <select
                       className="form-control"
                       value={formData.automation_status}
@@ -158,44 +160,44 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Preconditions</label>
+                  <label className="form-label">{t('formPreconditions')}</label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. User is logged in as standard customer..."
+                    placeholder={t('formPreconditionsPlaceholder')}
                     value={formData.preconditions}
                     onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Steps (One step per line)</label>
+                  <label className="form-label">{t('formSteps')}</label>
                   <textarea
                     rows={4}
                     className="form-control"
-                    placeholder="1. Open product page&#10;2. Click Add to Cart&#10;3. Navigate to checkout"
+                    placeholder={t('formStepsPlaceholder')}
                     value={stepsText}
                     onChange={(e) => setStepsText(e.target.value)}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Expected Result</label>
+                  <label className="form-label">{t('formExpectedResult')}</label>
                   <textarea
                     rows={2}
                     className="form-control"
-                    placeholder="Final total is reduced by exactly 10%."
+                    placeholder={t('formExpectedResultPlaceholder')}
                     value={formData.expected_result}
                     onChange={(e) => setFormData({ ...formData, expected_result: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Tags (comma separated)</label>
+                  <label className="form-label">{t('formTags')}</label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="smoke, checkout, cart"
+                    placeholder={t('formTagsPlaceholder')}
                     value={tagsText}
                     onChange={(e) => setTagsText(e.target.value)}
                   />
@@ -208,10 +210,10 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   className="btn btn-secondary"
                   onClick={onClose}
                 >
-                  Cancel
+                  {t('common:cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Test Case
+                  {t('formSave')}
                 </button>
               </div>
             </form>

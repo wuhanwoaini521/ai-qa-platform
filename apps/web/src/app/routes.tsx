@@ -1,4 +1,5 @@
 import React, { lazy } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
@@ -20,6 +21,7 @@ const FlakyPage = lazy(() => import('../pages/FlakyPage').then((m) => ({ default
 const QualityPage = lazy(() => import('../pages/QualityPage').then((m) => ({ default: m.QualityPage })));
 const SecurityPage = lazy(() => import('../pages/SecurityPage').then((m) => ({ default: m.SecurityPage })));
 const WorkersPage = lazy(() => import('../pages/WorkersPage').then((m) => ({ default: m.WorkersPage })));
+const SettingsPage = lazy(() => import('../pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
@@ -148,7 +150,14 @@ const QualityRoute: React.FC = () => {
 
 const NotFoundRoute: React.FC = () => {
   const nav = useAppNavigation();
-  return <EmptyState message="This page does not exist." actionLabel="Back to dashboard" onAction={() => nav.toTab('dashboard')} />;
+  const { t } = useTranslation('errors');
+  return (
+    <EmptyState
+      message={t('notFound')}
+      actionLabel={t('backToDashboard')}
+      onAction={() => nav.toTab('dashboard')}
+    />
+  );
 };
 
 interface AppRoutesProps {
@@ -177,6 +186,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/quality" element={<QualityRoute />} />
       <Route path="/workers" element={<WorkersPage />} />
       <Route path="/security" element={<SecurityPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="/dashboard" element={<Navigate to="/" replace />} />
       <Route path="/automation" element={<Navigate to="/projects" replace />} />
       <Route path="*" element={<NotFoundRoute />} />
