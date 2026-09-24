@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -25,12 +26,15 @@ class PytestRunner:
         nodeids: list[str] | None = None,
         markers: list[str] | None = None,
         environment: dict[str, str] | None = None,
+        interpreter: str | None = None,
     ) -> SuiteExecutionResult:
         ws_path = Path(workspace_dir).resolve()
         if not ws_path.exists():
             raise FileNotFoundError(f"Workspace directory not found: {ws_path}")
 
-        cmd = ["pytest", "-v", "--tb=short"]
+        # Run pytest through an explicit interpreter: an imported project must use its own virtualenv
+        # (its dependencies, its Python version), not whichever pytest happens to be on PATH.
+        cmd = [interpreter or sys.executable, "-m", "pytest", "-v", "--tb=short"]
         if markers:
             for m in markers:
                 cmd.extend(["-m", m])
@@ -57,6 +61,7 @@ class PytestRunner:
         except asyncio.TimeoutError:
             proc.kill()
             return SuiteExecutionResult(
+                exit_code=None,
                 total=len(nodeids or []),
                 failed=len(nodeids or []),
                 duration_ms=(time.perf_counter() - start_time) * 1000,
@@ -105,24 +110,22 @@ class PytestRunner:
                     )
                 )
 
-        # Fallback if no specific nodeids matched but command completed
-        if not results and nodeids:
+        # Only a clean exit may be summarised as passes. A non-zero exit with nothing parsed means
+        # the suite did not run (collection or usage error): the caller reports that as an error
+        # rather than inventing a verdict for tests that never executed.
+        if not results and nodeids and proc.returncode == 0:
             for nid in nodeids:
-                status = TestExecutionStatus.PASSED if proc.returncode == 0 else TestExecutionStatus.FAILED
-                if status == TestExecutionStatus.PASSED:
-                    passed_count += 1
-                else:
-                    failed_count += 1
+                passed_count += 1
                 results.append(
                     SingleTestResult(
                         nodeid=nid,
-                        status=status,
+                        status=TestExecutionStatus.PASSED,
                         duration_ms=duration_ms,
-                        error_message=None if status == TestExecutionStatus.PASSED else stdout_str,
                     )
                 )
 
         return SuiteExecutionResult(
+            exit_code=proc.returncode,
             total=len(results),
             passed=passed_count,
             failed=failed_count,

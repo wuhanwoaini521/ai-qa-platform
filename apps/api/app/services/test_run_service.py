@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import timedelta
+from pathlib import Path
 from typing import AsyncGenerator
 
 from integrations.jenkins_runner import JenkinsConfig, JenkinsRunnerBackend
@@ -188,12 +189,14 @@ class TestRunService:
             )
 
             try:
-                # Execute PytestRunner
+                # Execute PytestRunner. An imported project must run in its own virtualenv: using
+                # the API's interpreter makes its tests fail on their own dependencies.
                 suite_result = await self.pytest_runner.run_suite(
                     workspace_dir=ws_dir,
                     nodeids=data.nodeids,
                     markers=data.markers,
                     environment=data.environment,
+                    interpreter=self._project_interpreter(ws_dir),
                 )
 
                 passed_count = 0
@@ -277,7 +280,7 @@ class TestRunService:
                     )
 
                 finish_time = utc_now()
-                final_status = RunStatus.PASSED if failed_count == 0 else RunStatus.FAILED
+                final_status = self._verdict(suite_result.exit_code, len(suite_result.results), failed_count)
 
                 await run_repo.update_run_status(
                     run_id=run_id,
@@ -479,6 +482,29 @@ class TestRunService:
             )
             recovered.append(orm.id)
         return recovered
+
+    def _project_interpreter(self, workspace_dir: Path) -> str | None:
+        """The project's provisioned interpreter, when the workspace has one."""
+        candidate = Path(workspace_dir) / ".qa-platform-runtime" / "bin" / "python"
+        if candidate.exists():
+            return str(candidate)
+        return None
+
+    def _verdict(self, exit_code: int | None, result_count: int, failed_count: int) -> RunStatus:
+        """Decide the run verdict from the runner's exit code, never from an absence of failures.
+
+        pytest exit codes: 0 all passed, 1 failures, 2 interrupted, 3 internal error, 4 usage error,
+        5 no tests collected. A non-zero exit with no parsed result means the suite never ran
+        (a broken conftest, a missing dependency): reporting that as PASSED is the one thing the
+        platform must never do.
+        """
+        if exit_code is None:
+            return RunStatus.ERROR
+        if exit_code == 0:
+            return RunStatus.PASSED if failed_count == 0 else RunStatus.FAILED
+        if result_count == 0:
+            return RunStatus.ERROR
+        return RunStatus.FAILED
 
     async def cancel_run(self, run_id: str) -> TestRun | None:
         orm = await self.run_repo.get_by_id(run_id)

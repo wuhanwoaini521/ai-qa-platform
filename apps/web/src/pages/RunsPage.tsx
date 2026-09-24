@@ -297,6 +297,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         );
       case 'QUEUED':
         return <span className="badge badge-p2">QUEUED</span>;
+      case 'ERROR':
+        return <span className="status-pill status-pill-error">{status}</span>;
       case 'CANCELLED':
         return <span className="badge badge-p3">CANCELLED</span>;
       default:
@@ -554,7 +556,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 <div className="card-body" style={{ padding: 0 }}>
                   {selectedRun.executions.length === 0 ? (
                     <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      {t('waitingExecutions')}
+                      {selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED'
+                        ? t('waitingExecutions')
+                        : t('noExecutions')}
                     </div>
                   ) : (
                     <table className="data-table" style={{ fontSize: '12px' }}>

@@ -62,5 +62,6 @@
   "confirmPublish": "确认并发布到 TestRail",
   "triggerFailed": "触发执行运行失败：{{message}}",
   "cancelFailed": "取消失败：{{message}}",
-  "noConsoleOutput": "该执行未保留控制台输出。"
+  "noConsoleOutput": "该执行未保留控制台输出。",
+  "noExecutions": "没有执行任何测试 —— 具体原因见下方控制台日志。"
 }

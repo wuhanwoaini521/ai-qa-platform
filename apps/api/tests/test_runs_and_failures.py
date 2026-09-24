@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 from app.persistence.models import utc_now
 from app.repositories.test_run_repo import TestRunRepository
+from app.repositories.workspace_repo import WorkspaceRepository
 from httpx import AsyncClient
 from project_model.models import RunStatus, TestRunCreate
 
@@ -211,3 +212,57 @@ async def test_imported_run_persists_its_console_output(client: AsyncClient, tmp
     assert body["status"] == "FAILED"
     assert body["log_output"], "a finished run must keep the runner's console output"
     assert "test_fails" in body["log_output"]
+
+
+@pytest.mark.integration
+async def test_a_suite_that_never_ran_is_an_error_not_a_pass(client: AsyncClient, test_db_session, tmp_path):
+    """A broken conftest (missing dependency) must not be reported as PASSED with 0 tests."""
+    project = (await client.post("/api/projects", json={"name": "Broken Suite", "bootstrap_workspace": True})).json()
+    project_id = project["id"]
+    # Write the broken fixture into the project's real workspace, which is where the run executes.
+    await client.put(
+        f"/api/workspaces/{project_id}/file",
+        json={"path": "tests/conftest.py", "content": "import package_that_does_not_exist\n"},
+    )
+    await client.put(
+        f"/api/workspaces/{project_id}/file",
+        json={"path": "tests/test_x.py", "content": "def test_x():\n    assert True\n"},
+    )
+
+    async with test_db_session() as session:
+        run_repo = TestRunRepository(session)
+        run = await run_repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        await session.commit()
+        run_id = run.id
+
+    from app.services.test_run_service import TestRunService
+    from app.services.workspace_service import WorkspaceService
+
+    service = TestRunService(
+        TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
+    )
+    await service._run_worker_task(run_id, TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[]))
+
+    async with test_db_session() as session:
+        stored = await TestRunRepository(session).get_by_id(run_id)
+        assert stored is not None
+        # ERROR, not PASSED: nothing executed, and the console carries the reason.
+        assert stored.status == RunStatus.ERROR.value, stored.status
+        assert stored.passed == 0
+        assert stored.log_output and "package_that_does_not_exist" in stored.log_output
+
+
+@pytest.mark.unit
+def test_run_verdict_never_invents_a_pass_from_an_empty_result_set():
+    from app.services.test_run_service import TestRunService
+
+    service = TestRunService.__new__(TestRunService)  # no repositories needed for the pure decision
+    # exit 4 = usage error (broken conftest / bad args): the suite did not run
+    assert service._verdict(4, 0, 0) is RunStatus.ERROR
+    assert service._verdict(5, 0, 0) is RunStatus.ERROR
+    assert service._verdict(None, 0, 0) is RunStatus.ERROR
+    # a genuine pass, and a genuine failure
+    assert service._verdict(0, 3, 0) is RunStatus.PASSED
+    assert service._verdict(1, 3, 1) is RunStatus.FAILED
+    # non-zero exit with results parsed is a failure even if the counter disagrees
+    assert service._verdict(1, 2, 0) is RunStatus.FAILED

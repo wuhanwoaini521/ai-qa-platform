@@ -29,6 +29,9 @@ class SingleTestResult(BaseModel):
 
 
 class SuiteExecutionResult(BaseModel):
+    #: pytest's process exit code: 0 passed, 1 failures, 2 interrupted, 3 internal error,
+    #: 4 usage error, 5 no tests collected. The verdict is derived from it, never guessed.
+    exit_code: int | None = None
     total: int = 0
     passed: int = 0
     failed: int = 0
