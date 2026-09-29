@@ -70,6 +70,40 @@ jobs:
       - name: Run backend tests on PostgreSQL
         run: uv run pytest apps/api -v
 
+  windows:
+    name: Windows Compatibility
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      # Runs through scripts/task.py so the Windows code path of the task runner itself is
+      # covered, not just the underlying tools.
+      - name: Install dependencies
+        run: python scripts/task.py setup
+
+      - name: Lint
+        run: python scripts/task.py lint
+
+      - name: Test
+        run: python scripts/task.py test
+
   frontend:
     name: Frontend Lint & Build
     runs-on: ubuntu-latest

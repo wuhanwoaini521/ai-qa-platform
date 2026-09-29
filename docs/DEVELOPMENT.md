@@ -2,9 +2,13 @@
 
 ## Prerequisites
 
-- macOS or Linux development environment
+- macOS, Linux or Windows
 - `mise` installed for toolchain version management
 - Git and GitHub CLI `gh`
+
+Windows: `winget install jdx.mise`, then `mise install`. Git Bash is **not** required — every task
+runs through `scripts/task.py`, which is plain Python.
+
 
 ## Toolchain Overview
 
@@ -23,35 +27,59 @@ The repository configuration is managed by `mise.toml`:
 git clone git@github.com:wuhanwoaini521/ai-qa-platform.git
 cd ai-qa-platform
 
-# 2. Trust and install toolchain
+# 2. Trust and install toolchain (Python 3.13, Node 24, uv) and dependencies
 mise trust
-mise install
+pnpm setup
 
-# 3. Install dependencies
-mise exec -- uv sync --all-packages
-mise exec -- pnpm install
-
-# 4. Start full-stack development environment
-./scripts/dev
+# 3. Start full-stack development environment
+pnpm dev
 ```
+
+`pnpm setup` is shorthand for `python scripts/task.py setup`, which runs `mise install`,
+`uv sync --all-packages` and `pnpm install` in that order.
 
 - **Backend API**: `http://127.0.0.1:8000` (Swagger UI at `/docs`)
 - **Web Application**: `http://127.0.0.1:5173`
 
----
+Press `Ctrl+C` to stop both servers. On Windows the runner kills the whole process tree, so the
+`uvicorn --reload` grandchild is torn down with it and port 8000 is released.
+
+### Entry Points
+
+All three run the same implementation in `scripts/task.py`:
+
+| Task | Command | Shell equivalent |
+| --- | --- | --- |
+| Install | `pnpm setup` | `make install` |
+| Dev servers | `pnpm dev` | `make dev`, `./scripts/dev` |
+| Tests | `pnpm test` | `make test`, `./scripts/test` |
+| Lint | `pnpm lint` | `make lint`, `./scripts/lint` |
+| Build | `pnpm build` | `make build` |
+| Clean | `pnpm clean` | `make clean` |
+
+`make` is optional. The `scripts/dev`, `scripts/test` and `scripts/lint` files remain bash shims for
+existing macOS and Linux muscle memory; they simply delegate to the Python runner.
+
 
 ## Testing & Quality Assurance
 
 ```bash
-# Run all backend unit, integration, and security tests + frontend typecheck
-./scripts/test
+# Backend unit, integration and security tests + frontend typecheck, lint & build
+pnpm test
 
-# Run linters and code format checkers (ruff & eslint)
-./scripts/lint
+# Linters and format checkers (ruff & eslint)
+pnpm lint
 
 # Build production assets
-pnpm --filter @ai-qa/web build
+pnpm build
 ```
+
+The PostgreSQL lane is skipped unless `AI_QA_TEST_DATABASE_URL` is set:
+
+```bash
+AI_QA_TEST_DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/postgres' pnpm test
+```
+
 
 ---
 
@@ -75,7 +103,7 @@ Conventions:
   to be edited.
 - A feature owns its own namespace (`dashboard`, `studioShell`, `runs`, …) so two contributors never
   edit the same resource file. Shared vocabulary lives in `common` (`common:save`, `common:cancel`, …).
-- **Both languages must carry the same keys.** `./scripts/lint` runs `scripts/i18n_check.py`, which
+- **Both languages must carry the same keys.** `pnpm lint` runs `scripts/i18n_check.py`, which
   compares every namespace key-by-key and fails on a missing translation.
 - Do not translate data: node ids, file paths, framework names, status values the API returns, log
   and JSON output. Translate the labels around them.

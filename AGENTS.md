@@ -2,8 +2,8 @@
 
 ## Operational Principles
 
-- **Platform Environment**: This repository is developed on macOS.
-- **Path Integrity**: Use the current repository path. Do not guess filesystem paths. Run `pwd` before changing directories.
+- **Platform Environment**: This repository runs on macOS, Linux and Windows. Developer tasks are cross-platform Python in `scripts/task.py`; the `scripts/dev|test|lint` files are bash shims over it.
+- **Path Integrity**: Use the current repository path. Do not guess filesystem paths. Run `pwd` (`Get-Location` in PowerShell) before changing directories.
 - **Runtime Management**: Use `mise`-managed runtimes (`python 3.13`, `node 24`, `uv`, `pnpm`).
 - **Python Tooling**: Use `uv` for Python workspace management and dependency resolution.
 - **Frontend Tooling**: Use `pnpm` for frontend workspace and package management.

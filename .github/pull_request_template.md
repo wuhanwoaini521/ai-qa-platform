@@ -8,8 +8,8 @@
 
 ## Verification Checklist
 
-- [ ] Backend tests pass (`./scripts/test` or `uv run pytest`)
-- [ ] Linters pass (`./scripts/lint`)
-- [ ] Frontend builds cleanly without type errors (`pnpm --filter @ai-qa/web build`)
+- [ ] Backend tests pass (`pnpm test` or `uv run pytest`)
+- [ ] Linters pass (`pnpm lint`)
+- [ ] Frontend builds cleanly without type errors (`pnpm build`)
 - [ ] No secrets or unencrypted sensitive data committed
 - [ ] Workspace path traversal safeguards preserved

@@ -104,28 +104,48 @@ cp .env.example .env
 
 ### 2. Local Development
 
-```bash
-# Setup mise toolchain
-mise install
-mise exec -- uv sync --all-packages
-mise exec -- pnpm install
+Works on **macOS, Linux and Windows** — every entry point is a cross-platform Python task, so the
+same commands run in `bash`, PowerShell, `cmd.exe` or `make`.
 
-# Start development servers
-./scripts/dev
+```bash
+# Install the toolchain (mise pins Python 3.13, Node 24 and uv) and all dependencies
+pnpm setup
+
+# Start the backend API and the web dev server together (Ctrl+C stops both)
+pnpm dev
 ```
+
+Without `pnpm`, use `python scripts/task.py dev` or `make dev`. The `scripts/dev`, `scripts/test`
+and `scripts/lint` shell entry points still work on macOS and Linux.
+
+- **Web Application**: [http://127.0.0.1:5173](http://127.0.0.1:5173) — sign in with the seeded
+  administrator (`admin@ai-qa.local` / `adminpassword`; change it before exposing the platform)
+- **API Swagger Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+Windows notes:
+
+- Install [`mise`](https://mise.jdx.dev) (`winget install jdx.mise`), then `mise install`.
+- `pnpm setup` prints a clear error if `uv` or `pnpm` is missing from `PATH`.
+- The dev server binds `127.0.0.1` explicitly. Browsing to `localhost` may resolve to IPv6 `::1`
+  on Windows and fail to connect.
+
+
 
 ---
 
 ## 🧪 Testing & Validation
 
 ```bash
-# Run backend pytest suite & frontend typecheck
-./scripts/test
+# Run backend pytest suite & frontend typecheck, lint & build
+pnpm test
 
 # Run linters (ruff + eslint)
-./scripts/lint
+pnpm lint
 
-# Run production smoke test against running stack
+# Build production assets
+pnpm build
+
+# Run production smoke test against running stack (POSIX shell only)
 ./scripts/prod_smoke_test.sh http://127.0.0.1:8000
 ```
 
