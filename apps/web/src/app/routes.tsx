@@ -22,6 +22,7 @@ const QualityPage = lazy(() => import('../pages/QualityPage').then((m) => ({ def
 const SecurityPage = lazy(() => import('../pages/SecurityPage').then((m) => ({ default: m.SecurityPage })));
 const WorkersPage = lazy(() => import('../pages/WorkersPage').then((m) => ({ default: m.WorkersPage })));
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const RecorderPage = lazy(() => import('../pages/RecorderPage').then((m) => ({ default: m.RecorderPage })));
 
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
@@ -116,6 +117,11 @@ const RunsRoute: React.FC = () => {
   );
 };
 
+const RecorderRoute: React.FC = () => {
+  const { projects, selectedProjectId } = useProjectScope();
+  return <RecorderPage projects={projects} selectedProjectId={selectedProjectId} />;
+};
+
 const FailuresRoute: React.FC = () => {
   const { failureId } = useParams();
   const navigate = useNavigate();
@@ -180,6 +186,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/test-cases/:testCaseId" element={<TestCasesRoute />} />
       <Route path="/runs" element={<RunsRoute />} />
       <Route path="/runs/:runId" element={<RunsRoute />} />
+      <Route path="/recorder" element={<RecorderRoute />} />
       <Route path="/failures" element={<FailuresRoute />} />
       <Route path="/failures/:failureId" element={<FailuresRoute />} />
       <Route path="/flaky" element={<FlakyRoute />} />

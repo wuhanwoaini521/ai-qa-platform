@@ -11,6 +11,7 @@ from app.api.jira import router as jira_router
 from app.api.jobs import router as jobs_router
 from app.api.onboarding import router as onboarding_router
 from app.api.projects import router as projects_router
+from app.api.recorder import router as recorder_router
 from app.api.qa_assistant import router as qa_assistant_router
 from app.api.quality import router as quality_router
 from app.api.releases import router as releases_router
@@ -38,6 +39,7 @@ __all__ = [
     "jira_router",
     "jobs_router",
     "projects_router",
+    "recorder_router",
     "onboarding_router",
     "qa_assistant_router",
     "quality_router",

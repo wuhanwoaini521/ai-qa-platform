@@ -1,4 +1,5 @@
 import React from 'react';
+import '../monaco';
 import { useTranslation } from 'react-i18next';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { FileCode } from 'lucide-react';
@@ -15,6 +16,7 @@ interface MonacoEditorPaneProps {
   diffResult: GitDiffResult;
   /** Imperative handle shared with the problems panel and the QA assistant. */
   editorRef: React.RefObject<MonacoEditorInstance | null>;
+  onEditorReady?: () => void;
   onChange: (value: string | undefined) => void;
 }
 
@@ -35,11 +37,13 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   showDiffView,
   diffResult,
   editorRef,
+  onEditorReady,
   onChange,
 }) => {
   const { t } = useTranslation('studioShell');
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
+    onEditorReady?.();
   };
 
   return (

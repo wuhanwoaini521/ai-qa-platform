@@ -5,6 +5,7 @@
   "testCases": "Test Cases",
   "automation": "Automation Studio",
   "runs": "Runs & Runners",
+  "recorder": "Browser Recorder",
   "workers": "Distributed Workers",
   "flaky": "Flaky Intelligence",
   "failures": "Failures & Healing",

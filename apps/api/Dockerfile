@@ -27,6 +27,21 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -36,6 +51,12 @@ RUN groupadd -r aiqa && useradd -r -g aiqa -d /app aiqa
 COPY --from=builder --chown=aiqa:aiqa /app/.venv /app/.venv
 COPY --from=builder --chown=aiqa:aiqa /app/packages /app/packages
 COPY --from=builder --chown=aiqa:aiqa /app/apps/api /app/apps/api
+COPY --chown=aiqa:aiqa examples/quickstart /app/examples/quickstart
+
+# The browser recorder runs a headless Chromium instance inside the API container.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN /app/.venv/bin/playwright install chromium && \
+    chown -R aiqa:aiqa /ms-playwright
 
 # Create runtime storage directories with proper permissions
 RUN mkdir -p /app/runtime/workspaces /app/runtime/artifacts && \

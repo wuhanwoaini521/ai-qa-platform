@@ -84,6 +84,7 @@ import {
   Worker,
   WorkerCreate,
   WorkspaceValidationResult,
+  RecorderStep,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -132,6 +133,14 @@ export function hasAuthToken(): boolean {
   return authToken !== null;
 }
 
+export function getRecorderSocketUrl(sessionId: string): string {
+  const base = BASE_URL || window.location.origin;
+  const url = new URL(`/api/recorder/sessions/${encodeURIComponent(sessionId)}/stream`, base);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (authToken) url.searchParams.set('access_token', authToken);
+  return url.toString();
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}/api${endpoint}`;
   const headers: Record<string, string> = {
@@ -167,6 +176,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  createRecorderSession: (projectId: string, startUrl: string, recoveredSteps: RecorderStep[] = []) =>
+    request<{ id: string; project_id: string; state: string; url: string }>('/recorder/sessions', {
+      method: 'POST', body: JSON.stringify({ project_id: projectId, start_url: startUrl, recovered_steps: recoveredSteps }),
+    }),
+  getRecorderSession: (sessionId: string) =>
+    request<{ id: string; project_id: string; state: string; url: string; steps: RecorderStep[] }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`),
+  generateRecorderCode: (sessionId: string, payload: { case_name: string; file_path: string; test_name: string; steps: RecorderStep[] }) =>
+    request<{ code: string; project_id: string }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/generate`, {
+      method: 'POST', body: JSON.stringify(payload),
+    }),
+  closeRecorderSession: (sessionId: string) =>
+    request<{ closed: boolean }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   // Dashboard
   getDashboardStats: () => request<DashboardStats>('/dashboard/stats'),
 
@@ -338,6 +359,16 @@ export const api = {
   getExternalArtifacts: async (runId: string) => {
     const run = await request<TestRun>(`/runs/${runId}`);
     return run.external_artifacts || [];
+  },
+
+  downloadArtifact: async (artifactId: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/artifacts/${artifactId}/download`, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
+    if (!response.ok) {
+      throw new Error(`Artifact download failed [${response.status}]`);
+    }
+    return response.blob();
   },
 
   // Failure Intelligence & Locator Healing (Phase 5 & 6)

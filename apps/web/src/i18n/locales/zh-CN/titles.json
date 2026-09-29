@@ -5,6 +5,7 @@
   "testCases": "测试用例",
   "automation": "自动化工作室",
   "runs": "执行记录与运行器",
+  "recorder": "浏览器录制器",
   "flaky": "不稳定用例与稳定性",
   "failures": "失败分析与定位修复",
   "quality": "质量度量与发布准入",

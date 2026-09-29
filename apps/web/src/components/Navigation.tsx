@@ -14,6 +14,7 @@ import {
   Shield,
   Server,
   Settings,
+  MousePointerClick,
 } from 'lucide-react';
 import i18n from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
@@ -24,6 +25,7 @@ export type NavTab =
   | 'requirements'
   | 'test_cases'
   | 'automation'
+  | 'recorder'
   | 'runs'
   | 'flaky'
   | 'failures'
@@ -63,6 +65,7 @@ export const Navigation: React.FC = () => {
       to: projectBase ? `${projectBase}/studio` : '/projects',
     },
     { id: 'runs', labelKey: 'runs', icon: PlayCircle, to: '/runs' },
+    { id: 'recorder', labelKey: 'recorder', icon: MousePointerClick, to: '/recorder' },
     { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
     { id: 'failures', labelKey: 'failures', icon: AlertTriangle, to: '/failures' },

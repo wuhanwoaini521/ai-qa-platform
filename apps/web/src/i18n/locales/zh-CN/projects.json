@@ -23,5 +23,5 @@
   "frameworkPytestApi": "Pytest（API 测试套件）",
   "frameworkCustom": "自定义框架",
   "modalDefaultBranchLabel": "默认分支",
-  "modalBootstrapHint": "<strong>初始化空白 QA 项目</strong>（自动创建 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 工作区目录结构）"
+  "modalBootstrapHint": "<strong>创建可运行的 QA 示例</strong>（包含无需浏览器或外部服务的 Pytest 测试，以及 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 目录）"
 }

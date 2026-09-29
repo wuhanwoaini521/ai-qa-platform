@@ -37,7 +37,9 @@ def build_engine(database_url: str = settings.database_url) -> AsyncEngine:
 
     engine_kwargs: dict = {}
     if is_sqlite:
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
+        # Concurrent API polling and local pytest result writes can overlap. Give SQLite
+        # time to release its single-writer lock instead of failing a healthy request.
+        engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
     else:
         # PostgreSQL pooling parameters
         engine_kwargs["pool_size"] = 20

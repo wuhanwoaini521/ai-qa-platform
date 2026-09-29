@@ -17,6 +17,8 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
       return projectId ? `/projects/${projectId}/studio` : '/projects';
     case 'runs':
       return '/runs';
+    case 'recorder':
+      return '/recorder';
     case 'flaky':
       return '/flaky';
     case 'failures':

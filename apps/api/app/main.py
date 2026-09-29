@@ -19,6 +19,7 @@ from app.api import (
     jobs_router,
     onboarding_router,
     projects_router,
+    recorder_router,
     qa_assistant_router,
     quality_router,
     releases_router,
@@ -34,7 +35,7 @@ from app.api import (
     workspaces_router,
 )
 from app.api.authz import authorize_request
-from app.persistence.database import init_db
+from app.persistence.database import engine, init_db
 from app.services.metrics_service import metrics_service
 from app.settings import settings
 
@@ -61,7 +62,13 @@ async def lifespan(app: FastAPI):
             logger.warning("Recovered %d stale run(s) at startup: %s", len(recovered), ", ".join(recovered))
     except Exception as error:  # pragma: no cover - startup must never fail because of recovery
         logger.warning("Stale run recovery skipped: %s", error)
-    yield
+    try:
+        yield
+    finally:
+        from app.services.recorder_service import recorder_service
+
+        await recorder_service.close_all()
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -108,6 +115,7 @@ app.include_router(jobs_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
+app.include_router(recorder_router, prefix="/api")
 app.include_router(requirements_router, prefix="/api")
 app.include_router(test_designs_router, prefix="/api")
 app.include_router(test_cases_router, prefix="/api")

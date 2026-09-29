@@ -23,5 +23,5 @@
   "frameworkPytestApi": "Pytest (API Suite)",
   "frameworkCustom": "Custom Framework",
   "modalDefaultBranchLabel": "Default Branch",
-  "modalBootstrapHint": "<strong>Bootstrap Blank QA Project</strong> (Creates <code>tests/</code>, <code>pages/</code>, <code>flows/</code>, <code>components/</code> workspace structure)"
+  "modalBootstrapHint": "<strong>Create runnable QA examples</strong> (Includes browser-free Pytest tests and the <code>tests/</code>, <code>pages/</code>, <code>flows/</code>, <code>components/</code> workspace structure)"
 }

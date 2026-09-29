@@ -6,6 +6,25 @@ export type TestDesignCategory = 'FUNCTIONAL' | 'BOUNDARY' | 'NEGATIVE' | 'ANALY
 
 export type TestCasePriority = 'P0' | 'P1' | 'P2' | 'P3';
 
+export interface RecorderLocator {
+  kind: 'role' | 'test_id' | 'label' | 'placeholder' | 'id' | 'name' | 'css' | 'text' | 'xpath';
+  value: string;
+  name?: string | null;
+  exact?: boolean;
+  nth?: number | null;
+}
+
+export interface RecorderStep {
+  id: string;
+  action: 'navigate' | 'click' | 'double_click' | 'fill' | 'select' | 'check' | 'uncheck' | 'press' | 'hover' | 'wait' | 'assert_visible' | 'assert_text' | 'assert_url' | 'assert_title' | 'assert_count';
+  locator?: RecorderLocator | null;
+  frame_path?: string[];
+  url?: string | null;
+  value?: string | null;
+  key?: string | null;
+  description: string;
+}
+
 export type AutomationStatus = 'MANUAL' | 'DRAFT' | 'AUTOMATED';
 
 export type WorkspaceStatus = 'ACTIVE' | 'INITIALIZING' | 'ARCHIVED' | 'ERROR';
@@ -188,7 +207,7 @@ export interface CollectedTest {
   docstring: string;
 }
 
-export type RunnerType = 'LOCAL' | 'JENKINS' | 'DOCKER' | 'GITHUB_ACTIONS';
+export type RunnerType = 'LOCAL' | 'WORKER' | 'JENKINS' | 'DOCKER' | 'GITHUB_ACTIONS';
 
 export interface RunnerProfile {
   id: string;

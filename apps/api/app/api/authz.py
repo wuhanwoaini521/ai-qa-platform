@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, WebSocketException, status
 from project_model.models import ROLE_PERMISSIONS, Permission, User
+from starlette.requests import HTTPConnection
 
 from app.services.auth_service import AuthService
 
@@ -41,8 +42,8 @@ PUBLIC_PREFIXES = ("/api/health",)
 
 #: Routes whose client cannot send an Authorization header. The browser's EventSource API has no
 #: header option, so the run-event stream accepts the same bearer token as an `access_token` query
-#: parameter. Only these exact shapes are allowed, to keep tokens out of ordinary request URLs.
-QUERY_TOKEN_SUFFIXES = ("/events",)
+#: parameter. Only the SSE and authenticated WebSocket endpoints use this mechanism.
+QUERY_TOKEN_SUFFIXES = ("/events", "/stream")
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/test-designs", Permission.PROJECT_READ, Permission.REQUIREMENT_WRITE),
     Rule("/api/test-cases", Permission.PROJECT_READ, Permission.TEST_CASE_WRITE),
     Rule("/api/workspaces", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
+    Rule("/api/recorder", Permission.AUTOMATION_EDIT, Permission.AUTOMATION_EDIT),
     Rule("/api/runs", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     Rule("/api/runners", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     # Repair flows mutate workspace code, so they require the automation-edit permission:
@@ -95,7 +97,7 @@ DEFAULT_RULE = Rule("", Permission.PROJECT_READ, Permission.PROJECT_WRITE)
 
 def allows_query_token(path: str) -> bool:
     """True for the small set of routes where a bearer token may arrive as a query parameter."""
-    return path.startswith("/api/runs/") and path.endswith(QUERY_TOKEN_SUFFIXES)
+    return (path.startswith("/api/runs/") or path.startswith("/api/recorder/")) and path.endswith(QUERY_TOKEN_SUFFIXES)
 
 
 def is_public_path(path: str) -> bool:
@@ -138,15 +140,32 @@ async def get_current_user(request: Request) -> User:
     return user
 
 
-async def authorize_request(request: Request) -> None:
+async def authorize_request(request: HTTPConnection) -> None:
     """Application-level guard: authenticate every non-public request and enforce the policy table."""
     path = request.url.path
     if is_public_path(path):
         return
 
-    user = await get_current_user(request)
-    permission = required_permission(request.method, path)
+    authorization = request.headers.get("authorization")
+    if not authorization and allows_query_token(path):
+        query_token = request.query_params.get("access_token")
+        if query_token:
+            authorization = f"Bearer {query_token}"
+    user, _ = await auth_service.authenticate_token_or_key(authorization)
+    if not user:
+        if request.scope["type"] == "websocket":
+            raise WebSocketException(code=4401, reason="Invalid or missing authentication credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    request.state.current_user = user
+    method = "GET" if request.scope["type"] == "websocket" else request.method
+    permission = required_permission(method, path)
     if not has_permission(user, permission):
+        if request.scope["type"] == "websocket":
+            raise WebSocketException(code=4403, reason="Insufficient permission")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Role {user.role.value} lacks permission {permission.value if permission else 'unknown'}",
