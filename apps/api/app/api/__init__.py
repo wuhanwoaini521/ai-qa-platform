@@ -3,6 +3,7 @@ from app.api.artifacts import router as artifacts_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.dashboard import router as dashboard_router
+from app.api.decision import router as decision_router
 from app.api.failures import router as failures_router
 from app.api.flaky import router as flaky_router
 from app.api.git_pr import router as git_pr_router
@@ -32,6 +33,7 @@ __all__ = [
     "audit_router",
     "auth_router",
     "dashboard_router",
+    "decision_router",
     "failures_router",
     "flaky_router",
     "git_pr_router",

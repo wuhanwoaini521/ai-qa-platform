@@ -307,7 +307,23 @@ class AIInvocationORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
     error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    decision_name: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    decision_choice: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    decision_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+
+
+class DecisionProviderConfigORM(Base):
+    __tablename__ = "decision_provider_configs"
+
+    provider: Mapped[str] = mapped_column(String(50), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str] = mapped_column(String(128), default="jev-1.13.0")
+    base_url: Mapped[str] = mapped_column(String(2048), default="https://api.typesafe.ai/v1/systemone")
+    timeout: Mapped[float] = mapped_column(Float, default=20.0)
+    minimum_confidence: Mapped[float] = mapped_column(Float, default=0.60)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class RunnerProfileORM(Base):

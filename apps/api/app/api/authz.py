@@ -73,6 +73,7 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/test-cases", Permission.PROJECT_READ, Permission.TEST_CASE_WRITE),
     Rule("/api/workspaces", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
     Rule("/api/recorder", Permission.AUTOMATION_EDIT, Permission.AUTOMATION_EDIT),
+    Rule("/api/decision", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),
     Rule("/api/runs", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     Rule("/api/runners", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     # Repair flows mutate workspace code, so they require the automation-edit permission:

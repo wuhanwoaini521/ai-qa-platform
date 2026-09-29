@@ -11,6 +11,7 @@ from app.api import (
     audit_router,
     auth_router,
     dashboard_router,
+    decision_router,
     failures_router,
     flaky_router,
     git_pr_router,
@@ -114,6 +115,7 @@ app.include_router(workers_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(decision_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(recorder_router, prefix="/api")
 app.include_router(requirements_router, prefix="/api")

@@ -1,35 +1,32 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
+
+from cryptography.fernet import Fernet, InvalidToken
 
 
 class SecretStore:
-    """Enterprise secret store managing encrypted tokens, credentials, and safe masking."""
+    """Authenticated encryption for credentials persisted by API services."""
 
     def __init__(self, master_key: str | None = None) -> None:
         self.master_key = master_key or os.getenv("APP_SECRET_KEY", "qa-platform-super-secret-master-key-32b")
         self._in_memory_vault: dict[str, str] = {}
+        derived_key = base64.urlsafe_b64encode(hashlib.sha256(self.master_key.encode("utf-8")).digest())
+        self._fernet = Fernet(derived_key)
 
     def encrypt_secret(self, raw_secret: str) -> str:
         if not raw_secret:
             return ""
-        # XOR + base64 encoding for portable storage
-        key_bytes = self.master_key.encode("utf-8")
-        raw_bytes = raw_secret.encode("utf-8")
-        encrypted = bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(raw_bytes))
-        return "enc_" + base64.urlsafe_b64encode(encrypted).decode("utf-8")
+        return "enc_" + self._fernet.encrypt(raw_secret.encode("utf-8")).decode("ascii")
 
     def decrypt_secret(self, encrypted_token: str) -> str:
         if not encrypted_token or not encrypted_token.startswith("enc_"):
             return encrypted_token
         try:
-            raw_b64 = encrypted_token[4:]
-            encrypted = base64.urlsafe_b64decode(raw_b64.encode("utf-8"))
-            key_bytes = self.master_key.encode("utf-8")
-            decrypted = bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(encrypted))
-            return decrypted.decode("utf-8")
-        except Exception:
+            return self._fernet.decrypt(encrypted_token[4:].encode("ascii")).decode("utf-8")
+        except (InvalidToken, UnicodeDecodeError, ValueError):
             return ""
 
     @staticmethod

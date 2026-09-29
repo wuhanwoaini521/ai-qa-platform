@@ -7,6 +7,9 @@ import {
   AutomationBindingCreate,
   BranchInfo,
   CollectedTest,
+  DecisionConnectionResult,
+  DecisionRequest,
+  DecisionResult,
   DashboardStats,
   FailureRecord,
   FailureRecurrenceItem,
@@ -25,6 +28,8 @@ import {
   JiraCreateBugRequest,
   JiraCreateBugResponse,
   JiraImportRequest,
+  JevSettings,
+  JevSettingsUpdate,
   JiraIssue,
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
@@ -417,6 +422,13 @@ export const api = {
   // Production AI Services (Phase 5)
   getAIStatus: () => request<AIStatusResponse>('/ai/status'),
   getAIUsage: (limit = 50) => request<AIUsageSummary>(`/ai/usage?limit=${limit}`),
+  getJevSettings: () => request<JevSettings>('/decision/settings'),
+  saveJevSettings: (payload: JevSettingsUpdate) =>
+    request<JevSettings>('/decision/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  testJevConnection: (payload: JevSettingsUpdate) =>
+    request<DecisionConnectionResult>('/decision/test-connection', { method: 'POST', body: JSON.stringify(payload) }),
+  chooseDecision: (payload: DecisionRequest) =>
+    request<DecisionResult>('/decision/choose', { method: 'POST', body: JSON.stringify(payload) }),
   analyzeRequirement: (requirementId: string) =>
     request<RequirementAnalysisDTO>(`/ai/requirements/${requirementId}/analyze`, { method: 'POST' }),
   generateTestDesigns: (requirementId: string) =>

@@ -472,6 +472,9 @@ class AIInvocationDTO(EntityBase):
     status: str = "SUCCESS"
     error_type: str | None = None
     prompt_version: str | None = None
+    decision_name: str | None = None
+    decision_choice: str | None = None
+    decision_confidence: float | None = None
 
 
 class AIUsageSummary(BaseModel):
@@ -479,6 +482,62 @@ class AIUsageSummary(BaseModel):
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     invocations: list[AIInvocationDTO] = Field(default_factory=list)
+
+
+class DecisionOption(BaseModel):
+    key: str = Field(min_length=1, max_length=128)
+    description: str = Field(min_length=1, max_length=1000)
+
+
+class DecisionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    state: Any
+    options: list[DecisionOption] = Field(min_length=1, max_length=255)
+    instructions: str | None = Field(default=None, max_length=2000)
+
+
+class DecisionResult(BaseModel):
+    choice: str | None = None
+    confidence: float | None = None
+    probabilities: dict[str, float] = Field(default_factory=dict)
+    provider: str
+    model: str | None = None
+    usage: dict[str, int | float | None] | None = None
+    fallback_used: bool = False
+    reason: str | None = None
+
+
+class JevSettingsUpdate(BaseModel):
+    enabled: bool = False
+    api_key: str | None = Field(default=None, max_length=4096)
+    clear_api_key: bool = False
+    model: str = Field(default="jev-1.13.0", min_length=1, max_length=128)
+    base_url: str = Field(default="https://api.typesafe.ai/v1/systemone", min_length=1, max_length=2048)
+    timeout: float = Field(default=20, gt=0, le=120)
+    minimum_confidence: float = Field(default=0.60, ge=0, le=1)
+
+
+class JevSettingsResponse(BaseModel):
+    enabled: bool
+    api_key_configured: bool
+    api_key_masked: str | None = None
+    model: str
+    base_url: str
+    timeout: float
+    minimum_confidence: float
+
+
+class DecisionConnectionResult(BaseModel):
+    connected: bool
+    code: str
+    message: str
+    choice: str | None = None
+    model: str | None = None
+    latency_ms: float | None = None
+
+
+class DecisionPlaygroundResult(DecisionResult):
+    decision_name: str
 
 
 class RequirementAnalysisDTO(BaseModel):

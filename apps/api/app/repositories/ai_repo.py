@@ -35,6 +35,9 @@ class AIRepository:
         error_type: str | None = None,
         prompt_version: str | None = None,
         started_at: datetime | None = None,
+        decision_name: str | None = None,
+        decision_choice: str | None = None,
+        decision_confidence: float | None = None,
     ) -> AIInvocationORM:
         async with self.session_factory() as session:
             inv = AIInvocationORM(
@@ -51,6 +54,9 @@ class AIRepository:
                 status=status,
                 error_type=error_type,
                 prompt_version=prompt_version,
+                decision_name=decision_name,
+                decision_choice=decision_choice,
+                decision_confidence=decision_confidence,
             )
             session.add(inv)
             await session.commit()

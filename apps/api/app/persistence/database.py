@@ -81,7 +81,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 #: Columns added after the first release. `create_all` creates missing tables but never alters an
 #: existing one, so an already-deployed database needs these added explicitly. This is a stopgap
 #: until the platform adopts a migration framework; the names are code constants, never user input.
-ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (("test_runs", "log_output", "TEXT"),)
+ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("test_runs", "log_output", "TEXT"),
+    ("ai_invocations", "decision_name", "VARCHAR(128)"),
+    ("ai_invocations", "decision_choice", "VARCHAR(128)"),
+    ("ai_invocations", "decision_confidence", "FLOAT"),
+)
 
 
 async def apply_additive_columns(conn) -> list[str]:

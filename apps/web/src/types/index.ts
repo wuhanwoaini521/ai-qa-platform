@@ -436,6 +436,57 @@ export interface AIInvocationDTO {
   status: string;
   error_type?: string | null;
   prompt_version?: string | null;
+  decision_name?: string | null;
+  decision_choice?: string | null;
+  decision_confidence?: number | null;
+}
+
+export interface JevSettings {
+  enabled: boolean;
+  api_key_configured: boolean;
+  api_key_masked?: string | null;
+  model: string;
+  base_url: string;
+  timeout: number;
+  minimum_confidence: number;
+}
+
+export interface JevSettingsUpdate {
+  enabled: boolean;
+  api_key?: string | null;
+  clear_api_key?: boolean;
+  model: string;
+  base_url: string;
+  timeout: number;
+  minimum_confidence: number;
+}
+
+export interface DecisionRequest {
+  name: string;
+  state: unknown;
+  instructions?: string | null;
+  options: { key: string; description: string }[];
+}
+
+export interface DecisionResult {
+  decision_name: string;
+  choice: string | null;
+  confidence: number | null;
+  probabilities: Record<string, number>;
+  provider: string;
+  model?: string | null;
+  usage?: Record<string, number | null> | null;
+  fallback_used: boolean;
+  reason?: string | null;
+}
+
+export interface DecisionConnectionResult {
+  connected: boolean;
+  code: string;
+  message: string;
+  choice?: string | null;
+  model?: string | null;
+  latency_ms?: number | null;
 }
 
 export interface AIUsageSummary {
