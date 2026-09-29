@@ -150,7 +150,7 @@ class ContextSelector:
                 if stem in {"__init__", "base_page", "base_component", "base_flow"}:
                     continue
                 if stem and stem in source:
-                    selected.append(str(candidate.relative_to(root)))
+                    selected.append(candidate.relative_to(root).as_posix())
                     if len(selected) >= self.max_files // 2:
                         return selected
         return selected
@@ -163,7 +163,7 @@ class ContextSelector:
                 continue
             for candidate in sorted(base.rglob("*")):
                 if candidate.is_file() and candidate.suffix in {".md", ".yaml", ".yml", ".json"}:
-                    selected.append(str(candidate.relative_to(root)))
+                    selected.append(candidate.relative_to(root).as_posix())
                     if len(selected) >= 3:
                         return selected
         return selected
