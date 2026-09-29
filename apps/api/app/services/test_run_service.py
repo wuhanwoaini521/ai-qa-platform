@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
@@ -16,7 +17,7 @@ from project_model.models import (
     TestRun,
     TestRunCreate,
 )
-from qa_core.execution.models import TestExecutionStatus
+from qa_core.execution.models import SuiteExecutionResult, TestExecutionStatus
 from qa_core.execution.pytest_runner import PytestRunner
 from qa_core.execution.runner_backend import RunnerTriggerRequest
 from qa_core.onboarding.contract import venv_interpreter
@@ -29,9 +30,13 @@ from app.persistence.models import (
     utc_now,
 )
 from app.repositories.runner_profile_repo import RunnerProfileRepository
+from app.repositories.job_repo import JobRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.workspace_service import WorkspaceService
+from app.services.job_queue_service import JobQueueService
+from app.services.artifact_storage_service import ArtifactStorageService
+from app.settings import settings
 
 DEFAULT_STALE_RUN_SECONDS = 7200.0
 
@@ -154,6 +159,9 @@ class TestRunService:
         # 1. Create Run in DB
         orm = await self.run_repo.create_run(data)
         run_id = orm.id
+        # The execution task opens its own database session. Persist the queued run before scheduling
+        # it so the new session cannot race this request's dependency-managed transaction and see no row.
+        await self.run_repo.session.commit()
 
         # 2. Trigger asynchronous execution in background task depending on runner
         is_jenkins = data.runner_type == RunnerType.JENKINS.value or (
@@ -162,6 +170,15 @@ class TestRunService:
 
         if is_jenkins:
             asyncio.create_task(self._run_jenkins_worker_task(run_id, data))
+        elif data.runner_type == RunnerType.WORKER.value:
+            await JobQueueService(JobRepository(self.run_repo.session)).enqueue_job(
+                run_id=run_id,
+                project_id=data.project_id,
+                workspace_id=data.workspace_id,
+                nodeids=data.nodeids,
+                browser=data.browser,
+            )
+            await self.run_repo.session.commit()
         else:
             asyncio.create_task(self._run_worker_task(run_id, data))
 
@@ -172,6 +189,9 @@ class TestRunService:
 
         async with get_session() as session:
             run_repo = TestRunRepository(session)
+            existing = await run_repo.get_by_id(run_id)
+            if existing is None or existing.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
+                return
             ws_dir = self.workspace_service.get_workspace_dir(data.workspace_id)
             start_time = utc_now()
 
@@ -190,128 +210,40 @@ class TestRunService:
             )
 
             try:
+                live_logs: list[str] = []
+                artifact_dir = settings.artifact_storage_dir.resolve() / run_id
+                artifact_dir.mkdir(parents=True, exist_ok=True)
+
+                async def on_log(chunk: str) -> None:
+                    live_logs.append(chunk)
+                    await run_repo.update_run_status(
+                        run_id, status=RunStatus.RUNNING, log_output="".join(live_logs)[-20000:]
+                    )
+                    await session.commit()
+                    await event_bus.publish(run_id, {"type": "LOG_STREAM", "run_id": run_id, "log": chunk})
+
                 # Execute PytestRunner. An imported project must run in its own virtualenv: using
                 # the API's interpreter makes its tests fail on their own dependencies.
                 suite_result = await self.pytest_runner.run_suite(
                     workspace_dir=ws_dir,
                     nodeids=data.nodeids,
                     markers=data.markers,
-                    environment=data.environment,
+                    environment={**data.environment, "QA_ARTIFACT_DIR": str(artifact_dir)},
                     interpreter=self._project_interpreter(ws_dir),
+                    on_log=on_log,
                 )
+                suite_result.artifact_paths = [
+                    str(path) for path in artifact_dir.rglob("*") if path.is_file()
+                ]
 
-                passed_count = 0
-                failed_count = 0
-                skipped_count = 0
-
-                for res in suite_result.results:
-                    status = (
-                        RunStatus.PASSED
-                        if res.status == TestExecutionStatus.PASSED
-                        else (RunStatus.FAILED if res.status == TestExecutionStatus.FAILED else RunStatus.SKIPPED)
-                    )
-
-                    if status == RunStatus.PASSED:
-                        passed_count += 1
-                    elif status == RunStatus.FAILED:
-                        failed_count += 1
-                    else:
-                        skipped_count += 1
-
-                    failure_cat = None
-                    if status == RunStatus.FAILED:
-                        diag = self.orchestrator.diagnose_failure(
-                            error_message=res.error_message or "Test failed",
-                            stack_trace=res.stack_trace or "",
-                            test_nodeid=res.nodeid,
-                        )
-                        failure_cat = diag.classification.value
-
-                    exec_orm = await run_repo.add_execution(
-                        run_id=run_id,
-                        nodeid=res.nodeid,
-                        status=status,
-                        duration_ms=res.duration_ms,
-                        error_message=res.error_message,
-                        stack_trace=res.stack_trace,
-                        failure_category=failure_cat,
-                    )
-
-                    # If failed, create FailureRecord
-                    if status == RunStatus.FAILED:
-                        diag = self.orchestrator.diagnose_failure(
-                            error_message=res.error_message or "Test failed",
-                            stack_trace=res.stack_trace or "",
-                            test_nodeid=res.nodeid,
-                        )
-                        proposal = None
-                        if diag.failing_locator:
-                            p = self.orchestrator.propose_locator_repair(
-                                failing_locator=diag.failing_locator,
-                                error_message=res.error_message or "",
-                                file_path=res.nodeid.split("::")[0],
-                            )
-                            proposal = p.model_dump()
-
-                        await run_repo.create_failure_record(
-                            run_id=run_id,
-                            execution_id=exec_orm.id,
-                            test_nodeid=res.nodeid,
-                            test_name=res.nodeid.split("::")[-1],
-                            classification=diag.classification.value,
-                            exception_type=diag.exception_type,
-                            error_message=diag.error_message,
-                            stack_trace=diag.stack_trace,
-                            failing_locator=diag.failing_locator,
-                            suggested_action=diag.suggested_action,
-                            repair_proposal=proposal,
-                        )
-
-                    await session.commit()
-
-                    await event_bus.publish(
-                        run_id,
-                        {
-                            "type": "TEST_FINISHED",
-                            "run_id": run_id,
-                            "nodeid": res.nodeid,
-                            "status": status.value,
-                            "duration_ms": res.duration_ms,
-                        },
-                    )
-
-                finish_time = utc_now()
-                final_status = self._verdict(suite_result.exit_code, len(suite_result.results), failed_count)
-
-                await run_repo.update_run_status(
-                    run_id=run_id,
-                    status=final_status,
-                    passed=passed_count,
-                    failed=failed_count,
-                    skipped=skipped_count,
-                    duration_ms=suite_result.duration_ms,
-                    finished_at=finish_time,
-                    log_output="\n".join(suite_result.raw_logs)[-20000:] or None,
-                )
-                await session.commit()
-
-                await event_bus.publish(
-                    run_id,
-                    {
-                        "type": "RUN_FINISHED",
-                        "run_id": run_id,
-                        "status": final_status.value,
-                        "passed": passed_count,
-                        "failed": failed_count,
-                        "duration_ms": suite_result.duration_ms,
-                    },
-                )
+                await self.persist_suite_result(run_id, suite_result)
 
             except Exception as e:
                 await run_repo.update_run_status(
                     run_id=run_id,
                     status=RunStatus.ERROR,
                     finished_at=utc_now(),
+                    log_output=str(e),
                 )
                 await session.commit()
                 await event_bus.publish(
@@ -322,6 +254,148 @@ class TestRunService:
                         "error": str(e),
                     },
                 )
+
+    async def persist_suite_result(self, run_id: str, suite_result: SuiteExecutionResult) -> None:
+        from app.persistence.database import get_session
+
+        async with get_session() as session:
+            run_repo = TestRunRepository(session)
+            existing = await run_repo.get_by_id(run_id)
+            if existing is None or existing.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
+                return
+            artifact_urls: list[str] = []
+            artifact_records: list[tuple[str, str, str, str, str]] = []
+            artifact_root = (settings.artifact_storage_dir.resolve() / run_id).resolve()
+            storage = ArtifactStorageService()
+            for artifact_name in suite_result.artifact_paths:
+                artifact = Path(artifact_name).resolve()
+                if not artifact.is_relative_to(artifact_root) or not artifact.is_file():
+                    logger.warning("Ignoring artifact outside run directory: %s", artifact_name)
+                    continue
+                if artifact.stat().st_size > 20 * 1024 * 1024:
+                    logger.warning("Ignoring artifact larger than 20 MiB: %s", artifact_name)
+                    continue
+                content_type = mimetypes.guess_type(artifact.name)[0] or "application/octet-stream"
+                uploaded = await storage.save_artifact(artifact.name, artifact.read_bytes(), content_type)
+                kind = "SCREENSHOT" if content_type.startswith("image/") else (
+                    "TRACE" if artifact.suffix.lower() == ".zip" else "REPORT"
+                )
+                artifact_records.append((artifact.name, kind, uploaded.storage_url, uploaded.artifact_id, content_type))
+                artifact_urls.append(uploaded.storage_url)
+            for name, kind, url, artifact_id, content_type in artifact_records:
+                await run_repo.add_external_artifact(
+                    run_id, name, kind, url,
+                    metadata_json={"artifact_id": artifact_id, "content_type": content_type},
+                )
+            await session.commit()
+            passed_count = 0
+            failed_count = 0
+            skipped_count = 0
+
+            for res in suite_result.results:
+                status = (
+                    RunStatus.PASSED
+                    if res.status == TestExecutionStatus.PASSED
+                    else (RunStatus.SKIPPED if res.status == TestExecutionStatus.SKIPPED else RunStatus.FAILED)
+                )
+
+                if status == RunStatus.PASSED:
+                    passed_count += 1
+                elif status == RunStatus.FAILED:
+                    failed_count += 1
+                else:
+                    skipped_count += 1
+
+                failure_cat = None
+                if status == RunStatus.FAILED:
+                    diag = self.orchestrator.diagnose_failure(
+                        error_message=res.error_message or "Test failed",
+                        stack_trace=res.stack_trace or "",
+                        test_nodeid=res.nodeid,
+                    )
+                    failure_cat = diag.classification.value
+
+                exec_orm = await run_repo.add_execution(
+                    run_id=run_id,
+                    nodeid=res.nodeid,
+                    status=status,
+                    duration_ms=res.duration_ms,
+                    error_message=res.error_message,
+                    stack_trace=res.stack_trace,
+                    failure_category=failure_cat,
+                    artifact_paths=artifact_urls if len(suite_result.results) == 1 else None,
+                )
+
+                # If failed, create FailureRecord
+                if status == RunStatus.FAILED:
+                    diag = self.orchestrator.diagnose_failure(
+                        error_message=res.error_message or "Test failed",
+                        stack_trace=res.stack_trace or "",
+                        test_nodeid=res.nodeid,
+                    )
+                    proposal = None
+                    if diag.failing_locator:
+                        p = self.orchestrator.propose_locator_repair(
+                            failing_locator=diag.failing_locator,
+                            error_message=res.error_message or "",
+                            file_path=res.nodeid.split("::")[0],
+                        )
+                        proposal = p.model_dump()
+
+                    await run_repo.create_failure_record(
+                        run_id=run_id,
+                        execution_id=exec_orm.id,
+                        test_nodeid=res.nodeid,
+                        test_name=res.nodeid.split("::")[-1],
+                        classification=diag.classification.value,
+                        exception_type=diag.exception_type,
+                        error_message=diag.error_message,
+                        stack_trace=diag.stack_trace,
+                        failing_locator=diag.failing_locator,
+                        suggested_action=diag.suggested_action,
+                        repair_proposal=proposal,
+                    )
+
+                await session.commit()
+
+                await event_bus.publish(
+                    run_id,
+                    {
+                        "type": "TEST_FINISHED",
+                        "run_id": run_id,
+                        "nodeid": res.nodeid,
+                        "status": status.value,
+                        "duration_ms": res.duration_ms,
+                    },
+                )
+
+            finish_time = utc_now()
+            final_status = self._verdict(suite_result.exit_code, len(suite_result.results), failed_count)
+
+            await run_repo.update_run_status(
+                run_id=run_id,
+                status=final_status,
+                passed=passed_count,
+                failed=failed_count,
+                skipped=skipped_count,
+                total=suite_result.total,
+                duration_ms=suite_result.duration_ms,
+                finished_at=finish_time,
+                log_output="\n".join(suite_result.raw_logs)[-20000:] or None,
+            )
+            await session.commit()
+
+            await event_bus.publish(
+                run_id,
+                {
+                    "type": "RUN_FINISHED",
+                    "run_id": run_id,
+                    "status": final_status.value,
+                    "passed": passed_count,
+                    "failed": failed_count,
+                    "duration_ms": suite_result.duration_ms,
+                },
+            )
 
     async def _run_jenkins_worker_task(self, run_id: str, data: TestRunCreate) -> None:
         from app.persistence.database import get_session
@@ -501,6 +575,8 @@ class TestRunService:
         """
         if exit_code is None:
             return RunStatus.ERROR
+        if result_count == 0:
+            return RunStatus.ERROR
         if exit_code == 0:
             return RunStatus.PASSED if failed_count == 0 else RunStatus.FAILED
         if result_count == 0:
@@ -531,13 +607,39 @@ class TestRunService:
         return await self.get_run(run_id)
 
     async def event_generator(self, run_id: str) -> AsyncGenerator[str, None]:
-        queue = event_bus.subscribe(run_id)
-        try:
-            yield f"data: {json.dumps({'type': 'CONNECTED', 'run_id': run_id})}\n\n"
-            while True:
-                event = await queue.get()
-                yield f"data: {json.dumps(event)}\n\n"
-                if event.get("type") in ("RUN_FINISHED", "RUN_ERROR", "RUN_CANCELLED"):
-                    break
-        finally:
-            event_bus.unsubscribe(run_id, queue)
+        # Poll persisted state so reconnects and events from another process are visible.
+        # In-memory Pub/Sub alone loses events during refresh and cannot cross worker processes.
+        from app.persistence.database import get_session
+
+        yield f"data: {json.dumps({'type': 'CONNECTED', 'run_id': run_id})}\n\n"
+        sent_log = 0
+        seen_executions: set[str] = set()
+        last_status: RunStatus | None = None
+        while True:
+            async with get_session() as session:
+                orm = await TestRunRepository(session).get_by_id(run_id)
+                if orm is None:
+                    return
+                run = self._to_run_dto(orm)
+
+            if run.status == RunStatus.RUNNING and last_status != RunStatus.RUNNING:
+                yield f"data: {json.dumps({'type': 'RUN_STARTED', 'run_id': run_id, 'status': 'RUNNING', 'total': run.total})}\n\n"
+            log = run.log_output or ""
+            if len(log) < sent_log:
+                sent_log = 0
+            if len(log) > sent_log:
+                chunk = log[sent_log:]
+                sent_log = len(log)
+                yield f"data: {json.dumps({'type': 'LOG_STREAM', 'run_id': run_id, 'log': chunk})}\n\n"
+            for execution in run.executions:
+                if execution.id not in seen_executions:
+                    seen_executions.add(execution.id)
+                    yield f"data: {json.dumps({'type': 'TEST_FINISHED', 'run_id': run_id, 'nodeid': execution.nodeid, 'status': execution.status.value, 'duration_ms': execution.duration_ms})}\n\n"
+            if run.status not in (RunStatus.QUEUED, RunStatus.RUNNING):
+                event_type = "RUN_CANCELLED" if run.status == RunStatus.CANCELLED else (
+                    "RUN_ERROR" if run.status == RunStatus.ERROR else "RUN_FINISHED"
+                )
+                yield f"data: {json.dumps({'type': event_type, 'run_id': run_id, 'status': run.status.value, 'passed': run.passed, 'failed': run.failed, 'duration_ms': run.duration_ms})}\n\n"
+                return
+            last_status = run.status
+            await asyncio.sleep(0.3)

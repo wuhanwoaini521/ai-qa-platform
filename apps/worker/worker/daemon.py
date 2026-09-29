@@ -5,12 +5,14 @@ import logging
 import os
 import platform
 import socket
+import sys
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
-from qa_core.contracts import ExecutionRequest
-from qa_core.fake_adapters import FakeQAOrchestrator
+from qa_core.execution.pytest_runner import PytestRunner
+from qa_core.onboarding.contract import venv_interpreter
 
 logger = logging.getLogger("worker.daemon")
 
@@ -48,7 +50,7 @@ class WorkerDaemon:
         self._running = False
         self._running_jobs: set[str] = set()
         self._http_client: httpx.AsyncClient | None = None
-        self._orchestrator = FakeQAOrchestrator()
+        self._runner = PytestRunner()
         self._heartbeat_task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
 
@@ -128,6 +130,7 @@ class WorkerDaemon:
                 },
             )
             if resp.status_code in (200, 201):
+                self.worker_id = resp.json()["id"]
                 logger.info("Worker registered successfully: %s", resp.json())
             else:
                 logger.warning("Registration response: %d %s", resp.status_code, resp.text)
@@ -179,7 +182,7 @@ class WorkerDaemon:
             assert self._http_client is not None
             resp = await self._http_client.post(
                 "/api/jobs/claim",
-                json={"worker_id": self.worker_id, "capabilities": self.capabilities},
+                json={"worker_id": self.worker_id, "browser": "chromium"},
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -193,45 +196,49 @@ class WorkerDaemon:
 
     async def _process_job(self, job_data: dict[str, Any]) -> None:
         job_id = job_data["id"]
-        job_type = job_data.get("job_type", "test_run")
-        payload = job_data.get("payload", {})
-
-        logger.info("Processing job %s (Type: %s)", job_id, job_type)
+        logger.info("Processing job %s (Run: %s)", job_id, job_data["run_id"])
 
         try:
-            if job_type in ("test_run", "execution"):
-                req = ExecutionRequest(
-                    project_id=payload.get("project_id", "default"),
-                    workspace_path=payload.get("workspace_path", "."),
-                    test_paths=payload.get("test_paths", []),
-                )
-                report, analyses = await self._orchestrator.orchestrate_run(req)
-                result = {
-                    "report": report.model_dump(),
-                    "analyses": [a.model_dump() for a in analyses],
-                    "status": "completed",
-                }
-            else:
-                result = {
-                    "status": "completed",
-                    "message": f"Successfully executed custom job {job_type}",
-                }
-
-            # Complete job
             assert self._http_client is not None
-            await self._http_client.post(
-                f"/api/jobs/{job_id}/complete",
-                json={"result": result},
+            run_response = await self._http_client.get(f"/api/runs/{job_data['run_id']}")
+            run_response.raise_for_status()
+            run = run_response.json()
+            workspace_root = Path(os.getenv("WORKSPACE_STORAGE_DIR", "runtime/workspaces")).resolve()
+            workspace_dir = (workspace_root / job_data["workspace_id"]).resolve()
+            if not workspace_dir.is_relative_to(workspace_root):
+                raise ValueError("Invalid workspace ID")
+            project_interpreter = venv_interpreter(workspace_dir / ".qa-platform-runtime")
+            artifact_root = Path(os.getenv("ARTIFACT_STORAGE_DIR", "runtime/artifacts")).resolve()
+            artifact_dir = artifact_root / job_data["run_id"]
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+
+            async def send_log(chunk: str) -> None:
+                assert self._http_client is not None
+                response = await self._http_client.post(
+                    f"/api/jobs/{job_id}/log", json={"worker_id": self.worker_id, "log": chunk}
+                )
+                response.raise_for_status()
+
+            result = await self._runner.run_suite(
+                workspace_dir=workspace_dir,
+                nodeids=job_data["nodeids"],
+                markers=run["markers"],
+                environment={**run["environment"], "QA_ARTIFACT_DIR": str(artifact_dir)},
+                interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
+                on_log=send_log,
             )
+            result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
+            response = await self._http_client.post(
+                f"/api/jobs/{job_id}/result",
+                json={"worker_id": self.worker_id, "result": result.model_dump(mode="json")},
+            )
+            response.raise_for_status()
             logger.info("Successfully completed job %s", job_id)
 
         except Exception as exc:
             logger.exception("Failed to execute job %s: %s", job_id, exc)
             if self._http_client is not None:
                 try:
-                    await self._http_client.post(
-                        f"/api/jobs/{job_id}/complete",
-                        json={"result": {"status": "failed", "error": str(exc)}},
-                    )
+                    await self._http_client.post(f"/api/jobs/{job_id}/fail", json={"error_message": str(exc)})
                 except Exception:
                     pass

@@ -6,6 +6,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 
 from qa_core.execution.models import (
     SingleTestResult,
@@ -27,6 +28,7 @@ class PytestRunner:
         markers: list[str] | None = None,
         environment: dict[str, str] | None = None,
         interpreter: str | None = None,
+        on_log: Callable[[str], Awaitable[None]] | None = None,
     ) -> SuiteExecutionResult:
         ws_path = Path(workspace_dir).resolve()
         if not ws_path.exists():
@@ -34,7 +36,7 @@ class PytestRunner:
 
         # Run pytest through an explicit interpreter: an imported project must use its own virtualenv
         # (its dependencies, its Python version), not whichever pytest happens to be on PATH.
-        cmd = [interpreter or sys.executable, "-m", "pytest", "-v", "--tb=short"]
+        cmd = [interpreter or sys.executable, "-u", "-m", "pytest", "-v", "-s", "--tb=short"]
         if markers:
             for m in markers:
                 cmd.extend(["-m", m])
@@ -46,6 +48,9 @@ class PytestRunner:
         env = dict(os.environ)
         if environment:
             env.update(environment)
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
 
         start_time = time.perf_counter()
         proc = await asyncio.create_subprocess_exec(
@@ -53,44 +58,71 @@ class PytestRunner:
             cwd=str(ws_path),
             env=env,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
 
+        raw_logs: list[str] = []
+
+        async def collect_output() -> None:
+            assert proc.stdout is not None
+            while line := await proc.stdout.readline():
+                decoded = line.decode("utf-8", errors="replace").rstrip("\r\n")
+                raw_logs.append(decoded)
+                if on_log:
+                    await on_log(decoded + "\n")
+
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.default_timeout_sec)
+            await asyncio.wait_for(collect_output(), timeout=self.default_timeout_sec)
+            await proc.wait()
         except asyncio.TimeoutError:
             proc.kill()
+            await proc.wait()
+            message = f"Execution timed out after {self.default_timeout_sec:g}s."
+            raw_logs.append(message)
+            if on_log:
+                await on_log(message + "\n")
             return SuiteExecutionResult(
                 exit_code=None,
                 total=len(nodeids or []),
                 failed=len(nodeids or []),
                 duration_ms=(time.perf_counter() - start_time) * 1000,
                 results=[],
-                raw_logs=["Execution timed out after 120s."],
+                raw_logs=raw_logs,
             )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        stdout_str = stdout.decode("utf-8", errors="replace")
-        stderr_str = stderr.decode("utf-8", errors="replace")
+        stdout_str = "\n".join(raw_logs)
 
         # Parse test outcomes line by line
         results: list[SingleTestResult] = []
-        raw_logs: list[str] = (stdout_str + "\n" + stderr_str).splitlines()
 
         passed_count = 0
         failed_count = 0
         skipped_count = 0
+        pending_nodeid: str | None = None
 
         for line in raw_logs:
             # Pattern: tests/test_login.py::test_login_flow PASSED [100%]
             match = re.search(r"^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)", line)
             if match:
-                test_nodeid = match.group(1)
-                verdict = match.group(2)
+                test_nodeid, verdict = match.group(1), match.group(2)
+            else:
+                # With -s, a test's print() can appear after its nodeid and pytest may
+                # write the verdict alone on a later line (including across stream chunks).
+                node_line = re.match(r"^(\S+::\S+)(?:\s|$)", line)
+                if node_line and not line.startswith(("FAILED ", "ERROR ")):
+                    pending_nodeid = node_line.group(1)
+                verdict_line = re.match(r"^(PASSED|FAILED|SKIPPED|ERROR)(?:\s|$)", line)
+                if verdict_line and pending_nodeid:
+                    test_nodeid, verdict = pending_nodeid, verdict_line.group(1)
+                else:
+                    continue
+            pending_nodeid = None
+            if test_nodeid:
                 status = (
                     TestExecutionStatus.PASSED
                     if verdict == "PASSED"
-                    else (TestExecutionStatus.FAILED if verdict == "FAILED" else TestExecutionStatus.SKIPPED)
+                    else (TestExecutionStatus.SKIPPED if verdict == "SKIPPED" else TestExecutionStatus.FAILED)
                 )
 
                 if status == TestExecutionStatus.PASSED:
@@ -100,27 +132,17 @@ class PytestRunner:
                 else:
                     skipped_count += 1
 
+                error_line = next(
+                    (entry.strip() for entry in raw_logs if entry.startswith("E   ")),
+                    f"Test failed with {verdict}",
+                )
                 results.append(
                     SingleTestResult(
-                        nodeid=test_nodeid,
+                        nodeid=test_nodeid.replace("\\", "/"),
                         status=status,
                         duration_ms=duration_ms / max(1, len(nodeids or [1])),
-                        error_message=f"Test failed with {verdict}" if status == TestExecutionStatus.FAILED else None,
+                        error_message=error_line if status == TestExecutionStatus.FAILED else None,
                         stack_trace=stdout_str if status == TestExecutionStatus.FAILED else None,
-                    )
-                )
-
-        # Only a clean exit may be summarised as passes. A non-zero exit with nothing parsed means
-        # the suite did not run (collection or usage error): the caller reports that as an error
-        # rather than inventing a verdict for tests that never executed.
-        if not results and nodeids and proc.returncode == 0:
-            for nid in nodeids:
-                passed_count += 1
-                results.append(
-                    SingleTestResult(
-                        nodeid=nid,
-                        status=TestExecutionStatus.PASSED,
-                        duration_ms=duration_ms,
                     )
                 )
 

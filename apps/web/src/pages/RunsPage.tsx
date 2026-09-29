@@ -39,6 +39,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
   const [externalArtifacts, setExternalArtifacts] = useState<ExternalArtifactReference[]>([]);
+  const [artifactPreview, setArtifactPreview] = useState<{ name: string; url: string } | null>(null);
 
   // New Run Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -107,6 +108,31 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       console.error(`Failed to fetch run detail for ${runId}`, err);
     }
   };
+
+  const openArtifact = async (artifact: ExternalArtifactReference) => {
+    const artifactId = artifact.metadata_json?.artifact_id;
+    if (!artifactId) return;
+    try {
+      const blob = await api.downloadArtifact(artifactId);
+      const url = URL.createObjectURL(blob);
+      if (blob.type.startsWith('image/')) {
+        setArtifactPreview({ name: artifact.name, url });
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = artifact.name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } catch (error) {
+      console.error('Failed to open artifact', error);
+      alert(t('artifactOpenFailed'));
+    }
+  };
+
+  useEffect(() => () => {
+    if (artifactPreview) URL.revokeObjectURL(artifactPreview.url);
+  }, [artifactPreview]);
 
   const handleSelectRun = (run: TestRun) => {
     setSelectedRun(run);
@@ -402,7 +428,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
                             <span>
-                              {t('listTotal')}: <b>{r.total || r.total_tests}</b> | {t('listPassed')}:{' '}
+                              {t('listTotal')}: <b>{r.total ?? r.total_tests}</b> | {t('listPassed')}:{' '}
                               <b style={{ color: '#16a34a' }}>{r.passed !== undefined ? r.passed : r.passed_tests}</b> | {t('listFailed')}:{' '}
                               <b style={{ color: '#dc2626' }}>{r.failed !== undefined ? r.failed : r.failed_tests}</b>
                             </span>
@@ -516,6 +542,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                           href={art.url}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={(event) => {
+                            if (art.metadata_json?.artifact_id) {
+                              event.preventDefault();
+                              void openArtifact(art);
+                            }
+                          }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -535,6 +567,18 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         </a>
                       ))}
                     </div>
+                    {artifactPreview && (
+                      <div style={{ marginTop: '12px' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setArtifactPreview(null)}>
+                          {t('closePreview')}
+                        </button>
+                        <img
+                          src={artifactPreview.url}
+                          alt={artifactPreview.name}
+                          style={{ display: 'block', maxWidth: '100%', marginTop: '8px' }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -680,6 +724,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       }
                     >
                       <option value="LOCAL">{t('localRunner')}</option>
+                      <option value="WORKER">{t('workerRunner')}</option>
                       <option value="JENKINS">{t('jenkinsRunner')}</option>
                     </select>
                   </div>

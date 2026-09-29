@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 from project_model.models import ArtifactDownloadInfo, ArtifactUploadResponse
@@ -34,11 +35,12 @@ class ArtifactStorageService:
         content_type: str = "application/octet-stream",
         storage_type: str = "LOCAL",
     ) -> ArtifactUploadResponse:
-        file_path = self.base_dir / filename
+        safe_name = Path(filename.replace("\\", "/")).name or "artifact.bin"
+        file_path = self.base_dir / f"{uuid.uuid4().hex}_{safe_name}"
         file_path.write_bytes(content)
 
         orm = await self.artifact_repo.create(
-            filename=filename,
+            filename=safe_name,
             size_bytes=len(content),
             content_type=content_type,
             storage_type=storage_type,

@@ -84,6 +84,13 @@ class JobRepository:
 
         return await self._run(session, _exec)
 
+    async def get_by_id(self, job_id: str, session: AsyncSession | None = None) -> ExecutionJob | None:
+        async def _exec(s: AsyncSession) -> ExecutionJob | None:
+            orm = await s.get(ExecutionJobORM, job_id)
+            return self._to_model(orm) if orm else None
+
+        return await self._run(session, _exec)
+
     async def claim_next_job(
         self, worker_id: str, browser: str = "chromium", session: AsyncSession | None = None
     ) -> ExecutionJob | None:

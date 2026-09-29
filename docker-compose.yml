@@ -73,6 +73,10 @@ services:
       WORKER_NAME: Docker-Runner
       MAX_CONCURRENCY: 4
       WORKER_CAPABILITIES: playwright,chromium,firefox,pytest,python3
+      WORKSPACE_STORAGE_DIR: /app/runtime/workspaces
+      ARTIFACT_STORAGE_DIR: /app/runtime/artifacts
+    volumes:
+      - runtime_data:/app/runtime
     deploy:
       replicas: 2
 

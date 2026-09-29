@@ -3,7 +3,7 @@ from __future__ import annotations
 import statistics
 from datetime import datetime, timezone
 
-from project_model.models import DashboardStats, FlakyClassification
+from project_model.models import DashboardStats, FlakyClassification, TestRun
 
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
@@ -43,7 +43,8 @@ class DashboardService:
         # Calculate today stats
         now = datetime.now(timezone.utc)
         runs_today = [r for r in runs_orms if r.created_at and r.created_at.date() == now.date()]
-        tests_executed_today = sum(r.total for r in runs_today)
+        # Historical runs may have total=0 even though their execution rows have verdicts.
+        tests_executed_today = sum(max(r.total, r.passed + r.failed + r.skipped) for r in runs_today)
         passed_today = sum(r.passed for r in runs_today)
         pass_rate = (passed_today / tests_executed_today * 100.0) if tests_executed_today > 0 else 100.0
 
@@ -71,5 +72,5 @@ class DashboardService:
             recent_projects=recent_projects,
             recent_requirements=recent_requirements,
             recent_test_cases=recent_test_cases,
-            recent_runs=[],
+            recent_runs=[TestRun.model_validate(run) for run in runs_orms[:5]],
         )

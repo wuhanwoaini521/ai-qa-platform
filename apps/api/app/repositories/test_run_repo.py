@@ -79,6 +79,7 @@ class TestRunRepository:
         passed: int | None = None,
         failed: int | None = None,
         skipped: int | None = None,
+        total: int | None = None,
         duration_ms: float | None = None,
         started_at=None,
         finished_at=None,
@@ -97,6 +98,8 @@ class TestRunRepository:
             orm.failed = failed
         if skipped is not None:
             orm.skipped = skipped
+        if total is not None:
+            orm.total = total
         if duration_ms is not None:
             orm.duration_ms = duration_ms
         if started_at is not None:

@@ -44,7 +44,11 @@ async def test_git_and_pr_api_workflow(client: AsyncClient):
     # 5. Create new file and commit changes
     file_resp = await client.post(
         f"/api/workspaces/{workspace_id}/files/create",
-        json={"path": "tests/test_cart.py", "content": "def test_add_item(): pass\n", "is_directory": False},
+        json={
+            "path": "tests/test_cart_integration.py",
+            "content": "def test_add_item(): pass\n",
+            "is_directory": False,
+        },
     )
     assert file_resp.status_code in (200, 201)
 

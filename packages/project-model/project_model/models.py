@@ -579,6 +579,7 @@ class FailureRecurrenceItem(BaseModel):
 # --- Phase 7: Runner Platform Models ---
 class RunnerType(str, Enum):
     LOCAL = "LOCAL"
+    WORKER = "WORKER"
     JENKINS = "JENKINS"
     DOCKER = "DOCKER"
     GITHUB_ACTIONS = "GITHUB_ACTIONS"

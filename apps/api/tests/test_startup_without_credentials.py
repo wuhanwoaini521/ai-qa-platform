@@ -67,7 +67,7 @@ def test_import_and_serve_without_any_optional_configuration(tmp_path: Path):
 import asyncio
 from httpx import ASGITransport, AsyncClient
 from app.main import app
-from app.persistence.database import init_db
+from app.persistence.database import engine, init_db
 
 
 async def main():
@@ -103,6 +103,9 @@ async def main():
 
         testrail = await client.get("/api/testrail/cases", params={"suite_id": 1})
         assert testrail.status_code == 200, testrail.text
+
+    # ASGITransport does not run lifespan shutdown; close SQLite's worker thread explicitly.
+    await engine.dispose()
 
 
 asyncio.run(main())
