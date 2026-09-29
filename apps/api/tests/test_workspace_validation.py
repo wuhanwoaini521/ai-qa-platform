@@ -1,5 +1,7 @@
 import pytest
+from app.settings import settings
 from httpx import AsyncClient
+from qa_core.execution.pytest_runner import PytestRunner
 
 pytestmark = pytest.mark.integration
 
@@ -13,13 +15,16 @@ async def test_workspace_validation_and_collection(client: AsyncClient):
     )
     proj_id = proj_res.json()["id"]
 
-    # 2. Collect tests (should find test_login_flow from bootstrap)
+    # 2. The generated workspace must collect and execute the same six offline examples.
     collect_res = await client.post(f"/api/workspaces/{proj_id}/collect")
     assert collect_res.status_code == 200
     report = collect_res.json()
-    assert report["total"] >= 1
+    assert report["total"] == 6
     nodeids = [t["nodeid"] for t in report["tests"]]
     assert any("test_login_flow" in n for n in nodeids)
+    result = await PytestRunner().run_suite(settings.workspace_storage_dir / proj_id)
+    assert result.exit_code == 0, "\n".join(result.raw_logs)
+    assert result.passed == result.total == 6
 
     # 3. Validate clean workspace
     val_res = await client.post(f"/api/workspaces/{proj_id}/validate")

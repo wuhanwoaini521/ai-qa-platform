@@ -15,6 +15,8 @@
    - `flows/`
    - `components/`
    - `knowledge/`
+   New workspaces also receive the executable, browser-free tests from `examples/quickstart/`.
+   Re-running bootstrap adds missing example files without replacing files already edited in the workspace.
 
 4. **Runtime Artifacts are Not Source Code**:
    Screenshots, trace zip files, video recordings, and DOM dumps generated during test runs are managed independently through `ArtifactStorageService` under `runtime/artifacts/` with cloud storage pluggability (S3/MinIO) planned for future phases.

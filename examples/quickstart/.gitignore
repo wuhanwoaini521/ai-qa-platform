@@ -1,0 +1,9 @@
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv/
+.qa-platform-runtime/
+.env
+screenshots/
+traces/
+allure-results/

@@ -44,3 +44,11 @@ async def test_workspace_file_operations_and_diff(client: AsyncClient):
     diff_data = diff_res.json()
     changed_paths = [f["path"] for f in diff_data["changed_files"]]
     assert "tests/test_search.py" in changed_paths or any("test_search.py" in p for p in changed_paths)
+
+    # Repeating bootstrap must neither replace user files nor commit their pending changes.
+    bootstrap_res = await client.post(f"/api/workspaces/{proj_id}/bootstrap")
+    assert bootstrap_res.status_code == 200
+    read_res = await client.get(f"/api/workspaces/{proj_id}/file?path=tests/test_search.py")
+    assert "# New automated search test" in read_res.json()["content"]
+    diff_res = await client.get(f"/api/workspaces/{proj_id}/diff")
+    assert any("test_search.py" in item["path"] for item in diff_res.json()["changed_files"])

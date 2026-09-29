@@ -26,6 +26,21 @@ from project_model.models import (
 
 from app.settings import settings
 
+EXAMPLE_DIR = Path(__file__).resolve().parents[4] / "examples" / "quickstart"
+EXAMPLE_FILES = (
+    ".gitignore",
+    "README.md",
+    "pytest.ini",
+    "components/__init__.py",
+    "components/cart.py",
+    "flows/__init__.py",
+    "flows/login_flow.py",
+    "knowledge/example_rules.md",
+    "pages/README.md",
+    "tests/test_cart.py",
+    "tests/test_login.py",
+)
+
 
 class SecurityException(Exception):
     pass
@@ -65,66 +80,22 @@ class WorkspaceService:
         (ws_dir / "components").mkdir(parents=True, exist_ok=True)
         (ws_dir / "knowledge").mkdir(parents=True, exist_ok=True)
 
-        # Create sample files
-        readme_content = f"""# {project_name} Automation Workspace
+        # The repository example is the single source for both the checked-in sample and new
+        # workspaces. Re-running bootstrap must preserve edits made in Automation Studio.
+        for relative_path in EXAMPLE_FILES:
+            destination = self._resolve_safe_file_path(workspace_id, relative_path)
+            if destination.exists():
+                continue
+            content = (EXAMPLE_DIR / relative_path).read_text(encoding="utf-8")
+            if relative_path == "README.md":
+                content = content.replace(
+                    "# Automation Workspace Quickstart", f"# {project_name} Automation Workspace", 1
+                )
+            await self.write_file(workspace_id, relative_path, content)
 
-Welcome to the AI QA Automation Studio.
-
-## Workspace Layout
-- `tests/`: End-to-end and functional test suites.
-- `pages/`: Page Object Models and selector definitions.
-- `flows/`: Reusable user flow and scenario abstractions.
-- `components/`: Modular UI component locators and actions.
-- `knowledge/`: QA domain rules, test data, and locator dictionaries.
-"""
-        gitignore_content = """.pytest_cache/
-__pycache__/
-*.pyc
-.env
-screenshots/
-traces/
-"""
-        sample_page = """from playwright.sync_api import Page, expect
-
-class LoginPage:
-    def __init__(self, page: Page):
-        self.page = page
-        self.username_input = page.locator('input[name="username"]')
-        self.password_input = page.locator('input[name="password"]')
-        self.login_button = page.locator('button[type="submit"]')
-
-    def login(self, username: str, password: str):
-        self.username_input.fill(username)
-        self.password_input.fill(password)
-        self.login_button.click()
-"""
-        sample_test = """import pytest
-from playwright.sync_api import Page, expect
-from pages.login_page import LoginPage
-
-def test_login_flow(page: Page):
-    login_page = LoginPage(page)
-    page.goto("/login")
-    login_page.login("qa_user", "secure_password")
-    expect(page).to_have_url(r".*/dashboard")
-
-def test_login_invalid_password(page: Page):
-    login_page = LoginPage(page)
-    page.goto("/login")
-    login_page.login("qa_user", "wrong_password")
-    expect(page.locator(".error-banner")).to_be_visible()
-"""
-        sample_knowledge = """# Knowledge Base: Authentication & Login
-## Common Locators
-- `username`: `input[name="username"]` or `[data-testid="login-username"]`
-- `password`: `input[name="password"]` or `[data-testid="login-password"]`
-- `submit`: `button[type="submit"]` or `[data-testid="login-submit"]`
-"""
-        await self.write_file(workspace_id, "README.md", readme_content)
-        await self.write_file(workspace_id, ".gitignore", gitignore_content)
-        await self.write_file(workspace_id, "pages/login_page.py", sample_page)
-        await self.write_file(workspace_id, "tests/test_login.py", sample_test)
-        await self.write_file(workspace_id, "knowledge/login_knowledge.md", sample_knowledge)
+        # Existing workspaces may contain edits. Bootstrap must not stage or commit them.
+        if (ws_dir / ".git").exists():
+            return ws_dir
 
         # Initialize local git repository in workspace for diff tracking
         proc = await asyncio.create_subprocess_exec(
@@ -156,7 +127,7 @@ def test_login_invalid_password(page: Page):
             "user.email=agent@ai-qa.local",
             "commit",
             "-m",
-            "chore: initialize blank qa project workspace",
+            "chore: initialize runnable qa example workspace",
             cwd=str(ws_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

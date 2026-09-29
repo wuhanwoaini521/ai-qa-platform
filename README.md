@@ -129,6 +129,19 @@ Windows notes:
 - The dev server binds `127.0.0.1` explicitly. Browsing to `localhost` may resolve to IPv6 `::1`
   on Windows and fail to connect.
 
+### Run the included QA examples
+
+After `pnpm setup`, run the checked-in, browser-free Pytest examples on macOS or Windows:
+
+```bash
+mise exec -- uv run pytest -c examples/quickstart/pytest.ini examples/quickstart/tests
+```
+
+The [example workspace](examples/quickstart/README.md) contains six passing tests for an in-memory
+login flow and cart. Creating a project with **Create runnable QA examples** enabled copies the same
+files into its workspace. In Automation Studio, run one test from Test Explorer or start a run with
+no selection to execute all six. No browser install, live website, or external credentials are needed.
+
 
 
 ---

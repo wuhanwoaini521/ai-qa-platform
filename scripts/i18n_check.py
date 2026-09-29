@@ -114,7 +114,8 @@ def main() -> int:
         return 1
 
     total_keys = sum(
-        len(flatten(json.loads((LOCALES_DIR / languages[0] / f"{ns}.json").read_text()))) for ns in namespaces
+        len(flatten(json.loads((LOCALES_DIR / languages[0] / f"{ns}.json").read_text(encoding="utf-8"))))
+        for ns in namespaces
     )
     print(f"i18n check passed: {len(namespaces)} namespace(s), {len(languages)} language(s), {total_keys} keys")
     return 0
