@@ -1,0 +1,10 @@
+# Pin the package index for this repository.
+#
+# Without this file, a machine-level uv configuration (for example a corporate or regional mirror
+# in ~/.config/uv/uv.toml) silently rewrites every URL in uv.lock, producing a lockfile that
+# records a private mirror and does not match what CI resolves.
+#
+# This file is committed, so local runs and CI resolve from the same index.
+[[index]]
+url = "https://pypi.org/simple"
+default = true
