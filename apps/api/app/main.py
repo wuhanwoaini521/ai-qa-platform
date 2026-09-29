@@ -43,10 +43,10 @@ logger = logging.getLogger("app.startup")
 
 async def _recover_stale_runs() -> list[str]:
     """Recovery uses the application's own session factory, independent of the request lifecycle."""
-    from app.api.runs import get_run_service
+    from app.api.runs import open_run_service
 
-    service = get_run_service()
-    return await service.recover_stale_runs()
+    async with open_run_service() as service:
+        return await service.recover_stale_runs()
 
 
 @asynccontextmanager

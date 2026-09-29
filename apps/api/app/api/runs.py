@@ -1,9 +1,12 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from project_model.models import TestRun, TestRunCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
+from app.persistence.database import async_session_factory, get_db
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.test_run_service import TestRunService
@@ -13,10 +16,25 @@ router = APIRouter(prefix="/runs", tags=["Test Runs"])
 
 
 def get_run_service(session: AsyncSession = Depends(get_db)) -> TestRunService:
+    """Build the run service from a session.
+
+    Also callable outside the request cycle. `lifespan` startup recovery needs the same wiring but
+    has no resolved dependency to pass, so a missing session means "open one and close it" rather
+    than handing the Depends marker to the repository.
+    """
+    if not isinstance(session, AsyncSession):
+        raise RuntimeError("get_run_service requires a real AsyncSession, not a Depends marker")
     run_repo = TestRunRepository(session)
     workspace_repo = WorkspaceRepository(session)
     workspace_service = WorkspaceService()
     return TestRunService(run_repo, workspace_repo, workspace_service)
+
+
+@asynccontextmanager
+async def open_run_service() -> AsyncGenerator[TestRunService, None]:
+    """A run service bound to its own session, for use outside the request lifecycle."""
+    async with async_session_factory() as session:
+        yield get_run_service(session)
 
 
 @router.get("", response_model=list[TestRun])
