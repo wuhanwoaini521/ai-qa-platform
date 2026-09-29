@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import os
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+
+
+def venv_interpreter(environment_dir: Path) -> Path:
+    """The Python executable inside a virtualenv, in the layout the host platform creates.
+
+    POSIX virtualenvs put it in ``bin/``; Windows ones use ``Scripts/python.exe``. Every caller that
+    builds or probes a provisioned interpreter goes through this so the two layouts are never
+    spelled out a second time.
+    """
+    if os.name == "nt":
+        return environment_dir / "Scripts" / "python.exe"
+    return environment_dir / "bin" / "python"
 
 
 class QAProjectFramework(str, Enum):
@@ -50,21 +64,25 @@ class QARuntimeProfile(BaseModel):
 
     def resolve_interpreter(self, project_root: Path) -> str:
         """Return the interpreter to run the project with, preferring its provisioned virtualenv."""
-        candidates = []
+        candidates = [venv_interpreter(project_root / name) for name in (".qa-platform-runtime", ".venv", "venv")]
         if self.virtualenv_dir:
-            candidates.append(Path(self.virtualenv_dir) / "bin" / "python")
-            candidates.append(Path(self.virtualenv_dir) / "Scripts" / "python.exe")
-        candidates.extend(
-            [
-                project_root / ".qa-platform-runtime" / "bin" / "python",
-                project_root / ".venv" / "bin" / "python",
-                project_root / "venv" / "bin" / "python",
-                project_root / ".venv" / "Scripts" / "python.exe",
-            ]
-        )
+            # A contract that names its own virtualenv outranks the conventional directories.
+            candidates.insert(0, venv_interpreter(Path(self.virtualenv_dir)))
         for candidate in candidates:
             if candidate.exists():
                 return str(candidate)
+        return self._fallback_interpreter()
+
+    def _fallback_interpreter(self) -> str:
+        """The interpreter to use when the project has no virtualenv of its own.
+
+        ``python3`` is the POSIX name this model defaults to. On Windows the launcher is
+        ``python``, and a name that resolves there may land on the Microsoft Store alias stub
+        rather than a real interpreter, so the platform's own interpreter is used instead: it is
+        the caller's own environment and always exists.
+        """
+        if self.interpreter in ("python", "python3") and os.name == "nt":
+            return sys.executable
         return self.interpreter
 
 

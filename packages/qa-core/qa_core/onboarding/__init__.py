@@ -34,6 +34,7 @@ from qa_core.onboarding.contract import (
     QARuntimeProfile,
     load_contract_file,
     render_contract,
+    venv_interpreter,
 )
 from qa_core.onboarding.detector import DetectionEvidence, QAProjectDetection, QAProjectDetector
 from qa_core.onboarding.identity import (
@@ -101,4 +102,5 @@ __all__ = [
     "render_contract",
     "run_project_command",
     "write_plugin",
+    "venv_interpreter",
 ]

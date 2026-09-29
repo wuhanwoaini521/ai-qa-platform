@@ -19,6 +19,7 @@ from project_model.models import (
 from qa_core.execution.models import TestExecutionStatus
 from qa_core.execution.pytest_runner import PytestRunner
 from qa_core.execution.runner_backend import RunnerTriggerRequest
+from qa_core.onboarding.contract import venv_interpreter
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
 from app.persistence.models import (
@@ -485,7 +486,7 @@ class TestRunService:
 
     def _project_interpreter(self, workspace_dir: Path) -> str | None:
         """The project's provisioned interpreter, when the workspace has one."""
-        candidate = Path(workspace_dir) / ".qa-platform-runtime" / "bin" / "python"
+        candidate = venv_interpreter(Path(workspace_dir) / ".qa-platform-runtime")
         if candidate.exists():
             return str(candidate)
         return None

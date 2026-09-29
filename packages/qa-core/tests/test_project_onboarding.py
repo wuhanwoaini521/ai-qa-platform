@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,8 +13,10 @@ from qa_core.onboarding import (
     QAProjectContract,
     QAProjectDetector,
     QAProjectFramework,
+    QARuntimeProfile,
     load_contract_file,
     render_contract,
+    venv_interpreter,
 )
 
 pytestmark = pytest.mark.unit
@@ -181,14 +185,32 @@ def test_rendered_contract_is_a_valid_round_trip_and_hides_detection_metadata(tm
 
 
 def test_runtime_profile_prefers_the_project_virtualenv(tmp_path: Path):
+    """The resolved interpreter must be the one this platform's virtualenv layout actually creates."""
     contract = QAProjectContract()
-    assert contract.runtime.resolve_interpreter(tmp_path) == "python3"
+    no_venv = contract.runtime.resolve_interpreter(tmp_path)
+    # The default is a bare command name; on Windows it must not stay a name that cannot be spawned.
+    assert Path(no_venv).name.lower().startswith(("python", "python3"))
+    if os.name == "nt":
+        assert no_venv == sys.executable
 
-    venv_python = tmp_path / ".venv" / "bin" / "python"
+    venv_python = venv_interpreter(tmp_path / ".venv")
     venv_python.parent.mkdir(parents=True, exist_ok=True)
     venv_python.write_text("", encoding="utf-8")
 
     assert contract.runtime.resolve_interpreter(tmp_path) == str(venv_python)
+
+
+def test_runtime_profile_prefers_a_contract_declared_virtualenv_over_conventional_ones(tmp_path: Path):
+    declared = venv_interpreter(tmp_path / "custom-env")
+    declared.parent.mkdir(parents=True, exist_ok=True)
+    declared.write_text("", encoding="utf-8")
+    conventional = venv_interpreter(tmp_path / ".venv")
+    conventional.parent.mkdir(parents=True, exist_ok=True)
+    conventional.write_text("", encoding="utf-8")
+
+    contract = QAProjectContract(runtime=QARuntimeProfile(virtualenv_dir=str(tmp_path / "custom-env")))
+
+    assert contract.runtime.resolve_interpreter(tmp_path) == str(declared)
 
 
 def _write_yaml(root: Path, content: str) -> Path:

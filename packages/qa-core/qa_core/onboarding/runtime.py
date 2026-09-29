@@ -14,7 +14,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from qa_core.onboarding.collector import run_project_command
-from qa_core.onboarding.contract import PackageManager, QAProjectContract
+from qa_core.onboarding.contract import PackageManager, QAProjectContract, venv_interpreter
 
 #: Directory the platform owns inside an imported workspace. Never the project's own `.venv`.
 RUNTIME_DIR_NAME = ".qa-platform-runtime"
@@ -71,8 +71,8 @@ class QARuntimeProvisioner:
     def _existing_interpreter(self, project_root: Path, contract: QAProjectContract) -> Path | None:
         candidates = []
         if contract.runtime.virtualenv_dir:
-            candidates.append(Path(contract.runtime.virtualenv_dir) / "bin" / "python")
-        candidates.append(project_root / RUNTIME_DIR_NAME / "bin" / "python")
+            candidates.append(venv_interpreter(Path(contract.runtime.virtualenv_dir)))
+        candidates.append(venv_interpreter(project_root / RUNTIME_DIR_NAME))
         for candidate in candidates:
             if candidate.exists():
                 return candidate
@@ -92,7 +92,7 @@ class QARuntimeProvisioner:
             },
             timeout_sec=self.timeout_sec,
         )
-        interpreter = environment_dir / "bin" / "python"
+        interpreter = venv_interpreter(environment_dir)
         return self._result(command, result.exit_code, result.stdout, result.stderr, result.duration_ms, interpreter)
 
     async def _provision_with_venv(self, project_root: Path, contract: QAProjectContract) -> RuntimeProvisioningResult:
@@ -111,10 +111,10 @@ class QARuntimeProvisioner:
                 create.stdout,
                 create.stderr,
                 create.duration_ms,
-                environment_dir / "bin" / "python",
+                venv_interpreter(environment_dir),
             )
 
-        interpreter = environment_dir / "bin" / "python"
+        interpreter = venv_interpreter(environment_dir)
         install_command = list(contract.install_command)
         if install_command[:3] == ["python", "-m", "pip"]:
             install_command = [str(interpreter), *install_command[1:]]
