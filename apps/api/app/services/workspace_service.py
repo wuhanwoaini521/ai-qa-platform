@@ -41,7 +41,7 @@ class WorkspaceService:
         # Prevent traversal in workspace_id
         clean_id = Path(workspace_id).name
         target = (self.base_dir / clean_id).resolve()
-        if not (str(target) == str(self.base_dir) or str(target).startswith(str(self.base_dir) + os.sep)):
+        if not target.is_relative_to(self.base_dir):
             raise SecurityException("Invalid workspace ID or path traversal attempt.")
         return target
 
@@ -50,7 +50,7 @@ class WorkspaceService:
         # Normalize relative path
         cleaned = relative_path.lstrip("/\\")
         target = (ws_dir / cleaned).resolve()
-        if not (str(target) == str(ws_dir) or str(target).startswith(str(ws_dir) + "/")):
+        if not target.is_relative_to(ws_dir):
             raise SecurityException(f"Path traversal detected: {relative_path}")
         return target
 
@@ -331,7 +331,7 @@ def test_login_invalid_password(page: Page):
             for file in files:
                 if file.endswith(".py"):
                     full_path = Path(root) / file
-                    rel_path = str(full_path.relative_to(ws_dir))
+                    rel_path = full_path.relative_to(ws_dir).as_posix()
                     try:
                         content = full_path.read_text(encoding="utf-8")
                         ast.parse(content, filename=rel_path)
@@ -408,7 +408,7 @@ def test_login_invalid_password(page: Page):
             for file in files:
                 if file.startswith("test_") and file.endswith(".py"):
                     full_path = Path(root) / file
-                    rel_path = str(full_path.relative_to(ws_dir))
+                    rel_path = full_path.relative_to(ws_dir).as_posix()
                     try:
                         content = full_path.read_text(encoding="utf-8")
                         tree = ast.parse(content, filename=rel_path)
