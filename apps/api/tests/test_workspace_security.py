@@ -8,6 +8,19 @@ from httpx import AsyncClient
 pytestmark = pytest.mark.security
 
 
+def _symlink_or_skip(target: Path, link: Path) -> None:
+    """Create a symlink, or skip when the platform refuses to create one.
+
+    Windows only permits symlink creation for an elevated process or with Developer Mode enabled, so
+    the escape these tests set up cannot be constructed there. Skipping is honest: the assertion is
+    about a symlink escape, and there is no symlink to escape through.
+    """
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError, AttributeError) as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
+
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_workspace_path_traversal_prevention(client: AsyncClient):
@@ -74,7 +87,7 @@ def test_workspace_id_symlink_to_sibling_prefix_directory_rejected(tmp_path: Pat
     sibling = tmp_path / "workspaces-evil"
     base_dir.mkdir(parents=True, exist_ok=True)
     sibling.mkdir()
-    os.symlink(sibling, base_dir / "evil")
+    _symlink_or_skip(sibling, base_dir / "evil")
 
     service = WorkspaceService(base_dir=base_dir)
     with pytest.raises(SecurityException):
@@ -111,7 +124,7 @@ async def test_symlink_inside_workspace_cannot_escape_on_read_or_write(tmp_path:
     service = WorkspaceService(base_dir=base_dir)
     ws_dir = service.get_workspace_dir("ws-link")
     ws_dir.mkdir(parents=True, exist_ok=True)
-    os.symlink(outside, ws_dir / "link")
+    _symlink_or_skip(outside, ws_dir / "link")
 
     with pytest.raises(SecurityException):
         await service.read_file("ws-link", "link/secret.txt")

@@ -44,9 +44,13 @@ REPO_ROOT = API_ROOT.parents[1]
 
 def test_import_and_serve_without_any_optional_configuration(tmp_path: Path):
     """Importing the app and answering requests must not require any optional credential."""
+    # The intent is "no optional credential", not "no environment at all": a Windows interpreter
+    # still needs SystemRoot/USERPROFILE/TEMP, and dropping them would fail the test for a reason
+    # that has nothing to do with credentials.
     env = {
-        "PATH": os.environ.get("PATH", ""),
+        **{name: value for name, value in os.environ.items() if name not in OPTIONAL_ENV_VARS},
         "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
         "PYTHONPATH": os.pathsep.join(
             [
                 str(API_ROOT),
@@ -110,7 +114,11 @@ print("STARTUP_OK")
         cwd=tmp_path,
         env=env,
         capture_output=True,
-        text=True,
+        # A failing child writes a traceback in the console encoding (cp936 on Windows), which
+        # `text=True` would try to read as UTF-8 and raise UnicodeDecodeError instead of the
+        # assertion the failure actually belongs to.
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"

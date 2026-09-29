@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 import pytest
 from app.api import artifacts as artifacts_api
@@ -144,10 +145,10 @@ async def test_runner_selection_resolves_backend_by_profile_type(test_db_session
 
 
 @pytest.mark.asyncio
-async def test_artifact_storage_service(test_db_session):
+async def test_artifact_storage_service(test_db_session, tmp_path: Path):
     storage = ArtifactStorageService(
         artifact_repo=ArtifactRepository(test_db_session),
-        base_dir="/tmp/ai_qa_test_artifacts",
+        base_dir=str(tmp_path / "artifacts"),
     )
     test_bytes = b"<html><body>Test Report</body></html>"
 
