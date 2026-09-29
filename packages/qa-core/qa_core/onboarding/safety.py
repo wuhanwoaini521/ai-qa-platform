@@ -23,7 +23,7 @@ override.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from pydantic import BaseModel, Field
 
@@ -238,8 +238,19 @@ class SafetyPolicy(BaseModel):
     def _has_escaping_path_argument(self, call: ast.Call) -> bool:
         for argument in [*call.args, *call.keywords]:
             value = argument.value if isinstance(argument, ast.keyword) else argument
-            text = ast.unparse(value)
-            if text.startswith(("'/", '"/', "'~", '"~')) or ".." in text or "home()" in text:
+            if "home()" in ast.unparse(value):
+                return True
+            if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+                continue
+            text = value.value
+            if text.startswith("~"):
+                return True
+            # A path escapes the workspace when it is absolute or walks upwards, judged by both
+            # platforms' rules: the file would be resolved on whichever host runs the test, and
+            # `C:\Windows\...` is as much an absolute path as `/etc/passwd`.
+            if any(
+                parsed.is_absolute() or ".." in parsed.parts for parsed in (PurePosixPath(text), PureWindowsPath(text))
+            ):
                 return True
         return False
 

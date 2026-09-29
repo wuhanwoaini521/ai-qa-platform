@@ -545,6 +545,19 @@ def test_writes_authorized_keys():
     open("~/.ssh/authorized_keys", "a").write("ssh-rsa AAAA")
 
 
+
+def test_reads_a_windows_absolute_path():
+    open("C:/Windows/System32/config/SAM").read()
+
+
+def test_writes_to_a_windows_parent_directory():
+    open("C:/Users/Public/planted.txt", "a").write("pwned")
+
+
+def test_escapes_with_windows_separators():
+    open("..\\..\\..\\Windows\\System32\\drivers\\etc\\hosts").read()
+
+
 def test_browser_through_a_helper():
     browser = make_page()
     browser.goto(BASE_URL + "/login")
@@ -567,6 +580,9 @@ def test_shell_through_an_alias():
         "tests/test_evasions.py::test_reads_a_private_key",
         "tests/test_evasions.py::test_reads_home_files",
         "tests/test_evasions.py::test_writes_authorized_keys",
+        "tests/test_evasions.py::test_reads_a_windows_absolute_path",
+        "tests/test_evasions.py::test_writes_to_a_windows_parent_directory",
+        "tests/test_evasions.py::test_escapes_with_windows_separators",
         "tests/test_evasions.py::test_browser_through_a_helper",
         "tests/test_evasions.py::test_browser_through_an_unlisted_fixture",
         "tests/test_evasions.py::test_shell_through_an_alias",

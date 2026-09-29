@@ -8,7 +8,7 @@ into platform records (project, workspace, run, executions, failure records).
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -65,14 +65,20 @@ def validate_nodeids(nodeids: list[str]) -> list[str]:
     here rather than trusted: an operator (or a compromised caller) must not be able to turn a test
     selection into `--pyargs`, `-p`, `-c` or a shell fragment.
     """
-    invalid = [
-        nodeid
-        for nodeid in nodeids
-        # An absolute path would let the selection point at a host file instead of the workspace.
-        if not NODEID_PATTERN.match(nodeid.strip())
-        or nodeid.strip().startswith("/")
-        or ".." in nodeid.split("::")[0].split("/")
-    ]
+    invalid = []
+    for nodeid in nodeids:
+        candidate = nodeid.strip()
+        file_part = PurePosixPath(candidate.split("::")[0])
+        # A node id names a workspace-relative POSIX path. A backslash, a drive letter or a leading
+        # separator would either escape the workspace or be re-read as a path by a Windows
+        # resolver, and a `..` segment would leave the workspace.
+        if (
+            not NODEID_PATTERN.match(candidate)
+            or "\\" in candidate
+            or file_part.is_absolute()
+            or ".." in file_part.parts
+        ):
+            invalid.append(nodeid)
     if invalid:
         raise OnboardingError(
             "invalid test selection: "
