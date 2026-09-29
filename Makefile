@@ -1,21 +1,27 @@
-.PHONY: dev test lint build clean install
+# Every target delegates to scripts/task.py so make, pnpm and the shell scripts all execute the
+# same cross-platform implementation. `make` itself is optional: `pnpm dev` works without it.
+SHELL := /bin/bash
+PYTHON ?= $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null)
+
+.PHONY: install dev test lint build clean help
+
+help:
+	@$(PYTHON) scripts/task.py --help
 
 install:
-	mise install
-	uv sync --all-packages
-	pnpm install
+	$(PYTHON) scripts/task.py setup
 
 dev:
-	./scripts/dev
+	$(PYTHON) scripts/task.py dev
 
 test:
-	./scripts/test
+	$(PYTHON) scripts/task.py test
 
 lint:
-	./scripts/lint
+	$(PYTHON) scripts/task.py lint
 
 build:
-	pnpm --filter @ai-qa/web build
+	$(PYTHON) scripts/task.py build
 
 clean:
-	rm -rf .venv node_modules apps/web/node_modules apps/web/dist runtime/ai_qa_platform.db
+	$(PYTHON) scripts/task.py clean

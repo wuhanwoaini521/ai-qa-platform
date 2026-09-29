@@ -1,23 +1,9 @@
 #!/usr/bin/env bash
+# Thin wrapper: the implementation lives in scripts/task.py so macOS, Linux and Windows
+# run the exact same steps. Prefer `pnpm test` or `make test`.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "Running Python Backend Tests (SQLite)..."
-mise exec -- uv run pytest
-
-if [[ -n "${AI_QA_TEST_DATABASE_URL:-}" ]]; then
-  echo "Running the same suite on PostgreSQL..."
-  mise exec -- uv run pytest
-else
-  echo "Skipping the PostgreSQL lane: set AI_QA_TEST_DATABASE_URL to a PostgreSQL URL to run it locally."
-  echo "  e.g. AI_QA_TEST_DATABASE_URL='postgresql+asyncpg://postgres@/postgres?host=/tmp/pgdata'"
-fi
-
-echo "Running Frontend Typecheck, Lint & Build..."
-mise exec -- pnpm --filter @ai-qa/web typecheck
-mise exec -- pnpm --filter @ai-qa/web lint
-mise exec -- pnpm --filter @ai-qa/web build
-
-echo "All tests passed successfully!"
+exec "${AI_QA_PYTHON:-python3}" scripts/task.py test

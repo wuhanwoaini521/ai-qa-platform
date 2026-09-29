@@ -4,10 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @ai-qa/web dev",
+    "setup": "python scripts/task.py setup",
+    "dev": "python scripts/task.py dev",
+    "dev:web": "pnpm --filter @ai-qa/web dev",
     "build": "pnpm --filter @ai-qa/web build",
-    "lint": "pnpm --filter @ai-qa/web lint",
-    "typecheck": "pnpm --filter @ai-qa/web typecheck"
+    "lint": "python scripts/task.py lint",
+    "lint:web": "pnpm --filter @ai-qa/web lint",
+    "typecheck": "pnpm --filter @ai-qa/web typecheck",
+    "test": "python scripts/task.py test",
+    "clean": "python scripts/task.py clean"
   },
   "packageManager": "pnpm@12.5.1"
 }
