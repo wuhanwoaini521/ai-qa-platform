@@ -122,6 +122,10 @@ and `scripts/lint` shell entry points still work on macOS and Linux.
   administrator (`admin@ai-qa.local` / `adminpassword`; change it before exposing the platform)
 - **API Swagger Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
+These are the default development URLs. If a port is occupied, `pnpm dev` chooses the next free
+localhost port and prints the actual URLs; `AI_QA_API_PORT` and `AI_QA_WEB_PORT` set the preferred
+ports.
+
 Windows notes:
 
 - Install [`mise`](https://mise.jdx.dev) (`winget install jdx.mise`), then `mise install`.

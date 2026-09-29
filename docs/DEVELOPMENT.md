@@ -38,11 +38,15 @@ pnpm dev
 `pnpm setup` is shorthand for `python scripts/task.py setup`, which runs `mise install`,
 `uv sync --all-packages` and `pnpm install` in that order.
 
-- **Backend API**: `http://127.0.0.1:8000` (Swagger UI at `/docs`)
-- **Web Application**: `http://127.0.0.1:5173`
+- **Backend API**: `http://127.0.0.1:8000` by default (Swagger UI at `/docs`)
+- **Web Application**: `http://127.0.0.1:5173` by default
+
+If a default port is already in use, the runner selects the next available localhost port and
+prints the actual URLs. The Vite API proxy follows the selected backend port. Set
+`AI_QA_API_PORT` or `AI_QA_WEB_PORT` to choose a different preferred port.
 
 Press `Ctrl+C` to stop both servers. On Windows the runner kills the whole process tree, so the
-`uvicorn --reload` grandchild is torn down with it and port 8000 is released.
+`uvicorn --reload` grandchild is torn down with it and the selected API port is released.
 
 ### Entry Points
 

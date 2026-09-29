@@ -18,6 +18,7 @@ import argparse
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -120,7 +121,12 @@ def _stream(label: str, pipe, lock: threading.Lock) -> None:
     pipe.close()
 
 
-def _spawn(label: str, argv: list[str], lock: threading.Lock) -> subprocess.Popen:
+def _spawn(
+    label: str,
+    argv: list[str],
+    lock: threading.Lock,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.Popen:
     log(f"[{label}] $ {' '.join(argv)}")
     kwargs: dict = {}
     if IS_WINDOWS:
@@ -138,10 +144,39 @@ def _spawn(label: str, argv: list[str], lock: threading.Lock) -> subprocess.Pope
         encoding="utf-8",
         errors="replace",
         bufsize=1,
+        env={**os.environ, **(extra_env or {})},
         **kwargs,
     )
     threading.Thread(target=_stream, args=(label, process.stdout, lock), daemon=True).start()
     return process
+
+
+def _available_port(preferred: int, *, attempts: int = 100) -> int:
+    """Use the requested local port, or find the next free port without killing its owner."""
+    if not 1 <= preferred <= 65535:
+        raise ValueError(f"port must be between 1 and 65535, got {preferred}")
+
+    for port in range(preferred, min(preferred + attempts, 65536)):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            try:
+                listener.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(f"no free localhost port found from {preferred} through 65535")
+
+
+def _dev_port(env_name: str, default: int) -> int:
+    configured = os.getenv(env_name, "").strip()
+    try:
+        preferred = int(configured) if configured else default
+    except ValueError as error:
+        raise ValueError(f"{env_name} must be an integer port, got {configured!r}") from error
+
+    selected = _available_port(preferred)
+    if selected != preferred:
+        log(f"Port {preferred} is occupied; using {selected}. Set {env_name} to choose another preferred port.")
+    return selected
 
 
 def task_setup() -> int:
@@ -160,19 +195,39 @@ def task_setup() -> int:
 def task_dev() -> int:
     """Run the FastAPI backend and the Vite dev server together until interrupted."""
     require_tools()
+    try:
+        api_port = _dev_port("AI_QA_API_PORT", 8000)
+        web_port = _dev_port("AI_QA_WEB_PORT", 5173)
+    except (ValueError, RuntimeError) as error:
+        log(f"error: {error}")
+        return 1
     log("=" * 42)
     log("  AI QA Platform — development mode")
     log("=" * 42)
-    log("Backend API : http://127.0.0.1:8000  (docs at /docs)")
-    log("Web app     : http://127.0.0.1:5173")
+    log(f"Backend API : http://127.0.0.1:{api_port}  (docs at /docs)")
+    log(f"Web app     : http://127.0.0.1:{web_port}")
     log("Press Ctrl+C to stop both.\n")
 
     lock = threading.Lock()
     services = [
-        ("api", command("uv", "run", "uvicorn", "app.main:app", "--app-dir", "apps/api", "--reload", "--port", "8000")),
-        ("web", command("pnpm", "--filter", "@ai-qa/web", "dev")),
+        (
+            "api",
+            command(
+                "uv", "run", "uvicorn", "app.main:app", "--app-dir", "apps/api", "--reload",
+                "--host", "127.0.0.1", "--port", str(api_port),
+            ),
+            {},
+        ),
+        (
+            "web",
+            command(
+                "pnpm", "--filter", "@ai-qa/web", "dev",
+                "--host", "127.0.0.1", "--port", str(web_port), "--strictPort",
+            ),
+            {"VITE_DEV_API_TARGET": f"http://127.0.0.1:{api_port}"},
+        ),
     ]
-    running = [(label, _spawn(label, argv, lock)) for label, argv in services]
+    running = [(label, _spawn(label, argv, lock, extra_env)) for label, argv, extra_env in services]
     processes = [process for _, process in running]
 
     def shutdown(*_: object) -> None:
