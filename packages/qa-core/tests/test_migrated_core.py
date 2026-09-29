@@ -38,9 +38,36 @@ def test_locator_healer_proposal():
         file_path="pages/login_page.py",
     )
     assert proposal.old_locator == "button#submit-btn"
-    assert proposal.proposed_locator == '[data-testid="btn"]' or "testid" in proposal.proposed_locator
+    assert proposal.proposed_locator in {'[data-testid="submit-btn"]', 'role=button[name="Submit"]'}
     assert proposal.confidence >= 0.8
     assert proposal.applied is False
+
+
+def test_locator_healer_does_not_invent_candidates_without_dom_evidence():
+    proposal = LocatorHealer.generate_repair_proposal(
+        old_locator="button#missing-submit",
+        dom_snapshot="<main><button>Continue</button></main>",
+    )
+    assert proposal.proposed_locator == "button#missing-submit"
+    assert proposal.confidence == 0
+    assert "No replacement is recommended" in proposal.reason
+
+    ambiguous = LocatorHealer.generate_repair_proposal(
+        old_locator="button#submit-btn",
+        dom_snapshot='<button data-testid="submit-btn">Submit</button><button data-testid="submit-btn">Submit</button>',
+    )
+    assert ambiguous.confidence == 0
+
+
+def test_locator_candidates_rank_semantic_unique_targets_first():
+    from qa_core.healing.locator_intelligence import rank_locator_candidates
+
+    ranked = rank_locator_candidates([
+        {"kind": "css", "value": "button.primary"},
+        {"kind": "role", "value": "button", "name": "Save", "exact": True},
+        {"kind": "test_id", "value": "save", "nth": 1},
+    ])
+    assert [item["kind"] for item in ranked] == ["role", "test_id", "css"]
 
 
 def test_knowledge_loader_and_authoring(tmp_path: Path):

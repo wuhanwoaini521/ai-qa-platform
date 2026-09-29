@@ -119,6 +119,9 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                     await page.mouse.dblclick(command["x"], command["y"])
                 elif action == "move":
                     await page.mouse.move(command["x"], command["y"])
+                elif action == "pick_element":
+                    for frame in page.frames:
+                        await frame.evaluate("() => { window.__qaRecorderPickMode = true; window.__qaRecorderEnabled = true; }")
                 elif action == "wheel":
                     await page.mouse.wheel(command.get("delta_x", 0), command.get("delta_y", 0))
                 elif action == "type":

@@ -11,11 +11,13 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
+from qa_core.healing.locator_intelligence import rank_locator_candidates
 
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
   window.__qaRecorderInstalled = true;
   window.__qaRecorderEnabled = true;
+  window.__qaRecorderPickMode = false;
   window.__qaRecorderEvents = [];
   const roleFor = el => {
     const explicit = el.getAttribute('role'); if (explicit) return explicit.split(/\s+/)[0];
@@ -64,7 +66,7 @@ RECORDER_INIT_SCRIPT = r"""(() => {
       const peers=Array.from(document.querySelectorAll('button,a,input,textarea,select,[role],h1,h2,h3,h4,h5,h6,img')).filter(item=>roleFor(item)===role && nameFor(item)===name);
       candidates.push({kind:'role', value:role, name, exact:true, nth:peers.length>1?peers.indexOf(el):null});
     }
-    for (const key of ['data-testid','data-test','data-qa']) { const value=el.getAttribute(key); if(value) { candidates.push({kind:'test_id',value,nth:Array.from(document.querySelectorAll('['+key+']')).filter(item=>item.getAttribute(key)===value).length>1?Array.from(document.querySelectorAll('['+key+']')).filter(item=>item.getAttribute(key)===value).indexOf(el):null}); break; } }
+    for (const key of ['data-testid','data-test','data-qa']) { const value=el.getAttribute(key); if(value) { const peers=Array.from(document.querySelectorAll('['+key+']')).filter(item=>item.getAttribute(key)===value); candidates.push(key==='data-testid' ? {kind:'test_id',value,nth:peers.length>1?peers.indexOf(el):null} : {kind:'css',value:'['+key+'='+JSON.stringify(value)+']',nth:peers.length>1?peers.indexOf(el):null}); break; } }
     if (el.id && !unstable(el.id)) candidates.push({kind:'id',value:el.id});
     if (el.getAttribute('name')) candidates.push({kind:'name',value:el.getAttribute('name')});
     if (el.getAttribute('placeholder')) candidates.push({kind:'placeholder',value:el.getAttribute('placeholder')});
@@ -79,7 +81,9 @@ RECORDER_INIT_SCRIPT = r"""(() => {
   const emit = event => { if (window.__qaRecorderEnabled) window.__qaRecorderEvents.push(event); };
   let inputTimer, clickTimer;
   document.addEventListener('click', event => {
-    const target=describe(event.target); if(!target) return;
+    const raw=event.target, actionable=raw instanceof Element ? raw.closest('button,a,input,textarea,select,[role]') || raw : raw;
+    const target=describe(actionable); if(!target) return;
+    if(window.__qaRecorderPickMode) { emit({action:'pick',...target}); window.__qaRecorderPickMode=false; event.preventDefault(); event.stopImmediatePropagation(); return; }
     if(target.tag==='select' || ['checkbox','radio'].includes(target.type)) return;
     if(event.detail>1) { clearTimeout(clickTimer); emit({action:'double_click',...target}); return; }
     clickTimer=setTimeout(()=>emit({action:'click',...target}),260);
@@ -165,6 +169,7 @@ class RecorderSession:
     steps: list[dict[str, Any]] = field(default_factory=list)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     last_activity: float = field(default_factory=time.monotonic)
+    picked_element: dict[str, Any] | None = None
 
 
 class BrowserRecorderService:
@@ -246,8 +251,11 @@ class BrowserRecorderService:
             session.last_url = page.url
             for frame in page.frames:
                 frame_events = await frame.evaluate("() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []")
-                if session.state == "RECORDING":
-                    for event in frame_events:
+                for event in frame_events:
+                    if event.get("action") == "pick":
+                        session.picked_element = event
+                        continue
+                    if session.state == "RECORDING":
                         for step in self.events_to_steps([event]):
                             if not session.steps or self._dedupe_key(session.steps[-1]) != self._dedupe_key(step):
                                 session.steps.append(step)
@@ -256,7 +264,11 @@ class BrowserRecorderService:
             tabs = []
             for index, item in enumerate(session.context.pages):
                 tabs.append({"index": index, "url": item.url, "title": await item.title(), "active": item is page})
-            return {"type": "frame", "url": page.url, "title": await page.title(), "image": base64.b64encode(image).decode("ascii"), "state": session.state, "steps": session.steps, "new_steps": new_steps, "tabs": tabs}
+            picked = session.picked_element
+            session.picked_element = None
+            if picked:
+                picked = {**picked, "ranked_candidates": rank_locator_candidates(picked.get("candidates") or [])}
+            return {"type": "frame", "url": page.url, "title": await page.title(), "image": base64.b64encode(image).decode("ascii"), "state": session.state, "steps": session.steps, "new_steps": new_steps, "tabs": tabs, "picked": picked}
         except Exception as error:
             return {"type": "error", "message": str(error), "url": page.url, "state": session.state, "steps": session.steps}
 
@@ -274,7 +286,7 @@ class BrowserRecorderService:
                 continue
             locator_data = None
             if action != "navigate":
-                candidates = event.get("candidates") or []
+                candidates = rank_locator_candidates(event.get("candidates") or [])
                 candidate = candidates[0] if candidates else {"kind": "css", "value": event.get("tag", "body")}
                 locator_data = {"kind": candidate.get("kind", "css"), "value": str(candidate.get("value", "")), "name": candidate.get("name"), "exact": candidate.get("exact", True), "nth": candidate.get("nth", event.get("nth"))}
             result.append(RecorderStep(action=action, locator=locator_data, frame_path=event.get("frame_path", []), url=event.get("url") if action == "navigate" else None, value=str(event.get("value", "")) if action in ("fill", "select") else None, key=event.get("key") if action == "press" else None, description=event.get("name") or event.get("url") or action.replace("_", " ").title()).model_dump(mode="json"))

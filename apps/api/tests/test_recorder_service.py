@@ -1,4 +1,5 @@
 from app.services.recorder_service import (
+    BrowserRecorderService,
     RecorderGenerateRequest,
     RecorderLocator,
     RecorderStep,
@@ -47,3 +48,19 @@ def test_locator_nth_zero_is_preserved_for_duplicate_matches() -> None:
     )
 
     assert '.nth(0).click()' in source
+
+
+def test_recorder_prefers_semantic_locator_candidates():
+    steps = BrowserRecorderService.events_to_steps([{
+        "action": "click",
+        "tag": "button",
+        "name": "Save",
+        "candidates": [
+            {"kind": "css", "value": "button.primary"},
+            {"kind": "role", "value": "button", "name": "Save", "exact": True},
+            {"kind": "test_id", "value": "save"},
+        ],
+    }])
+
+    assert steps[0]["locator"]["kind"] == "role"
+    assert steps[0]["locator"]["name"] == "Save"

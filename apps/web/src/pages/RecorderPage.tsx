@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
 import { MonacoEditorPane, MonacoEditorInstance } from '../features/automation-studio/components/MonacoEditorPane';
 import { EditorTab } from '../features/automation-studio/types';
 import { GitDiffResult, Project, RecorderStep, TestCasePriority } from '../types';
 
 type StepAction = RecorderStep['action'];
-type Frame = { type: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; message?: string };
+type Frame = { type: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][] } | null; message?: string };
 
 const actions: StepAction[] = ['navigate','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
 const labels: Record<StepAction, string> = { navigate:'打开页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
@@ -34,6 +34,8 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const [code, setCode] = useState('');
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
+  const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
+  const pickTargetStepRef = useRef<string | null>(null);
   const [priority, setPriority] = useState<TestCasePriority>('P2');
   const wsRef = useRef<WebSocket | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
@@ -87,6 +89,20 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
       if (data.type === 'frame') {
         setFrame(data);
         if (data.steps) setSteps(data.steps);
+        if (data.picked && pickTargetStepRef.current) {
+          const best = data.picked.ranked_candidates?.[0];
+          if (best) {
+            setCode('');
+            setSteps((current) => current.map((step) => {
+              if (step.id !== pickTargetStepRef.current) return step;
+              const updated = { ...step, locator: best, frame_path: data.picked?.frame_path || [] };
+              send('edit_step', { step: updated });
+              return updated;
+            }));
+          }
+          pickTargetStepRef.current = null;
+          setPickTargetStep(null);
+        }
         if (data.url) setUrl(data.url);
         if (data.state) setRecording(data.state === 'RECORDING');
       } else if (data.type === 'error' || data.type === 'command_error') setError(data.message || '浏览器操作失败');
@@ -233,10 +249,10 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
       </section>
       <section style={{display:'flex',flexDirection:'column',minHeight:0,gap:8}}>
         <div style={{display:'flex',gap:8,alignItems:'center'}}><strong>执行步骤 ({steps.length})</strong><div style={{flex:1}}/><select aria-label="添加断言" defaultValue="" onChange={(e)=>{if(e.target.value)addAssertion(e.target.value as StepAction);e.target.value=''}}><option value="">+ 添加断言</option><option value="assert_visible">元素可见</option><option value="assert_text">包含文本</option><option value="assert_url">URL 匹配</option><option value="assert_title">标题匹配</option><option value="assert_count">元素数量</option></select></div>
-        <div style={{overflowY:'auto',minHeight:130,maxHeight:'45%',display:'flex',flexDirection:'column',gap:6}}>{steps.map((step,index)=><div key={step.id} style={{display:'grid',gridTemplateColumns:'90px minmax(60px,1fr) minmax(60px,1fr) minmax(60px,1fr) auto',gap:5,alignItems:'center',padding:6,border:'1px solid var(--border-color)',borderRadius:6}}>
+        <div style={{overflowY:'auto',minHeight:130,maxHeight:'45%',display:'flex',flexDirection:'column',gap:6}}>{steps.map((step,index)=><div key={step.id} style={{display:'grid',gridTemplateColumns:'90px minmax(60px,1fr) minmax(60px,1fr) minmax(60px,1fr) auto auto',gap:5,alignItems:'center',padding:6,border:'1px solid var(--border-color)',borderRadius:6}}>
           <select aria-label="步骤类型" value={step.action} onChange={(e)=>updateStep(index,{action:e.target.value as StepAction})}>{actions.map((action)=><option key={action} value={action}>{labels[action]}</option>)}</select>
           <input aria-label="步骤说明" value={step.description} onChange={(e)=>updateStep(index,{description:e.target.value})} />{actionInputs(step,index)}
-          <div style={{display:'flex'}}><button title="上移" disabled={index===0} onClick={()=>{const next=[...steps];[next[index-1],next[index]]=[next[index],next[index-1]];setSteps(next);send('reorder',{ids:next.map(s=>s.id)})}}><ArrowUp size={14}/></button><button title="下移" disabled={index===steps.length-1} onClick={()=>{const next=[...steps];[next[index+1],next[index]]=[next[index],next[index+1]];setSteps(next);send('reorder',{ids:next.map(s=>s.id)})}}><ArrowDown size={14}/></button><button title="删除" onClick={()=>{setSteps(steps.filter((_,i)=>i!==index));send('delete_step',{id:step.id})}}><Trash2 size={14}/></button></div>
+          <button title="从内置浏览器拾取此步骤定位器" disabled={!sessionId} onClick={()=>{pickTargetStepRef.current=step.id;setPickTargetStep(step.id);send('pick_element')}}><Crosshair size={14}/>{pickTargetStep===step.id?'请在页面点击':'拾取'}</button><div style={{display:'flex'}}><button title="上移" disabled={index===0} onClick={()=>{const next=[...steps];[next[index-1],next[index]]=[next[index],next[index-1]];setSteps(next);send('reorder',{ids:next.map(s=>s.id)})}}><ArrowUp size={14}/></button><button title="下移" disabled={index===steps.length-1} onClick={()=>{const next=[...steps];[next[index+1],next[index]]=[next[index],next[index+1]];setSteps(next);send('reorder',{ids:next.map(s=>s.id)})}}><ArrowDown size={14}/></button><button title="删除" onClick={()=>{setSteps(steps.filter((_,i)=>i!==index));send('delete_step',{id:step.id})}}><Trash2 size={14}/></button></div>
         </div>)}</div>
         <details><summary style={{cursor:'pointer'}}>用例和文件设置</summary><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,padding:6}}><input aria-label="Case 名称" value={caseName} onChange={(e)=>setCaseName(e.target.value)}/><input aria-label="测试函数名" value={testName} onChange={(e)=>setTestName(e.target.value)}/><input aria-label="项目文件路径" value={filePath} onChange={(e)=>setFilePath(e.target.value)}/><select value={priority} onChange={(e)=>setPriority(e.target.value as TestCasePriority)}><option value="P1">高优先级</option><option value="P2">中优先级</option><option value="P3">低优先级</option></select><input aria-label="Test Suite / Module" value={suiteName} onChange={(e)=>setSuiteName(e.target.value)} placeholder="Test Suite / Module"/><input aria-label="Case tags" value={tagsText} onChange={(e)=>setTagsText(e.target.value)} placeholder="标签，逗号分隔"/><input aria-label="Pytest markers" value={markersText} onChange={(e)=>setMarkersText(e.target.value)} placeholder="pytest marker，逗号分隔"/></div></details>
         <div style={{flex:1,minHeight:180,border:'1px solid var(--border-color)',borderRadius:6,overflow:'hidden',position:'relative'}}><MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} onEditorReady={()=>{setEditorReady(true);setShowCodeFallback(false)}} onChange={(value)=>setCode(value||'')}/>{showCodeFallback && !editorReady && <textarea aria-label="生成的 Python 脚本" value={code} onChange={(event)=>setCode(event.target.value)} spellCheck={false} style={{position:'absolute',inset:0,width:'100%',height:'100%',resize:'none',border:0,padding:12,fontFamily:'var(--font-mono)',fontSize:13,lineHeight:1.5,background:'var(--surface-primary)',color:'var(--text-primary)'}}/>}</div>
