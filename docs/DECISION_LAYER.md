@@ -10,6 +10,10 @@ API Key 只发送到服务端，并由 Fernet 认证加密后保存在数据库�
 
 设置和决策接口仅限具有 `SECURITY_ADMIN` 权限的用户调用。启用后，正常选择请求会在 Jev 不可用、超时或置信度低于阈值时回退；若候选项含 `unknown` 则选择它，否则返回空选择，调用方应按未决结果处理。调用元数据写入 AI invocation 记录，不保存决策状态正文。
 
+## 常规 AI 提供方
+
+Settings 页面中的“常规 AI 提供方”单独配置 QA 助手、需求分析、用例生成和失败诊断使用的 Fake 或 OpenAI-compatible provider。它有独立的数据库配置记录与加密 API Key，不会读写 Jev 决策设置；首次配置前可继续使用 `.env` 中的 `QA_AI_*` 默认值。常规 AI 设置由安全管理员保存，保存后即时生效并在 API 重启时从数据库恢复。密钥加密依赖 `APP_SECRET_KEY`；轮换该值后需要重新保存 AI API Key。
+
 ## API
 
 - `GET /api/decision/settings`：读取非敏感设置。

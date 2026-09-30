@@ -89,6 +89,7 @@ Thumbs.db
 
 # Runtime data (ignore contents but keep .gitkeep)
 runtime/acceptance-*/
+runtime/dev-logs/
 runtime/projects/*
 !runtime/projects/.gitkeep
 runtime/workspaces/*

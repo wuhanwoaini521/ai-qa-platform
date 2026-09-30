@@ -4,8 +4,9 @@
 
 ## 使用
 
-1. 在侧边栏打开“浏览器录制器”，选择项目并输入目标 URL。
-2. 启动浏览器并开始录制。浏览器运行在 API 服务所在主机/容器中；Docker 部署时目标站点必须能从 API 容器访问。
+1. 在侧边栏打开“浏览器录制器”，选择项目并启动浏览器。初始页面为 `about:blank`；在地址栏输入目标 URL 并按 Enter。
+2. 开始录制。浏览器运行在 API 服务所在主机/容器中；Docker 部署时目标站点必须能从 API 容器访问。
+   如果初始地址访问失败，浏览器会话仍会保留；修改地址并按 Enter 即可重试。
 3. 在远程画面中操作。右侧 Steps 面板会持续显示操作，可编辑定位器、操作、参数、说明和顺序，也可以添加断言。
 4. 生成 Python 脚本，在 Monaco 中编辑用例名、文件路径、Suite/Module、Case tags 和 pytest markers。
 5. 点击“保存为 Case 并运行”。脚本写入项目工作区，平台创建 Case 与自动化绑定，再将绑定的 pytest node id 交给现有本地执行器。完成后打开运行详情查看状态和 pytest 日志。
@@ -39,6 +40,19 @@ mise exec -- uv run playwright install chromium
 ```
 
 API Docker 镜像会在构建时安装 Playwright Chromium 及 headless 运行库。macOS/Windows 上本地录制优先尝试 Chromium，之后回退 Edge/Chrome。
+
+## 目标网站的网络与代理
+
+录制器浏览器、AI 页面探索运行在 API 主机；“保存为 Case 并运行”生成的浏览器测试运行在本地 API 或 worker 主机。两处都需要能访问目标网站。配置 `BROWSER_PROXY_URL` 可让这些 Playwright 浏览器通过 HTTP、HTTPS 或 SOCKS5 代理访问；可选的 `BROWSER_PROXY_BYPASS` 用逗号分隔不走代理的主机。代理 URL 中的用户名和密码会作为 Playwright 认证参数传递。未设置专用变量时，浏览器会尝试使用 `HTTPS_PROXY`、`HTTP_PROXY` 与 `NO_PROXY` 环境变量。
+
+本地开发可在项目 `.env` 中设置：
+
+```dotenv
+BROWSER_PROXY_URL=http://proxy.example.com:3128
+BROWSER_PROXY_BYPASS=localhost,127.0.0.1
+```
+
+Docker Compose 会把这两个变量传给 API 和 worker 容器；修改后重新创建容器。代理地址必须从容器内部可达，不能使用只在宿主机可访问的 `127.0.0.1`。如果没有可用的网络或代理，应用无法绕过主机的出站访问限制；此时使用 API 主机可访问的测试站点地址。
 
 ## 数据恢复和限制
 

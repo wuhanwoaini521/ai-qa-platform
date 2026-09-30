@@ -36,6 +36,8 @@ services:
       QA_AI_API_KEY: ${QA_AI_API_KEY:-}
       QA_AI_BASE_URL: ${QA_AI_BASE_URL:-https://api.openai.com/v1}
       QA_AI_MODEL: ${QA_AI_MODEL:-gpt-4o-mini}
+      BROWSER_PROXY_URL: ${BROWSER_PROXY_URL:-}
+      BROWSER_PROXY_BYPASS: ${BROWSER_PROXY_BYPASS:-}
       # Integrations (optional; each falls back to a dry-run adapter when unset).
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       JIRA_BASE_URL: ${JIRA_BASE_URL:-}
@@ -75,6 +77,8 @@ services:
       WORKER_CAPABILITIES: playwright,chromium,firefox,pytest,python3
       WORKSPACE_STORAGE_DIR: /app/runtime/workspaces
       ARTIFACT_STORAGE_DIR: /app/runtime/artifacts
+      BROWSER_PROXY_URL: ${BROWSER_PROXY_URL:-}
+      BROWSER_PROXY_BYPASS: ${BROWSER_PROXY_BYPASS:-}
     volumes:
       - runtime_data:/app/runtime
     deploy:

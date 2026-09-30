@@ -40,6 +40,14 @@ AI_MAX_REQUESTS_PER_RUN=25
 AI_MAX_TOKENS_PER_RUN=50000
 ```
 
+### OpenCode-compatible gateways
+
+The OpenAI-compatible provider identifies itself as `ai-qa-platform` and sends
+`x-opencode-session` on every completion request. Each `AICompletionRequest` gets
+an opaque session ID by default; retries keep the same ID. Callers that make
+multiple related completions can pass the same `session_id` to keep those calls
+on one OpenCode session route. See the [OpenCode Go client requirements](https://opencode.ai/docs/go/#where-can-i-use-it).
+
 ---
 
 ## 3. Telemetry & Auditing
