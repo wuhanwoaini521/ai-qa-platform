@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
 import { TestExecution } from '../types';
 import { api } from '../api/client';
+import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import {
   PlayCircle,
   Plus,
   RefreshCw,
   Clock,
   Terminal,
+  ChevronDown,
   ChevronRight,
   StopCircle,
   Sparkles,
@@ -37,6 +39,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
+  const regressionTask = useContextTask(currentProjectId, 'run', selectedRun?.id ?? currentProjectId);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
   const [externalArtifacts, setExternalArtifacts] = useState<ExternalArtifactReference[]>([]);
   const [artifactPreview, setArtifactPreview] = useState<{ name: string; url: string } | null>(null);
@@ -267,6 +270,25 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     }
   };
 
+  const handleAiRegression = () => {
+    if (!currentProjectId) return;
+    void regressionTask.start({
+      type: 'RUN_REGRESSION',
+      goal: selectedRun ? t('aiRegressionRunGoal', { id: selectedRun.id }) : t('aiRegressionProjectGoal'),
+      project_id: currentProjectId,
+      workspace_id: currentProjectId,
+      inputs: { ...(selectedRun ? {
+        source_run_id: selectedRun.id,
+        nodeids: selectedRun.nodeids.length ? selectedRun.nodeids : selectedRun.executions.map((execution) => execution.nodeid),
+        environment: selectedRun.environment,
+        browser: selectedRun.browser,
+        markers: selectedRun.markers,
+        runner_type: selectedRun.runner_type,
+        runner_profile_id: selectedRun.runner_profile_id,
+      } : {}) },
+    });
+  };
+
   const handleCancelRun = async (runId: string) => {
     try {
       const updated = await api.cancelTestRun(runId);
@@ -333,13 +355,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+    <div className="runs-page">
+      <div className="page-header runs-page-header">
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('pageTitle')}</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('pageSubtitle')}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="runs-page-actions" style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" disabled={!currentProjectId || regressionTask.busy} onClick={handleAiRegression}><Sparkles size={16} /> {regressionTask.busy ? t('aiRegressionStarting') : t('aiRegression')}</button>
           <button className="btn btn-secondary btn-sm" onClick={fetchRuns} title={t('refreshRuns')}>
             <RefreshCw size={14} /> {t('common:refresh')}
           </button>
@@ -364,6 +387,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         </div>
       </div>
 
+      <ContextTaskProgress task={regressionTask.task} error={regressionTask.error} />
+
       {projects.length === 0 ? (
         <div className="card">
           <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -371,7 +396,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px' }}>
+        <div className="runs-layout-grid">
           {/* Left: Execution Runs List */}
           <div className="card">
             <div className="card-header">
@@ -451,8 +476,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Summary Header */}
               <div className="card">
-                <div className="card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="card-header runs-selected-header">
+                  <div className="runs-selected-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {getStatusBadge(selectedRun.status)}
                     <span className="card-title" style={{ fontFamily: 'var(--font-mono)' }}>
                       {t('runTitle', { id: selectedRun.id })}
@@ -461,7 +486,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       {t('runnerLabel', { type: selectedRun.runner_type || 'LOCAL' })}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="runs-selected-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {(selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED') ? (
                       <button
                         className="btn btn-secondary btn-sm"
@@ -605,6 +630,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         : t('noExecutions')}
                     </div>
                   ) : (
+                    <div className="table-responsive">
                     <table className="data-table" style={{ fontSize: '12px' }}>
                       <thead>
                         <tr>
@@ -629,45 +655,39 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Terminal-Style Realtime Log Viewer */}
-              <div className="card">
-                <div className="card-header" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f8fafc' }}>
-                    <Terminal size={14} color="#38bdf8" />
-                    <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                      {t('terminalTitle')}
-                    </span>
-                  </div>
-                  {selectedRun.status === 'RUNNING' && (
-                    <span style={{ fontSize: '11px', color: '#38bdf8', animation: 'pulse 1.5s infinite' }}>
-                      {t('liveStreaming')}
-                    </span>
-                  )}
-                </div>
+              <details
+                className="card run-console"
+                open={selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED'}
+                onToggle={(event) => {
+                  if (event.currentTarget.open) {
+                    requestAnimationFrame(() => {
+                      if (terminalLogRef.current) terminalLogRef.current.scrollTop = terminalLogRef.current.scrollHeight;
+                    });
+                  }
+                }}
+              >
+                <summary className="run-console-summary">
+                  <span><Terminal size={15} /> {t('terminalTitle')}</span>
+                  <span className="run-console-meta">
+                    {selectedRun.status === 'RUNNING' && <span className="run-console-live">{t('liveStreaming')}</span>}
+                    <ChevronDown className="run-console-chevron" size={15} aria-hidden="true" />
+                  </span>
+                </summary>
                 <div
+                  className="run-console-output"
                   ref={terminalLogRef}
-                  style={{
-                    background: '#090d16',
-                    color: '#e2e8f0',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '12px',
-                    padding: '16px',
-                    maxHeight: '300px',
-                    overflowY: 'auto',
-                    whiteSpace: 'pre-wrap',
-                    lineHeight: 1.6,
-                  }}
                 >
                   {selectedRun.log_output ||
                     (selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED'
                       ? t('awaitingStream')
                       : t('noConsoleOutput'))}
                 </div>
-              </div>
+              </details>
             </div>
           ) : (
             <div className="card">
@@ -866,6 +886,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
                   {/* Status Mapping Table */}
                   <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                    <div className="table-responsive">
                     <table className="data-table" style={{ fontSize: '12px' }}>
                       <thead>
                         <tr>
@@ -904,6 +925,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
               ) : (

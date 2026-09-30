@@ -12,6 +12,7 @@ import {
   Project,
 } from '../types';
 import { api } from '../api/client';
+import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import {
   AlertTriangle,
   Sparkles,
@@ -88,6 +89,28 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const [rerunning, setRerunning] = useState<boolean>(false);
   const [rerunMessage, setRerunMessage] = useState<string | null>(null);
+  const [startingFix, setStartingFix] = useState(false);
+  const fixTask = useContextTask(currentProjectId, 'failure', selectedFailure?.id ?? null);
+
+  const handleAutoFix = async () => {
+    if (!selectedFailure || !currentProjectId) return;
+    setStartingFix(true);
+    const sourceRun = await api.getTestRun(selectedFailure.run_id).catch(() => null);
+    await fixTask.start({
+      type: 'FIX_FAILURE',
+      goal: t('autoFixGoal', { nodeid: selectedFailure.test_nodeid }),
+      project_id: currentProjectId,
+      workspace_id: currentProjectId,
+      inputs: {
+        failure_id: selectedFailure.id,
+        test_nodeid: selectedFailure.test_nodeid,
+        run_id: selectedFailure.run_id,
+        file_path: selectedFailure.test_nodeid.split('::')[0],
+        ...(sourceRun ? { environment: sourceRun.environment, browser: sourceRun.browser, runner_type: sourceRun.runner_type, runner_profile_id: sourceRun.runner_profile_id, region: sourceRun.environment?.QA_REGION } : {}),
+      },
+    });
+    setStartingFix(false);
+  };
 
   const fetchFailures = async () => {
     try {
@@ -418,6 +441,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   {getCategoryBadge(selectedFailure.classification)}
                 </div>
                 <div className="card-body">
+                  <p style={{ margin: '0 0 12px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {t('ruleClassifier')}: {selectedFailure.classification}
+                  </p>
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
                       {t('errorMessage')}
@@ -447,12 +473,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       {diagnosing ? t('diagnosing') : t('diagnoseAI')}
                     </button>
                     <button
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-secondary btn-sm"
                       disabled={generatingProposal}
                       onClick={handleGenerateProposal}
                     >
                       <Sparkles size={13} />{' '}
                       {generatingProposal ? t('generatingProposal') : t('generateProposal')}
+                    </button>
+                    <button className="btn btn-primary btn-sm" disabled={startingFix || fixTask.busy} onClick={() => void handleAutoFix()}>
+                      <Sparkles size={13} /> {startingFix || fixTask.busy ? t('autoFixStarting') : t('autoFix')}
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
@@ -484,6 +513,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       {rerunMessage}
                     </div>
                   )}
+                  <ContextTaskProgress task={fixTask.task} error={fixTask.error} />
                 </div>
               </div>
 
@@ -502,6 +532,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </span>
                   </div>
                   <div className="card-body">
+                    <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {t('aiAnalysisSource')}: {aiDiagnosis.provider || t('unknownProvider')}
+                    </p>
+                    {(aiDiagnosis.fallback_used || aiDiagnosis.provider === 'fake') && (
+                      <p role="status" style={{ color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '8px 10px', fontSize: '12px', margin: '0 0 12px' }}>
+                        {t('fallbackDiagnosis')}
+                      </p>
+                    )}
                     <p style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.6, marginBottom: '12px' }}>
                       <b>{t('rootCause')}</b> {aiDiagnosis.root_cause}
                     </p>

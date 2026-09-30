@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/client';
 import {
@@ -36,6 +36,7 @@ export function useAutomationBinding({
 }: UseAutomationBindingOptions) {
   const { t } = useTranslation('testCases');
   const [selectedBinding, setSelectedBinding] = useState<AutomationBinding | null>(null);
+  const bindingRequest = useRef(0);
   const [isBindingModalOpen, setIsBindingModalOpen] = useState(false);
   const [bindingFormData, setBindingFormData] = useState<BindingFormData>({
     file_path: '',
@@ -52,8 +53,11 @@ export function useAutomationBinding({
   const { caseHistory, loadingCaseHistory, fetchCaseHistory, setCaseHistory } = useCaseHistory();
 
   const fetchBinding = async (caseId: string) => {
+    const requestId = ++bindingRequest.current;
+    setSelectedBinding(null);
     try {
       const binding = await api.getAutomationBinding(caseId);
+      if (requestId !== bindingRequest.current) return;
       setSelectedBinding(binding);
       if (binding) {
         setBindingFormData({
@@ -79,7 +83,7 @@ export function useAutomationBinding({
     }
   };
 
-  const clearBinding = () => setSelectedBinding(null);
+  const clearBinding = () => { bindingRequest.current += 1; setSelectedBinding(null); };
 
   const clearDraft = () => {
     setGeneratedDraft(null);

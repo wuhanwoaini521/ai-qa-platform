@@ -1,20 +1,26 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckSquare, ExternalLink, Tag } from 'lucide-react';
+import { CheckSquare, ExternalLink, Sparkles, Tag } from 'lucide-react';
 import { AutomationStatus, TestCase } from '../../../types';
 
 interface TestCaseDetailProps {
   selectedCase: TestCase;
   onUpdateStatus: (caseId: string, automationStatus: AutomationStatus) => void;
+  onOptimize?: () => void;
+  onReview?: () => void;
+  aiDisabled?: boolean;
 }
 
 export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
   selectedCase,
   onUpdateStatus,
+  onOptimize,
+  onReview,
+  aiDisabled,
 }) => {
   const { t } = useTranslation('testCases');
   return (
-    <div className="card">
+    <div className="card test-case-detail">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <CheckSquare size={16} color="#16a34a" />
@@ -31,6 +37,8 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onOptimize}><Sparkles size={13} /> {t('tasks:optimizeAction')}</button>
+          <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onReview}><Sparkles size={13} /> {t('tasks:reviewAction')}</button>
           <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>
             {selectedCase.priority}
           </span>

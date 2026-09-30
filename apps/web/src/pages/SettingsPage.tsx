@@ -5,7 +5,17 @@ import { SUPPORTED_LANGUAGES } from '../i18n';
 import { START_PAGE_OPTIONS, usePreferences } from '../app/Preferences';
 import { useProjectScope } from '../app/ProjectScope';
 import { api } from '../api/client';
-import type { DecisionResult, JevSettings, JevSettingsUpdate } from '../types';
+import type { AIProviderConnectionResult, AIProviderSettings, AIProviderSettingsUpdate, AIStatusResponse, DecisionResult, JevSettings, JevSettingsUpdate } from '../types';
+
+const defaultAISettings: AIProviderSettings = {
+  provider: 'fake',
+  api_key_configured: false,
+  api_key_masked: null,
+  model: 'gpt-4o-mini',
+  base_url: 'https://api.openai.com/v1',
+  timeout: 30,
+  max_retries: 3,
+};
 
 const defaultJevSettings: JevSettings = {
   enabled: false,
@@ -17,13 +27,21 @@ const defaultJevSettings: JevSettings = {
   minimum_confidence: 0.6,
 };
 
-/** Settings page: language, start page and default project. Everything here is wired to real behaviour. */
+/** Settings page for server-backed AI providers and browser-local interface preferences. */
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation('settings');
   const { language, setLanguage, startPage, setStartPage, defaultProjectId, setDefaultProjectId, reset } =
     usePreferences();
   const { projects } = useProjectScope();
   const [jev, setJev] = useState<JevSettings>(defaultJevSettings);
+  const [aiSettings, setAiSettings] = useState<AIProviderSettings>(defaultAISettings);
+  const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [loadingAI, setLoadingAI] = useState(true);
+  const [savingAI, setSavingAI] = useState(false);
+  const [testingAI, setTestingAI] = useState(false);
+  const [aiMessage, setAiMessage] = useState('');
+  const [aiConnection, setAiConnection] = useState<AIProviderConnectionResult | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [loadingJev, setLoadingJev] = useState(true);
   const [savingJev, setSavingJev] = useState(false);
@@ -47,6 +65,63 @@ export const SettingsPage: React.FC = () => {
     });
     return () => { active = false; };
   }, [t]);
+
+  useEffect(() => {
+    let active = true;
+    api.getAIProviderSettings().then((value) => {
+      if (active) setAiSettings(value);
+    }).catch(() => {
+      if (active) setAiMessage(t('aiConfig.loadFailed'));
+    }).finally(() => {
+      if (active) setLoadingAI(false);
+    });
+    return () => { active = false; };
+  }, [t]);
+
+  useEffect(() => {
+    let active = true;
+    api.getAIStatus().then((value) => { if (active) setAiStatus(value); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  const aiPayload = (clearKey = false): AIProviderSettingsUpdate => ({
+    provider: aiSettings.provider,
+    api_key: aiApiKey || undefined,
+    clear_api_key: clearKey,
+    model: aiSettings.model,
+    base_url: aiSettings.base_url,
+    timeout: Number(aiSettings.timeout),
+    max_retries: Number(aiSettings.max_retries),
+  });
+
+  const saveAI = async (clearKey = false) => {
+    setSavingAI(true);
+    setAiMessage('');
+    try {
+      const saved = await api.saveAIProviderSettings(aiPayload(clearKey));
+      setAiSettings(saved);
+      void api.getAIStatus().then(setAiStatus).catch(() => undefined);
+      setAiApiKey('');
+      setAiMessage(t(clearKey ? 'aiConfig.keyCleared' : 'aiConfig.saved'));
+    } catch {
+      setAiMessage(t('aiConfig.saveFailed'));
+    } finally {
+      setSavingAI(false);
+    }
+  };
+
+  const testAI = async () => {
+    setTestingAI(true);
+    setAiMessage('');
+    setAiConnection(null);
+    try {
+      setAiConnection(await api.testAIProviderConnection(aiPayload()));
+    } catch {
+      setAiMessage(t('aiConfig.connectionFailed'));
+    } finally {
+      setTestingAI(false);
+    }
+  };
 
   const parsedOptions = useMemo(() => playOptions.split('\n').map((line) => {
     const separator = line.indexOf('|');
@@ -111,7 +186,59 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '720px' }}>
+    <div className="page-container settings-page">
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="card-header"><span className="card-title">{t('aiConfig.title')}</span></div>
+        <div className="card-body">
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>{t('aiConfig.description')}</p>
+          {aiStatus && <div className={`ai-runtime-status is-${aiStatus.status.toLowerCase()}`} role="status">
+            <strong>{t(`aiConfig.status_${aiStatus.status}`)}</strong>
+            <span>{aiStatus.provider} · {aiStatus.model}</span>
+            {aiStatus.failure_reason && <code>{aiStatus.failure_reason}</code>}
+            <small>{aiStatus.fallback_active ? t('aiConfig.fallbackActive') : t('aiConfig.realProviderStatus')}</small>
+          </div>}
+          {loadingAI ? <p>{t('aiConfig.loading')}</p> : <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+              <div>
+                <label className="form-label" htmlFor="ai-provider">{t('aiConfig.provider')}</label>
+                <select id="ai-provider" className="form-control" value={aiSettings.provider} onChange={(event) => setAiSettings({ ...aiSettings, provider: event.target.value as AIProviderSettings['provider'] })}>
+                  <option value="fake">{t('aiConfig.fakeProvider')}</option>
+                  <option value="openai-compatible">{t('aiConfig.openAICompatibleProvider')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ai-api-key">{t('aiConfig.apiKey')}</label>
+                <input id="ai-api-key" className="form-control" type="password" autoComplete="new-password" value={aiApiKey} onChange={(event) => setAiApiKey(event.target.value)} placeholder={aiSettings.api_key_configured ? t('aiConfig.keyConfigured') : t('aiConfig.apiKeyPlaceholder')} />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{t('aiConfig.secretNote')}</div>
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ai-model">{t('aiConfig.model')}</label>
+                <input id="ai-model" className="form-control" value={aiSettings.model} onChange={(event) => setAiSettings({ ...aiSettings, model: event.target.value })} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label" htmlFor="ai-base-url">{t('aiConfig.baseUrl')}</label>
+                <input id="ai-base-url" className="form-control" value={aiSettings.base_url} onChange={(event) => setAiSettings({ ...aiSettings, base_url: event.target.value })} />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ai-timeout">{t('aiConfig.timeout')}</label>
+                <input id="ai-timeout" className="form-control" type="number" min="1" max="300" value={aiSettings.timeout} onChange={(event) => setAiSettings({ ...aiSettings, timeout: Number(event.target.value) })} />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ai-retries">{t('aiConfig.maxRetries')}</label>
+                <input id="ai-retries" className="form-control" type="number" min="0" max="10" value={aiSettings.max_retries} onChange={(event) => setAiSettings({ ...aiSettings, max_retries: Number(event.target.value) })} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
+              <button type="button" className="btn btn-primary btn-sm" disabled={savingAI} onClick={() => void saveAI()}><Save size={13} /> {savingAI ? t('aiConfig.saving') : t('aiConfig.save')}</button>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={testingAI} onClick={() => void testAI()}><Wifi size={13} /> {testingAI ? t('aiConfig.testing') : t('aiConfig.testConnection')}</button>
+              {aiSettings.api_key_configured && <button type="button" className="btn btn-secondary btn-sm" disabled={savingAI} onClick={() => void saveAI(true)}>{t('aiConfig.clearKey')}</button>}
+            </div>
+            {aiMessage && <p role="status" style={{ fontSize: '12px', marginTop: '12px' }}>{aiMessage}</p>}
+            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--success-color, #16a34a)' : 'var(--danger-color, #dc2626)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status}</p>}
+          </>}
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: '16px' }}>
         <div className="card-header">
           <span className="card-title">{t('title')}</span>

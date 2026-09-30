@@ -15,6 +15,7 @@ import {
   Server,
   Settings,
   MousePointerClick,
+  Workflow,
 } from 'lucide-react';
 import i18n from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
@@ -27,6 +28,7 @@ export type NavTab =
   | 'automation'
   | 'recorder'
   | 'runs'
+  | 'tasks'
   | 'flaky'
   | 'failures'
   | 'quality'
@@ -65,6 +67,7 @@ export const Navigation: React.FC = () => {
       to: projectBase ? `${projectBase}/studio` : '/projects',
     },
     { id: 'runs', labelKey: 'runs', icon: PlayCircle, to: '/runs' },
+    { id: 'tasks', labelKey: 'tasks', icon: Workflow, to: '/tasks' },
     { id: 'recorder', labelKey: 'recorder', icon: MousePointerClick, to: '/recorder' },
     { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
@@ -92,6 +95,7 @@ export const Navigation: React.FC = () => {
               to={item.to}
               end={item.end}
               title={t(item.labelKey)}
+              aria-label={t(item.labelKey)}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <Icon size={17} />

@@ -2,6 +2,10 @@ import {
   ApplyRepairPayload,
   AIFailureDiagnosisResponse,
   AIStatusResponse,
+  AIProviderSettings,
+  AIProviderSettingsUpdate,
+  AIProviderConnectionResult,
+  AITraceEvent,
   AIUsageSummary,
   AutomationBinding,
   AutomationBindingCreate,
@@ -89,6 +93,10 @@ import {
   Worker,
   WorkerCreate,
   WorkspaceValidationResult,
+  AgentTask,
+  AgentTaskEvent,
+  AgentTaskType,
+  Workspace,
   RecorderStep,
 } from '../types';
 
@@ -181,12 +189,90 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
-  createRecorderSession: (projectId: string, startUrl: string, recoveredSteps: RecorderStep[] = []) =>
-    request<{ id: string; project_id: string; state: string; url: string }>('/recorder/sessions', {
+  streamQAAssistant: async (
+    data: QAChatRequest,
+    onEvent: (event: AITraceEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    const response = await fetch(`${BASE_URL}/api/qa-assistant/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+      signal,
+    });
+    if (response.status === 401) {
+      setAuthToken(null);
+      unauthorizedHandler?.();
+    }
+    if (!response.ok) {
+      throw new Error(`API Error [${response.status}]: ${(await response.text()) || response.statusText}`);
+    }
+    if (!response.body) throw new Error('Streaming response body is unavailable.');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    const dispatch = (frame: string) => {
+      let eventName = '';
+      let payload = '';
+      for (const line of frame.split(/\r?\n/)) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        if (line.startsWith('data:')) payload += line.slice(5).trim();
+      }
+      if (!payload) return;
+      try {
+        const event = JSON.parse(payload) as AITraceEvent;
+        if (!event.type && eventName) event.type = eventName;
+        onEvent(event);
+      } catch {
+        throw new Error(`Invalid AI stream event: ${eventName || 'unknown'}`);
+      }
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        pending += decoder.decode(value, { stream: true });
+        let boundary: number;
+        while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
+          const separator = pending.match(/\r?\n\r?\n/)?.[0] ?? '\n\n';
+          dispatch(pending.slice(0, boundary));
+          pending = pending.slice(boundary + separator.length);
+        }
+      }
+      pending += decoder.decode();
+      if (pending.trim()) dispatch(pending);
+    } finally {
+      reader.releaseLock();
+    }
+  },
+  getWorkspaces: (projectId: string) => request<Workspace[]>(`/workspaces?project_id=${encodeURIComponent(projectId)}`),
+  getTasks: (projectId?: string) => request<AgentTask[]>(`/tasks${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
+  getTask: (taskId: string) => request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}`),
+  createTask: (data: { type: AgentTaskType; goal: string; project_id?: string; workspace_id?: string; inputs?: Record<string, unknown> }) =>
+    request<AgentTask>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
+  decideTaskApproval: (taskId: string, approved: boolean, comment = '') =>
+    request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/approval`, { method: 'POST', body: JSON.stringify({ approved, comment }) }),
+  cancelTask: (taskId: string) => request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' }),
+  replanTask: (taskId: string, instructions: string) =>
+    request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/replan?instructions=${encodeURIComponent(instructions)}`, { method: 'POST' }),
+  streamTaskEvents: (taskId: string, onEvent: (event: AgentTaskEvent) => void, onError?: (error: Event) => void) => {
+    const url = `${BASE_URL}/api${withAccessToken(`/tasks/${encodeURIComponent(taskId)}/events`)}`;
+    const source = new EventSource(url);
+    source.onmessage = (event) => {
+      try { onEvent(JSON.parse(event.data) as AgentTaskEvent); } catch (error) { console.error('Failed to parse task event', error); }
+    };
+    source.onerror = (error) => onError?.(error);
+    return () => source.close();
+  },
+    createRecorderSession: (projectId: string, startUrl: string, recoveredSteps: RecorderStep[] = []) =>
+      request<{ id: string; project_id: string; state: string; url: string; requested_url: string; navigation_error: string | null }>('/recorder/sessions', {
       method: 'POST', body: JSON.stringify({ project_id: projectId, start_url: startUrl, recovered_steps: recoveredSteps }),
     }),
-  getRecorderSession: (sessionId: string) =>
-    request<{ id: string; project_id: string; state: string; url: string; steps: RecorderStep[] }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`),
+    getRecorderSession: (sessionId: string) =>
+      request<{ id: string; project_id: string; state: string; url: string; requested_url: string; navigation_error: string | null; steps: RecorderStep[] }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`),
   generateRecorderCode: (sessionId: string, payload: { case_name: string; file_path: string; test_name: string; steps: RecorderStep[] }) =>
     request<{ code: string; project_id: string }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/generate`, {
       method: 'POST', body: JSON.stringify(payload),
@@ -307,10 +393,53 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ message, author: author || 'AI QA Platform <qa@platform.local>' }),
     }),
-  validateWorkspace: (workspaceId: string) =>
-    request<WorkspaceValidationResult>(`/workspaces/${workspaceId}/validate`),
-  collectWorkspaceTests: (workspaceId: string) =>
-    request<CollectedTest[]>(`/workspaces/${workspaceId}/collect`),
+  validateWorkspace: async (workspaceId: string) => {
+    const report = await request<{
+      valid: boolean;
+      issues: Array<{
+        file: string;
+        line: number;
+        column: number;
+        severity: 'ERROR' | 'WARNING' | 'INFO';
+        code?: string | null;
+        source: string;
+        message: string;
+      }>;
+    }>(`/workspaces/${workspaceId}/validate`, { method: 'POST' });
+    const issues = report.issues.map((issue) => ({
+      file: issue.file,
+      line: issue.line,
+      column: issue.column,
+      message: issue.message,
+      severity: issue.severity.toLowerCase() as 'error' | 'warning' | 'info',
+      rule_id: issue.code || issue.source,
+    }));
+    return {
+      is_valid: report.valid,
+      error_count: issues.filter((issue) => issue.severity === 'error').length,
+      warning_count: issues.filter((issue) => issue.severity === 'warning').length,
+      issues,
+    } satisfies WorkspaceValidationResult;
+  },
+  collectWorkspaceTests: async (workspaceId: string) => {
+    const report = await request<{
+      tests: Array<{
+        nodeid: string;
+        file: string;
+        test_name: string;
+        line: number | null;
+        markers: string[];
+      }>;
+    }>(`/workspaces/${workspaceId}/collect`, { method: 'POST' });
+    return report.tests.map((test): CollectedTest => ({
+      nodeid: test.nodeid,
+      name: test.test_name,
+      path: test.file,
+      line: test.line ?? 0,
+      markers: test.markers,
+      docstring: '',
+    }));
+  },
   bootstrapWorkspace: (workspaceId: string) =>
     request<{ status: string; workspace_id: string }>(`/workspaces/${workspaceId}/bootstrap`, {
       method: 'POST',
@@ -422,6 +551,11 @@ export const api = {
   // Production AI Services (Phase 5)
   getAIStatus: () => request<AIStatusResponse>('/ai/status'),
   getAIUsage: (limit = 50) => request<AIUsageSummary>(`/ai/usage?limit=${limit}`),
+  getAIProviderSettings: () => request<AIProviderSettings>('/ai/settings'),
+  saveAIProviderSettings: (data: AIProviderSettingsUpdate) =>
+    request<AIProviderSettings>('/ai/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  testAIProviderConnection: (data: AIProviderSettingsUpdate) =>
+    request<AIProviderConnectionResult>('/ai/test-connection', { method: 'POST', body: JSON.stringify(data) }),
   getJevSettings: () => request<JevSettings>('/decision/settings'),
   saveJevSettings: (payload: JevSettingsUpdate) =>
     request<JevSettings>('/decision/settings', { method: 'PUT', body: JSON.stringify(payload) }),

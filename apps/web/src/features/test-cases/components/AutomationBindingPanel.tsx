@@ -51,16 +51,16 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
       <div className="card-body">
         {selectedBinding ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-              <div>
+            <div className="automation-binding-info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <div className="automation-binding-info-field">
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('bindingTargetFile')}</div>
-                <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px' }}>
+                <div className="automation-binding-info-value" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px' }}>
                   {selectedBinding.file_path}
                 </div>
               </div>
-              <div>
+              <div className="automation-binding-info-field">
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('bindingNodeId')}</div>
-                <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div className="automation-binding-info-value" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#0f172a', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedBinding.nodeid}
                 </div>
               </div>

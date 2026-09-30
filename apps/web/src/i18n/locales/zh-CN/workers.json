@@ -4,6 +4,8 @@
   "registerWorker": "注册 Worker",
   "registering": "注册中...",
   "statClusterWorkers": "集群 Worker",
+  "statOnlineWorkers": "在线 Worker",
+  "statOnlineWorkersHint": "当前可用的执行节点",
   "statOnlineBusy": "{{online}} 在线 / {{busy}} 忙碌",
   "statZeroWorkers": "0 个 Worker",
   "statConcurrencyCapacity": "并发容量",

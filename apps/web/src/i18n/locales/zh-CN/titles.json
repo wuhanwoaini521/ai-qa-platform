@@ -5,6 +5,7 @@
   "testCases": "测试用例",
   "automation": "自动化工作室",
   "runs": "执行记录与运行器",
+  "tasks": "任务中心",
   "recorder": "浏览器录制器",
   "flaky": "不稳定用例与稳定性",
   "failures": "失败分析与定位修复",

@@ -381,45 +381,180 @@ export interface ApplyRepairRequest {
   new_code: string;
 }
 
-export interface QAChatRequest {
-  action?: string;
-  message?: string;
-  project_id?: string;
+export type QAChatAction = 'explain' | 'generate_draft' | 'suggest_refactor' | 'analyze_error' | 'chat';
+
+export interface QAChatContext {
+  project_id: string;
+  project_name?: string;
+  requirement_title?: string | null;
+  test_case_title?: string | null;
   current_file?: string | null;
   selected_code?: string | null;
-  context_type?: string;
-  context?: {
-    project_id: string;
-    project_name?: string;
-    requirement_title?: string | null;
-    test_case_title?: string | null;
-    current_file?: string | null;
-    selected_code?: string | null;
-    open_files?: string[];
-    git_diff?: string | null;
-    latest_validation?: any | null;
-    latest_run_summary?: string | null;
-  };
+  open_files?: string[];
+  git_diff?: string | null;
+  latest_validation?: unknown | null;
+  latest_run_summary?: string | null;
+}
+
+export type AgentTaskType = 'CREATE_TEST' | 'FIX_FAILURE' | 'OPTIMIZE_TEST' | 'EXPLORE_PAGE' | 'RUN_REGRESSION' | 'REVIEW_TEST';
+export type AgentTaskStatus = 'PENDING' | 'PLANNING' | 'RUNNING' | 'WAITING' | 'VERIFYING' | 'RETRYING' | 'REPLANNING' | 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'CANCELLED';
+export type AgentTaskStepStatus = 'PENDING' | 'RUNNING' | 'WAITING_FOR_APPROVAL' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'CANCELLED';
+
+export interface Workspace {
+  id: string;
+  project_id: string;
+  path: string;
+  branch: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTaskStep {
+  id: string;
+  task_id: string;
+  position: number;
+  key: string;
+  name: string;
+  tool: string;
+  status: AgentTaskStepStatus;
+  dependencies: string[];
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+  evidence_ids: string[];
+  retry_count: number;
+  max_retries: number;
+  error?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms: number;
+}
+
+export interface AgentTaskEvidence {
+  id: string;
+  task_id: string;
+  step_id?: string | null;
+  type: string;
+  source: string;
+  summary: string;
+  content?: string | null;
+  artifact_id?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentTaskArtifact {
+  id: string;
+  task_id: string;
+  step_id?: string | null;
+  artifact_id: string;
+  name: string;
+  kind: string;
+  created_at: string;
+}
+
+export interface AgentTaskEvent {
+  id: number;
+  task_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentTask {
+  id: string;
+  type: AgentTaskType;
+  goal: string;
+  status: AgentTaskStatus;
+  project_id?: string | null;
+  workspace_id?: string | null;
+  inputs: Record<string, unknown>;
+  context: Record<string, unknown>;
+  plan: AgentTaskStep[];
+  evidence: AgentTaskEvidence[];
+  artifacts: AgentTaskArtifact[];
+  decisions: Array<Record<string, unknown>>;
+  verification: Record<string, unknown>;
+  retry_count: number;
+  replan_count: number;
+  max_replans: number;
+  current_step_id?: string | null;
+  failure_reason?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at: string;
+  steps?: AgentTaskStep[];
+  events?: AgentTaskEvent[];
+}
+
+export interface QAChatRequest {
+  action: QAChatAction;
+  message: string;
+  context: QAChatContext;
 }
 
 export interface QAChatResponse {
-  response?: string;
-  reply?: string;
+  response: string;
   suggested_code?: string | null;
-  code_snippet?: string | null;
   target_file?: string | null;
-  action_type?: string;
-  suggested_actions?: string[];
+  action_type: string;
 }
 
-export type AIProviderHealth = 'AVAILABLE' | 'DISABLED' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'UNAVAILABLE';
+export type AIProviderHealth = 'AVAILABLE' | 'FALLBACK_ONLY' | 'DISABLED' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'UNAVAILABLE';
 
 export interface AIStatusResponse {
+  provider: string;
+  status: 'REAL_AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
+  message: string;
+  model: string;
+  base_url?: string | null;
+  real_model_available: boolean;
+  fallback_active: boolean;
+  failure_reason?: string | null;
+  health_status: AIProviderHealth;
+}
+
+export interface AITraceEvent {
+  run_id: string;
+  event_id: string;
+  type: string;
+  timestamp: string;
+  stage: string;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  content?: string | null;
+}
+
+export type AIProviderType = 'fake' | 'openai-compatible';
+
+export interface AIProviderSettings {
+  provider: AIProviderType;
+  api_key_configured: boolean;
+  api_key_masked?: string | null;
+  model: string;
+  base_url: string;
+  timeout: number;
+  max_retries: number;
+}
+
+export interface AIProviderSettingsUpdate {
+  provider: AIProviderType;
+  api_key?: string | null;
+  clear_api_key?: boolean;
+  model: string;
+  base_url: string;
+  timeout: number;
+  max_retries: number;
+}
+
+export interface AIProviderConnectionResult {
+  connected: boolean;
   provider: string;
   status: AIProviderHealth;
   message: string;
   model: string;
-  base_url?: string | null;
 }
 
 export interface AIInvocationDTO {
@@ -592,6 +727,8 @@ export interface AIFailureDiagnosisResponse {
   hypotheses: string[];
   recommended_actions: string[];
   confidence: number;
+  provider: string;
+  fallback_used: boolean;
 }
 
 export interface LocatorSemanticReviewResponse {

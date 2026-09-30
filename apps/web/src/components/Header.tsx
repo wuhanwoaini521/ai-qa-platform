@@ -67,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="topbar-utility-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {/* AI Health Badge */}
         {aiStatus && (
           <div
@@ -79,13 +79,13 @@ export const Header: React.FC<HeaderProps> = ({
               fontSize: '11px',
               padding: '3px 8px',
               borderRadius: '12px',
-              background: aiStatus.status === 'AVAILABLE' ? '#eff6ff' : '#fef2f2',
-              color: aiStatus.status === 'AVAILABLE' ? '#1d4ed8' : '#b91c1c',
-              border: `1px solid ${aiStatus.status === 'AVAILABLE' ? '#bfdbfe' : '#fecaca'}`,
+              background: aiStatus.status === 'REAL_AVAILABLE' ? '#eff6ff' : aiStatus.status === 'FALLBACK_ONLY' ? '#fff7e3' : '#fef2f2',
+              color: aiStatus.status === 'REAL_AVAILABLE' ? '#1d4ed8' : aiStatus.status === 'FALLBACK_ONLY' ? '#7c5600' : '#b91c1c',
+              border: `1px solid ${aiStatus.status === 'REAL_AVAILABLE' ? '#bfdbfe' : aiStatus.status === 'FALLBACK_ONLY' ? '#e9d7a4' : '#fecaca'}`,
             }}
           >
-            <Sparkles size={12} color={aiStatus.status === 'AVAILABLE' ? '#2563eb' : '#dc2626'} />
-            <span style={{ fontWeight: 600 }}>AI: {aiStatus.provider}</span>
+            <Sparkles size={12} color={aiStatus.status === 'REAL_AVAILABLE' ? '#2563eb' : aiStatus.status === 'FALLBACK_ONLY' ? '#8a5a00' : '#dc2626'} />
+            <span style={{ fontWeight: 600 }}>AI: {aiStatus.status} · {aiStatus.provider}</span>
           </div>
         )}
 

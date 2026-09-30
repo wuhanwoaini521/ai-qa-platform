@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
+import { ContextTaskProgress, useContextTask } from '../../components/ContextTaskProgress';
 import { Project, TestCase } from '../../types';
 import { useTestCases } from './hooks/useTestCases';
 import { useAutomationBinding } from './hooks/useAutomationBinding';
@@ -47,6 +48,19 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   });
 
   const { selectedCase } = cases;
+  const caseTask = useContextTask(selectedCase?.project_id ?? null, 'test_case', selectedCase?.id ?? null);
+
+  const startCaseTask = (type: 'OPTIMIZE_TEST' | 'REVIEW_TEST') => {
+    const target = binding.selectedBinding;
+    if (!selectedCase || !target) return;
+    void caseTask.start({
+      type,
+      goal: t(type === 'OPTIMIZE_TEST' ? 'tasks:optimizeGoal' : 'tasks:reviewGoal', { title: selectedCase.title }),
+      project_id: selectedCase.project_id,
+      workspace_id: target.workspace_id || selectedCase.project_id,
+      inputs: { test_case_id: selectedCase.id, file_path: target.file_path, test_nodeid: target.nodeid },
+    });
+  };
 
   const handleSelectCase = (tc: TestCase) => {
     cases.setSelectedCase(tc);
@@ -80,11 +94,11 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+    <div className="page-container test-cases-page">
+      <div className="page-header">
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('pageTitle')}</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          <h2>{t('pageTitle')}</h2>
+          <p className="subtitle">
             {t('pageSubtitle')}
           </p>
         </div>
@@ -104,7 +118,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '20px' }}>
+        <div className="test-cases-grid">
           <TestCaseList
             testCases={cases.testCases}
             loading={cases.loading}
@@ -113,8 +127,9 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           />
 
           {selectedCase ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <TestCaseDetail selectedCase={selectedCase} onUpdateStatus={cases.updateStatus} />
+            <div className="test-case-workspace">
+              <TestCaseDetail selectedCase={selectedCase} onUpdateStatus={cases.updateStatus} aiDisabled={!binding.selectedBinding || caseTask.busy} onOptimize={() => startCaseTask('OPTIMIZE_TEST')} onReview={() => startCaseTask('REVIEW_TEST')} />
+              <ContextTaskProgress task={caseTask.task} error={caseTask.error} />
 
               <AutomationBindingPanel
                 selectedBinding={binding.selectedBinding}

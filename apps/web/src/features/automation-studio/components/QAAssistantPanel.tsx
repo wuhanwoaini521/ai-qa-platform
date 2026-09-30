@@ -1,15 +1,24 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, Send, Sparkles, User } from 'lucide-react';
+import { AlertTriangle, Check, Send, Sparkles, StopCircle, User } from 'lucide-react';
 import { AssistantActionType, AssistantMessage } from '../types';
+import { AgentTask, AITraceEvent } from '../../../types';
+import { ContextTaskProgress } from '../../../components/ContextTaskProgress';
+import { AIExecutionTimeline } from '../../../components/AIExecutionTimeline';
 
 interface QAAssistantPanelProps {
   messages: AssistantMessage[];
   input: string;
   loading: boolean;
+  traceEvents: AITraceEvent[];
   onInputChange: (value: string) => void;
   onSend: (customPrompt?: string, actionType?: AssistantActionType) => void;
+  onCancel: () => void;
   onInsertSnippet: (snippet: string) => void;
+  onStartGenerateTask: (url: string, goal: string) => void;
+  generateTask: AgentTask | null;
+  generateTaskBusy: boolean;
+  generateTaskError: string;
 }
 
 interface MessageSegment {
@@ -93,18 +102,33 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
   messages,
   input,
   loading,
+  traceEvents,
   onInputChange,
   onSend,
+  onCancel,
   onInsertSnippet,
+  onStartGenerateTask,
+  generateTask,
+  generateTaskBusy,
+  generateTaskError,
 }) => {
   const { t } = useTranslation('studioPanels');
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [targetUrl, setTargetUrl] = useState('');
+  const [testGoal, setTestGoal] = useState('');
   const streamRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
 
-  // Keep the newest turn in view; only the stream scrolls.
+  // Follow new tokens only while the user is already reading the bottom of the transcript.
   useEffect(() => {
     const stream = streamRef.current;
-    if (stream) stream.scrollTop = stream.scrollHeight;
-  }, [messages.length, loading]);
+    if (stream && autoScrollRef.current) stream.scrollTop = stream.scrollHeight;
+  }, [messages.length, messages[messages.length - 1]?.text, loading, traceEvents.length]);
+
+  const handleStreamScroll = () => {
+    const stream = streamRef.current;
+    if (stream) autoScrollRef.current = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 72;
+  };
 
   const renderedMessages = useMemo(
     () =>
@@ -146,7 +170,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
             type="button"
             className="ai-chip"
             disabled={loading}
-            onClick={() => onSend(prompt, actionType)}
+            onClick={() => actionType === 'generate' ? setShowGenerate(true) : onSend(prompt, actionType)}
           >
             <Icon size={12} color={color} />
             {t(labelKey)}
@@ -154,7 +178,19 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
         ))}
       </div>
 
-      <div className="ai-stream" ref={streamRef}>
+      {showGenerate && <form onSubmit={(event) => {
+        event.preventDefault();
+        onStartGenerateTask(targetUrl.trim(), testGoal.trim());
+        setShowGenerate(false);
+      }} style={{ display: 'grid', gap: 8, padding: 12 }}>
+        <label>{t('tasks:studioUrl')}<input type="url" required value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" style={{ width: '100%' }} /></label>
+        <label>{t('tasks:studioGoal')}<textarea required minLength={3} value={testGoal} onChange={(event) => setTestGoal(event.target.value)} rows={3} style={{ width: '100%' }} /></label>
+        <div style={{ display: 'flex', gap: 8 }}><button type="submit" className="btn btn-primary btn-sm" disabled={generateTaskBusy}>{t('tasks:studioCreate')}</button><button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>{t('tasks:studioCancel')}</button></div>
+      </form>}
+      <ContextTaskProgress task={generateTask} error={generateTaskError} />
+
+      <div className="ai-stream" ref={streamRef} onScroll={handleStreamScroll}>
+        <AIExecutionTimeline events={traceEvents} running={loading} onCancel={onCancel} debugMode={import.meta.env.DEV} />
         {messages.length === 0 ? (
           <div className="ai-welcome">
             <div className="ai-welcome-mark" aria-hidden="true">
@@ -181,7 +217,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
             >
               <div className="ai-message-role">
                 {msg.role === 'user' ? <User size={11} /> : <Sparkles size={11} />}
-                {msg.role === 'user' ? t('assistant.roleYou') : t('assistant.title')}
+                {msg.role === 'user' ? t('assistant.roleYou') : t('assistant.answer')}
               </div>
 
               {msg.role === 'user'
@@ -219,12 +255,6 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
           ))
         )}
 
-        {loading && (
-          <div className="ai-thinking" style={{ alignSelf: 'flex-start' }}>
-            <span aria-hidden="true" style={pixelDot('var(--ui-primary)', true)} />
-            {t('assistant.reasoning')}
-          </div>
-        )}
       </div>
 
       <div className="ai-composer">
@@ -259,6 +289,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
           >
             <Send size={14} />
           </button>
+          {loading && <button type="button" className="ai-send ai-stop" onClick={onCancel} aria-label={t('assistant.cancel')} title={t('assistant.cancel')}><StopCircle size={14} /></button>}
         </form>
         <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--ui-ink-muted)' }}>
           {t('assistant.composerHint')}

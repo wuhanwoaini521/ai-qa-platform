@@ -1,12 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-
-const blockStyle: React.CSSProperties = {
-  padding: '32px',
-  textAlign: 'center',
-  color: 'var(--text-muted)',
-  fontSize: '13px',
-};
+import { AlertTriangle, Inbox, LoaderCircle } from 'lucide-react';
 
 interface LoadingStateProps {
   label?: string;
@@ -14,7 +8,12 @@ interface LoadingStateProps {
 
 export const LoadingState: React.FC<LoadingStateProps> = ({ label }) => {
   const { t } = useTranslation('common');
-  return <div style={blockStyle}>{label ?? t('loading')}</div>;
+  return (
+    <div className="async-state" role="status" aria-live="polite">
+      <LoaderCircle className="spin" size={20} aria-hidden="true" />
+      <span>{label ?? t('loading')}</span>
+    </div>
+  );
 };
 
 interface ErrorStateProps {
@@ -26,9 +25,10 @@ interface ErrorStateProps {
 export const ErrorState: React.FC<ErrorStateProps> = ({ title, message, onRetry }) => {
   const { t } = useTranslation('common');
   return (
-    <div style={{ ...blockStyle, color: 'var(--danger-color, #ef4444)' }}>
-      <div style={{ fontWeight: 600, marginBottom: '6px' }}>{title ?? t('errorTitle')}</div>
-      <div style={{ marginBottom: onRetry ? '12px' : 0 }}>{message}</div>
+    <div className="async-state async-state-error" role="alert">
+      <AlertTriangle size={20} aria-hidden="true" />
+      <div className="async-state-title">{title ?? t('errorTitle')}</div>
+      <div className="async-state-message">{message}</div>
       {onRetry && (
         <button type="button" className="btn btn-secondary" onClick={onRetry}>
           {t('retry')}
@@ -45,8 +45,9 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ message, actionLabel, onAction }) => (
-  <div style={blockStyle}>
-    <div style={{ marginBottom: actionLabel ? '12px' : 0 }}>{message}</div>
+  <div className="async-state">
+    <Inbox size={22} aria-hidden="true" />
+    <div className="async-state-message">{message}</div>
     {actionLabel && onAction && (
       <button type="button" className="btn btn-secondary" onClick={onAction}>
         {actionLabel}

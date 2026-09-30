@@ -16,6 +16,7 @@ const AutomationStudioPage = lazy(() =>
   import('../pages/AutomationStudioPage').then((m) => ({ default: m.AutomationStudioPage }))
 );
 const RunsPage = lazy(() => import('../pages/RunsPage').then((m) => ({ default: m.RunsPage })));
+const TasksPage = lazy(() => import('../pages/TasksPage').then((m) => ({ default: m.TasksPage })));
 const FailuresPage = lazy(() => import('../pages/FailuresPage').then((m) => ({ default: m.FailuresPage })));
 const FlakyPage = lazy(() => import('../pages/FlakyPage').then((m) => ({ default: m.FlakyPage })));
 const QualityPage = lazy(() => import('../pages/QualityPage').then((m) => ({ default: m.QualityPage })));
@@ -26,7 +27,8 @@ const RecorderPage = lazy(() => import('../pages/RecorderPage').then((m) => ({ d
 
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
-  return <DashboardPage onNavigate={nav.toTab} onOpenCreateProject={() => nav.toTab('projects')} />;
+  const navigate = useNavigate();
+  return <DashboardPage onNavigate={nav.toTab} onOpenTask={(id) => navigate(`/tasks?taskId=${encodeURIComponent(id)}`)} onOpenCreateProject={() => nav.toTab('projects')} />;
 };
 
 const ProjectsRoute: React.FC = () => {
@@ -122,6 +124,11 @@ const RecorderRoute: React.FC = () => {
   return <RecorderPage projects={projects} selectedProjectId={selectedProjectId} />;
 };
 
+const TasksRoute: React.FC = () => {
+  const { projects, selectedProjectId } = useProjectScope();
+  return <TasksPage projects={projects} selectedProjectId={selectedProjectId} />;
+};
+
 const FailuresRoute: React.FC = () => {
   const { failureId } = useParams();
   const navigate = useNavigate();
@@ -186,6 +193,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/test-cases/:testCaseId" element={<TestCasesRoute />} />
       <Route path="/runs" element={<RunsRoute />} />
       <Route path="/runs/:runId" element={<RunsRoute />} />
+      <Route path="/tasks" element={<TasksRoute />} />
       <Route path="/recorder" element={<RecorderRoute />} />
       <Route path="/failures" element={<FailuresRoute />} />
       <Route path="/failures/:failureId" element={<FailuresRoute />} />

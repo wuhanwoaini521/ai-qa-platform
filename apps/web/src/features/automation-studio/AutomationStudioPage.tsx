@@ -24,6 +24,7 @@ import { WorkbenchStatusBar } from './components/WorkbenchStatusBar';
 import { ProblemsPanel } from './components/ProblemsPanel';
 import { RunOutputPanel } from './components/RunOutputPanel';
 import { QAAssistantPanel } from './components/QAAssistantPanel';
+import { useContextTask } from '../../components/ContextTaskProgress';
 import { QuickOpen } from './components/QuickOpen';
 import { FileOpModal } from './components/FileOpModal';
 import { BranchModal } from './components/BranchModal';
@@ -46,6 +47,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 }) => {
   const { t } = useTranslation('studioShell');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
+  const generateTask = useContextTask(currentProjectId, 'studio', currentProjectId);
 
   // Cross-panel UI state (read/written by more than one panel)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('files');
@@ -456,9 +458,18 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         messages={assistant.assistantMessages}
         input={assistant.assistantInput}
         loading={assistant.assistantLoading}
+        traceEvents={assistant.assistantTraceEvents}
         onInputChange={assistant.setAssistantInput}
         onSend={assistant.sendMessage}
+        onCancel={assistant.cancelStream}
         onInsertSnippet={assistant.insertSnippet}
+        onStartGenerateTask={(url, goal) => {
+          if (!currentProjectId) return;
+          void generateTask.start({ type: 'CREATE_TEST', goal, project_id: currentProjectId, workspace_id: currentProjectId, inputs: { url, requirement: goal } });
+        }}
+        generateTask={generateTask.task}
+        generateTaskBusy={generateTask.busy}
+        generateTaskError={generateTask.error}
       />
     </div>
   );

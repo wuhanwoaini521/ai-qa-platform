@@ -65,6 +65,7 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
               {t('historyRecentExecutions')}
             </div>
+            <div className="table-responsive">
             <table className="data-table" style={{ fontSize: '11px' }}>
               <thead>
                 <tr>
@@ -97,6 +98,7 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ) : (
           <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>

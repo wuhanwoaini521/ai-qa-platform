@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import { DashboardStats } from '../types';
+import { AgentTask, DashboardStats } from '../types';
 import {
   FolderGit2,
   FileText,
@@ -14,19 +14,26 @@ import {
   RotateCcw,
   Clock,
   Sparkles,
+  Workflow,
+  Wrench,
+  ClipboardCheck,
 } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
 
 interface DashboardPageProps {
   onNavigate: (tab: NavTab) => void;
+  onOpenTask?: (taskId: string) => void;
   onOpenCreateProject?: () => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
+  onOpenTask,
 }) => {
   const { t } = useTranslation('dashboard');
+  const { t: taskT } = useTranslation('tasks');
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentTasks, setRecentTasks] = useState<AgentTask[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
@@ -34,6 +41,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       setLoading(true);
       const data = await api.getDashboardStats();
       setStats(data);
+      setRecentTasks((await api.getTasks()).slice(0, 5));
     } catch (err) {
       console.error('Failed to load dashboard stats', err);
     } finally {
@@ -63,7 +71,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   };
 
   return (
-    <div>
+    <div className="dashboard-page">
+      <section className="card" style={{ marginBottom: 20 }}>
+        <div className="card-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 14 }}>
+            <div><h2 style={{ margin: 0 }}>{taskT('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-muted)' }}>{taskT('dashboardDescription')}</p></div>
+            <button type="button" className="btn btn-secondary" onClick={() => onNavigate('tasks')}><Workflow size={16} /> {taskT('allTasks')}</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 9 }}>
+            {([
+              ['recorder', 'entryRecorder', Sparkles], ['failures', 'entryFailures', Wrench],
+              ['test_cases', 'entryTests', ClipboardCheck], ['runs', 'entryRuns', PlayCircle],
+            ] as const).map(([tab, label, Icon]) => <button key={tab} type="button" className="btn btn-secondary" onClick={() => onNavigate(tab)} style={{ display: 'flex', gap: 8, justifyContent: 'flex-start' }}>
+              <Icon size={16} /> {taskT(label)}
+            </button>)}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <strong>{taskT('recentTasks')}</strong>
+            {recentTasks.length ? <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+              {recentTasks.map((task) => {
+                const steps = task.plan ?? [];
+                const completed = steps.filter((step) => step.status === 'COMPLETED' || step.status === 'SKIPPED').length;
+                const current = steps.find((step) => step.status === 'RUNNING')?.name;
+                return <button key={task.id} type="button" className="btn btn-secondary dashboard-task-item" onClick={() => onOpenTask?.(task.id)} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, textAlign: 'left' }}>
+                  <span className="dashboard-task-copy"><strong>{taskT(`type_${task.type}`)}</strong> · {task.goal}{current ? <small style={{ display: 'block', color: 'var(--text-muted)' }}>{taskT('currentStep')}: {current}</small> : null}</span>
+                  <span className="dashboard-task-status">{task.status} · {completed}/{steps.length}</span>
+                </button>;
+              })}
+            </div> : <p style={{ color: 'var(--text-muted)' }}>{taskT('noTasks')}</p>}
+          </div>
+        </div>
+      </section>
       {/* Stat Cards Row 1: Core Quality & Intelligence KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
         <div className="card">

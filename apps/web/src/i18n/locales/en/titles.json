@@ -5,6 +5,7 @@
   "testCases": "Test Cases",
   "automation": "Automation Studio",
   "runs": "Execution Runs & Runners",
+  "tasks": "Task Center",
   "recorder": "Browser Recorder",
   "flaky": "Flaky Intelligence & Stability",
   "failures": "Failure Intelligence & Healing",

@@ -195,6 +195,19 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#047857' }}>
+            <Radio size={20} />
+          </div>
+          <div className="stat-details">
+            <div className="stat-title">{t('statOnlineWorkers')}</div>
+            <div className="stat-value">
+              {clusterSummary ? clusterSummary.online_workers : '--'}
+            </div>
+            <div className="stat-subtitle">{t('statOnlineWorkersHint')}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
           <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
             <Cpu size={20} />
           </div>
@@ -268,7 +281,7 @@ export const WorkersPage: React.FC = () => {
             <span className="text-secondary text-sm">{t('workersHint')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="data-table worker-table">
               <thead>
                 <tr>
                   <th>{t('colHostname')}</th>
@@ -289,40 +302,30 @@ export const WorkersPage: React.FC = () => {
                       <td><code>{w.ip_address}</code></td>
                       <td>{getWorkerStatusBadge(w.status)}</td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div
-                            style={{
-                              width: '60px',
-                              height: '6px',
-                              backgroundColor: 'var(--border-color)',
-                              borderRadius: '3px',
-                              overflow: 'hidden',
-                            }}
-                          >
+                        <div className="worker-load">
+                          <div className="worker-load-track" aria-label={`${w.current_load} / ${w.max_concurrency} slots in use`}>
                             <div
-                              style={{
-                                width: `${w.max_concurrency > 0 ? (w.current_load / w.max_concurrency) * 100 : 0}%`,
-                                height: '100%',
-                                backgroundColor: 'var(--accent-primary)',
-                              }}
+                              className="worker-load-fill"
+                              style={{ width: `${w.max_concurrency > 0 ? (w.current_load / w.max_concurrency) * 100 : 0}%` }}
                             />
                           </div>
-                          <span style={{ fontSize: '0.85rem' }}>{w.current_load}/{w.max_concurrency}</span>
+                          <span>{w.current_load}/{w.max_concurrency}</span>
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '4px' }}>
+                        <div className="worker-capabilities">
+                          {w.browsers.length > 0 && <span className="status-pill status-pill-runtime">Playwright</span>}
                           {w.browsers.map((b) => (
-                            <span key={b} className="status-pill status-pill-draft" style={{ fontSize: '0.75rem', padding: '2px 6px' }}>
+                            <span key={b} className="status-pill status-pill-draft">
                               {b}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td style={{ textTransform: 'capitalize' }}>{w.os}</td>
+                      <td><span className="status-pill status-pill-draft worker-os">{w.os}</span></td>
                       <td style={{ fontSize: '0.85rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Radio size={12} color="#10b981" />
+                        <div className="worker-heartbeat">
+                          <Radio size={12} aria-hidden="true" />
                           <span>{new Date(w.last_heartbeat_at).toLocaleTimeString()}</span>
                         </div>
                       </td>
