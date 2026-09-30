@@ -450,12 +450,50 @@ class AIProviderStatus(str, Enum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+class AIProviderRuntimeState(str, Enum):
+    REAL_AVAILABLE = "REAL_AVAILABLE"
+    FALLBACK_ONLY = "FALLBACK_ONLY"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
 class AIStatusResponse(BaseModel):
     provider: str
-    status: AIProviderStatus
+    status: AIProviderRuntimeState
     message: str = ""
     model: str = ""
     base_url: str | None = None
+    real_model_available: bool = False
+    fallback_active: bool = False
+    failure_reason: str | None = None
+    health_status: AIProviderStatus = AIProviderStatus.UNAVAILABLE
+
+
+class AIProviderSettingsResponse(BaseModel):
+    provider: str
+    api_key_configured: bool = False
+    api_key_masked: str | None = None
+    model: str
+    base_url: str
+    timeout: float
+    max_retries: int
+
+
+class AIProviderSettingsUpdate(BaseModel):
+    provider: str = Field(pattern=r"^(fake|openai-compatible)$")
+    api_key: str | None = None
+    clear_api_key: bool = False
+    model: str = Field(min_length=1, max_length=128)
+    base_url: str = Field(min_length=1, max_length=2048)
+    timeout: float = Field(ge=1, le=300)
+    max_retries: int = Field(ge=0, le=10)
+
+
+class AIProviderConnectionResult(BaseModel):
+    connected: bool
+    provider: str
+    status: str
+    message: str
+    model: str
 
 
 class AIInvocationDTO(EntityBase):

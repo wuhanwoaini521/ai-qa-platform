@@ -1,5 +1,10 @@
 from project_model.models import (
     AddMemberRequest,
+    AIProviderConnectionResult,
+    AIProviderSettingsResponse,
+    AIProviderSettingsUpdate,
+    AIProviderStatus,
+    AIStatusResponse,
     ApplyRepairRequest,
     AutomationBinding,
     AutomationBindingBase,
@@ -60,6 +65,11 @@ from project_model.models import (
 
 __all__ = [
     "AddMemberRequest",
+    "AIProviderConnectionResult",
+    "AIProviderSettingsResponse",
+    "AIProviderSettingsUpdate",
+    "AIProviderStatus",
+    "AIStatusResponse",
     "ApplyRepairRequest",
     "AutomationBinding",
     "AutomationBindingBase",

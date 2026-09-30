@@ -6,10 +6,14 @@ import re
 class SensitiveRedactor:
     """Redacts passwords, tokens, API keys, and sensitive headers from logs and traces."""
 
+    SENSITIVE_KEYS = re.compile(
+        r"(?i)(?:^|[_-])(authorization|cookie|set-cookie|password|passwd|secret|token|api[_-]?key)(?:$|[_-])"
+    )
+
     PATTERNS = [
         (
             re.compile(
-                r'(?i)(password|secret|passwd|token|api[_-]?key)["\']?\s*[:=]\s*["\']?([^"\'\s,;]+)', re.IGNORECASE
+                r'(?i)(authorization|cookie|set-cookie|password|secret|passwd|token|api[_-]?key)["\']?\s*[:=]\s*["\']?([^"\'\s,;]+)', re.IGNORECASE
             ),
             r"\1=***REDACTED***",
         ),
@@ -29,14 +33,22 @@ class SensitiveRedactor:
 
     @classmethod
     def redact_dict(cls, data: dict) -> dict:
-        redacted = {}
-        for k, v in data.items():
-            if isinstance(v, str):
-                redacted[k] = cls.redact_text(v)
-            elif isinstance(v, dict):
-                redacted[k] = cls.redact_dict(v)
-            elif isinstance(v, list):
-                redacted[k] = [cls.redact_text(item) if isinstance(item, str) else item for item in v]
-            else:
-                redacted[k] = v
-        return redacted
+        return cls.redact_value(data)
+
+    @classmethod
+    def redact_value(cls, value):
+        """Recursively redact trace/log metadata, including values behind sensitive keys."""
+        if isinstance(value, dict):
+            redacted = {}
+            for key, item in value.items():
+                key_text = str(key)
+                if cls.SENSITIVE_KEYS.search(key_text):
+                    redacted[key] = "***REDACTED***" if item is not None else None
+                else:
+                    redacted[key] = cls.redact_value(item)
+            return redacted
+        if isinstance(value, (list, tuple)):
+            return [cls.redact_value(item) for item in value]
+        if isinstance(value, str):
+            return cls.redact_text(value)
+        return value

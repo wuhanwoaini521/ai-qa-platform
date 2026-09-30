@@ -6,6 +6,7 @@ from qa_core.ai.models import (
     AICompletionResponse,
     AIInvocationRecord,
     AIProviderType,
+    AIStreamChunk,
     CodeAssistantResponse,
     FailureAnalysisResponse,
     LocatorSemanticReview,
@@ -22,8 +23,10 @@ from qa_core.ai.provider import (
     FakeAIProvider,
     FallbackAIProvider,
     OpenAICompatibleProvider,
+    stream_provider_completion,
 )
 from qa_core.ai.registry import AIProviderRegistry
+from qa_core.ai.trace import AITraceEvent, make_trace_event
 
 __all__ = [
     "AIProvider",
@@ -36,6 +39,10 @@ __all__ = [
     "ProviderHealthStatus",
     "AICompletionRequest",
     "AICompletionResponse",
+    "AIStreamChunk",
+    "AITraceEvent",
+    "make_trace_event",
+    "stream_provider_completion",
     "AIInvocationRecord",
     "RequirementAnalysisResponse",
     "TestDesignSuggestion",

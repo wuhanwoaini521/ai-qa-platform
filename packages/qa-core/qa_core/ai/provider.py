@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
@@ -12,6 +13,7 @@ import httpx
 from qa_core.ai.models import (
     AICompletionRequest,
     AICompletionResponse,
+    AIStreamChunk,
     CodeAssistantResponse,
     FailureAnalysisResponse,
     LocatorSemanticReview,
@@ -21,9 +23,62 @@ from qa_core.ai.models import (
     TestCaseGenerationResponse,
     TestDesignGenerationResponse,
 )
+from qa_core.failure.classifier import FailureClassifier
+from qa_core.failure.models import FailureCategory
 from qa_core.failure.redactor import SensitiveRedactor
 
 logger = logging.getLogger("qa_core.ai")
+AI_QA_USER_AGENT = "ai-qa-platform"
+
+
+def _fake_failure_analysis(prompt: str) -> FailureAnalysisResponse:
+    """Build a conservative offline diagnosis from the supplied failure text only."""
+    context = re.search(
+        r"Error Message:\s*(.*?)\nStack Trace:\s*(.*?)\nFailing Locator:\s*(.*?)"
+        r"\n\nHistorical Context:",
+        prompt,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if context:
+        error_message, stack_trace, failing_locator = (
+            value.strip() for value in context.groups()
+        )
+    else:
+        # Keep direct FakeAIProvider use useful even when the standard prompt template
+        # is not used, while avoiding classification from instructions/schema text.
+        error_message, stack_trace, failing_locator = prompt.strip(), "", "None"
+
+    classification, explanation, _ = FailureClassifier.classify(error_message, stack_trace)
+    evidence = [line.strip() for line in (error_message + "\n" + stack_trace).splitlines() if line.strip()]
+    evidence = evidence[-5:]
+
+    if classification == FailureCategory.ASSERTION_FAILURE:
+        hypotheses = ["The expected value or test condition may not match the observed result."]
+        actions = ["Compare the assertion's expected value with the observed value and the test's intended behavior."]
+    elif classification == FailureCategory.LOCATOR_CHANGED:
+        hypotheses = ["The target element may be absent, renamed, or not yet rendered."]
+        actions = ["Verify the locator against the current page state and DOM before changing the selector."]
+    elif classification == FailureCategory.TIMING_ISSUE:
+        hypotheses = ["The required condition may not have become true before the timeout."]
+        actions = ["Inspect the timed-out condition and wait for the specific required state."]
+    elif classification == FailureCategory.ENVIRONMENT_ERROR:
+        hypotheses = ["A service or test-environment dependency may be unavailable."]
+        actions = ["Check the target service and test-environment connectivity."]
+    else:
+        hypotheses = ["The available error output is insufficient to identify a specific cause."]
+        actions = ["Inspect the complete traceback and relevant test setup before changing the test or application."]
+
+    if failing_locator and failing_locator.lower() != "none" and failing_locator not in evidence:
+        evidence.append(f"Failing locator recorded by runner: {failing_locator}")
+
+    return FailureAnalysisResponse(
+        classification=classification.value,
+        root_cause=explanation,
+        evidence=evidence,
+        hypotheses=hypotheses,
+        recommended_actions=actions,
+        confidence=0.9 if classification != FailureCategory.UNKNOWN else 0.35,
+    )
 
 
 def clean_json_text(text: str) -> str:
@@ -41,6 +96,38 @@ class AIProvider(Protocol):
     async def check_health(self) -> ProviderHealthStatus: ...
 
 
+class StreamingAIProvider(Protocol):
+    async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]: ...
+
+
+async def stream_provider_completion(
+    provider: AIProvider,
+    request: AICompletionRequest,
+) -> AsyncIterator[AIStreamChunk]:
+    """Use native streaming where available and adapt legacy providers without breaking them."""
+    stream = getattr(provider, "stream_complete", None)
+    if callable(stream):
+        iterator = stream(request)
+        try:
+            async for chunk in iterator:
+                yield chunk
+        finally:
+            close = getattr(iterator, "aclose", None)
+            if callable(close):
+                await close()
+        return
+
+    response = await provider.complete(request)
+    yield AIStreamChunk(
+        content_delta=response.content,
+        usage={"prompt_tokens": response.input_tokens, "completion_tokens": response.output_tokens},
+        finish_reason="stop",
+        provider=response.provider,
+        model=response.model,
+        fallback_used=response.fallback_used,
+    )
+
+
 class FakeAIProvider:
     """Deterministic Fake AI Provider for testing and offline development."""
 
@@ -51,8 +138,8 @@ class FakeAIProvider:
     async def check_health(self) -> ProviderHealthStatus:
         return ProviderHealthStatus(
             provider=self.provider_name,
-            status=ProviderHealth.AVAILABLE,
-            message="Fake AI Provider is active and available.",
+            status=ProviderHealth.FALLBACK_ONLY,
+            message="Fake AI Provider is active; no real model is connected.",
             model=self.model,
         )
 
@@ -142,23 +229,7 @@ class FakeAIProvider:
             content = json.dumps(structured, indent=2)
 
         elif prompt_id == "failure_diagnosis" or "diagnose the following test failure" in p_lower:
-            data = FailureAnalysisResponse(
-                classification="LOCATOR_CHANGED" if "locator" in p_lower else "TIMING_ISSUE",
-                root_cause="Target element locator could not be resolved in the DOM during interaction step.",
-                evidence=[
-                    "Locator search failed after timeout",
-                    "DOM element matching selector was absent in snapshot",
-                ],
-                hypotheses=[
-                    "UI component rendered with updated data-testid",
-                    "Element dynamic rendering was delayed by network request",
-                ],
-                recommended_actions=[
-                    "Update selector to resilient data-testid",
-                    "Add explicit state assertion before interaction",
-                ],
-                confidence=0.92,
-            )
+            data = _fake_failure_analysis(request.prompt)
             structured = data.model_dump()
             content = json.dumps(structured, indent=2)
 
@@ -233,7 +304,10 @@ class OpenAICompatibleProvider:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.get(
                     f"{self.base_url}/models",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "User-Agent": AI_QA_USER_AGENT,
+                    },
                 )
                 if res.status_code == 200:
                     return ProviderHealthStatus(
@@ -293,6 +367,10 @@ class OpenAICompatibleProvider:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": AI_QA_USER_AGENT,
+            # OpenCode-compatible gateways use this ID to keep one AI conversation
+            # on a stable route. It remains unchanged for every retry of this request.
+            "x-opencode-session": request.session_id,
         }
 
         payload: dict[str, Any] = {
@@ -392,6 +470,94 @@ class OpenAICompatibleProvider:
         redacted_err = SensitiveRedactor.redact_text(str(last_exception))
         raise RuntimeError(f"OpenAI completion failed after {retry_count} retries: {redacted_err}")
 
+    async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]:
+        if not self.api_key:
+            raise RuntimeError("AI provider is missing_api_key")
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": AI_QA_USER_AGENT,
+            "x-opencode-session": request.session_id,
+        }
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": request.system_instruction},
+                {"role": "user", "content": request.prompt},
+            ],
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        emitted_content = False
+        last_error: Exception | None = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                timeout = httpx.Timeout(self.timeout)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                    ) as response:
+                        if response.status_code in (401, 403):
+                            raise RuntimeError("AI provider authentication_error")
+                        if response.status_code == 429:
+                            raise RuntimeError("AI provider rate_limited")
+                        if response.status_code >= 500 and attempt < self.max_retries:
+                            await asyncio.sleep(min(1.0 * (2**attempt), 8.0))
+                            continue
+                        if response.status_code >= 400:
+                            raise RuntimeError(f"AI provider http_{response.status_code}")
+
+                        async for line in response.aiter_lines():
+                            if not line or line.startswith(":") or not line.startswith("data:"):
+                                continue
+                            data_text = line[5:].strip()
+                            if data_text == "[DONE]":
+                                return
+                            try:
+                                data = json.loads(data_text)
+                            except json.JSONDecodeError:
+                                continue
+
+                            usage = data.get("usage")
+                            normalized_usage = None
+                            if isinstance(usage, dict):
+                                normalized_usage = {
+                                    "prompt_tokens": usage.get("prompt_tokens"),
+                                    "completion_tokens": usage.get("completion_tokens"),
+                                    "total_tokens": usage.get("total_tokens"),
+                                }
+                            choices = data.get("choices") or []
+                            choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+                            delta = choice.get("delta") or {}
+                            content = delta.get("content")
+                            if isinstance(content, str) and content:
+                                emitted_content = True
+                            if content or normalized_usage or choice.get("finish_reason"):
+                                yield AIStreamChunk(
+                                    content_delta=content if isinstance(content, str) else "",
+                                    usage=normalized_usage,
+                                    finish_reason=choice.get("finish_reason"),
+                                    provider=self.provider_name,
+                                    model=data.get("model") if isinstance(data.get("model"), str) else self.model,
+                                )
+                return
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as error:
+                last_error = error
+                if emitted_content or attempt >= self.max_retries:
+                    reason = "timeout" if isinstance(error, httpx.TimeoutException) else "connection_error"
+                    raise RuntimeError(f"AI provider {reason}") from None
+                await asyncio.sleep(min(1.0 * (2**attempt), 8.0))
+
+        if last_error is not None:
+            raise RuntimeError("AI provider connection_error") from None
+
 
 class FallbackAIProvider:
     """Chains primary provider with secondary and fallback providers (Gate 5.8)."""
@@ -406,10 +572,10 @@ class FallbackAIProvider:
             return primary_health
         for fb in self.fallbacks:
             fb_health = await fb.check_health()
-            if fb_health.status == ProviderHealth.AVAILABLE:
+            if fb_health.status in (ProviderHealth.AVAILABLE, ProviderHealth.FALLBACK_ONLY):
                 return ProviderHealthStatus(
-                    provider=f"{primary_health.provider} (fallback to {fb_health.provider})",
-                    status=ProviderHealth.AVAILABLE,
+                    provider=primary_health.provider,
+                    status=ProviderHealth.FALLBACK_ONLY,
                     message=f"Primary provider is {primary_health.status.value}; fallback active.",
                     model=fb_health.model,
                 )
@@ -446,3 +612,30 @@ class FallbackAIProvider:
                 retry_count=0,
                 prompt_version=request.prompt_version,
             )
+
+    async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]:
+        providers = [self.primary, *self.fallbacks]
+        for index, provider in enumerate(providers):
+            emitted_content = False
+            stream = stream_provider_completion(provider, request)
+            try:
+                try:
+                    async for chunk in stream:
+                        emitted_content = emitted_content or bool(chunk.content_delta)
+                        if index > 0:
+                            chunk.fallback_used = True
+                        yield chunk
+                finally:
+                    await stream.aclose()
+                return
+            except Exception as error:
+                logger.warning(
+                    "AI stream provider failed provider=%s error_type=%s",
+                    getattr(provider, "provider_name", "unknown"),
+                    type(error).__name__,
+                )
+                # Once text has reached the client, switching providers would splice two
+                # different answers together. Preserve the partial answer and report failure.
+                if emitted_content:
+                    raise
+        raise RuntimeError("AI provider unavailable")

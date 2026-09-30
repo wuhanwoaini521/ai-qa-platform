@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Callable
+from typing import Callable, Mapping
 
 from qa_core.ai.models import AIProviderType
 from qa_core.ai.provider import (
@@ -17,24 +17,38 @@ class AIProviderRegistry:
 
     _factories: dict[str, Callable[[], AIProvider]] = {}
     _instance: AIProvider | None = None
+    _runtime_config: dict[str, str] | None = None
 
     @classmethod
     def register(cls, name: str, factory: Callable[[], AIProvider]) -> None:
         cls._factories[name.lower()] = factory
 
     @classmethod
+    def configure_runtime(cls, config: Mapping[str, str] | None) -> None:
+        """Set an API-managed provider configuration without changing environment fallbacks."""
+        cls._runtime_config = dict(config) if config is not None else None
+
+    @classmethod
     def get_provider(cls, name: str | None = None, api_key: str | None = None) -> AIProvider:
-        provider_name = (name or os.getenv("QA_AI_PROVIDER", "fake")).lower()
+        config = cls._runtime_config or {
+            "provider": os.getenv("QA_AI_PROVIDER", "fake"),
+            "api_key": os.getenv("QA_AI_API_KEY", ""),
+            "base_url": os.getenv("QA_AI_BASE_URL", "https://api.openai.com/v1"),
+            "model": os.getenv("QA_AI_MODEL", "gpt-4o-mini"),
+            "timeout": os.getenv("QA_AI_TIMEOUT", "30.0"),
+            "max_retries": os.getenv("QA_AI_MAX_RETRIES", "3"),
+        }
+        provider_name = (name or config.get("provider", "fake")).lower()
 
         if provider_name in (AIProviderType.FAKE.value, "fake"):
             return FakeAIProvider()
 
         if provider_name in (AIProviderType.OPENAI_COMPATIBLE.value, "openai", "openai-compatible"):
-            key = api_key or os.getenv("QA_AI_API_KEY", "")
-            base_url = os.getenv("QA_AI_BASE_URL", "https://api.openai.com/v1")
-            model = os.getenv("QA_AI_MODEL", "gpt-4o-mini")
-            timeout = float(os.getenv("QA_AI_TIMEOUT", "30.0"))
-            max_retries = int(os.getenv("QA_AI_MAX_RETRIES", "3"))
+            key = api_key if api_key is not None else config.get("api_key", "")
+            base_url = config.get("base_url", "https://api.openai.com/v1")
+            model = config.get("model", "gpt-4o-mini")
+            timeout = float(config.get("timeout", "30.0"))
+            max_retries = int(config.get("max_retries", "3"))
 
             primary = OpenAICompatibleProvider(
                 api_key=key,
@@ -56,3 +70,4 @@ class AIProviderRegistry:
     def reset(cls) -> None:
         cls._factories.clear()
         cls._instance = None
+        cls._runtime_config = None

@@ -22,7 +22,7 @@ async def test_fake_ai_provider_tasks():
 
     # Health check
     health = await provider.check_health()
-    assert health.status == ProviderHealth.AVAILABLE
+    assert health.status == ProviderHealth.FALLBACK_ONLY
 
     # Requirement analysis
     req_res = await provider.complete(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +14,7 @@ def utc_now() -> datetime:
 
 class ProviderHealth(str, Enum):
     AVAILABLE = "AVAILABLE"
+    FALLBACK_ONLY = "FALLBACK_ONLY"
     DISABLED = "DISABLED"
     AUTH_ERROR = "AUTH_ERROR"
     RATE_LIMITED = "RATE_LIMITED"
@@ -36,6 +38,9 @@ class AICompletionRequest(BaseModel):
     response_schema: type[BaseModel] | None = None
     prompt_id: str | None = None
     prompt_version: str | None = None
+    # One completion request is one conversation by default. Callers that make
+    # multiple related completions can pass the same ID to keep OpenCode routing stable.
+    session_id: str = Field(default_factory=lambda: uuid4().hex)
 
 
 class AICompletionResponse(BaseModel):
@@ -49,6 +54,17 @@ class AICompletionResponse(BaseModel):
     fallback_used: bool = False
     retry_count: int = 0
     prompt_version: str | None = None
+
+
+class AIStreamChunk(BaseModel):
+    """One provider-neutral piece of a streamed completion."""
+
+    content_delta: str = ""
+    usage: dict[str, int | float | None] | None = None
+    finish_reason: str | None = None
+    provider: str = "unknown"
+    model: str = ""
+    fallback_used: bool = False
 
 
 class ProviderHealthStatus(BaseModel):
@@ -107,6 +123,8 @@ class FailureAnalysisResponse(BaseModel):
     hypotheses: list[str] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
     confidence: float = 0.8
+    provider: str = ""
+    fallback_used: bool = False
 
 
 class LocatorSemanticReview(BaseModel):
