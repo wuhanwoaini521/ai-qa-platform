@@ -4,6 +4,7 @@ import ast
 import asyncio
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import aiofiles
@@ -97,44 +98,41 @@ class WorkspaceService:
         if (ws_dir / ".git").exists():
             return ws_dir
 
-        # Initialize local git repository in workspace for diff tracking
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "init",
-            "-b",
-            "main",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc.communicate()
-
-        proc_add = await asyncio.create_subprocess_exec(
-            "git",
-            "add",
-            ".",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc_add.communicate()
-
-        proc_commit = await asyncio.create_subprocess_exec(
-            "git",
-            "-c",
-            "user.name=AI QA Platform",
-            "-c",
-            "user.email=agent@ai-qa.local",
-            "commit",
-            "-m",
-            "chore: initialize runnable qa example workspace",
-            cwd=str(ws_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc_commit.communicate()
+        # Python's Windows selector event loop does not support asyncio subprocess transports.
+        # Run the short local Git bootstrap in a worker thread so project creation also works
+        # when Uvicorn is running with its Windows-compatible event loop.
+        await asyncio.to_thread(self._initialize_git_repo, ws_dir)
 
         return ws_dir
+
+    @staticmethod
+    def _initialize_git_repo(workspace_dir: Path) -> None:
+        """Initialize version history without making Git availability block workspace creation."""
+        commands = (
+            ["git", "init", "-b", "main"],
+            ["git", "add", "."],
+            [
+                "git",
+                "-c",
+                "user.name=AI QA Platform",
+                "-c",
+                "user.email=agent@ai-qa.local",
+                "commit",
+                "-m",
+                "chore: initialize runnable qa example workspace",
+            ],
+        )
+        for command in commands:
+            result = subprocess.run(
+                command,
+                cwd=workspace_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                # Keep the usable source workspace even if Git is missing or misconfigured.
+                return
 
     async def get_file_tree(self, workspace_id: str) -> list[FileNode]:
         ws_dir = self.get_workspace_dir(workspace_id)
@@ -333,17 +331,15 @@ class WorkspaceService:
 
         # 2. Pytest collection check to capture test discovery issues
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "pytest",
-                "--collect-only",
-                "-q",
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["pytest", "--collect-only", "-q"],
                 cwd=str(ws_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                capture_output=True,
+                check=False,
             )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0 and b"ERROR" in stderr or b"errors during collection" in stdout:
-                for line in (stderr.decode() + "\n" + stdout.decode()).splitlines():
+            if (proc.returncode != 0 and b"ERROR" in proc.stderr) or b"errors during collection" in proc.stdout:
+                for line in (proc.stderr.decode() + "\n" + proc.stdout.decode()).splitlines():
                     if "ERROR collecting" in line or "ModuleNotFoundError" in line:
                         issues.append(
                             ValidationIssue(

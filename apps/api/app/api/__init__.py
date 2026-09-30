@@ -22,6 +22,7 @@ from app.api.runs import router as runs_router
 from app.api.teams import router as teams_router
 from app.api.test_cases import router as test_cases_router
 from app.api.test_designs import router as test_designs_router
+from app.api.tasks import router as tasks_router
 from app.api.testrail import router as testrail_router
 from app.api.users import router as users_router
 from app.api.workers import router as workers_router
@@ -52,6 +53,7 @@ __all__ = [
     "teams_router",
     "test_cases_router",
     "test_designs_router",
+    "tasks_router",
     "testrail_router",
     "users_router",
     "workers_router",

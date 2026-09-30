@@ -1,6 +1,10 @@
 from pathlib import Path
 
 import pytest
+from project_model.models import AIProviderSettingsUpdate, QAChatRequest
+from pydantic import ValidationError
+from qa_core.ai.provider import FallbackAIProvider
+from qa_core.ai.registry import AIProviderRegistry
 from qa_core.author.grounder import KnowledgeGrounder, PytestCodeGenerator
 from qa_core.author.models import AuthoringRequest
 from qa_core.failure.classifier import FailureClassifier
@@ -68,6 +72,40 @@ def test_locator_candidates_rank_semantic_unique_targets_first():
         {"kind": "test_id", "value": "save", "nth": 1},
     ])
     assert [item["kind"] for item in ranked] == ["role", "test_id", "css"]
+
+
+def test_ai_provider_registry_uses_runtime_settings():
+    AIProviderRegistry.reset()
+    try:
+        AIProviderRegistry.configure_runtime({
+            "provider": "openai-compatible",
+            "api_key": "runtime-secret",
+            "model": "runtime-model",
+            "base_url": "https://ai.example/v1",
+            "timeout": "12",
+            "max_retries": "1",
+        })
+        provider = AIProviderRegistry.get_provider()
+        assert isinstance(provider, FallbackAIProvider)
+        assert provider.primary.api_key == "runtime-secret"
+        assert provider.primary.model == "runtime-model"
+        assert provider.primary.base_url == "https://ai.example/v1"
+    finally:
+        AIProviderRegistry.reset()
+
+
+def test_provider_settings_and_qa_assistant_contracts_are_validated():
+    settings = AIProviderSettingsUpdate.model_validate({
+        "provider": "openai-compatible",
+        "model": "gpt-test",
+        "base_url": "https://ai.example/v1",
+        "timeout": 15,
+        "max_retries": 2,
+    })
+    assert settings.provider == "openai-compatible"
+
+    with pytest.raises(ValidationError):
+        QAChatRequest.model_validate({"message": "broken old shape", "project_id": "project-1"})
 
 
 def test_knowledge_loader_and_authoring(tmp_path: Path):

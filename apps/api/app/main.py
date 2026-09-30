@@ -20,14 +20,15 @@ from app.api import (
     jobs_router,
     onboarding_router,
     projects_router,
-    recorder_router,
     qa_assistant_router,
     quality_router,
+    recorder_router,
     releases_router,
     requirements_router,
     runners_router,
     runs_router,
     teams_router,
+    tasks_router,
     test_cases_router,
     test_designs_router,
     testrail_router,
@@ -37,6 +38,7 @@ from app.api import (
 )
 from app.api.authz import authorize_request
 from app.persistence.database import engine, init_db
+from app.services.ai_settings_service import AISettingsService
 from app.services.metrics_service import metrics_service
 from app.settings import settings
 
@@ -55,6 +57,10 @@ async def _recover_stale_runs() -> list[str]:
 async def lifespan(app: FastAPI):
     # Initialize database tables
     await init_db()
+    try:
+        await AISettingsService().load_runtime_config()
+    except Exception as error:  # AI config must not prevent core API startup
+        logger.warning("Persisted AI provider settings could not be loaded: %s", error)
     # Close runs abandoned by a previous process: without this a crashed run stays RUNNING forever
     # and every pass-rate and coverage figure built on it stays wrong.
     try:
@@ -63,9 +69,15 @@ async def lifespan(app: FastAPI):
             logger.warning("Recovered %d stale run(s) at startup: %s", len(recovered), ", ".join(recovered))
     except Exception as error:  # pragma: no cover - startup must never fail because of recovery
         logger.warning("Stale run recovery skipped: %s", error)
+    from app.api.tasks import task_runtime_service
+
+    task_runtime = task_runtime_service
+    app.state.task_runtime = task_runtime
+    await task_runtime.start()
     try:
         yield
     finally:
+        await task_runtime.stop()
         from app.services.recorder_service import recorder_service
 
         await recorder_service.close_all()
@@ -129,6 +141,7 @@ app.include_router(audit_router, prefix="/api")
 app.include_router(quality_router, prefix="/api")
 app.include_router(releases_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
+app.include_router(tasks_router, prefix="/api")
 app.include_router(runners_router, prefix="/api")
 app.include_router(failures_router, prefix="/api")
 app.include_router(flaky_router, prefix="/api")

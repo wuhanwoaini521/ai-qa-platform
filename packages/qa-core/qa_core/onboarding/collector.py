@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import time
 from enum import Enum
 from pathlib import Path
@@ -145,23 +146,46 @@ async def run_project_command(
     env.update(environment or {})
 
     start = time.perf_counter()
-    process = await asyncio.create_subprocess_exec(
-        *resolved,
-        cwd=str(project_root),
-        env=env,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_sec)
-        timed_out = False
-    except asyncio.TimeoutError:
-        process.kill()
-        stdout, stderr = await process.communicate()
-        timed_out = True
+        process = await asyncio.create_subprocess_exec(
+            *resolved,
+            cwd=str(project_root),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except NotImplementedError:
+        # Windows' selector event loop (used by Uvicorn) has no asyncio subprocess transport.
+        try:
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                resolved,
+                cwd=str(project_root),
+                env=env,
+                capture_output=True,
+                timeout=timeout_sec,
+                check=False,
+            )
+            stdout, stderr = completed.stdout, completed.stderr
+            exit_code = completed.returncode
+            timed_out = False
+        except subprocess.TimeoutExpired as error:
+            stdout = error.stdout or b""
+            stderr = error.stderr or b""
+            exit_code = None
+            timed_out = True
+    else:
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_sec)
+            timed_out = False
+        except asyncio.TimeoutError:
+            process.kill()
+            stdout, stderr = await process.communicate()
+            timed_out = True
+        exit_code = process.returncode if not timed_out else None
 
     return _ProcessResult(
-        exit_code=None if timed_out else process.returncode,
+        exit_code=exit_code,
         stdout=stdout.decode("utf-8", errors="replace"),
         stderr=stderr.decode("utf-8", errors="replace"),
         duration_ms=(time.perf_counter() - start) * 1000,

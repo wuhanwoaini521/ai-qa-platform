@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import time
 
 from project_model.models import (
+    AIProviderRuntimeState,
     AIProviderStatus,
     AIStatusResponse,
     AIUsageSummary,
@@ -20,6 +22,9 @@ from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
+from app.services.ai_observability import log_ai_execution
+
+logger = logging.getLogger("app.ai")
 
 
 class AIService:
@@ -43,29 +48,75 @@ class AIService:
         self.budget_guard = AIBudgetGuard()
 
     async def get_status(self) -> AIStatusResponse:
-        provider = self.orchestrator.ai_provider
-        health = await provider.check_health()
+        configured = self.orchestrator.ai_provider
+        primary = getattr(configured, "primary", configured)
+        primary_health = await primary.check_health()
+        primary_name = getattr(primary, "provider_name", primary_health.provider)
+        health_status = self._health_status(primary_health.status.value)
+        real_available = (
+            primary_name != "fake"
+            and primary_health.status.value == "AVAILABLE"
+        )
+        if primary_name == "fake":
+            health_status = AIProviderStatus.DISABLED
+        fallback_active = False
+        fallback_health = None
 
-        # Map to AIProviderStatus safely, never exposing secrets
-        status_val = AIProviderStatus.AVAILABLE
-        if health.status.value == "DISABLED":
-            status_val = AIProviderStatus.DISABLED
-        elif health.status.value == "AUTH_ERROR":
-            status_val = AIProviderStatus.AUTH_ERROR
-        elif health.status.value == "RATE_LIMITED":
-            status_val = AIProviderStatus.RATE_LIMITED
-        elif health.status.value == "TIMEOUT":
-            status_val = AIProviderStatus.TIMEOUT
-        elif health.status.value == "UNAVAILABLE":
-            status_val = AIProviderStatus.UNAVAILABLE
+        if real_available:
+            state = AIProviderRuntimeState.REAL_AVAILABLE
+            model = primary_health.model
+            message = primary_health.message
+            failure_reason = None
+        else:
+            for fallback in getattr(configured, "fallbacks", []):
+                candidate = await fallback.check_health()
+                if candidate.status.value in ("AVAILABLE", "FALLBACK_ONLY"):
+                    fallback_health = candidate
+                    break
+            fallback_active = primary_name == "fake" or fallback_health is not None
+            if fallback_active:
+                state = AIProviderRuntimeState.FALLBACK_ONLY
+                model = fallback_health.model if fallback_health else primary_health.model
+                message = (
+                    "Fake provider is selected; no real model is active."
+                    if primary_name == "fake"
+                    else f"Real provider is unavailable; fallback to {fallback_health.provider} is active."
+                )
+            else:
+                state = AIProviderRuntimeState.UNAVAILABLE
+                model = primary_health.model
+                message = primary_health.message or "No AI provider is available."
+            failure_reason = "fake_provider_selected" if primary_name == "fake" else self._failure_reason(primary_health.status.value)
 
         return AIStatusResponse(
-            provider=health.provider,
-            status=status_val,
-            message=health.message,
-            model=health.model,
-            base_url=health.base_url,
+            provider=primary_name,
+            status=state,
+            message=message,
+            model=model,
+            base_url=primary_health.base_url,
+            real_model_available=real_available,
+            fallback_active=fallback_active,
+            failure_reason=failure_reason,
+            health_status=health_status,
         )
+
+    @staticmethod
+    def _health_status(value: str) -> AIProviderStatus:
+        try:
+            return AIProviderStatus(value)
+        except ValueError:
+            return AIProviderStatus.UNAVAILABLE
+
+    @staticmethod
+    def _failure_reason(value: str) -> str | None:
+        reasons = {
+            "DISABLED": "missing_api_key",
+            "AUTH_ERROR": "authentication_error",
+            "RATE_LIMITED": "rate_limited",
+            "TIMEOUT": "timeout",
+            "UNAVAILABLE": "connection_error",
+        }
+        return reasons.get(value)
 
     async def get_usage(self, limit: int = 50) -> AIUsageSummary:
         return await self.ai_repo.get_usage_summary(limit=limit)
@@ -86,6 +137,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        log_ai_execution(logger, feature="requirement_analysis", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
         await self.ai_repo.record_invocation(
             task="requirement_analysis",
             provider=invocation["provider"],
@@ -124,6 +176,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        log_ai_execution(logger, feature="test_design", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
         await self.ai_repo.record_invocation(
             task="test_design",
             provider=invocation["provider"],
@@ -167,6 +220,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        log_ai_execution(logger, feature="test_case_generation", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
         await self.ai_repo.record_invocation(
             task="test_case_generation",
             provider=invocation["provider"],

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import logging
 import time
 
 from project_model.models import (
@@ -17,7 +18,10 @@ from app.repositories.ai_repo import AIRepository
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.ai_observability import log_ai_execution
 from app.services.workspace_service import WorkspaceService
+
+logger = logging.getLogger("app.ai")
 
 
 class FailureService:
@@ -120,6 +124,7 @@ class FailureService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        log_ai_execution(logger, feature="failure_analysis", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
         await self.ai_repo.record_invocation(
             task="failure_diagnosis",
             provider=invocation["provider"],
@@ -173,6 +178,7 @@ class FailureService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        log_ai_execution(logger, feature="locator_analysis", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
         await self.ai_repo.record_invocation(
             task="locator_review",
             provider=invocation["provider"],

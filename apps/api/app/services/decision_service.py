@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from uuid import uuid4
 
 from project_model.models import (
     DecisionConnectionResult,
@@ -13,6 +14,7 @@ from project_model.models import (
 )
 
 from app.repositories.ai_repo import AIRepository
+from app.services.ai_observability import log_ai_execution
 from app.services.decision_provider import DecisionProviderRegistry
 from app.services.decision_settings_service import DecisionSettingsService
 from app.services.jev_provider import DecisionProviderError, JevDecisionProvider
@@ -100,7 +102,8 @@ class DecisionService:
         except Exception as error:  # telemetry must never turn a safe decision into a failed test run
             logger.warning("Decision telemetry write failed (%s)", type(error).__name__)
 
-    async def choose(self, request: DecisionRequest) -> DecisionResult:
+    async def choose(self, request: DecisionRequest, *, run_id: str | None = None) -> DecisionResult:
+        run_id = run_id or uuid4().hex
         if len({option.key for option in request.options}) != len(request.options):
             raise ValueError("Decision option keys must be unique")
 
@@ -116,6 +119,16 @@ class DecisionService:
                 result=result,
                 status="FALLBACK",
                 error_type="provider_disabled",
+            )
+            log_ai_execution(
+                logger,
+                run_id=run_id,
+                feature=request.name,
+                provider="fallback",
+                model="",
+                duration_ms=0,
+                status="FALLBACK",
+                fallback_used=True,
             )
             return result
 
@@ -140,12 +153,23 @@ class DecisionService:
                     usage=remote_result.usage,
                 )
                 logger.info(
-                    "Decision completed name=%s provider=%s model=%s latency_ms=%.1f confidence=%s",
+                    "Decision completed run_id=%s name=%s provider=%s model=%s latency_ms=%.1f confidence=%s",
+                    run_id,
                     request.name,
                     remote_result.provider,
                     remote_result.model,
                     duration,
                     remote_result.confidence,
+                )
+                log_ai_execution(
+                    logger,
+                    run_id=run_id,
+                    feature=request.name,
+                    provider=remote_result.provider,
+                    model=remote_result.model or "",
+                    duration_ms=duration,
+                    status="SUCCESS",
+                    fallback_used=remote_result.fallback_used,
                 )
                 return remote_result
         except asyncio.TimeoutError:
@@ -169,11 +193,22 @@ class DecisionService:
             usage=remote_result.usage if remote_result else None,
         )
         logger.info(
-            "Decision fallback name=%s provider=%s latency_ms=%.1f reason=%s",
+            "Decision fallback run_id=%s name=%s provider=%s latency_ms=%.1f reason=%s",
+            run_id,
             request.name,
             config.provider,
             duration,
             error_code,
+        )
+        log_ai_execution(
+            logger,
+            run_id=run_id,
+            feature=request.name,
+            provider=config.provider,
+            model=config.model,
+            duration_ms=duration,
+            status="FALLBACK",
+            fallback_used=True,
         )
         return result
 

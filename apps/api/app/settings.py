@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     runtime_dir: Path = Path("./runtime")
     workspace_storage_dir: Path = Path("./runtime/workspaces")
     artifact_storage_dir: Path = Path("./runtime/artifacts")
+    qa_ai_provider: str = "fake"
+    qa_ai_api_key: str = ""
+    qa_ai_base_url: str = "https://api.openai.com/v1"
+    qa_ai_model: str = "gpt-4o-mini"
+    qa_ai_timeout: float = 30.0
+    qa_ai_max_retries: int = 3
+    browser_proxy_url: str = ""
+    browser_proxy_bypass: str = ""
     jev_enabled: bool = False
     jev_api_key: str = ""
     jev_model: str = "jev-1.13.0"

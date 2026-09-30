@@ -29,13 +29,13 @@ from app.persistence.models import (
     TestRunORM,
     utc_now,
 )
-from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.job_repo import JobRepository
+from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
-from app.services.workspace_service import WorkspaceService
-from app.services.job_queue_service import JobQueueService
 from app.services.artifact_storage_service import ArtifactStorageService
+from app.services.job_queue_service import JobQueueService
+from app.services.workspace_service import WorkspaceService
 from app.settings import settings
 
 DEFAULT_STALE_RUN_SECONDS = 7200.0
@@ -69,6 +69,7 @@ class TestRunEventBus:
 
 
 event_bus = TestRunEventBus()
+_RUN_WORKER_TASKS: dict[str, asyncio.Task] = {}
 
 
 class TestRunService:
@@ -180,7 +181,9 @@ class TestRunService:
             )
             await self.run_repo.session.commit()
         else:
-            asyncio.create_task(self._run_worker_task(run_id, data))
+            worker = asyncio.create_task(self._run_worker_task(run_id, data), name=f"test-run-{run_id}")
+            _RUN_WORKER_TASKS[run_id] = worker
+            worker.add_done_callback(lambda done, rid=run_id: _RUN_WORKER_TASKS.pop(rid, None))
 
         return self._to_run_dto(orm)
 
@@ -224,11 +227,16 @@ class TestRunService:
 
                 # Execute PytestRunner. An imported project must run in its own virtualenv: using
                 # the API's interpreter makes its tests fail on their own dependencies.
+                browser_proxy_env = {}
+                if settings.browser_proxy_url:
+                    browser_proxy_env["BROWSER_PROXY_URL"] = settings.browser_proxy_url
+                if settings.browser_proxy_bypass:
+                    browser_proxy_env["BROWSER_PROXY_BYPASS"] = settings.browser_proxy_bypass
                 suite_result = await self.pytest_runner.run_suite(
                     workspace_dir=ws_dir,
                     nodeids=data.nodeids,
                     markers=data.markers,
-                    environment={**data.environment, "QA_ARTIFACT_DIR": str(artifact_dir)},
+                    environment={**data.environment, **browser_proxy_env, "QA_ARTIFACT_DIR": str(artifact_dir)},
                     interpreter=self._project_interpreter(ws_dir),
                     on_log=on_log,
                 )
@@ -597,6 +605,11 @@ class TestRunService:
             status=RunStatus.CANCELLED,
             finished_at=utc_now(),
         )
+        await self.run_repo.session.commit()
+        worker = _RUN_WORKER_TASKS.get(run_id)
+        if worker and worker is not asyncio.current_task():
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
         await event_bus.publish(
             run_id,
             {

@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
+from app.services.browser_proxy import browser_proxy_options
+
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
   window.__qaRecorderInstalled = true;
@@ -166,6 +168,8 @@ class RecorderSession:
     page: Any
     state: str = "READY"
     last_url: str = "about:blank"
+    requested_url: str = "about:blank"
+    navigation_error: str | None = None
     steps: list[dict[str, Any]] = field(default_factory=list)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     last_activity: float = field(default_factory=time.monotonic)
@@ -188,12 +192,13 @@ class BrowserRecorderService:
 
     async def create_session(self, owner_id: str, data: RecorderSessionCreate) -> RecorderSession:
         async with self._lifecycle_lock:
+            proxy = browser_proxy_options()
             playwright = await self._start_playwright()
             browser = None
             launch_errors: list[str] = []
             for kwargs in ({"headless": True}, {"headless": True, "channel": "msedge"}, {"headless": True, "channel": "chrome"}):
                 try:
-                    browser = await playwright.chromium.launch(**kwargs)
+                    browser = await playwright.chromium.launch(**kwargs, **({"proxy": proxy} if proxy else {}))
                     break
                 except Exception as error:
                     launch_errors.append(str(error).splitlines()[0])
@@ -202,14 +207,17 @@ class BrowserRecorderService:
             context = await browser.new_context(viewport={"width": 1280, "height": 720})
             await context.add_init_script(RECORDER_INIT_SCRIPT)
             page = await context.new_page()
-            try:
-                if data.start_url != "about:blank":
+            navigation_error = None
+            if data.start_url != "about:blank":
+                try:
                     await page.goto(data.start_url, wait_until="domcontentloaded", timeout=30000)
-            except Exception:
-                await context.close()
-                await browser.close()
-                raise
-            session = RecorderSession(uuid.uuid4().hex, owner_id, data.project_id, browser, context, page, last_url=page.url)
+                except Exception as error:
+                    # A blocked target must not destroy the browser; the user can retry another URL.
+                    navigation_error = str(error)
+            session = RecorderSession(
+                uuid.uuid4().hex, owner_id, data.project_id, browser, context, page,
+                last_url=page.url, requested_url=data.start_url, navigation_error=navigation_error,
+            )
             session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in data.recovered_steps]
             context.on("page", lambda new_page: setattr(session, "page", new_page))
             async with self._lock:
@@ -333,16 +341,37 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
     lines = [
         "import os",
         "import re",
+        "from urllib.parse import unquote, urlsplit",
         "from playwright.sync_api import sync_playwright, expect",
+        "",
+        "def _browser_proxy():",
+        "    raw = (os.getenv('BROWSER_PROXY_URL') or os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')",
+        "           or os.getenv('HTTP_PROXY') or os.getenv('http_proxy'))",
+        "    if not raw:",
+        "        return None",
+        "    parsed = urlsplit(raw if '://' in raw else f'http://{raw}')",
+        "    if (parsed.scheme not in {'http', 'https', 'socks5'} or not parsed.hostname",
+        "            or parsed.path not in {'', '/'} or parsed.query or parsed.fragment):",
+        "        raise ValueError('BROWSER_PROXY_URL must be an HTTP, HTTPS or SOCKS5 proxy URL')",
+        "    proxy = {'server': f\"{parsed.scheme}://{parsed.netloc.rsplit('@', 1)[-1]}\"}",
+        "    if parsed.username:",
+        "        proxy['username'] = unquote(parsed.username)",
+        "    if parsed.password:",
+        "        proxy['password'] = unquote(parsed.password)",
+        "    bypass = os.getenv('BROWSER_PROXY_BYPASS') or os.getenv('NO_PROXY') or os.getenv('no_proxy')",
+        "    if bypass:",
+        "        proxy['bypass'] = bypass",
+        "    return proxy",
         "",
         f"def {test_name}():",
         "    with sync_playwright() as playwright:",
+        "        proxy = _browser_proxy()",
         "        channels = [os.getenv('PLAYWRIGHT_CHANNEL'), None, 'msedge', 'chrome']",
         "        browser = None",
         "        launch_error = None",
         "        for channel in dict.fromkeys(channels):",
         "            try:",
-        "                browser = playwright.chromium.launch(headless=True, channel=channel)",
+        "                browser = playwright.chromium.launch(headless=True, channel=channel, **({'proxy': proxy} if proxy else {}))",
         "                break",
         "            except Exception as error:",
         "                launch_error = error",

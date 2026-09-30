@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import AsyncGenerator
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
+from project_model.models import User
+from project_model.task_models import (
+    Task,
+    TaskApprovalRequest,
+    TaskCreate,
+    TaskDetail,
+    TaskStatus,
+)
+
+from app.api.authz import get_current_user
+from app.persistence.database import async_session_factory
+from app.repositories.task_repo import TaskRepository
+from app.services.task_runtime_service import TaskRuntimeService
+
+router = APIRouter(prefix="/tasks", tags=["Agent Tasks"])
+task_runtime_service = TaskRuntimeService()
+
+
+def get_task_runtime(request: Request) -> TaskRuntimeService:
+    return getattr(request.app.state, "task_runtime", task_runtime_service)
+
+
+@router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    data: TaskCreate,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> Task:
+    try:
+        return await runtime.create(data, str(user.id))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("", response_model=list[Task])
+async def list_tasks(
+    project_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> list[Task]:
+    return await runtime.list(str(user.id), project_id=project_id, limit=limit)
+
+
+@router.get("/{task_id}", response_model=TaskDetail)
+async def get_task(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskDetail:
+    detail = await runtime.get(task_id, str(user.id))
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return detail
+
+
+@router.post("/{task_id}/approval", response_model=TaskDetail)
+async def decide_task_approval(
+    task_id: str,
+    request: TaskApprovalRequest,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskDetail:
+    detail = await runtime.approve(task_id, str(user.id), request)
+    if detail is None:
+        raise HTTPException(status_code=409, detail="Task is not waiting for an approval decision")
+    return detail
+
+
+@router.post("/{task_id}/cancel", response_model=Task)
+async def cancel_task(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> Task:
+    result = await runtime.cancel(task_id, str(user.id))
+    if result is None:
+        raise HTTPException(status_code=409, detail="Task does not exist or is already terminal")
+    detail = await runtime.get(task_id, str(user.id))
+    assert detail is not None
+    return detail
+
+
+@router.post("/{task_id}/replan", response_model=TaskDetail)
+async def replan_task(
+    task_id: str,
+    instructions: str = Query(min_length=1, max_length=4000),
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskDetail:
+    try:
+        detail = await runtime.replan(task_id, str(user.id), instructions)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if detail is None:
+        raise HTTPException(status_code=409, detail="Only failed or blocked tasks can be replanned")
+    return detail
+
+
+async def _task_event_stream(
+    task_id: str,
+    owner_id: str,
+    after_id: int,
+    session_factory,
+) -> AsyncGenerator[str, None]:
+    cursor = after_id
+    terminal = {
+        item.value for item in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED, TaskStatus.CANCELLED)
+    }
+    while True:
+        async with session_factory() as session:
+            repo = TaskRepository(session)
+            task = await repo.get(task_id, owner_id)
+            if task is None:
+                return
+            events = await repo.events_after(task_id, cursor)
+            current_status = task.status
+            for event in events:
+                payload = json.dumps(
+                    {
+                        "id": event.id,
+                        "task_id": event.task_id,
+                        "type": event.type,
+                        "payload": event.payload,
+                        "created_at": event.created_at.isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+                cursor = event.id
+                yield f"id: {event.id}\ndata: {payload}\n\n"
+        if current_status in terminal and not events:
+            return
+        if not events:
+            yield ": keep-alive\n\n"
+            await asyncio.sleep(0.5)
+
+
+@router.get("/{task_id}/events")
+async def stream_task_events(
+    task_id: str,
+    request: Request,
+    after: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    async with async_session_factory() as session:
+        repo = TaskRepository(session)
+        if await repo.get(task_id, str(user.id)) is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+    # EventSource reconnects with Last-Event-ID. The query parameter also supports clients
+    # that cannot set custom request headers.
+    cursor = after
+    header_cursor = request.headers.get("last-event-id")
+    raw_cursor = header_cursor or request.query_params.get("last_event_id")
+    if raw_cursor:
+        try:
+            cursor = max(cursor, int(raw_cursor))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Last-Event-ID must be an integer")
+    return StreamingResponse(
+        _task_event_stream(task_id, str(user.id), cursor, async_session_factory),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )

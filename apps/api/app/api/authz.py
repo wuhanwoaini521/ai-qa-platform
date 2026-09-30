@@ -40,9 +40,8 @@ PUBLIC_PATHS = (
 #: Public prefixes that also match sub-paths (``/api/health/live``, ``/api/health/ready``).
 PUBLIC_PREFIXES = ("/api/health",)
 
-#: Routes whose client cannot send an Authorization header. The browser's EventSource API has no
-#: header option, so the run-event stream accepts the same bearer token as an `access_token` query
-#: parameter. Only the SSE and authenticated WebSocket endpoints use this mechanism.
+#: Routes whose browser-native clients cannot send an Authorization header. The SSE and recorder
+#: streams accept the same bearer token as an `access_token` query parameter.
 QUERY_TOKEN_SUFFIXES = ("/events", "/stream")
 
 
@@ -75,6 +74,8 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/recorder", Permission.AUTOMATION_EDIT, Permission.AUTOMATION_EDIT),
     Rule("/api/decision", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),
     Rule("/api/runs", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
+    # Agent tasks may propose and, after explicit approval, write workspace source.
+    Rule("/api/tasks", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
     Rule("/api/runners", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     # Repair flows mutate workspace code, so they require the automation-edit permission:
     # a VIEWER can read failures and proposals but can never apply one.
@@ -98,7 +99,10 @@ DEFAULT_RULE = Rule("", Permission.PROJECT_READ, Permission.PROJECT_WRITE)
 
 def allows_query_token(path: str) -> bool:
     """True for the small set of routes where a bearer token may arrive as a query parameter."""
-    return (path.startswith("/api/runs/") or path.startswith("/api/recorder/")) and path.endswith(QUERY_TOKEN_SUFFIXES)
+    return (
+        (path.startswith("/api/runs/") or path.startswith("/api/recorder/") or path.startswith("/api/tasks/"))
+        and path.endswith(QUERY_TOKEN_SUFFIXES)
+    )
 
 
 def is_public_path(path: str) -> bool:

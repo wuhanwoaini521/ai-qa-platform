@@ -209,11 +209,22 @@ def task_dev() -> int:
     log("Press Ctrl+C to stop both.\n")
 
     lock = threading.Lock()
+    # Uvicorn's Windows reloader selects SelectorEventLoop so it can supervise subprocesses.
+    # Playwright's async driver uses asyncio subprocesses, which SelectorEventLoop does not
+    # support on Windows. Run the API without hot reload there so recorder sessions and browser
+    # automation use the default ProactorEventLoop. POSIX keeps the usual reload workflow.
+    api_reload_args = (
+        []
+        if IS_WINDOWS
+        else ["--reload", "--reload-dir", "apps/api", "--reload-dir", "packages"]
+    )
+    if IS_WINDOWS:
+        log("Windows: API hot reload is disabled because Playwright requires ProactorEventLoop.")
     services = [
         (
             "api",
             command(
-                "uv", "run", "uvicorn", "app.main:app", "--app-dir", "apps/api", "--reload",
+                "uv", "run", "uvicorn", "app.main:app", "--app-dir", "apps/api", *api_reload_args,
                 "--host", "127.0.0.1", "--port", str(api_port),
             ),
             {},

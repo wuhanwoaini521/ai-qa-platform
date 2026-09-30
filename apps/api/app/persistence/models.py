@@ -326,6 +326,19 @@ class DecisionProviderConfigORM(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
+class AIProviderConfigORM(Base):
+    __tablename__ = "ai_provider_configs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True, default="default")
+    provider: Mapped[str] = mapped_column(String(50), default="fake")
+    encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str] = mapped_column(String(128), default="gpt-4o-mini")
+    base_url: Mapped[str] = mapped_column(String(2048), default="https://api.openai.com/v1")
+    timeout: Mapped[float] = mapped_column(Float, default=30.0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
 class RunnerProfileORM(Base):
     __tablename__ = "runner_profiles"
 
@@ -498,3 +511,110 @@ class ArtifactORM(Base):
     storage_type: Mapped[str] = mapped_column(String(50), default="LOCAL")  # LOCAL, S3
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+
+
+class TaskORM(Base):
+    """Durable user goal. Test runs and worker jobs remain execution resources below a task."""
+
+    __tablename__ = "agent_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="PENDING", index=True)
+    owner_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    inputs: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    context: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    verification: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    replan_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_steps: Mapped[int] = mapped_column(Integer, default=30)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3)
+    max_replans: Mapped[int] = mapped_column(Integer, default=2)
+    max_ai_calls: Mapped[int] = mapped_column(Integer, default=8)
+    max_duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
+    current_step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
+class TaskStepORM(Base):
+    __tablename__ = "agent_task_steps"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="PENDING", index=True)
+    dependencies: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    condition: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    inputs: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    outputs: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    evidence_ids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    decision: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=1)
+    parallelizable: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class TaskEvidenceORM(Base):
+    __tablename__ = "agent_task_evidence"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True, index=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(200), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("stored_artifacts.id", ondelete="SET NULL"), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+
+
+class TaskArtifactORM(Base):
+    __tablename__ = "agent_task_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True)
+    artifact_id: Mapped[str] = mapped_column(String(36), ForeignKey("stored_artifacts.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+
+
+class TaskDecisionORM(Base):
+    __tablename__ = "agent_task_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    choice: Mapped[str] = mapped_column(String(128), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    rationale: Mapped[str] = mapped_column(Text, default="")
+    escalated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+
+
+class TaskEventORM(Base):
+    __tablename__ = "agent_task_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)

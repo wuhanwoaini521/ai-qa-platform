@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -46,6 +47,18 @@ class GitRepository(GitRepositoryProtocol):
 
     BRANCH_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_\-\.\/]+$")
 
+    @staticmethod
+    async def _run(repo_dir: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+        """Run Git off the event loop; Windows' selector loop cannot create subprocess transports."""
+        return await asyncio.to_thread(
+            subprocess.run,
+            ["git", *args],
+            cwd=str(repo_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
     def _validate_branch_name(self, branch_name: str) -> None:
         if not branch_name or not self.BRANCH_NAME_REGEX.match(branch_name):
             raise GitSecurityError(
@@ -60,34 +73,15 @@ class GitRepository(GitRepositoryProtocol):
             raise GitSecurityError(f"Unsafe branch name format: '{branch_name}'")
 
     async def get_current_branch(self, repo_dir: Path) -> str:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "rev-parse",
-            "--abbrev-ref",
-            "HEAD",
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        branch = stdout.decode().strip()
+        result = await self._run(repo_dir, "rev-parse", "--abbrev-ref", "HEAD")
+        branch = result.stdout.decode().strip()
         return branch if branch else "main"
 
     async def get_branches(self, repo_dir: Path) -> list[BranchInfo]:
         current = await self.get_current_branch(repo_dir)
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "branch",
-            "--list",
-            "-v",
-            "--no-abbrev",
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
+        result = await self._run(repo_dir, "branch", "--list", "-v", "--no-abbrev")
         branches: list[BranchInfo] = []
-        for line in stdout.decode().splitlines():
+        for line in result.stdout.decode().splitlines():
             line_str = line.strip()
             if not line_str:
                 continue
@@ -112,47 +106,24 @@ class GitRepository(GitRepositoryProtocol):
     async def create_branch(self, repo_dir: Path, branch_name: str, checkout: bool = True) -> str:
         self._validate_branch_name(branch_name)
         args = ["checkout", "-b", branch_name] if checkout else ["branch", branch_name]
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            *args,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            err_msg = stderr.decode() or stdout.decode()
+        result = await self._run(repo_dir, *args)
+        if result.returncode != 0:
+            err_msg = result.stderr.decode() or result.stdout.decode()
             raise RuntimeError(f"Failed to create branch '{branch_name}': {err_msg.strip()}")
         return branch_name
 
     async def switch_branch(self, repo_dir: Path, branch_name: str) -> str:
         self._validate_branch_name(branch_name)
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "checkout",
-            branch_name,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            err_msg = stderr.decode() or stdout.decode()
+        result = await self._run(repo_dir, "checkout", branch_name)
+        if result.returncode != 0:
+            err_msg = result.stderr.decode() or result.stdout.decode()
             raise RuntimeError(f"Failed to switch to branch '{branch_name}': {err_msg.strip()}")
         return branch_name
 
     async def get_status(self, repo_dir: Path) -> list[GitChangedFile]:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "status",
-            "--porcelain",
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
+        result = await self._run(repo_dir, "status", "--porcelain")
         changed: list[GitChangedFile] = []
-        for line in stdout.decode().splitlines():
+        for line in result.stdout.decode().splitlines():
             if not line or len(line) < 3:
                 continue
             staged_char = line[0]
@@ -166,26 +137,12 @@ class GitRepository(GitRepositoryProtocol):
     async def get_diff(self, repo_dir: Path, staged: bool = False) -> GitDiffResult:
         changed_files = await self.get_status(repo_dir)
         args = ["diff", "--cached"] if staged else ["diff", "HEAD"]
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            *args,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        diff_text = stdout.decode()
+        result = await self._run(repo_dir, *args)
+        diff_text = result.stdout.decode()
         if not diff_text and not staged:
             # Fallback for unstaged or brand new working tree files
-            proc2 = await asyncio.create_subprocess_exec(
-                "git",
-                "diff",
-                cwd=str(repo_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout2, _ = await proc2.communicate()
-            diff_text = stdout2.decode()
+            result = await self._run(repo_dir, "diff")
+            diff_text = result.stdout.decode()
         return GitDiffResult(diff=diff_text, changed_files=changed_files)
 
     async def commit(
@@ -199,18 +156,10 @@ class GitRepository(GitRepositoryProtocol):
             raise ValueError("Commit message cannot be empty")
 
         # Stage all tracked/untracked changes safely
-        proc_add = await asyncio.create_subprocess_exec(
-            "git",
-            "add",
-            ".",
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc_add.communicate()
+        await self._run(repo_dir, "add", ".")
 
-        proc_commit = await asyncio.create_subprocess_exec(
-            "git",
+        result = await self._run(
+            repo_dir,
             "-c",
             f"user.name={author_name}",
             "-c",
@@ -218,17 +167,13 @@ class GitRepository(GitRepositoryProtocol):
             "commit",
             "-m",
             message,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc_commit.communicate()
-        if proc_commit.returncode != 0:
-            err = (stderr.decode() or stdout.decode()).strip()
-            if "nothing to commit" in err or "nothing to commit" in stdout.decode():
+        if result.returncode != 0:
+            err = (result.stderr.decode() or result.stdout.decode()).strip()
+            if "nothing to commit" in err or "nothing to commit" in result.stdout.decode():
                 return "Nothing to commit, working tree clean."
             raise RuntimeError(f"Commit failed: {err}")
-        return stdout.decode().strip()
+        return result.stdout.decode().strip()
 
     async def push(self, repo_dir: Path, branch: str | None = None, remote: str = "origin") -> GitPushResult:
         if not branch:
@@ -236,17 +181,8 @@ class GitRepository(GitRepositoryProtocol):
         self._validate_branch_name(branch)
 
         # Check if remote exists
-        proc_remote = await asyncio.create_subprocess_exec(
-            "git",
-            "remote",
-            "get-url",
-            remote,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        remote_url_out, _ = await proc_remote.communicate()
-        remote_url = remote_url_out.decode().strip() if proc_remote.returncode == 0 else ""
+        remote_result = await self._run(repo_dir, "remote", "get-url", remote)
+        remote_url = remote_result.stdout.decode().strip() if remote_result.returncode == 0 else ""
 
         if not remote_url:
             return GitPushResult(
@@ -257,19 +193,9 @@ class GitRepository(GitRepositoryProtocol):
             )
 
         # Execute push without --force
-        proc_push = await asyncio.create_subprocess_exec(
-            "git",
-            "push",
-            "-u",
-            remote,
-            branch,
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc_push.communicate()
-        if proc_push.returncode != 0:
-            err_msg = (stderr.decode() or stdout.decode()).strip()
+        result = await self._run(repo_dir, "push", "-u", remote, branch)
+        if result.returncode != 0:
+            err_msg = (result.stderr.decode() or result.stdout.decode()).strip()
             return GitPushResult(
                 success=False,
                 branch=branch,
@@ -284,19 +210,15 @@ class GitRepository(GitRepositoryProtocol):
         )
 
     async def get_log(self, repo_dir: Path, limit: int = 15) -> list[GitCommitInfo]:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
+        result = await self._run(
+            repo_dir,
             "log",
             f"-n{limit}",
             "--pretty=format:%H%x00%an%x00%ae%x00%ad%x00%s",
             "--date=iso",
-            cwd=str(repo_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await proc.communicate()
         commits: list[GitCommitInfo] = []
-        for line in stdout.decode().splitlines():
+        for line in result.stdout.decode().splitlines():
             if not line:
                 continue
             parts = line.split("\x00")

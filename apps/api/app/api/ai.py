@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from project_model.models import (
+    AIProviderConnectionResult,
+    AIProviderSettingsResponse,
+    AIProviderSettingsUpdate,
     AIStatusResponse,
     AIUsageSummary,
+    Permission,
     RequirementAnalysisDTO,
     TestCaseGenerationItem,
     TestDesignSuggestion,
+    User,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.authz import require_permission
 from app.persistence.database import get_db
 from app.repositories.ai_repo import AIRepository
 from app.repositories.project_repo import ProjectRepository
@@ -18,8 +24,37 @@ from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.ai_service import AIService
+from app.services.ai_settings_service import AISettingsService
 
 router = APIRouter(prefix="/ai", tags=["Production AI Intelligence"])
+
+
+def get_ai_settings_service() -> AISettingsService:
+    return AISettingsService()
+
+
+@router.get("/settings", response_model=AIProviderSettingsResponse)
+async def get_ai_provider_settings(service: AISettingsService = Depends(get_ai_settings_service)):
+    """Read normal AI provider settings without exposing its API key."""
+    return await service.get_settings()
+
+
+@router.put("/settings", response_model=AIProviderSettingsResponse)
+async def save_ai_provider_settings(
+    update: AIProviderSettingsUpdate,
+    _user: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: AISettingsService = Depends(get_ai_settings_service),
+):
+    return await service.save(update)
+
+
+@router.post("/test-connection", response_model=AIProviderConnectionResult)
+async def test_ai_provider_connection(
+    update: AIProviderSettingsUpdate,
+    _user: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: AISettingsService = Depends(get_ai_settings_service),
+):
+    return await service.test_connection(update)
 
 
 def get_ai_service(session: AsyncSession = Depends(get_db)) -> AIService:

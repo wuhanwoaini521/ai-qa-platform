@@ -227,7 +227,10 @@ class ProductionQAOrchestrator:
         res = await self.ai_provider.complete(req)
         self.last_completion = res
         if res.structured_data:
-            return FailureAnalysisResponse.model_validate(res.structured_data)
+            analysis = FailureAnalysisResponse.model_validate(res.structured_data)
+            return analysis.model_copy(
+                update={"provider": res.provider, "fallback_used": res.fallback_used}
+            )
 
         # Deterministic fallback
         classification, suggested_action, _ = FailureClassifier.classify(error_message, stack_trace)
@@ -238,6 +241,8 @@ class ProductionQAOrchestrator:
             hypotheses=["Element state or locator mismatch"],
             recommended_actions=[suggested_action],
             confidence=0.85,
+            provider=res.provider,
+            fallback_used=res.fallback_used,
         )
 
     def propose_locator_repair(

@@ -32,7 +32,9 @@ async def create_recorder_session(
         created = await recorder_service.create_session(user.id, data)
     except Exception as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return {"id": created.id, "project_id": created.project_id, "state": created.state, "url": created.page.url}
+    return {"id": created.id, "project_id": created.project_id, "state": created.state,
+            "url": created.page.url, "requested_url": created.requested_url,
+            "navigation_error": created.navigation_error}
 
 
 @router.get("/sessions/{session_id}")
@@ -43,7 +45,9 @@ async def get_recorder_session(
     session = await recorder_service.get(session_id, user.id)
     if not session:
         raise HTTPException(status_code=404, detail="Recorder session not found")
-    return {"id": session.id, "project_id": session.project_id, "state": session.state, "url": session.page.url, "steps": session.steps}
+    return {"id": session.id, "project_id": session.project_id, "state": session.state,
+            "url": session.page.url, "requested_url": session.requested_url,
+            "navigation_error": session.navigation_error, "steps": session.steps}
 
 
 @router.post("/sessions/{session_id}/generate")
@@ -94,7 +98,10 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
             try:
                 if action == "navigate":
                     target = RecorderSessionCreate(project_id=session.project_id, start_url=command["url"]).start_url
+                    session.requested_url = target
                     await page.goto(target, wait_until="domcontentloaded", timeout=30000)
+                    session.navigation_error = None
+                    await websocket.send_json({"type": "command_success", "action": "navigate", "url": page.url})
                 elif action == "back":
                     await page.go_back(wait_until="domcontentloaded", timeout=15000)
                 elif action == "forward":
@@ -150,7 +157,9 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                     session.steps = [by_id[item] for item in order if item in by_id] + [step for step in session.steps if step["id"] not in order]
                 session.last_activity = asyncio.get_running_loop().time()
             except Exception as error:
-                await websocket.send_json({"type": "command_error", "message": str(error)})
+                if action == "navigate":
+                    session.navigation_error = str(error)
+                await websocket.send_json({"type": "command_error", "message": str(error), "url": command.get("url") if action == "navigate" else page.url})
     except WebSocketDisconnect:
         pass
     except Exception:

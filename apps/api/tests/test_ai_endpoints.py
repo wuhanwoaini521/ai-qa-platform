@@ -12,7 +12,9 @@ async def test_ai_status_and_usage_endpoints(client: AsyncClient):
     data = status_res.json()
     assert "provider" in data
     assert "status" in data
-    assert data["status"] in ["AVAILABLE", "DISABLED", "AUTH_ERROR", "RATE_LIMITED", "TIMEOUT", "UNAVAILABLE"]
+    assert data["status"] in ["REAL_AVAILABLE", "FALLBACK_ONLY", "UNAVAILABLE"]
+    assert data["real_model_available"] is (data["status"] == "REAL_AVAILABLE")
+    assert data["fallback_active"] is (data["status"] == "FALLBACK_ONLY")
     # Verify no secret leaked
     assert "api_key" not in data
     assert "sk-" not in str(data)

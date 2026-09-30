@@ -86,6 +86,7 @@ ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("ai_invocations", "decision_name", "VARCHAR(128)"),
     ("ai_invocations", "decision_choice", "VARCHAR(128)"),
     ("ai_invocations", "decision_confidence", "FLOAT"),
+    ("agent_tasks", "max_ai_calls", "INTEGER NOT NULL DEFAULT 8"),
 )
 
 

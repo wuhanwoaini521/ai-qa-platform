@@ -7,14 +7,33 @@ from project_model.models import (
     GitDiffResult,
     RenameFilePayload,
     ValidationReport,
+    Workspace,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.database import get_db
+from app.persistence.models import WorkspaceORM
 from app.repositories.project_repo import ProjectRepository
 from app.services.workspace_service import SecurityException, WorkspaceService
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
+
+
+@router.get("", response_model=list[Workspace])
+async def list_workspaces(
+    project_id: str = Query(...),
+    session: AsyncSession = Depends(get_db),
+) -> list[Workspace]:
+    result = await session.execute(
+        select(WorkspaceORM).where(WorkspaceORM.project_id == project_id).order_by(WorkspaceORM.created_at.desc())
+    )
+    # The existing workspace/file/run APIs use project_id as their workspace key. Return that
+    # canonical key instead of exposing the unused internal WorkspaceORM row ID.
+    return [Workspace(
+        id=row.project_id, project_id=row.project_id, path=row.path, branch=row.branch,
+        status=row.status, created_at=row.created_at, updated_at=row.updated_at,
+    ) for row in result.scalars().all()]
 
 
 def get_workspace_service() -> WorkspaceService:
