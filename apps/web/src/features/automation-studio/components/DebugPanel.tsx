@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { DebugStackFrame, DebugState, DebugVariable } from '../hooks/useDebugSession';
+import { DebugBreakpointBinding, DebugStackFrame, DebugState, DebugVariable } from '../hooks/useDebugSession';
 
 interface DebugPanelProps {
   state: DebugState;
@@ -9,6 +9,8 @@ interface DebugPanelProps {
   frames: DebugStackFrame[];
   locals: DebugVariable[];
   output: string;
+  breakpointBindings: DebugBreakpointBinding[];
+  hasHitBreakpoint: boolean;
   onSelectFrame: (frame: DebugStackFrame) => void;
 }
 
@@ -28,6 +30,8 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   frames,
   locals,
   output,
+  breakpointBindings,
+  hasHitBreakpoint,
   onSelectFrame,
 }) => {
   const { t } = useTranslation('studioPanels');
@@ -58,6 +62,23 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
         )}
         {error && <span role="alert" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11, color: 'var(--ui-rose)' }}>{error}</span>}
       </header>
+      <div aria-label={t('debug.breakpoints')} style={{ padding: '5px 12px', borderBottom: '1px solid var(--ui-line)', fontSize: 11, maxHeight: 80, overflow: 'auto' }}>
+        {nodeid?.includes('::') && <div style={{ color: 'var(--text-muted)' }}>{t('debug.singleCaseScope')}</div>}
+        {state === 'finished' && !hasHitBreakpoint && (
+          <div role="status" style={{ color: 'var(--ui-amber)' }}>{t('debug.noBreakpointHit')}</div>
+        )}
+        {!breakpointBindings.length && <div style={{ color: 'var(--text-muted)' }}>{t('debug.noBreakpoints')}</div>}
+        {breakpointBindings.map((binding) => (
+          <div key={binding.id} title={binding.message} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '2px 0' }}>
+            <code>{binding.path}:{binding.requestedLine}</code>
+            <span style={{ color: binding.hit ? 'var(--ui-mint-strong)' : binding.verified === false ? 'var(--ui-rose)' : 'var(--text-muted)' }}>
+              {t(binding.hit ? 'debug.breakpointHit' : binding.verified === null ? 'debug.breakpointPending' : binding.verified ? 'debug.breakpointVerified' : 'debug.breakpointRejected')}
+            </span>
+            {binding.line !== binding.requestedLine && <span>{t('debug.breakpointMoved', { line: binding.line })}</span>}
+            {binding.message && <span style={{ color: 'var(--text-muted)' }}>{binding.message}</span>}
+          </div>
+        ))}
+      </div>
       <div style={{ minHeight: 0, flex: 1, display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(180px, 1fr) minmax(200px, 1.4fr)' }}>
         <div style={{ minWidth: 0, overflow: 'auto', borderRight: '1px solid var(--ui-line)', padding: '7px 10px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{t('debug.callStack')}</div>

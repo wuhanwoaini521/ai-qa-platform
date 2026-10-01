@@ -18,6 +18,17 @@ export interface DebugVariable {
   type?: string;
 }
 
+export interface DebugBreakpointBinding {
+  id: string;
+  path: string;
+  requestedLine: number;
+  line: number;
+  adapterId?: number;
+  verified: boolean | null;
+  message?: string;
+  hit: boolean;
+}
+
 interface DapMessage {
   seq?: number;
   type?: string;
@@ -54,12 +65,21 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
   const [frames, setFrames] = useState<DebugStackFrame[]>([]);
   const [locals, setLocals] = useState<DebugVariable[]>([]);
   const [output, setOutput] = useState('');
+  const [breakpointBindings, setBreakpointBindings] = useState<DebugBreakpointBinding[]>([]);
+  const [hasHitBreakpoint, setHasHitBreakpoint] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const bootstrapRef = useRef<DebugSessionBootstrap | null>(null);
   const sequenceRef = useRef(0);
   const threadIdRef = useRef<number | null>(null);
   const pendingRef = useRef(new Map<number, PendingRequest>());
+  const breakpointsRef = useRef(breakpoints);
+  breakpointsRef.current = breakpoints;
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+  const configuredRef = useRef(false);
+  const breakpointPathsRef = useRef(new Set<string>());
+  const breakpointQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const sendRequest = useCallback((command: string, args: Record<string, unknown> = {}, wait = true) => {
     const socket = socketRef.current;
@@ -106,13 +126,20 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     }
   }, [onExecutionLine, onOpenFile, sendRequest]);
 
-  const loadStack = useCallback(async (threadId: number) => {
+  const loadStack = useCallback(async (threadId: number, reason?: string) => {
     const socket = socketRef.current;
     try {
       const response = await sendRequest('stackTrace', { threadId });
       if (socketRef.current !== socket) return;
       const nextFrames = (response.body?.stackFrames as DebugStackFrame[] | undefined) ?? [];
       setFrames(nextFrames);
+      const frame = nextFrames[0];
+      if (reason === 'breakpoint' && frame) {
+        const path = frame.source?.path?.replace(/\\/g, '/');
+        setBreakpointBindings((items) => items.map((item) => (
+          item.path === path && item.line === frame.line ? { ...item, hit: true } : item
+        )));
+      }
       if (nextFrames[0]) await selectFrame(nextFrames[0]);
     } catch (requestError) {
       if (socketRef.current !== socket) return;
@@ -120,24 +147,76 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     }
   }, [selectFrame, sendRequest]);
 
-  const configureBreakpoints = useCallback(async () => {
+  const synchronizeBreakpoints = useCallback((items: Breakpoint[]) => {
     const socket = socketRef.current;
-    try {
-      const activeBreakpoints = (bootstrapRef.current?.breakpoints ?? breakpoints).filter((item) => item.enabled);
+    if (!configuredRef.current || !socket || socket.readyState !== WebSocket.OPEN
+      || bootstrapRef.current?.workspace_id !== projectIdRef.current) return Promise.resolve();
+    // Serialize full-file replacements, including empty lists when the last breakpoint is removed.
+    // A slow response from an earlier edit must never overwrite a newer edit.
+    const queued = breakpointQueueRef.current.catch(() => undefined).then(async () => {
+      if (socketRef.current !== socket || !configuredRef.current
+        || bootstrapRef.current?.workspace_id !== projectIdRef.current) return;
+      const activeBreakpoints = items.filter((item) => item.enabled);
       const grouped = new Map<string, Breakpoint[]>();
       for (const breakpoint of activeBreakpoints) {
         const path = breakpoint.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
         grouped.set(path, [...(grouped.get(path) ?? []), breakpoint]);
       }
-      for (const [path, items] of grouped) {
-        await sendRequest('setBreakpoints', {
+      const paths = new Set([...breakpointPathsRef.current, ...grouped.keys()]);
+      for (const path of paths) {
+        if (bootstrapRef.current?.workspace_id !== projectIdRef.current) return;
+        const fileItems = grouped.get(path) ?? [];
+        // Keep track of partially applied configurations so a retry can clear them too.
+        breakpointPathsRef.current.add(path);
+        setBreakpointBindings((current) => [
+          ...current.filter((item) => item.path !== path),
+          ...fileItems.map((item) => ({
+            id: item.id, path, requestedLine: item.line_number, line: item.line_number,
+            verified: null, hit: current.find((binding) => binding.id === item.id)?.hit ?? false,
+          })),
+        ]);
+        const response = await sendRequest('setBreakpoints', {
           source: { name: path.split('/').pop() ?? path, path },
-          breakpoints: [...new Set(items.map((item) => item.line_number))].map((line) => ({ line })),
+          breakpoints: fileItems.map((item) => ({ line: item.line_number })),
           sourceModified: false,
         });
         if (socketRef.current !== socket) return;
+        const accepted = (response.body?.breakpoints as Array<{ id?: number; line?: number; verified?: boolean; message?: string }> | undefined) ?? [];
+        setBreakpointBindings((current) => current.map((binding) => {
+          const index = fileItems.findIndex((item) => item.id === binding.id);
+          if (binding.path !== path || index < 0) return binding;
+          const result = accepted[index];
+          return { ...binding, adapterId: result?.id, line: result?.line ?? binding.requestedLine,
+            verified: result?.verified === true, message: result?.message };
+        }));
       }
+      breakpointPathsRef.current = new Set(grouped.keys());
+    });
+    breakpointQueueRef.current = queued;
+    void queued.catch((requestError) => {
+      if (socketRef.current !== socket) return;
+      const message = requestError instanceof Error ? requestError.message : String(requestError);
+      setError(message);
+      setBreakpointBindings((current) => current.map((binding) => (
+        binding.verified === null ? { ...binding, verified: false, message } : binding
+      )));
+    });
+    return queued;
+  }, [sendRequest]);
+
+  useEffect(() => {
+    void synchronizeBreakpoints(breakpoints).catch(() => undefined);
+  }, [breakpoints, synchronizeBreakpoints]);
+
+  const configureBreakpoints = useCallback(async () => {
+    const socket = socketRef.current;
+    try {
+      configuredRef.current = true;
+      await synchronizeBreakpoints(breakpointsRef.current);
+      if (socketRef.current !== socket) return;
       await sendRequest('setExceptionBreakpoints', { filters: [] });
+      if (socketRef.current !== socket) return;
+      await breakpointQueueRef.current;
       if (socketRef.current !== socket) return;
       await sendRequest('configurationDone');
     } catch (requestError) {
@@ -145,7 +224,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
       setState('error');
       setError(requestError instanceof Error ? requestError.message : String(requestError));
     }
-  }, [breakpoints, sendRequest]);
+  }, [sendRequest, synchronizeBreakpoints]);
 
   const start = useCallback(async (nodeid: string) => {
     if (!projectId || state === 'starting' || state === 'running' || state === 'paused') return;
@@ -154,6 +233,11 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     setFrames([]);
     setLocals([]);
     setOutput('');
+    setBreakpointBindings([]);
+    setHasHitBreakpoint(false);
+    configuredRef.current = false;
+    breakpointPathsRef.current = new Set();
+    breakpointQueueRef.current = Promise.resolve();
     onExecutionLine(null);
     const previousSocket = socketRef.current;
     socketRef.current = null;
@@ -172,6 +256,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
       const bootstrap = await api.createDebugSession(projectId, nodeid);
       setTargetNodeid(bootstrap.nodeid);
       bootstrapRef.current = bootstrap;
+      breakpointsRef.current = bootstrap.breakpoints;
       onBreakpoints?.(bootstrap.breakpoints);
       sessionIdRef.current = bootstrap.id;
       setSessionId(bootstrap.id);
@@ -226,13 +311,22 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
             if (typeof threadId === 'number') {
               threadIdRef.current = threadId;
               setState('paused');
-              void loadStack(threadId);
+              const reason = String(message.body?.reason ?? '');
+              if (reason === 'breakpoint') setHasHitBreakpoint(true);
+              void loadStack(threadId, reason);
             }
+          } else if (message.event === 'breakpoint') {
+            const binding = message.body?.breakpoint as { id?: number; verified?: boolean; line?: number; message?: string } | undefined;
+            if (binding && typeof binding.id === 'number') setBreakpointBindings((items) => items.map((item) => (
+              item.adapterId === binding.id ? { ...item, verified: binding.verified === true,
+                line: binding.line ?? item.line, message: binding.message } : item
+            )));
           } else if (message.event === 'continued') setState('running');
           else if (message.event === 'output') {
             const text = String(message.body?.output ?? '');
             if (text) setOutput((current) => `${current}${text}`.slice(-12000));
           } else if (message.event === 'terminated') {
+            configuredRef.current = false;
             setState('finished');
             threadIdRef.current = null;
             const currentId = sessionIdRef.current;
@@ -247,6 +341,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
       };
       socket.onclose = () => {
         if (socketRef.current === socket && sessionIdRef.current === bootstrap.id) {
+          configuredRef.current = false;
           setState((current) => current === 'error' ? current : 'finished');
         }
       };
@@ -265,6 +360,8 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
   const control = useCallback(async (command: 'continue' | 'next' | 'stepIn' | 'stepOut' | 'pause') => {
     const socket = socketRef.current;
     try {
+      await breakpointQueueRef.current;
+      if (socketRef.current !== socket) return;
       let threadId = threadIdRef.current;
       if (command === 'pause' && threadId === null) {
         const response = await sendRequest('threads');
@@ -292,6 +389,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     const currentId = sessionIdRef.current;
     if (!currentId) return;
     setState('finished');
+    configuredRef.current = false;
     void sendRequest('disconnect', { restart: false, terminateDebuggee: true }, false).catch(() => undefined);
     const socket = socketRef.current;
     socketRef.current = null;
@@ -318,5 +416,5 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     pendingRef.current.clear();
   }, []);
 
-  return { sessionId, targetNodeid, state, error, frames, locals, output, start, control, stop, selectFrame };
+  return { sessionId, targetNodeid, state, error, frames, locals, output, breakpointBindings, hasHitBreakpoint, start, control, stop, selectFrame };
 };

@@ -37,7 +37,9 @@ Run/task SSE 使用服务端签发的 5 分钟 stream ticket 放在 `Authorizati
 
 ## Debug Runtime
 
-工作室顶部“调试”运行当前测试文件中的全部用例，使用该文件及 workspace 中启用的断点；有未保存编辑时先保存，保存失败不会启动。测试树或失败详情中的调试入口仍运行指定用例。调试面板显示实际启动目标，避免把第一条已收集用例误当成当前文件。pytest 停在可执行行，函数声明、空行等断点位置可能由 debugpy 调整。
+工作室顶部“调试”运行当前测试文件中的全部用例，使用该文件及 workspace 中启用的断点；所有调试入口启动前保存已修改的打开文件，保存失败显示错误并阻止启动。测试树或失败详情中的调试入口仍运行指定用例，面板明确提示执行范围。调试面板显示实际启动目标，避免把第一条已收集用例误当成当前文件。
+
+调试运行或暂停期间增删断点，会按文件顺序向 debugpy 发送完整的 `setBreakpoints` 配置；删除最后一个断点也发送空列表。继续或单步前等待已排队的同步完成。面板显示调试器是否接受断点、实际可执行行、拒绝原因及本次是否命中；空行等位置可能被 debugpy 调整。如果会话结束前没有命中任何断点，显示检查目标、执行分支和验证状态的提示。断点被接受仅表示可绑定，不保证目标用例或分支实际执行该行。
 
 Debugger 由独立的 `DebugSessionService` 为经授权的 debug session 启动一个 debugpy DAP adapter；它复用项目 workspace 和选定的 pytest node ID，不复用或重启 Run 的浏览器。`debug_session_id` 隔离会话，session 绑定 owner。源文件路径必须位于 workspace 内，客户端请求仅允许明确支持的 DAP commands。停止或关闭 debug session 时应结束 adapter 及相关 task。Debugpy 不可启动时返回明确错误，不显示虚假的 Running 状态。
 

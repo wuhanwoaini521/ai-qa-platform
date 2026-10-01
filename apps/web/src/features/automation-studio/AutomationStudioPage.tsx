@@ -64,6 +64,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [quickOpenQuery, setQuickOpenQuery] = useState<string>('');
   const [quickOpenSelectedIndex, setQuickOpenSelectedIndex] = useState<number>(0);
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
+  const [debugPreparationError, setDebugPreparationError] = useState('');
   const [executionLocation, setExecutionLocation] = useState<{ path: string; line: number } | null>(null);
 
   // Monaco Editor Ref
@@ -118,10 +119,18 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       ]);
     },
   });
-  const debugStartRef = useRef(debug.start);
+  const startDebug = async (nodeid: string) => {
+    setDebugPreparationError('');
+    if (!await editor.saveAll()) {
+      setDebugPreparationError(t('debug.saveFailed', { ns: 'studioPanels' }));
+      return;
+    }
+    await debug.start(nodeid);
+  };
+  const debugStartRef = useRef(startDebug);
   const autoDebugStartedRef = useRef<string | null>(null);
   const autoSelectedFrameRef = useRef<DebugStackFrame | null>(null);
-  debugStartRef.current = debug.start;
+  debugStartRef.current = startDebug;
   const activeFilePath = editor.activeTab?.path.replace(/\\/g, '/').replace(/^\/+/, '');
   // The toolbar debugs the active test module, so breakpoints in any of its cases can be hit.
   // Explicit case debugging remains available in the test explorer and failure deep links.
@@ -413,7 +422,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               runningTest={run.runningTest}
               onOpenFile={editor.openFile}
               onRunTest={run.runExecution}
-              onDebugTest={(nodeid) => { void debug.start(nodeid); }}
+              onDebugTest={(nodeid) => { void startDebug(nodeid); }}
             />
           )}
 
@@ -506,8 +515,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               disabled={!debugTargetNodeId || run.runningTest || debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'}
               onClick={async () => {
                 if (!debugTargetNodeId) return;
-                if (editor.activeTab?.isDirty && !await editor.saveActiveTab()) return;
-                await debug.start(debugTargetNodeId);
+                await startDebug(debugTargetNodeId);
               }}
               title={debugTargetNodeId ? t('editor.debugTarget', { nodeid: debugTargetNodeId }) : t('editor.noDebugTarget')}
             >
@@ -549,14 +557,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
         </div>
 
-        {(debug.state !== 'idle' || initialDebugNodeId) && (
+        {(debug.state !== 'idle' || initialDebugNodeId || debugPreparationError) && (
           <DebugPanel
-            state={debug.state}
+            state={debugPreparationError ? 'error' : debug.state}
             nodeid={debug.targetNodeid}
-            error={debug.error}
+            error={debugPreparationError || debug.error}
             frames={debug.frames}
             locals={debug.locals}
             output={debug.output}
+            breakpointBindings={debug.breakpointBindings}
+            hasHitBreakpoint={debug.hasHitBreakpoint}
             onSelectFrame={debug.selectFrame}
           />
         )}

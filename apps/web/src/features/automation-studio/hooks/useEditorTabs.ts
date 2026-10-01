@@ -143,24 +143,29 @@ export const useEditorTabs = ({
   }, [projectId, activeTab, saving]);
 
   const saveAll = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || saving) return false;
     const dirtyTabs = tabs.filter((t) => t.isDirty);
-    if (dirtyTabs.length === 0) return;
+    if (dirtyTabs.length === 0) return true;
     try {
       setSaving(true);
       for (const t of dirtyTabs) {
         await api.writeWorkspaceFile(projectId, t.path, t.content);
       }
       setTabs((prev) =>
-        prev.map((t) => ({ ...t, initialContent: t.content, isDirty: false }))
+        prev.map((t) => {
+          const saved = dirtyTabs.find((item) => item.path === t.path);
+          return saved ? { ...t, initialContent: saved.content, isDirty: t.content !== saved.content } : t;
+        })
       );
       await afterSaveAllRef.current?.();
+      return true;
     } catch (err) {
       console.error('Failed to save all files', err);
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [projectId, tabs]);
+  }, [projectId, saving, tabs]);
 
   return {
     tabs,
