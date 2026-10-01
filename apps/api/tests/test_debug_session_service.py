@@ -24,7 +24,10 @@ async def _wait_message(session, predicate, backlog: list[dict[str, Any]], timeo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("target", ["tests/test_debugger.py", "tests/test_debugger.py::test_debuggable_case"])
-async def test_debugpy_dap_pauses_steps_reads_locals_and_continues(tmp_path: Path, target: str) -> None:
+@pytest.mark.parametrize("live_updates", [False, True])
+async def test_debugpy_dap_pauses_steps_reads_locals_and_continues(
+    tmp_path: Path, target: str, live_updates: bool
+) -> None:
     workspace = tmp_path / "workspace"
     test_file = workspace / "tests" / "test_debugger.py"
     test_file.parent.mkdir(parents=True)
@@ -55,6 +58,16 @@ async def test_debugpy_dap_pauses_steps_reads_locals_and_continues(tmp_path: Pat
     debug_session = await service.get(bootstrap.id, "owner")
     assert debug_session is not None
     assert bootstrap.breakpoints == [breakpoint]
+    # Event source paths follow the same workspace-relative contract as stack traces.
+    breakpoint_event = service._to_client_paths(
+        debug_session,
+        {
+            "type": "event",
+            "event": "breakpoint",
+            "body": {"reason": "changed", "breakpoint": {"id": 1, "source": {"path": str(test_file)}}},
+        },
+    )
+    assert breakpoint_event["body"]["breakpoint"]["source"]["path"] == "tests/test_debugger.py"
 
     seq = 0
     backlog: list[dict[str, Any]] = []
@@ -126,13 +139,27 @@ async def test_debugpy_dap_pauses_steps_reads_locals_and_continues(tmp_path: Pat
         _, variables_response = await request("variables", {"variablesReference": locals_scope["variablesReference"]})
         assert {item["name"]: item["value"] for item in variables_response["body"]["variables"]}["value"] == "1"
 
-        await request("next", {"threadId": thread_id})
+        if live_updates:
+            _, updated = await request(
+                "setBreakpoints",
+                {"source": {"path": "tests/test_debugger.py"}, "breakpoints": [{"line": 7}]},
+            )
+            assert updated["body"]["breakpoints"][0]["verified"] is True
+            assert updated["body"]["breakpoints"][0]["line"] == 7
+        await request("continue" if live_updates else "next", {"threadId": thread_id})
         step_stop = await _wait_message(
             debug_session,
             lambda message: message.get("type") == "event" and message.get("event") == "stopped",
             backlog,
         )
-        assert step_stop["body"]["reason"] == "step"
+        assert step_stop["body"]["reason"] == ("breakpoint" if live_updates else "step")
+        _, updated_stack = await request("stackTrace", {"threadId": thread_id})
+        assert updated_stack["body"]["stackFrames"][0]["line"] == 7
+        if live_updates:
+            _, removed = await request(
+                "setBreakpoints", {"source": {"path": "tests/test_debugger.py"}, "breakpoints": []}
+            )
+            assert removed["body"]["breakpoints"] == []
         _, continued = await request("continue", {"threadId": thread_id})
         assert continued["body"]["allThreadsContinued"] is True
         exited = await _wait_message(

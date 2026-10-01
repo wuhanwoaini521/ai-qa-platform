@@ -288,6 +288,11 @@ class DebugSessionService:
             body = dict(body)
             if "source" in body:
                 body["source"] = relative_source(body["source"])
+            if isinstance(body.get("breakpoint"), dict) and "source" in body["breakpoint"]:
+                body["breakpoint"] = {
+                    **body["breakpoint"],
+                    "source": relative_source(body["breakpoint"].get("source")),
+                }
             if isinstance(body.get("stackFrames"), list):
                 body["stackFrames"] = [
                     {**frame, "source": relative_source(frame.get("source"))}
