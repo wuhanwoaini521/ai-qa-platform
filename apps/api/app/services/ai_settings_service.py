@@ -46,9 +46,7 @@ class AISettingsService:
 
     async def _row(self) -> AIProviderConfigORM | None:
         async with async_session_factory() as session:
-            result = await session.execute(
-                select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default")
-            )
+            result = await session.execute(select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default"))
             return result.scalar_one_or_none()
 
     @staticmethod
@@ -103,14 +101,10 @@ class AISettingsService:
 
     async def save(self, update: AIProviderSettingsUpdate) -> AIProviderSettingsResponse:
         async with async_session_factory() as session:
-            result = await session.execute(
-                select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default")
-            )
+            result = await session.execute(select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default"))
             row = result.scalar_one_or_none()
             current_key = (
-                self.secret_store.decrypt_secret(row.encrypted_api_key or "")
-                if row
-                else settings.qa_ai_api_key
+                self.secret_store.decrypt_secret(row.encrypted_api_key or "") if row else settings.qa_ai_api_key
             )
             if update.clear_api_key:
                 api_key = ""
@@ -138,7 +132,11 @@ class AISettingsService:
 
     async def _config_for_update(self, update: AIProviderSettingsUpdate) -> AIRuntimeConfig:
         current = await self._effective_config()
-        api_key = "" if update.clear_api_key else (update.api_key.strip() if update.api_key and update.api_key.strip() else current.api_key)
+        api_key = (
+            ""
+            if update.clear_api_key
+            else (update.api_key.strip() if update.api_key and update.api_key.strip() else current.api_key)
+        )
         return AIRuntimeConfig(
             provider=update.provider,
             api_key=api_key,
@@ -148,9 +146,7 @@ class AISettingsService:
             max_retries=update.max_retries,
         )
 
-    async def test_connection(
-        self, update: AIProviderSettingsUpdate | None = None
-    ) -> AIProviderConnectionResult:
+    async def test_connection(self, update: AIProviderSettingsUpdate | None = None) -> AIProviderConnectionResult:
         config = await self._config_for_update(update) if update else await self._effective_config()
         if config.provider == "fake":
             health = await FakeAIProvider(model=config.model).check_health()

@@ -98,3 +98,11 @@ runtime/artifacts/*
 !runtime/artifacts/.gitkeep
 runtime/pytest-reports/*
 !runtime/pytest-reports/.gitkeep
+
+# Local browser verification and temporary test workspaces
+/.playwright-cli/
+/.tmp-ai-trace-tests/
+/runtime/pytest-*/
+/runtime/uv-cache/
+/output/pytest-*/
+/output/playwright/

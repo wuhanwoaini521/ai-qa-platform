@@ -112,8 +112,7 @@ class JevDecisionProvider:
                 usage = {
                     key: value
                     for key, value in raw_usage.items()
-                    if key in ("input_tokens", "output_tokens")
-                    and (value is None or isinstance(value, (int, float)))
+                    if key in ("input_tokens", "output_tokens") and (value is None or isinstance(value, (int, float)))
                 }
             model = body.get("model")
             return DecisionResult(

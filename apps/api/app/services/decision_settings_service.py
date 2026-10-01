@@ -104,7 +104,9 @@ class DecisionSettingsService:
         async with async_session_factory() as session:
             row = await session.get(DecisionProviderConfigORM, PROVIDER_NAME)
             if row is None:
-                initial_key = update.api_key.strip() if update.api_key and update.api_key.strip() else settings.jev_api_key
+                initial_key = (
+                    update.api_key.strip() if update.api_key and update.api_key.strip() else settings.jev_api_key
+                )
                 row = DecisionProviderConfigORM(
                     provider=PROVIDER_NAME,
                     enabled=update.enabled,

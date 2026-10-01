@@ -54,9 +54,7 @@ async def test_ai_provider_settings_are_encrypted_and_activated(client, test_db_
 
 
 @pytest.mark.asyncio
-async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(
-    client, role_client, monkeypatch
-):
+async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(client, role_client, monkeypatch):
     async def healthy(self):
         return ProviderHealthStatus(
             provider="openai-compatible",

@@ -52,9 +52,7 @@ async def test_timeout_is_recorded_as_an_error_instead_of_a_pass(tmp_path):
         encoding="utf-8",
     )
 
-    result = await PytestRunner(default_timeout_sec=0.2).run_suite(
-        tmp_path, nodeids=["tests/test_slow.py::test_slow"]
-    )
+    result = await PytestRunner(default_timeout_sec=0.2).run_suite(tmp_path, nodeids=["tests/test_slow.py::test_slow"])
 
     assert result.exit_code is None
     assert result.results == []

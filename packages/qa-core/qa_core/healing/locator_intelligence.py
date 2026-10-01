@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-
 _STRATEGY_SCORE = {
     "role": 1.0,
     "label": 0.98,

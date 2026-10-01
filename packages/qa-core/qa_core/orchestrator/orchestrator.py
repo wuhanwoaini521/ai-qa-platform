@@ -228,9 +228,7 @@ class ProductionQAOrchestrator:
         self.last_completion = res
         if res.structured_data:
             analysis = FailureAnalysisResponse.model_validate(res.structured_data)
-            return analysis.model_copy(
-                update={"provider": res.provider, "fallback_used": res.fallback_used}
-            )
+            return analysis.model_copy(update={"provider": res.provider, "fallback_used": res.fallback_used})
 
         # Deterministic fallback
         classification, suggested_action, _ = FailureClassifier.classify(error_message, stack_trace)

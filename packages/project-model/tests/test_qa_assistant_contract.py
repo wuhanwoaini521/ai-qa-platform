@@ -1,6 +1,6 @@
 import pytest
-from pydantic import ValidationError
 from project_model.models import QAChatRequest
+from pydantic import ValidationError
 
 
 def test_qa_assistant_request_uses_nested_context_contract() -> None:

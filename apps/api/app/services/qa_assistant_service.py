@@ -204,8 +204,8 @@ def test_{slug}(page: Page):
                     "\n\n```python\n"
                     "import pytest\nfrom playwright.sync_api import Page, expect\n\n"
                     f"@pytest.mark.ui\ndef test_{slug}(page: Page):\n"
-                    f"    \"\"\"Generated from QA Assistant: {title}.\"\"\"\n"
-                    "    page.goto(\"/\")\n    expect(page).to_have_title(r\".*\")\n"
+                    f'    """Generated from QA Assistant: {title}."""\n'
+                    '    page.goto("/")\n    expect(page).to_have_title(r".*")\n'
                     "```"
                 )
                 answer += sample

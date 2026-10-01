@@ -79,7 +79,9 @@ async def test_legacy_provider_uses_complete_adapter():
                 output_tokens=2,
             )
 
-    chunks = [chunk async for chunk in stream_provider_completion(LegacyProvider(), AICompletionRequest(prompt="one shot"))]
+    chunks = [
+        chunk async for chunk in stream_provider_completion(LegacyProvider(), AICompletionRequest(prompt="one shot"))
+    ]
     assert len(chunks) == 1
     assert chunks[0].content_delta == "one shot"
     assert chunks[0].provider == "legacy"
