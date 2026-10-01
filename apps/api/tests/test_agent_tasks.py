@@ -365,6 +365,7 @@ async def test_explore_task_uses_real_playwright_against_a_local_page(client):
         decision = body["decisions"][0]
         assert decision["choice"] == "0"
         assert decision["provider"] != "fake"
+        assert decision["confidence"] is None
         assert body["evidence"]
         screenshot = next(item for item in body["artifacts"] if item["kind"] == "SCREENSHOT")
         downloaded = await client.get(f"/api/artifacts/{screenshot['artifact_id']}/download")

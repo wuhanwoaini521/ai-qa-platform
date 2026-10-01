@@ -83,6 +83,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 #: until the platform adopts a migration framework; the names are code constants, never user input.
 ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("test_runs", "log_output", "TEXT"),
+    ("test_runs", "parallel_workers", "INTEGER NOT NULL DEFAULT 1"),
+    ("browser_sessions", "page_evidence_json", "TEXT"),
     ("ai_invocations", "decision_name", "VARCHAR(128)"),
     ("ai_invocations", "decision_choice", "VARCHAR(128)"),
     ("ai_invocations", "decision_confidence", "FLOAT"),

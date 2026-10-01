@@ -46,6 +46,7 @@ RECORDER_INIT_SCRIPT = r"""(() => {
     return (el.getAttribute('alt') || el.getAttribute('title') || el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 120);
   };
   const unstable = value => !value || /^\d+$/.test(value) || /^[0-9a-f]{8,}$/i.test(value) || /\d{5,}/.test(value);
+  const xpathLiteral = value => value.includes("'") ? (value.includes('"') ? `concat('${value.replace(/'/g, "',\"'\",'")}')` : `"${value}"`) : `'${value}'`;
   const framePath = () => {
     const path=[]; let frame=window.frameElement;
     while(frame) {
@@ -64,21 +65,25 @@ RECORDER_INIT_SCRIPT = r"""(() => {
   const describe = el => {
     if (!(el instanceof Element)) return null;
     const role = roleFor(el), name = nameFor(el), candidates = [];
+    let domDepth=0; for(let node=el; node && node!==document.documentElement; node=node.parentElement) domDepth++;
     if (role && name) {
       const peers=Array.from(document.querySelectorAll('button,a,input,textarea,select,[role],h1,h2,h3,h4,h5,h6,img')).filter(item=>roleFor(item)===role && nameFor(item)===name);
-      candidates.push({kind:'role', value:role, name, exact:true, nth:peers.length>1?peers.indexOf(el):null});
+      candidates.push({kind:'role', value:role, name, exact:true, nth:peers.length>1?peers.indexOf(el):null, evidence:{uniqueness:peers.length===1,dom_depth:domDepth}});
     }
-    for (const key of ['data-testid','data-test','data-qa']) { const value=el.getAttribute(key); if(value) { const peers=Array.from(document.querySelectorAll('['+key+']')).filter(item=>item.getAttribute(key)===value); candidates.push(key==='data-testid' ? {kind:'test_id',value,nth:peers.length>1?peers.indexOf(el):null} : {kind:'css',value:'['+key+'='+JSON.stringify(value)+']',nth:peers.length>1?peers.indexOf(el):null}); break; } }
-    if (el.id && !unstable(el.id)) candidates.push({kind:'id',value:el.id});
-    if (el.getAttribute('name')) candidates.push({kind:'name',value:el.getAttribute('name')});
-    if (el.getAttribute('placeholder')) candidates.push({kind:'placeholder',value:el.getAttribute('placeholder')});
+    for (const key of ['data-testid','data-test','data-qa']) { const value=el.getAttribute(key); if(value) { const peers=Array.from(document.querySelectorAll('['+key+']')).filter(item=>item.getAttribute(key)===value); candidates.push(key==='data-testid' ? {kind:'test_id',value,nth:peers.length>1?peers.indexOf(el):null,evidence:{uniqueness:peers.length===1,dom_depth:domDepth}} : {kind:'css',value:'['+key+'='+JSON.stringify(value)+']',nth:peers.length>1?peers.indexOf(el):null,evidence:{uniqueness:peers.length===1,dom_depth:domDepth}}); if(key==='data-testid' && !unstable(value)) candidates.push({kind:'xpath',value:'//*[@data-testid='+xpathLiteral(value)+']',evidence:{uniqueness:peers.length===1,dom_depth:domDepth}}); break; } }
+    if (el.labels?.length) { const label=Array.from(el.labels).map(item=>item.innerText.trim()).find(Boolean); if(label) candidates.push({kind:'label',value:label,exact:true,evidence:{uniqueness:Array.from(document.querySelectorAll('label')).filter(item=>item.innerText.trim()===label).length===1,dom_depth:domDepth}}); }
+    if (el.id && !unstable(el.id)) { candidates.push({kind:'id',value:el.id,evidence:{uniqueness:document.querySelectorAll('#'+CSS.escape(el.id)).length===1,dom_depth:domDepth}}); candidates.push({kind:'xpath',value:'//*[@id='+xpathLiteral(el.id)+']',evidence:{uniqueness:document.querySelectorAll('#'+CSS.escape(el.id)).length===1,dom_depth:domDepth}}); }
+    if (el.getAttribute('name')) candidates.push({kind:'name',value:el.getAttribute('name'),evidence:{uniqueness:document.querySelectorAll('[name='+JSON.stringify(el.getAttribute('name'))+']').length===1,dom_depth:domDepth}});
+    if (el.getAttribute('placeholder')) { const value=el.getAttribute('placeholder'); candidates.push({kind:'placeholder',value,evidence:{uniqueness:Array.from(document.querySelectorAll('[placeholder]')).filter(item=>item.getAttribute('placeholder')===value).length===1,dom_depth:domDepth}}); }
     const stableClasses=Array.from(el.classList).filter(c=>!unstable(c) && !/[0-9a-f]{8,}/i.test(c)).slice(0,2);
     let css=el.tagName.toLowerCase() + stableClasses.map(c=>'.'+CSS.escape(c)).join('');
     if (!stableClasses.length && el.getAttribute('type')) css += '[type="' + CSS.escape(el.getAttribute('type')) + '"]';
-    candidates.push({kind:'css',value:css});
-    if (name) candidates.push({kind:'text',value:name,exact:true});
+    const cssMatches=Array.from(document.querySelectorAll(css));
+    candidates.push({kind:'css',value:css,evidence:{uniqueness:cssMatches.length===1,dom_depth:domDepth}});
+    const visibleText=(el.innerText || '').trim().replace(/\s+/g,' ').slice(0,120);
+    if (visibleText) candidates.push({kind:'text',value:visibleText,exact:true,evidence:{uniqueness:Array.from(document.querySelectorAll('*')).filter(item=>item.children.length===0 && item.innerText?.trim().replace(/\s+/g,' ')===visibleText).length===1,dom_depth:domDepth,text_stability:!unstable(visibleText)}});
     let nth=null; try { const matches=Array.from(document.querySelectorAll(css)); if(matches.length>1) nth=matches.indexOf(el); } catch {}
-    return {tag:el.tagName.toLowerCase(), type:el.getAttribute('type') || '', role, name, value:('value' in el ? el.value : ''), checked:('checked' in el ? el.checked : false), text:(el.innerText || '').trim().slice(0,180), url:location.href, candidates, nth, frame_path:framePath()};
+    return {tag:el.tagName.toLowerCase(), type:el.getAttribute('type') || '', role, name, value:('value' in el ? el.value : ''), checked:('checked' in el ? el.checked : false), text:(el.innerText || '').trim().slice(0,180), dom_depth:domDepth, url:location.href, candidates, nth, frame_path:framePath()};
   };
   const emit = event => { if (window.__qaRecorderEnabled) window.__qaRecorderEvents.push(event); };
   let inputTimer, clickTimer;
@@ -126,13 +131,30 @@ class RecorderLocator(BaseModel):
 
 class RecorderStep(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    action: Literal["navigate", "click", "double_click", "fill", "select", "check", "uncheck", "press", "hover", "wait", "assert_visible", "assert_text", "assert_url", "assert_title", "assert_count"]
+    action: Literal[
+        "navigate",
+        "click",
+        "double_click",
+        "fill",
+        "select",
+        "check",
+        "uncheck",
+        "press",
+        "hover",
+        "wait",
+        "assert_visible",
+        "assert_text",
+        "assert_url",
+        "assert_title",
+        "assert_count",
+    ]
     locator: RecorderLocator | None = None
     frame_path: list[str] = Field(default_factory=list)
     url: str | None = None
     value: str | None = None
     key: str | None = None
     description: str = ""
+    locator_decision: dict[str, Any] | None = None
 
 
 class RecorderSessionCreate(BaseModel):
@@ -174,14 +196,18 @@ class RecorderSession:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     last_activity: float = field(default_factory=time.monotonic)
     picked_element: dict[str, Any] | None = None
+    locator_trace: list[dict[str, Any]] = field(default_factory=list)
+    pending_pick_action: str = "click"
 
 
 class BrowserRecorderService:
-    def __init__(self) -> None:
+    def __init__(self, decision_service: Any | None = None, decision_settings_service: Any | None = None) -> None:
         self._playwright = None
         self._sessions: dict[str, RecorderSession] = {}
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
+        self._decision_service = decision_service
+        self._decision_settings_service = decision_settings_service
 
     async def _start_playwright(self):
         if self._playwright is None:
@@ -196,14 +222,21 @@ class BrowserRecorderService:
             playwright = await self._start_playwright()
             browser = None
             launch_errors: list[str] = []
-            for kwargs in ({"headless": True}, {"headless": True, "channel": "msedge"}, {"headless": True, "channel": "chrome"}):
+            for kwargs in (
+                {"headless": True},
+                {"headless": True, "channel": "msedge"},
+                {"headless": True, "channel": "chrome"},
+            ):
                 try:
                     browser = await playwright.chromium.launch(**kwargs, **({"proxy": proxy} if proxy else {}))
                     break
                 except Exception as error:
                     launch_errors.append(str(error).splitlines()[0])
             if browser is None:
-                raise RuntimeError("无法启动 Chromium。请安装 Playwright Chromium：uv run playwright install chromium。 " + " | ".join(launch_errors))
+                raise RuntimeError(
+                    "无法启动 Chromium。请安装 Playwright Chromium：uv run playwright install chromium。 "
+                    + " | ".join(launch_errors)
+                )
             context = await browser.new_context(viewport={"width": 1280, "height": 720})
             await context.add_init_script(RECORDER_INIT_SCRIPT)
             page = await context.new_page()
@@ -215,8 +248,15 @@ class BrowserRecorderService:
                     # A blocked target must not destroy the browser; the user can retry another URL.
                     navigation_error = str(error)
             session = RecorderSession(
-                uuid.uuid4().hex, owner_id, data.project_id, browser, context, page,
-                last_url=page.url, requested_url=data.start_url, navigation_error=navigation_error,
+                uuid.uuid4().hex,
+                owner_id,
+                data.project_id,
+                browser,
+                context,
+                page,
+                last_url=page.url,
+                requested_url=data.start_url,
+                navigation_error=navigation_error,
             )
             session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in data.recovered_steps]
             context.on("page", lambda new_page: setattr(session, "page", new_page))
@@ -249,7 +289,13 @@ class BrowserRecorderService:
     async def page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
         page = session.page
         if page.is_closed():
-            return {"type": "error", "message": "浏览器页面已关闭", "url": "", "state": "CRASHED", "steps": session.steps}
+            return {
+                "type": "error",
+                "message": "浏览器页面已关闭",
+                "url": "",
+                "state": "CRASHED",
+                "steps": session.steps,
+            }
         try:
             new_steps: list[dict[str, Any]] = []
             if session.state == "RECORDING" and page.url != session.last_url:
@@ -261,9 +307,14 @@ class BrowserRecorderService:
                 frame_events = await frame.evaluate("() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []")
                 for event in frame_events:
                     if event.get("action") == "pick":
-                        session.picked_element = event
+                        session.picked_element = {**event, "action": session.pending_pick_action}
+                        session.pending_pick_action = "click"
                         continue
                     if session.state == "RECORDING":
+                        locator_selection = await self._select_locator_candidate(page, event, session.id)
+                        if locator_selection:
+                            event = {**event, "locator_selection": locator_selection}
+                            session.locator_trace = locator_selection["trace"]
                         for step in self.events_to_steps([event]):
                             if not session.steps or self._dedupe_key(session.steps[-1]) != self._dedupe_key(step):
                                 session.steps.append(step)
@@ -275,29 +326,127 @@ class BrowserRecorderService:
             picked = session.picked_element
             session.picked_element = None
             if picked:
-                picked = {**picked, "ranked_candidates": rank_locator_candidates(picked.get("candidates") or [])}
-            return {"type": "frame", "url": page.url, "title": await page.title(), "image": base64.b64encode(image).decode("ascii"), "state": session.state, "steps": session.steps, "new_steps": new_steps, "tabs": tabs, "picked": picked}
+                selection = await self._select_locator_candidate(page, picked, session.id)
+                if selection:
+                    session.locator_trace = selection["trace"]
+                picked = {
+                    **picked,
+                    "ranked_candidates": rank_locator_candidates(picked.get("candidates") or []),
+                    "selection": selection,
+                }
+            return {
+                "type": "frame",
+                "url": page.url,
+                "title": await page.title(),
+                "image": base64.b64encode(image).decode("ascii"),
+                "state": session.state,
+                "steps": session.steps,
+                "new_steps": new_steps,
+                "tabs": tabs,
+                "picked": picked,
+                "locator_trace": session.locator_trace,
+            }
         except Exception as error:
-            return {"type": "error", "message": str(error), "url": page.url, "state": session.state, "steps": session.steps}
+            return {
+                "type": "error",
+                "message": str(error),
+                "url": page.url,
+                "state": session.state,
+                "steps": session.steps,
+            }
+
+    async def _select_locator_candidate(
+        self, page: Any, event: dict[str, Any], trace_run_id: str
+    ) -> dict[str, Any] | None:
+        from app.services.locator_decision_service import LocatorDecisionService
+
+        candidates = LocatorDecisionService.generate_candidates(event)
+        if not candidates:
+            return None
+        pipeline = LocatorDecisionService(
+            decision_service=self._decision_service,
+            settings_service=self._decision_settings_service,
+        )
+        return await pipeline.decide(
+            run_id=trace_run_id,
+            event=event,
+            candidates=candidates,
+            page=page,
+            step_id=str(event.get("step_id") or "") or None,
+        )
+
+    @staticmethod
+    def _candidate_label(candidate: dict[str, Any]) -> str:
+        from app.services.locator_decision_service import LocatorDecisionService
+
+        return LocatorDecisionService.format_locator(candidate)
+
+    @staticmethod
+    async def _verify_locator_candidate(
+        page: Any, candidate: dict[str, Any], event: dict[str, Any]
+    ) -> dict[str, bool | None]:
+        from app.services.locator_decision_service import LocatorDecisionService
+
+        return await LocatorDecisionService.verify_candidate(page, candidate, event)
 
     @staticmethod
     def _dedupe_key(step: dict[str, Any]) -> tuple:
         locator = step.get("locator") or {}
-        return (step.get("action"), locator.get("kind"), locator.get("value"), locator.get("name"), step.get("value"), step.get("url"), step.get("key"))
+        return (
+            step.get("action"),
+            locator.get("kind"),
+            locator.get("value"),
+            locator.get("name"),
+            step.get("value"),
+            step.get("url"),
+            step.get("key"),
+        )
 
     @staticmethod
     def events_to_steps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         for event in events:
             action = event.get("action")
-            if action not in {"navigate", "click", "double_click", "fill", "select", "check", "uncheck", "press", "hover"}:
+            if action not in {
+                "navigate",
+                "click",
+                "double_click",
+                "fill",
+                "select",
+                "check",
+                "uncheck",
+                "press",
+                "hover",
+            }:
                 continue
             locator_data = None
+            locator_decision = None
             if action != "navigate":
                 candidates = rank_locator_candidates(event.get("candidates") or [])
-                candidate = candidates[0] if candidates else {"kind": "css", "value": event.get("tag", "body")}
-                locator_data = {"kind": candidate.get("kind", "css"), "value": str(candidate.get("value", "")), "name": candidate.get("name"), "exact": candidate.get("exact", True), "nth": candidate.get("nth", event.get("nth"))}
-            result.append(RecorderStep(action=action, locator=locator_data, frame_path=event.get("frame_path", []), url=event.get("url") if action == "navigate" else None, value=str(event.get("value", "")) if action in ("fill", "select") else None, key=event.get("key") if action == "press" else None, description=event.get("name") or event.get("url") or action.replace("_", " ").title()).model_dump(mode="json"))
+                selection = event.get("locator_selection") or {}
+                candidate = selection.get("selected_candidate") or (
+                    candidates[0] if candidates else {"kind": "css", "value": event.get("tag", "body")}
+                )
+                locator_data = {
+                    "kind": candidate.get("kind", "css"),
+                    "value": str(candidate.get("value", "")),
+                    "name": candidate.get("name"),
+                    "exact": candidate.get("exact", True),
+                    "nth": candidate.get("nth", event.get("nth")),
+                }
+                locator_decision = selection.get("summary")
+            result.append(
+                RecorderStep(
+                    action=action,
+                    locator=locator_data,
+                    frame_path=event.get("frame_path", []),
+                    url=event.get("url") if action == "navigate" else None,
+                    value=str(event.get("value", "")) if action in ("fill", "select") else None,
+                    key=event.get("key") if action == "press" else None,
+                    description=event.get("name") or event.get("url") or action.replace("_", " ").title(),
+                    locator_decision=locator_decision,
+                ).model_dump(mode="json", exclude_none=True)
+            )
         return result
 
 
@@ -310,7 +459,9 @@ def _locator_expression(locator: RecorderLocator | None, frame_path: list[str] |
         raise ValueError("该步骤缺少 Locator")
     page = "page" + "".join(f".frame_locator({_py_literal(selector)})" for selector in (frame_path or []))
     if locator.kind == "role":
-        expression = f"{page}.get_by_role({_py_literal(locator.value)}, name={_py_literal(locator.name)}, exact={locator.exact})"
+        expression = (
+            f"{page}.get_by_role({_py_literal(locator.value)}, name={_py_literal(locator.name)}, exact={locator.exact})"
+        )
     elif locator.kind == "test_id":
         expression = f"{page}.get_by_test_id({_py_literal(locator.value)})"
     elif locator.kind == "label":
@@ -392,17 +543,28 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
             lines.append(f"            expect(page).to_have_title(re.compile({_py_literal(step.value)}))")
         else:
             locator = _locator_expression(step.locator, step.frame_path)
-            if step.action == "click": lines.append(f"            {locator}.click()")
-            elif step.action == "double_click": lines.append(f"            {locator}.dblclick()")
-            elif step.action == "fill": lines.append(f"            {locator}.fill({_py_literal(step.value)})")
-            elif step.action == "select": lines.append(f"            {locator}.select_option(label={_py_literal(step.value)})")
-            elif step.action == "check": lines.append(f"            {locator}.check()")
-            elif step.action == "uncheck": lines.append(f"            {locator}.uncheck()")
-            elif step.action == "press": lines.append(f"            {locator}.press({_py_literal(step.key)})")
-            elif step.action == "hover": lines.append(f"            {locator}.hover()")
-            elif step.action == "assert_visible": lines.append(f"            expect({locator}).to_be_visible()")
-            elif step.action == "assert_text": lines.append(f"            expect({locator}).to_contain_text({_py_literal(step.value)})")
-            elif step.action == "assert_count": lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
+            if step.action == "click":
+                lines.append(f"            {locator}.click()")
+            elif step.action == "double_click":
+                lines.append(f"            {locator}.dblclick()")
+            elif step.action == "fill":
+                lines.append(f"            {locator}.fill({_py_literal(step.value)})")
+            elif step.action == "select":
+                lines.append(f"            {locator}.select_option(label={_py_literal(step.value)})")
+            elif step.action == "check":
+                lines.append(f"            {locator}.check()")
+            elif step.action == "uncheck":
+                lines.append(f"            {locator}.uncheck()")
+            elif step.action == "press":
+                lines.append(f"            {locator}.press({_py_literal(step.key)})")
+            elif step.action == "hover":
+                lines.append(f"            {locator}.hover()")
+            elif step.action == "assert_visible":
+                lines.append(f"            expect({locator}).to_be_visible()")
+            elif step.action == "assert_text":
+                lines.append(f"            expect({locator}).to_contain_text({_py_literal(step.value)})")
+            elif step.action == "assert_count":
+                lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
     lines.extend(["        finally:", "            browser.close()", ""])
     return "\n".join(lines)
 

@@ -59,7 +59,9 @@ async def test_ai_provider_connection(
 
 def get_ai_service(session: AsyncSession = Depends(get_db)) -> AIService:
     return AIService(
-        ai_repo=AIRepository(lambda: session),
+        # AIRepository commits invocation telemetry in its own session. Passing the request
+        # session through a lambda would let record_invocation close the caller's session.
+        ai_repo=AIRepository(),
         requirement_repo=RequirementRepository(session),
         test_design_repo=TestDesignRepository(session),
         test_case_repo=TestCaseRepository(session),

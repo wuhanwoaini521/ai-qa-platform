@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from project_model.models import ExecutionJob, ExecutionJobCreate, JobStatus
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence import database
@@ -129,6 +129,8 @@ class JobRepository:
             orm = res.scalar_one_or_none()
             if not orm:
                 return None
+            if orm.status in {JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value}:
+                return self._to_model(orm)
             orm.status = status.value if isinstance(status, JobStatus) else str(status)
             if duration_ms > 0:
                 orm.duration_ms = duration_ms
@@ -140,6 +142,23 @@ class JobRepository:
             await s.commit()
             await s.refresh(orm)
             return self._to_model(orm)
+
+        return await self._run(session, _exec)
+
+    async def cancel_active_jobs_for_run(self, run_id: str, session: AsyncSession | None = None) -> int:
+        async def _exec(s: AsyncSession) -> int:
+            result = await s.execute(
+                update(ExecutionJobORM)
+                .where(
+                    ExecutionJobORM.run_id == run_id,
+                    ExecutionJobORM.status.in_(
+                        [JobStatus.QUEUED.value, JobStatus.ASSIGNED.value, JobStatus.RUNNING.value]
+                    ),
+                )
+                .values(status=JobStatus.CANCELLED.value, finished_at=utc_now(), updated_at=utc_now())
+            )
+            await s.commit()
+            return int(result.rowcount or 0)
 
         return await self._run(session, _exec)
 

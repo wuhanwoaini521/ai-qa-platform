@@ -14,9 +14,11 @@ dependency to that route instead of widening the table.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from urllib.parse import parse_qsl, urlencode
 
-from fastapi import Depends, HTTPException, Request, WebSocketException, status
+from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, WebSocketException, status
 from project_model.models import ROLE_PERMISSIONS, Permission, User
 from starlette.requests import HTTPConnection
 
@@ -40,9 +42,8 @@ PUBLIC_PATHS = (
 #: Public prefixes that also match sub-paths (``/api/health/live``, ``/api/health/ready``).
 PUBLIC_PREFIXES = ("/api/health",)
 
-#: Routes whose browser-native clients cannot send an Authorization header. The SSE and recorder
-#: streams accept the same bearer token as an `access_token` query parameter.
-QUERY_TOKEN_SUFFIXES = ("/events", "/stream")
+#: Stream routes protected by resource-scoped tickets or an ordinary Authorization header.
+STREAM_ROUTE_SUFFIXES = ("/events", "/stream")
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ ANY_AUTHENTICATED: None = None
 #: Most specific prefixes first; the first match wins.
 RULES: tuple[Rule, ...] = (
     Rule("/api/auth/api-keys", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
+    Rule("/api/auth/stream-ticket", Permission.PROJECT_READ, Permission.PROJECT_READ),
     Rule("/api/users", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
     Rule("/api/teams", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
     Rule("/api/audit", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
@@ -72,6 +74,7 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/test-cases", Permission.PROJECT_READ, Permission.TEST_CASE_WRITE),
     Rule("/api/workspaces", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
     Rule("/api/recorder", Permission.AUTOMATION_EDIT, Permission.AUTOMATION_EDIT),
+    Rule("/api/debug", Permission.RUN_EXECUTE, Permission.RUN_EXECUTE),
     Rule("/api/decision", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),
     Rule("/api/runs", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     # Agent tasks may propose and, after explicit approval, write workspace source.
@@ -97,12 +100,68 @@ RULES: tuple[Rule, ...] = (
 DEFAULT_RULE = Rule("", Permission.PROJECT_READ, Permission.PROJECT_WRITE)
 
 
-def allows_query_token(path: str) -> bool:
-    """True for the small set of routes where a bearer token may arrive as a query parameter."""
+def is_stream_route(path: str) -> bool:
+    """True only for routes whose short-lived stream credentials are accepted in headers/frames."""
     return (
-        (path.startswith("/api/runs/") or path.startswith("/api/recorder/") or path.startswith("/api/tasks/"))
-        and path.endswith(QUERY_TOKEN_SUFFIXES)
-    )
+        path.startswith("/api/runs/")
+        or path.startswith("/api/recorder/")
+        or path.startswith("/api/tasks/")
+        or path.startswith("/api/debug/")
+    ) and path.endswith(STREAM_ROUTE_SUFFIXES)
+
+
+def stream_ticket_scope(path: str) -> str | None:
+    parts = path.strip("/").split("/")
+    if not parts or parts[0] != "api":
+        return None
+    if len(parts) == 4 and parts[1] in {"runs", "tasks"}:
+        family, resource_id, suffix = parts[1:]
+        kind = {("runs", "events"): "run", ("tasks", "events"): "task"}.get((family, suffix))
+    elif len(parts) == 5 and parts[1] in {"recorder", "debug"} and parts[2] == "sessions":
+        family, resource_id, suffix = parts[1], parts[3], parts[4]
+        kind = {("recorder", "stream"): "recorder", ("debug", "stream"): "debug"}.get((family, suffix))
+    else:
+        return None
+    return f"{kind}:{resource_id}" if kind and resource_id else None
+
+
+class StreamTicketQuerySanitizer:
+    """Strip legacy query credentials before application and ASGI access logging."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in {"http", "websocket"} and is_stream_route(scope.get("path", "")):
+            query = scope.get("query_string", b"").decode("latin-1")
+            items = parse_qsl(query, keep_blank_values=True)
+            scope["query_string"] = urlencode(
+                [(key, value) for key, value in items if key not in {"access_token", "stream_ticket"}]
+            ).encode("latin-1")
+        await self.app(scope, receive, send)
+
+
+async def authenticate_stream_request(request: Request) -> User | None:
+    """Authenticate a short-lived ticket from an Authorization header, never from the URL."""
+    authorization = request.headers.get("authorization", "")
+    parts = authorization.strip().split(" ")
+    ticket = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else None
+    return await auth_service.authenticate_stream_ticket(ticket, stream_ticket_scope(request.url.path))
+
+
+async def authenticate_websocket_stream(websocket: WebSocket, expected_scope: str) -> User | None:
+    """Authenticate a WebSocket using its first frame so credentials stay out of handshake URLs."""
+    await websocket.accept()
+    try:
+        message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+    except (asyncio.TimeoutError, ValueError, WebSocketDisconnect):
+        await websocket.close(code=4401, reason="Stream authentication required")
+        return None
+    ticket = message.get("stream_ticket") if isinstance(message, dict) and message.get("type") == "auth" else None
+    user = await auth_service.authenticate_stream_ticket(ticket, expected_scope)
+    if user is None:
+        await websocket.close(code=4401, reason="Invalid stream ticket")
+    return user
 
 
 def is_public_path(path: str) -> bool:
@@ -129,12 +188,12 @@ async def get_current_user(request: Request) -> User:
         return cached
 
     authorization = request.headers.get("authorization")
-    if not authorization and allows_query_token(request.url.path):
-        query_token = request.query_params.get("access_token")
-        if query_token:
-            authorization = f"Bearer {query_token}"
-
-    user, _ = await auth_service.authenticate_token_or_key(authorization)
+    if is_stream_route(request.url.path):
+        user = await authenticate_stream_request(request)
+        if user is None:
+            user, _ = await auth_service.authenticate_token_or_key(authorization)
+    else:
+        user, _ = await auth_service.authenticate_token_or_key(authorization)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,11 +211,15 @@ async def authorize_request(request: HTTPConnection) -> None:
         return
 
     authorization = request.headers.get("authorization")
-    if not authorization and allows_query_token(path):
-        query_token = request.query_params.get("access_token")
-        if query_token:
-            authorization = f"Bearer {query_token}"
-    user, _ = await auth_service.authenticate_token_or_key(authorization)
+    if is_stream_route(path):
+        if request.scope["type"] == "websocket" and not authorization:
+            # The route accepts the handshake, then authenticates its first frame before sending data.
+            return
+        user = await authenticate_stream_request(request)
+        if user is None:
+            user, _ = await auth_service.authenticate_token_or_key(authorization)
+    else:
+        user, _ = await auth_service.authenticate_token_or_key(authorization)
     if not user:
         if request.scope["type"] == "websocket":
             raise WebSocketException(code=4401, reason="Invalid or missing authentication credentials")

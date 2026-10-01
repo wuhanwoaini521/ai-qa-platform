@@ -102,7 +102,13 @@ class DecisionService:
         except Exception as error:  # telemetry must never turn a safe decision into a failed test run
             logger.warning("Decision telemetry write failed (%s)", type(error).__name__)
 
-    async def choose(self, request: DecisionRequest, *, run_id: str | None = None) -> DecisionResult:
+    async def choose(
+        self,
+        request: DecisionRequest,
+        *,
+        run_id: str | None = None,
+        allow_missing_confidence: bool = False,
+    ) -> DecisionResult:
         run_id = run_id or uuid4().hex
         if len({option.key for option in request.options}) != len(request.options):
             raise ValueError("Decision option keys must be unique")
@@ -137,9 +143,9 @@ class DecisionService:
         try:
             provider = self.provider_registry.create(config.provider, config)
             remote_result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
-            if remote_result.confidence is None:
+            if remote_result.confidence is None and not allow_missing_confidence:
                 error_code = "confidence_missing"
-            elif remote_result.confidence < config.minimum_confidence:
+            elif remote_result.confidence is not None and remote_result.confidence < config.minimum_confidence:
                 error_code = "below_minimum_confidence"
             else:
                 duration = (time.perf_counter() - started) * 1000

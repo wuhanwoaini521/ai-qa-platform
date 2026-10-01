@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
-from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest
-from project_model.models import JobStatus, RunStatus
-from qa_core.execution.models import SuiteExecutionResult
+from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest, JobStatus, RunStatus
 from pydantic import BaseModel
+from qa_core.execution.models import SuiteExecutionResult
+from qa_core.failure.redactor import SensitiveRedactor
 
+from app.api.runs import get_run_service
 from app.persistence.database import get_session
 from app.persistence.models import utc_now
 from app.repositories.job_repo import JobRepository
 from app.repositories.test_run_repo import TestRunRepository
-from app.api.runs import get_run_service
-
 from app.services.job_queue_service import JobQueueService
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -47,6 +46,14 @@ async def list_jobs(
     return await job_queue_service.list_jobs(run_id=run_id, project_id=project_id, status=status, limit=limit)
 
 
+@router.get("/{job_id}", response_model=ExecutionJob)
+async def get_job(job_id: str) -> ExecutionJob:
+    job = await JobRepository().get_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    return job
+
+
 @router.post("/claim", response_model=ExecutionJob | None)
 async def claim_next_job(request: ClaimJobRequest) -> ExecutionJob | None:
     return await job_queue_service.dispatch_next_job(worker_id=request.worker_id, browser=request.browser)
@@ -55,17 +62,21 @@ async def claim_next_job(request: ClaimJobRequest) -> ExecutionJob | None:
 @router.post("/{job_id}/log")
 async def append_job_log(job_id: str, payload: WorkerLogPayload) -> dict[str, bool]:
     job = await _assigned_job(job_id, payload.worker_id)
+    safe_log = SensitiveRedactor.redact_text(payload.log)
     async with get_session() as session:
         run_repo = TestRunRepository(session)
         run = await run_repo.get_by_id(job.run_id)
         if run is None or run.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
             raise HTTPException(status_code=409, detail="Run is no longer active")
-        await run_repo.update_run_status(
+        changed = await run_repo.transition_run_status(
             job.run_id,
+            [RunStatus.QUEUED, RunStatus.RUNNING],
             RunStatus.RUNNING,
             started_at=utc_now() if run.started_at is None else None,
-            log_output=((run.log_output or "") + payload.log)[-20000:],
+            log_output=((run.log_output or "") + safe_log)[-20000:],
         )
+        if not changed:
+            raise HTTPException(status_code=409, detail="Run is no longer active")
         await session.commit()
     await JobRepository().update_job_status(job_id, JobStatus.RUNNING)
     return {"saved": True}
@@ -91,18 +102,20 @@ async def complete_job(job_id: str, request: CompleteJobRequest) -> ExecutionJob
 
 @router.post("/{job_id}/fail", response_model=ExecutionJob)
 async def fail_job(job_id: str, request: FailJobRequest) -> ExecutionJob:
-    job = await job_queue_service.fail_job(job_id, error_message=request.error_message)
+    safe_error = SensitiveRedactor.redact_text(request.error_message)
+    job = await job_queue_service.fail_job(job_id, error_message=safe_error)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     async with get_session() as session:
         run_repo = TestRunRepository(session)
         run = await run_repo.get_by_id(job.run_id)
         if run is not None and run.status in ("QUEUED", "RUNNING"):
-            await run_repo.update_run_status(
+            await run_repo.transition_run_status(
                 job.run_id,
+                [RunStatus.QUEUED, RunStatus.RUNNING],
                 RunStatus.ERROR,
                 finished_at=utc_now(),
-                log_output=((run.log_output or "") + "\nWorker error: " + request.error_message)[-20000:],
+                log_output=((run.log_output or "") + "\nWorker error: " + safe_error)[-20000:],
             )
             await session.commit()
     return job

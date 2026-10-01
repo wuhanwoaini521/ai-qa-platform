@@ -11,6 +11,7 @@ from app.api import (
     audit_router,
     auth_router,
     dashboard_router,
+    debugger_router,
     decision_router,
     failures_router,
     flaky_router,
@@ -27,8 +28,8 @@ from app.api import (
     requirements_router,
     runners_router,
     runs_router,
-    teams_router,
     tasks_router,
+    teams_router,
     test_cases_router,
     test_designs_router,
     testrail_router,
@@ -36,7 +37,7 @@ from app.api import (
     workers_router,
     workspaces_router,
 )
-from app.api.authz import authorize_request
+from app.api.authz import StreamTicketQuerySanitizer, authorize_request
 from app.persistence.database import engine, init_db
 from app.services.ai_settings_service import AISettingsService
 from app.services.metrics_service import metrics_service
@@ -57,6 +58,9 @@ async def _recover_stale_runs() -> list[str]:
 async def lifespan(app: FastAPI):
     # Initialize database tables
     await init_db()
+    from app.repositories.failure_analysis_repo import FailureAnalysisRepository
+
+    await FailureAnalysisRepository().recover_interrupted()
     try:
         await AISettingsService().load_runtime_config()
     except Exception as error:  # AI config must not prevent core API startup
@@ -78,9 +82,11 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await task_runtime.stop()
+        from app.services.debug_session_service import debug_session_service
         from app.services.recorder_service import recorder_service
 
         await recorder_service.close_all()
+        await debug_session_service.close_all()
         await engine.dispose()
 
 
@@ -93,6 +99,7 @@ app = FastAPI(
     # enforces the resource policy table in app/api/authz.py.
     dependencies=[Depends(authorize_request)],
 )
+app.add_middleware(StreamTicketQuerySanitizer)
 
 # CORS middleware
 app.add_middleware(
@@ -127,6 +134,7 @@ app.include_router(workers_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(debugger_router, prefix="/api")
 app.include_router(decision_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(recorder_router, prefix="/api")

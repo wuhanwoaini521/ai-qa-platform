@@ -6,10 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from project_model.models import Permission, User
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.authz import has_permission, require_permission
+from app.api.authz import authenticate_websocket_stream, has_permission, require_permission
 from app.persistence.database import get_db
 from app.repositories.project_repo import ProjectRepository
-from app.services.auth_service import AuthService
 from app.services.recorder_service import (
     RecorderGenerateRequest,
     RecorderSessionCreate,
@@ -32,9 +31,14 @@ async def create_recorder_session(
         created = await recorder_service.create_session(user.id, data)
     except Exception as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return {"id": created.id, "project_id": created.project_id, "state": created.state,
-            "url": created.page.url, "requested_url": created.requested_url,
-            "navigation_error": created.navigation_error}
+    return {
+        "id": created.id,
+        "project_id": created.project_id,
+        "state": created.state,
+        "url": created.page.url,
+        "requested_url": created.requested_url,
+        "navigation_error": created.navigation_error,
+    }
 
 
 @router.get("/sessions/{session_id}")
@@ -45,9 +49,15 @@ async def get_recorder_session(
     session = await recorder_service.get(session_id, user.id)
     if not session:
         raise HTTPException(status_code=404, detail="Recorder session not found")
-    return {"id": session.id, "project_id": session.project_id, "state": session.state,
-            "url": session.page.url, "requested_url": session.requested_url,
-            "navigation_error": session.navigation_error, "steps": session.steps}
+    return {
+        "id": session.id,
+        "project_id": session.project_id,
+        "state": session.state,
+        "url": session.page.url,
+        "requested_url": session.requested_url,
+        "navigation_error": session.navigation_error,
+        "steps": session.steps,
+    }
 
 
 @router.post("/sessions/{session_id}/generate")
@@ -73,16 +83,15 @@ async def close_recorder_session(
 
 @router.websocket("/sessions/{session_id}/stream")
 async def recorder_stream(websocket: WebSocket, session_id: str):
-    token = websocket.query_params.get("access_token")
-    user, _ = await AuthService().authenticate_token_or_key(f"Bearer {token}" if token else None)
+    user = await authenticate_websocket_stream(websocket, f"recorder:{session_id}")
     if not user or not has_permission(user, Permission.AUTOMATION_EDIT):
-        await websocket.close(code=4403, reason="Recorder permission required")
+        if user:
+            await websocket.close(code=4403, reason="Recorder permission required")
         return
     session = await recorder_service.get(session_id, user.id)
     if not session:
         await websocket.close(code=4404, reason="Recorder session not found")
         return
-    await websocket.accept()
     session.last_activity = asyncio.get_running_loop().time()
     try:
         while True:
@@ -111,7 +120,9 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                 elif action == "start":
                     session.state = "RECORDING"
                     if not session.steps:
-                        session.steps.extend(recorder_service.events_to_steps([{"action": "navigate", "url": page.url}]))
+                        session.steps.extend(
+                            recorder_service.events_to_steps([{"action": "navigate", "url": page.url}])
+                        )
                     for frame in page.frames:
                         await frame.evaluate("() => {window.__qaRecorderEnabled=true; window.__qaRecorderEvents=[]}")
                 elif action == "pause":
@@ -127,8 +138,17 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                 elif action == "move":
                     await page.mouse.move(command["x"], command["y"])
                 elif action == "pick_element":
+                    requested_action = command.get("step_action")
+                    session.pending_pick_action = (
+                        requested_action
+                        if requested_action
+                        in {"click", "double_click", "fill", "select", "check", "uncheck", "press", "hover"}
+                        else "click"
+                    )
                     for frame in page.frames:
-                        await frame.evaluate("() => { window.__qaRecorderPickMode = true; window.__qaRecorderEnabled = true; }")
+                        await frame.evaluate(
+                            "() => { window.__qaRecorderPickMode = true; window.__qaRecorderEnabled = true; }"
+                        )
                 elif action == "wheel":
                     await page.mouse.wheel(command.get("delta_x", 0), command.get("delta_y", 0))
                 elif action == "type":
@@ -154,12 +174,20 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                 elif action == "reorder":
                     order = command.get("ids", [])
                     by_id = {step["id"]: step for step in session.steps}
-                    session.steps = [by_id[item] for item in order if item in by_id] + [step for step in session.steps if step["id"] not in order]
+                    session.steps = [by_id[item] for item in order if item in by_id] + [
+                        step for step in session.steps if step["id"] not in order
+                    ]
                 session.last_activity = asyncio.get_running_loop().time()
             except Exception as error:
                 if action == "navigate":
                     session.navigation_error = str(error)
-                await websocket.send_json({"type": "command_error", "message": str(error), "url": command.get("url") if action == "navigate" else page.url})
+                await websocket.send_json(
+                    {
+                        "type": "command_error",
+                        "message": str(error),
+                        "url": command.get("url") if action == "navigate" else page.url,
+                    }
+                )
     except WebSocketDisconnect:
         pass
     except Exception:

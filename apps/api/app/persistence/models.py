@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from app.persistence.database import Base
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, TypeDecorator
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, TypeDecorator, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -220,6 +221,7 @@ class TestRunORM(Base):
     queue_duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
     environment: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     browser: Mapped[str] = mapped_column(String(50), default="chromium")
+    parallel_workers: Mapped[int] = mapped_column(Integer, default=1)
     markers: Mapped[list[str]] = mapped_column(JsonList, default=list)
     nodeids: Mapped[list[str]] = mapped_column(JsonList, default=list)
     total: Mapped[int] = mapped_column(Integer, default=0)
@@ -240,6 +242,9 @@ class TestRunORM(Base):
     )
     external_artifacts: Mapped[list[ExternalArtifactReferenceORM]] = relationship(
         "ExternalArtifactReferenceORM", back_populates="run", cascade="all, delete-orphan", lazy="selectin"
+    )
+    browser_sessions: Mapped[list[BrowserSessionORM]] = relationship(
+        "BrowserSessionORM", back_populates="run", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
@@ -263,6 +268,51 @@ class TestExecutionORM(Base):
     failure_record: Mapped[FailureRecordORM | None] = relationship(
         "FailureRecordORM", back_populates="execution", uselist=False, cascade="all, delete-orphan"
     )
+    browser_sessions: Mapped[list[BrowserSessionORM]] = relationship("BrowserSessionORM", back_populates="execution")
+
+
+class BrowserSessionORM(Base):
+    """A browser page opened by a test worker, linked to its run and eventual test execution."""
+
+    __tablename__ = "browser_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True)
+    case_execution_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_executions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    worker_id: Mapped[str] = mapped_column(String(100), default="main", index=True)
+    browser_session_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    page_id: Mapped[str] = mapped_column(String(36), index=True)
+    nodeid: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    case_name: Mapped[str] = mapped_column(String(250), default="")
+    current_url: Mapped[str] = mapped_column(String(2048), default="")
+    page_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="browser_sessions")
+    execution: Mapped[TestExecutionORM | None] = relationship("TestExecutionORM", back_populates="browser_sessions")
+
+
+class BreakpointORM(Base):
+    __tablename__ = "breakpoints"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "file_path", "line_number", "source", name="uq_breakpoint_location_source"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(30), default="manual")
+    run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class FailureRecordORM(Base):
@@ -289,6 +339,20 @@ class FailureRecordORM(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
     execution: Mapped[TestExecutionORM] = relationship("TestExecutionORM", back_populates="failure_record")
+
+
+class FailureAnalysisORM(Base):
+    __tablename__ = "failure_analyses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    failure_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("failure_records.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="RUNNING", index=True)
+    events: Mapped[list[dict[str, Any]]] = mapped_column(JsonList, default=list)
+    result: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
 class AIInvocationORM(Base):
@@ -523,7 +587,9 @@ class TaskORM(Base):
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="PENDING", index=True)
     owner_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     inputs: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     context: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
@@ -573,12 +639,16 @@ class TaskEvidenceORM(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
-    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True, index=True)
+    step_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(200), nullable=False)
     summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    artifact_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("stored_artifacts.id", ondelete="SET NULL"), nullable=True)
+    artifact_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("stored_artifacts.id", ondelete="SET NULL"), nullable=True
+    )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
@@ -588,8 +658,12 @@ class TaskArtifactORM(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
-    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True)
-    artifact_id: Mapped[str] = mapped_column(String(36), ForeignKey("stored_artifacts.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True
+    )
+    artifact_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stored_artifacts.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     kind: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
@@ -600,7 +674,9 @@ class TaskDecisionORM(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
-    step_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True)
+    step_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_task_steps.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     choice: Mapped[str] = mapped_column(String(128), nullable=False)

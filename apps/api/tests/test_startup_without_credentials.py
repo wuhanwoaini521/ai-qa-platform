@@ -95,9 +95,9 @@ async def main():
         ai_status = await client.get("/api/ai/status")
         assert ai_status.status_code == 200, ai_status.text
         body = ai_status.json()
-        assert body["status"] in {"REAL_AVAILABLE", "FALLBACK_ONLY", "UNAVAILABLE"}, body
-        assert body["real_model_available"] is (body["status"] == "REAL_AVAILABLE"), body
-        assert body["fallback_active"] is (body["status"] == "FALLBACK_ONLY"), body
+        assert body["status"] in {"REAL_CONNECTED", "FALLBACK", "SIMULATION", "UNAVAILABLE"}, body
+        assert body["real_model_available"] is (body["status"] == "REAL_CONNECTED"), body
+        assert body["fallback_active"] is (body["status"] == "FALLBACK"), body
         assert "api_key" not in str(body).lower(), body
 
         jira = await client.get("/api/jira/issues", params={"query": "anything"})

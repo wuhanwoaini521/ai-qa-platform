@@ -14,8 +14,6 @@ from project_model.models import (
     AutomationBindingCreate,
     AutomationBindingStatus,
     AutomationStatus,
-    DecisionOption,
-    DecisionRequest,
     FrameworkType,
     RunStatus,
     TestCaseCreate,
@@ -36,6 +34,7 @@ from qa_core.ai.models import AICompletionRequest, CodeAssistantResponse
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.ai.trace import make_trace_event
 from qa_core.failure.classifier import FailureClassifier
+from qa_core.failure.redactor import SensitiveRedactor
 from sqlalchemy import select, update
 
 from app.persistence.database import async_session_factory
@@ -628,7 +627,10 @@ class TaskRuntimeService:
                 )
             decision = outputs.pop("_decision", None)
             if decision:
-                stored = await repo.add_decision(task_id=task_id, step_id=step_id, **decision)
+                decision_values = {
+                    key: value for key, value in decision.items() if key != "confidence" or value is not None
+                }
+                stored = await repo.add_decision(task_id=task_id, step_id=step_id, **decision_values)
                 await repo.add_event(
                     task_id,
                     "decision.created",
@@ -773,8 +775,8 @@ class TaskRuntimeService:
             "type": evidence_type.value,
             "source": source,
             "summary": summary,
-            "content": content[:24000] if content else None,
-            "metadata": metadata or {},
+            "content": SensitiveRedactor.redact_text(content[:24000]) if content else None,
+            "metadata": SensitiveRedactor.redact_value(metadata or {}),
             "artifact_id": artifact_id,
         }
 
@@ -791,7 +793,9 @@ class TaskRuntimeService:
             proxy = browser_proxy_options()
             browser = await playwright.chromium.launch(headless=True, **({"proxy": proxy} if proxy else {}))
             try:
-                context = await browser.new_context(viewport={"width": 1280, "height": 800}, storage_state=recorder_state)
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 800}, storage_state=recorder_state
+                )
                 page = await context.new_page()
                 response = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                 title = await page.title()
@@ -824,8 +828,12 @@ class TaskRuntimeService:
                             "playwright.aria_snapshot",
                             f"Page {title!r} at {page.url}; {len(candidates)} interactive candidates.",
                             aria,
-                            {"url": page.url, "title": title, "http_status": response.status if response else None,
-                             "recorder_state_applied": recorder_state is not None},
+                            {
+                                "url": page.url,
+                                "title": title,
+                                "http_status": response.status if response else None,
+                                "recorder_state_applied": recorder_state is not None,
+                            },
                         ),
                         await self._evidence(
                             task,
@@ -856,169 +864,195 @@ class TaskRuntimeService:
 
     async def _decision_select(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         observed = outputs.get("inspect", {})
-        candidates = [item for item in observed.get("candidates", []) if item.get("safe")]
+        observed_controls = [
+            item
+            for item in observed.get("candidates", [])
+            if item.get("safe") and item.get("role") and item.get("name")
+        ]
         trace_run_id = uuid4().hex
-        await self._record_ai_trace(
-            task.id,
-            make_trace_event(trace_run_id, "run.started", stage="decision", title="Browser decision started",
-                             metadata={"feature": "browser_exploration", "decision": "explore_next_action"}),
-        )
-        await self._record_ai_trace(
-            task.id,
-            make_trace_event(trace_run_id, "evidence.collected", stage="evidence", title="Page scan complete",
-                             message=f"{len(candidates)} safe action candidate(s)",
-                             metadata={"candidate_count": len(candidates)}),
-        )
-        await self._record_ai_trace(
-            task.id,
-            make_trace_event(trace_run_id, "decision.started", stage="decision", title="Selecting next action",
-                             metadata={"candidate_count": len(candidates)}),
-        )
-        if not candidates:
-            await self._record_ai_trace(
-                task.id,
-                make_trace_event(trace_run_id, "decision.completed", stage="decision", title="Local policy selected",
-                                 message="No safe interactive action was observed.",
-                                 metadata={"provider": "local-policy", "candidate_count": 0, "fallback_used": False}),
+        raw_candidates = [
+            {
+                "kind": "role",
+                "value": str(item["role"]),
+                "name": str(item["name"])[:180],
+                "exact": True,
+                "task_candidate_index": int(item["index"]),
+                "evidence": {"uniqueness": True},
+            }
+            for item in observed_controls
+        ]
+        event = {
+            "tag": "control",
+            "action": "click",
+            "url": SensitiveRedactor.redact_url(str(observed.get("url") or ""))[:500],
+            "target": {"task_goal": task.goal[:500], "accessible_name": "safe page action", "action": "inspect"},
+            "context": {"page_title": str(observed.get("title") or "")[:200], "task_goal": task.goal[:500]},
+            "candidates": raw_candidates,
+        }
+        if not raw_candidates:
+            event_trace = make_trace_event(
+                trace_run_id,
+                "decision_completed",
+                stage="decision",
+                title="Local Strategy found no safe candidate",
+                metadata={"provider": "local-strategy", "candidate_count": 0, "verified": False},
             )
-            await self._record_ai_trace(
-                task.id,
-                make_trace_event(trace_run_id, "run.completed", stage="decision", title="Browser decision complete"),
-            )
+            await self._record_ai_trace(task.id, event_trace)
             return {
                 "choice": "none",
                 "candidate": None,
-                "provider": "local-policy",
-                "confidence": 1.0,
-                "rationale": "No safe interactive candidate was observed.",
+                "provider": "local-strategy",
+                "confidence": None,
+                "rationale": "No safe named control was observed.",
                 "_decision": {
                     "name": "explore_next_action",
-                    "provider": "local-policy",
+                    "provider": "local-strategy",
                     "choice": "none",
-                    "confidence": 1.0,
-                    "rationale": "No safe interactive candidate was observed.",
-                    "escalated": False,
+                    "confidence": None,
+                    "rationale": "No safe named control was observed.",
                 },
+                "_evidence": [],
             }
-        options = [
-            DecisionOption(key=str(item["index"]), description=f"{item['role']} {item['name']}"[:1000])
-            for item in candidates
-        ]
-        request = DecisionRequest(
-            name="explore_next_action",
-            state={
-                "goal": task.goal,
-                "url": observed.get("url"),
-                "title": observed.get("title"),
-                "candidates": candidates,
-            },
-            options=options,
-            instructions="Choose a safe, relevant page control to inspect. Never select destructive, purchase, submit, or sign-out actions.",
-        )
+
+        from app.services.locator_decision_service import LocatorDecisionService
+
         can_call_provider = await self._reserve_ai_call(task.id)
-        result = await DecisionService().choose(request, run_id=trace_run_id) if can_call_provider else None
-        if result:
+        if can_call_provider:
+            decision_service = DecisionService()
+        else:
+            from project_model.models import DecisionResult
+
+            class BudgetExhaustedDecisionService:
+                async def choose(self, request, *, run_id=None):
+                    return DecisionResult(provider="fallback", fallback_used=True, reason="task_ai_budget_exhausted")
+
+            decision_service = BudgetExhaustedDecisionService()
+        pipeline = LocatorDecisionService(decision_service=decision_service)
+        candidates = LocatorDecisionService.generate_candidates(event)
+        try:
+            selection = await self._run_locator_decision(task, observed, event, candidates, pipeline, trace_run_id)
+        except Exception as error:
+            selection = None
+            logger.info(
+                "Browser locator verification unavailable task_id=%s error_type=%s", task.id, type(error).__name__
+            )
+
+        if selection:
+            for item in selection["trace"]:
+                await self._record_ai_trace(task.id, item)
+        selected_candidate = (selection or {}).get("selected_candidate")
+        summary = (selection or {}).get("summary") or {"engine": "Local Strategy", "verified": False}
+        if not summary.get("verified"):
+            selected_candidate = None
+        original = next(
+            (
+                item
+                for item in observed_controls
+                if selected_candidate and int(item["index"]) == selected_candidate.get("task_candidate_index")
+            ),
+            None,
+        )
+        provider = "jev" if summary.get("engine") == "Jev" else "local-strategy"
+        confidence = summary.get("confidence") if provider == "jev" else None
+        rationale = (
+            f"{summary.get('engine', 'Local Strategy')} selected and Playwright verified {summary.get('candidate_id')}."
+            if original
+            else "No candidate passed Playwright verification."
+        )
+        if provider == "jev":
             async with async_session_factory() as session:
                 repo = TaskRepository(session)
                 fresh = await repo.get(task.id)
                 if fresh:
-                    is_provider_call = result.provider != "fallback" and not result.fallback_used
-                    fresh.context = {
-                        **fresh.context,
-                        "jev_calls": int(fresh.context.get("jev_calls", 0)) + int(is_provider_call),
-                    }
-                    await repo.add_event(
-                        task.id,
-                        "step.progress",
-                        {
-                            "type": "decision.call",
-                            "provider": result.provider,
-                            "fallback_used": result.fallback_used,
-                            "confidence": result.confidence,
-                            "reason": result.reason,
-                        },
-                    )
+                    fresh.context = {**fresh.context, "jev_calls": int(fresh.context.get("jev_calls", 0)) + 1}
                     await session.commit()
-        selected = next((item for item in candidates if result and str(item["index"]) == str(result.choice)), None)
-        # Jev abstention, low confidence, or invalid choice escalates to a conservative local rule.
-        escalated = selected is None or (result is not None and (result.confidence or 0) < 0.6)
-        if escalated:
-            selected = candidates[0]
-            choice = str(selected["index"])
-            provider = "local-policy"
-            rationale = "Jev was unavailable, abstained, exceeded the task AI-call budget, or confidence was below threshold; selected the first observed safe candidate."
-            confidence = 0.5
-        else:
-            choice = str(selected["index"])
-            provider = result.provider if result else "local-policy"
-            rationale = (
-                (result.reason or "Jev selected an observed candidate.")
-                if result
-                else "Task AI-call budget exhausted; applied local safe-candidate policy."
+        if original:
+            final_event = make_trace_event(
+                trace_run_id,
+                "decision_completed",
+                stage="decision",
+                title=f"{summary['engine']} selected and verified action",
+                message=f"{original.get('role')} {original.get('name')}",
+                metadata={
+                    "provider": provider,
+                    "model": summary.get("model"),
+                    "latency_ms": summary.get("latency_ms"),
+                    "candidate_id": summary.get("candidate_id"),
+                    "candidate_count": summary.get("candidate_count"),
+                    "confidence": confidence,
+                    "verified": True,
+                    "selected_action": {"role": original.get("role"), "name": original.get("name")},
+                },
             )
-            confidence = (result.confidence or 0.0) if result else 0.5
+            await self._record_ai_trace(task.id, final_event)
         decision = {
             "name": "explore_next_action",
             "provider": provider,
-            "choice": choice,
+            "choice": str(original.get("index")) if original else "none",
             "confidence": confidence,
             "rationale": rationale,
-            "escalated": escalated,
+            "candidate_id": summary.get("candidate_id"),
+            "verified": bool(original),
+            "model": summary.get("model") if provider == "jev" else None,
+            "latency_ms": summary.get("latency_ms") if provider == "jev" else None,
         }
-        await self._record_ai_trace(
-            task.id,
-            make_trace_event(
-                trace_run_id,
-                "decision.completed",
-                stage="decision",
-                title="Jev decision complete" if not escalated else "Local policy fallback",
-                message=(
-                    f"Selected {selected.get('role', 'control')} {selected.get('name', '')}".strip()
-                    if selected
-                    else "No candidate selected."
-                ),
-                metadata={
-                    "provider": provider,
-                    "candidate_count": len(candidates),
-                    "selected_action": {
-                        "role": selected.get("role"),
-                        "name": selected.get("name"),
-                    } if selected else None,
-                    "choice": choice,
-                    "confidence": confidence,
-                    "fallback_used": escalated or bool(result and result.fallback_used),
-                    "fallback_reason": result.reason if result and result.fallback_used else None,
-                },
-            ),
-        )
-        await self._record_ai_trace(
-            task.id,
-            make_trace_event(trace_run_id, "run.completed", stage="decision", title="Browser decision complete"),
-        )
         return {
-            "choice": choice,
-            "candidate": selected,
+            "choice": decision["choice"],
+            "candidate": original,
             "provider": provider,
             "confidence": confidence,
             "rationale": rationale,
-            "_decision": decision,
+            "_decision": {key: decision[key] for key in ("name", "provider", "choice", "confidence", "rationale")},
             "_evidence": [
                 await self._evidence(
                     task,
                     "decide",
                     EvidenceType.LOCATOR_CANDIDATES,
-                    "browser.inspect + decision.choose",
-                    f"Selected candidate {choice} from {len(candidates)} safe observed controls.",
-                    json.dumps(candidates, ensure_ascii=False),
-                    {"provider": provider, "escalated": escalated},
+                    "locator_decision_service",
+                    f"{summary.get('engine', 'Local Strategy')} selected candidate {summary.get('candidate_id')}; verified={bool(original)}.",
+                    json.dumps(
+                        [
+                            {
+                                "candidate_id": item["candidate_id"],
+                                "locator": item["locator"],
+                                "static_score": item["static_score"],
+                            }
+                            for item in candidates
+                        ],
+                        ensure_ascii=False,
+                    ),
+                    {"provider": provider, "verified": bool(original), "candidate_id": summary.get("candidate_id")},
                 )
             ],
         }
 
+    async def _run_locator_decision(self, task, observed, event, candidates, pipeline, trace_run_id):
+        from playwright.async_api import async_playwright
+
+        url = str(observed.get("url") or "")
+        recorder_state = await self._recorder_storage_state(task)
+        async with async_playwright() as playwright:
+            proxy = browser_proxy_options()
+            browser = await playwright.chromium.launch(headless=True, **({"proxy": proxy} if proxy else {}))
+            try:
+                context = await browser.new_context(storage_state=recorder_state)
+                page = await context.new_page()
+                await page.goto(url, wait_until="domcontentloaded", timeout=12000)
+                return await pipeline.decide(
+                    run_id=trace_run_id,
+                    event=event,
+                    candidates=candidates,
+                    page=page,
+                    step_id=f"task:{task.id}",
+                )
+            finally:
+                await browser.close()
+
     async def _record_ai_trace(self, task_id: str, event) -> None:
         async with async_session_factory() as session:
             repo = TaskRepository(session)
-            await repo.add_event(task_id, "ai.trace", event.model_dump(mode="json"))
+            payload = event.model_dump(mode="json") if callable(getattr(event, "model_dump", None)) else event
+            await repo.add_event(task_id, "ai.trace", SensitiveRedactor.redact_value(payload))
             await session.commit()
 
     async def _browser_act(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
@@ -1041,7 +1075,15 @@ class TaskRuntimeService:
                 await page.goto(inspected["url"], wait_until="domcontentloaded", timeout=20000)
                 role, name = selected.get("role"), selected.get("name")
                 if role in {"button", "link"} and name:
-                    await page.get_by_role(role, name=name, exact=True).first.click(timeout=5000)
+                    from app.services.locator_decision_service import LocatorDecisionService
+
+                    candidate = {"kind": "role", "value": role, "name": name, "exact": True}
+                    verification = await LocatorDecisionService.verify_candidate(page, candidate, {"action": "click"})
+                    if not verification["verified"]:
+                        raise TaskBlocked(
+                            "The selected browser action did not pass unique, visible, enabled and clickable verification."
+                        )
+                    await page.get_by_role(role, name=name, exact=True).click(timeout=5000)
                 elif selected.get("tag") == "a" and selected.get("href"):
                     await page.goto(
                         urljoin(inspected["url"], selected["href"]), wait_until="domcontentloaded", timeout=15000
@@ -1372,7 +1414,9 @@ class TaskRuntimeService:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import) and any(alias.name.split(".")[0] == "urllib" for alias in node.names):
                 if any(alias.name != "urllib.parse" for alias in node.names):
-                    raise TaskBlocked("Generated test imports a process/network/system-control module; refusing execution.")
+                    raise TaskBlocked(
+                        "Generated test imports a process/network/system-control module; refusing execution."
+                    )
             if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "urllib":
                 safe_url_parser = (
                     node.level == 0
@@ -1380,7 +1424,9 @@ class TaskRuntimeService:
                     and all(alias.name in {"unquote", "urlsplit"} and alias.asname is None for alias in node.names)
                 )
                 if not safe_url_parser:
-                    raise TaskBlocked("Generated test imports a process/network/system-control module; refusing execution.")
+                    raise TaskBlocked(
+                        "Generated test imports a process/network/system-control module; refusing execution."
+                    )
             if isinstance(node, ast.Import) and any(
                 alias.name.split(".")[0] in forbidden_imports for alias in node.names
             ):
@@ -1576,13 +1622,15 @@ class TaskRuntimeService:
                 "test_nodeid": failure.test_nodeid,
                 "classification": failure.classification,
                 "exception_type": failure.exception_type,
-                "error_message": failure.error_message,
-                "stack_trace": failure.stack_trace[-12000:],
-                "failing_locator": failure.failing_locator,
+                "error_message": SensitiveRedactor.redact_text(failure.error_message or ""),
+                "stack_trace": SensitiveRedactor.redact_text(failure.stack_trace or "")[-12000:],
+                "failing_locator": SensitiveRedactor.redact_text(failure.failing_locator or "") or None,
                 "screenshot_path": failure.screenshot_path,
                 "trace_path": failure.trace_path,
                 "dom_snapshot_path": failure.dom_snapshot_path,
-                "repair_proposal": failure.repair_proposal,
+                "repair_proposal": SensitiveRedactor.redact_value(failure.repair_proposal)
+                if failure.repair_proposal
+                else None,
             }
         evidence = [
             await self._evidence(
@@ -1891,30 +1939,42 @@ class TaskRuntimeService:
         recorded_steps = self._input(task, "recorded_steps", []) or []
         title = str(self._input(task, "case_name", task.goal))[:250]
         async with async_session_factory() as session:
-            existing = (await session.execute(select(TestCaseORM).where(
-                TestCaseORM.project_id == task.project_id,
-                TestCaseORM.external_system == "AGENT_TASK",
-                TestCaseORM.external_case_id == task.id,
-            ))).scalar_one_or_none()
+            existing = (
+                await session.execute(
+                    select(TestCaseORM).where(
+                        TestCaseORM.project_id == task.project_id,
+                        TestCaseORM.external_system == "AGENT_TASK",
+                        TestCaseORM.external_case_id == task.id,
+                    )
+                )
+            ).scalar_one_or_none()
             if existing is None:
-                existing = await TestCaseRepository(session).create(TestCaseCreate(
-                    project_id=task.project_id,
-                    title=title,
-                    steps=[str(step.get("description", "")) for step in recorded_steps if isinstance(step, dict) and step.get("description")],
-                    expected_result=str(self._input(task, "requirement", ""))[:2000],
-                    automation_status=AutomationStatus.AUTOMATED,
-                    tags=["ai-generated"],
-                    external_system="AGENT_TASK",
-                    external_case_id=task.id,
-                ))
-            await AutomationBindingRepository(session).create_or_update(AutomationBindingCreate(
-                test_case_id=existing.id,
-                workspace_id=task.workspace_id,
-                nodeid=str(nodeids[0]),
-                file_path=str(generated["target_file"]),
-                framework=FrameworkType.PLAYWRIGHT_PYTHON,
-                status=AutomationBindingStatus.ACTIVE,
-            ))
+                existing = await TestCaseRepository(session).create(
+                    TestCaseCreate(
+                        project_id=task.project_id,
+                        title=title,
+                        steps=[
+                            str(step.get("description", ""))
+                            for step in recorded_steps
+                            if isinstance(step, dict) and step.get("description")
+                        ],
+                        expected_result=str(self._input(task, "requirement", ""))[:2000],
+                        automation_status=AutomationStatus.AUTOMATED,
+                        tags=["ai-generated"],
+                        external_system="AGENT_TASK",
+                        external_case_id=task.id,
+                    )
+                )
+            await AutomationBindingRepository(session).create_or_update(
+                AutomationBindingCreate(
+                    test_case_id=existing.id,
+                    workspace_id=task.workspace_id,
+                    nodeid=str(nodeids[0]),
+                    file_path=str(generated["target_file"]),
+                    framework=FrameworkType.PLAYWRIGHT_PYTHON,
+                    status=AutomationBindingStatus.ACTIVE,
+                )
+            )
             await session.commit()
         return {"test_case_id": existing.id, "file_path": generated["target_file"], "nodeid": nodeids[0]}
 

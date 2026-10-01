@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import mimetypes
+import os
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
@@ -13,17 +15,24 @@ from project_model.models import (
     ExternalArtifactReference,
     RunnerType,
     RunStatus,
+    TestBrowserSession,
     TestExecution,
     TestRun,
     TestRunCreate,
 )
+from qa_core.execution.live_browser_plugin import write_live_browser_plugin
 from qa_core.execution.models import SuiteExecutionResult, TestExecutionStatus
 from qa_core.execution.pytest_runner import PytestRunner
 from qa_core.execution.runner_backend import RunnerTriggerRequest
+from qa_core.failure.redactor import SensitiveRedactor
+from qa_core.failure.traceback_frames import last_user_code_frame
 from qa_core.onboarding.contract import venv_interpreter
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
+from sqlalchemy import select, update
 
 from app.persistence.models import (
+    BreakpointORM,
+    BrowserSessionORM,
     ExternalArtifactReferenceORM,
     TestExecutionORM,
     TestRunORM,
@@ -52,7 +61,7 @@ class TestRunEventBus:
     def subscribe(self, run_id: str) -> asyncio.Queue:
         if run_id not in self._subscribers:
             self._subscribers[run_id] = []
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=32)
         self._subscribers[run_id].append(q)
         return q
 
@@ -65,11 +74,48 @@ class TestRunEventBus:
     async def publish(self, run_id: str, event: dict) -> None:
         if run_id in self._subscribers:
             for q in self._subscribers[run_id]:
-                await q.put(event)
+                if q.full():
+                    # Frames and logs are transient. Preserve lifecycle events (especially the
+                    # worker/session mapping and terminal run status) when a tab is slow.
+                    queued: list[dict] = []
+                    while not q.empty():
+                        queued.append(q.get_nowait())
+                    drop_index = next(
+                        (i for i, item in enumerate(queued) if item.get("type") == "BROWSER_FRAME"),
+                        None,
+                    )
+                    if drop_index is None:
+                        drop_index = next(
+                            (i for i, item in enumerate(queued) if item.get("type") == "LOG_STREAM"),
+                            None,
+                        )
+                    if drop_index is None and event.get("type") in {"BROWSER_FRAME", "LOG_STREAM"}:
+                        for item in queued:
+                            q.put_nowait(item)
+                        continue
+                    if drop_index is None:
+                        drop_index = 0
+                    queued.pop(drop_index)
+                    for item in queued:
+                        q.put_nowait(item)
+                q.put_nowait(event)
 
 
 event_bus = TestRunEventBus()
 _RUN_WORKER_TASKS: dict[str, asyncio.Task] = {}
+_RUN_JENKINS_BACKENDS: dict[str, JenkinsRunnerBackend] = {}
+
+
+def _jenkins_config_for_profile(profile) -> JenkinsConfig:
+    cfg = profile.config if profile else {}
+    return JenkinsConfig(
+        base_url=cfg.get("base_url", "http://localhost:8080"),
+        job_name=cfg.get("job_name", "qa-automation-suite"),
+        user=cfg.get("user"),
+        api_token=cfg.get("api_token"),
+        default_parameters=cfg.get("default_parameters", {}),
+        parameter_mapping=cfg.get("parameter_mapping", {}),
+    )
 
 
 class TestRunService:
@@ -95,8 +141,8 @@ class TestRunService:
             nodeid=orm.nodeid,
             status=RunStatus(orm.status),
             duration_ms=orm.duration_ms,
-            error_message=orm.error_message,
-            stack_trace=orm.stack_trace,
+            error_message=SensitiveRedactor.redact_text(orm.error_message) if orm.error_message else None,
+            stack_trace=SensitiveRedactor.redact_text(orm.stack_trace) if orm.stack_trace else None,
             failure_category=orm.failure_category,
             artifact_paths=orm.artifact_paths or [],
             started_at=orm.started_at,
@@ -109,13 +155,17 @@ class TestRunService:
             run_id=orm.run_id,
             name=orm.name,
             type=orm.type,
-            url=orm.url,
+            url=SensitiveRedactor.redact_url(orm.url),
             metadata_json=orm.metadata_json or {},
             created_at=orm.created_at,
         )
 
     def _to_run_dto(self, orm: TestRunORM) -> TestRun:
         executions = [self._to_execution_dto(e) for e in (orm.executions or [])]
+        # Freshly inserted run rows do not have this selectin relationship loaded yet. Do not
+        # trigger implicit async I/O while building the response DTO.
+        loaded_browser_sessions = orm.__dict__.get("browser_sessions", [])
+        browser_sessions = [self._to_browser_session_dto(item) for item in loaded_browser_sessions]
         artifacts = [self._to_artifact_dto(a) for a in (getattr(orm, "external_artifacts", []) or [])]
         return TestRun(
             id=orm.id,
@@ -126,10 +176,15 @@ class TestRunService:
             runner_type=getattr(orm, "runner_type", "LOCAL"),
             runner_profile_id=getattr(orm, "runner_profile_id", None),
             external_job_id=getattr(orm, "external_job_id", None),
-            external_build_url=getattr(orm, "external_build_url", None),
+            external_build_url=(
+                SensitiveRedactor.redact_url(orm.external_build_url)
+                if getattr(orm, "external_build_url", None)
+                else None
+            ),
             queue_duration_ms=getattr(orm, "queue_duration_ms", 0.0),
             environment=orm.environment or {},
             browser=orm.browser,
+            parallel_workers=getattr(orm, "parallel_workers", 1),
             markers=orm.markers or [],
             nodeids=orm.nodeids or [],
             total=orm.total,
@@ -138,12 +193,33 @@ class TestRunService:
             skipped=orm.skipped,
             cancelled=orm.cancelled,
             duration_ms=orm.duration_ms,
-            log_output=getattr(orm, "log_output", None),
+            log_output=(SensitiveRedactor.redact_text(orm.log_output) if getattr(orm, "log_output", None) else None),
             started_at=orm.started_at,
             finished_at=orm.finished_at,
             created_at=orm.created_at,
             executions=executions,
+            browser_sessions=browser_sessions,
             external_artifacts=artifacts,
+        )
+
+    @staticmethod
+    def _to_browser_session_dto(orm: BrowserSessionORM) -> TestBrowserSession:
+        elapsed_end = orm.finished_at or utc_now()
+        elapsed_ms = max(0.0, (elapsed_end - orm.started_at).total_seconds() * 1000)
+        return TestBrowserSession(
+            id=orm.id,
+            run_id=orm.run_id,
+            case_execution_id=orm.case_execution_id,
+            worker_id=orm.worker_id,
+            browser_session_id=orm.browser_session_id,
+            page_id=orm.page_id,
+            nodeid=orm.nodeid,
+            case_name=orm.case_name,
+            current_url=SensitiveRedactor.redact_url(orm.current_url),
+            status=orm.status,
+            elapsed_ms=elapsed_ms,
+            started_at=orm.started_at,
+            finished_at=orm.finished_at,
         )
 
     async def list_runs(self, project_id: str | None = None) -> list[TestRun]:
@@ -170,7 +246,9 @@ class TestRunService:
         )
 
         if is_jenkins:
-            asyncio.create_task(self._run_jenkins_worker_task(run_id, data))
+            worker = asyncio.create_task(self._run_jenkins_worker_task(run_id, data), name=f"test-run-{run_id}")
+            _RUN_WORKER_TASKS[run_id] = worker
+            worker.add_done_callback(lambda done, rid=run_id: _RUN_WORKER_TASKS.pop(rid, None))
         elif data.runner_type == RunnerType.WORKER.value:
             await JobQueueService(JobRepository(self.run_repo.session)).enqueue_job(
                 run_id=run_id,
@@ -198,8 +276,15 @@ class TestRunService:
             ws_dir = self.workspace_service.get_workspace_dir(data.workspace_id)
             start_time = utc_now()
 
-            await run_repo.update_run_status(run_id, status=RunStatus.RUNNING, started_at=start_time)
+            started = await run_repo.transition_run_status(
+                run_id,
+                [RunStatus.QUEUED],
+                RunStatus.RUNNING,
+                started_at=start_time,
+            )
             await session.commit()
+            if not started:
+                return
 
             await event_bus.publish(
                 run_id,
@@ -218,12 +303,13 @@ class TestRunService:
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 async def on_log(chunk: str) -> None:
-                    live_logs.append(chunk)
-                    await run_repo.update_run_status(
-                        run_id, status=RunStatus.RUNNING, log_output="".join(live_logs)[-20000:]
-                    )
+                    safe_chunk = SensitiveRedactor.redact_text(chunk)
+                    live_logs.append(safe_chunk)
+                    active = await run_repo.update_run_log_if_active(run_id, "".join(live_logs)[-20000:])
                     await session.commit()
-                    await event_bus.publish(run_id, {"type": "LOG_STREAM", "run_id": run_id, "log": chunk})
+                    if not active:
+                        return
+                    await event_bus.publish(run_id, {"type": "LOG_STREAM", "run_id": run_id, "log": safe_chunk})
 
                 # Execute PytestRunner. An imported project must run in its own virtualenv: using
                 # the API's interpreter makes its tests fail on their own dependencies.
@@ -232,26 +318,52 @@ class TestRunService:
                     browser_proxy_env["BROWSER_PROXY_URL"] = settings.browser_proxy_url
                 if settings.browser_proxy_bypass:
                     browser_proxy_env["BROWSER_PROXY_BYPASS"] = settings.browser_proxy_bypass
-                suite_result = await self.pytest_runner.run_suite(
-                    workspace_dir=ws_dir,
-                    nodeids=data.nodeids,
-                    markers=data.markers,
-                    environment={**data.environment, **browser_proxy_env, "QA_ARTIFACT_DIR": str(artifact_dir)},
-                    interpreter=self._project_interpreter(ws_dir),
-                    on_log=on_log,
-                )
-                suite_result.artifact_paths = [
-                    str(path) for path in artifact_dir.rglob("*") if path.is_file()
-                ]
 
-                await self.persist_suite_result(run_id, suite_result)
+                async def on_browser_event(event: dict) -> None:
+                    await self._record_browser_event(run_id, event)
+
+                # Browser frames are sensitive, transient telemetry. Keep plugin source and frame
+                # logs in a temporary subdirectory so they are neither uploaded as artifacts nor
+                # retained after the run finishes.
+                with tempfile.TemporaryDirectory(prefix=".qa-live-", dir=artifact_dir) as live_dir_value:
+                    live_dir = Path(live_dir_value)
+                    live_browser_log = live_dir / "browser-live"
+                    live_plugin = write_live_browser_plugin(live_dir)
+                    plugin_pythonpath = os.pathsep.join(
+                        value for value in (str(live_dir), os.environ.get("PYTHONPATH", "")) if value
+                    )
+                    suite_result = await self.pytest_runner.run_suite(
+                        workspace_dir=ws_dir,
+                        nodeids=data.nodeids,
+                        markers=data.markers,
+                        environment={
+                            **data.environment,
+                            **browser_proxy_env,
+                            "QA_ARTIFACT_DIR": str(artifact_dir),
+                            "QA_PLATFORM_LIVE_BROWSER_LOG": str(live_browser_log),
+                            "PYTHONPATH": plugin_pythonpath,
+                        },
+                        interpreter=self._project_interpreter(ws_dir),
+                        on_log=on_log,
+                        browser_event_path=live_browser_log,
+                        on_browser_event=on_browser_event,
+                        parallel_workers=data.parallel_workers,
+                        extra_pytest_args=["-p", live_plugin],
+                    )
+                suite_result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
+
+                await self.persist_suite_result(
+                    run_id, suite_result, workspace_id=data.workspace_id, workspace_dir=ws_dir
+                )
 
             except Exception as e:
-                await run_repo.update_run_status(
-                    run_id=run_id,
-                    status=RunStatus.ERROR,
+                safe_error = SensitiveRedactor.redact_text(str(e))
+                await run_repo.transition_run_status(
+                    run_id,
+                    [RunStatus.QUEUED, RunStatus.RUNNING],
+                    RunStatus.ERROR,
                     finished_at=utc_now(),
-                    log_output=str(e),
+                    log_output=safe_error,
                 )
                 await session.commit()
                 await event_bus.publish(
@@ -259,11 +371,18 @@ class TestRunService:
                     {
                         "type": "RUN_ERROR",
                         "run_id": run_id,
-                        "error": str(e),
+                        "error": safe_error,
                     },
                 )
 
-    async def persist_suite_result(self, run_id: str, suite_result: SuiteExecutionResult) -> None:
+    async def persist_suite_result(
+        self,
+        run_id: str,
+        suite_result: SuiteExecutionResult,
+        *,
+        workspace_id: str | None = None,
+        workspace_dir: Path | None = None,
+    ) -> None:
         from app.persistence.database import get_session
 
         async with get_session() as session:
@@ -271,6 +390,9 @@ class TestRunService:
             existing = await run_repo.get_by_id(run_id)
             if existing is None or existing.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
                 return
+            # Artifact uploads happen outside the database lock; start the guarded write transaction
+            # only after external I/O so a cancellation can win cleanly while uploads are pending.
+            await session.rollback()
             artifact_urls: list[str] = []
             artifact_records: list[tuple[str, str, str, str, str]] = []
             artifact_root = (settings.artifact_storage_dir.resolve() / run_id).resolve()
@@ -285,22 +407,34 @@ class TestRunService:
                     continue
                 content_type = mimetypes.guess_type(artifact.name)[0] or "application/octet-stream"
                 uploaded = await storage.save_artifact(artifact.name, artifact.read_bytes(), content_type)
-                kind = "SCREENSHOT" if content_type.startswith("image/") else (
-                    "TRACE" if artifact.suffix.lower() == ".zip" else "REPORT"
+                kind = (
+                    "SCREENSHOT"
+                    if content_type.startswith("image/")
+                    else ("TRACE" if artifact.suffix.lower() == ".zip" else "REPORT")
                 )
                 artifact_records.append((artifact.name, kind, uploaded.storage_url, uploaded.artifact_id, content_type))
                 artifact_urls.append(uploaded.storage_url)
+            if artifact_records and not await run_repo.reserve_active_run_for_result(run_id):
+                return
             for name, kind, url, artifact_id, content_type in artifact_records:
                 await run_repo.add_external_artifact(
-                    run_id, name, kind, url,
+                    run_id,
+                    name,
+                    kind,
+                    url,
                     metadata_json={"artifact_id": artifact_id, "content_type": content_type},
                 )
             await session.commit()
             passed_count = 0
             failed_count = 0
             skipped_count = 0
+            executions_by_nodeid: dict[str, TestExecutionORM] = {}
 
             for res in suite_result.results:
+                safe_error_message = SensitiveRedactor.redact_text(res.error_message or "")
+                safe_stack_trace = SensitiveRedactor.redact_text(res.stack_trace or "")
+                if not await run_repo.reserve_active_run_for_result(run_id):
+                    return
                 status = (
                     RunStatus.PASSED
                     if res.status == TestExecutionStatus.PASSED
@@ -317,8 +451,8 @@ class TestRunService:
                 failure_cat = None
                 if status == RunStatus.FAILED:
                     diag = self.orchestrator.diagnose_failure(
-                        error_message=res.error_message or "Test failed",
-                        stack_trace=res.stack_trace or "",
+                        error_message=safe_error_message or "Test failed",
+                        stack_trace=safe_stack_trace,
                         test_nodeid=res.nodeid,
                     )
                     failure_cat = diag.classification.value
@@ -328,27 +462,32 @@ class TestRunService:
                     nodeid=res.nodeid,
                     status=status,
                     duration_ms=res.duration_ms,
-                    error_message=res.error_message,
-                    stack_trace=res.stack_trace,
+                    error_message=safe_error_message or None,
+                    stack_trace=safe_stack_trace or None,
                     failure_category=failure_cat,
                     artifact_paths=artifact_urls if len(suite_result.results) == 1 else None,
+                )
+                executions_by_nodeid[res.nodeid] = exec_orm
+                await session.execute(
+                    update(BrowserSessionORM)
+                    .where(
+                        BrowserSessionORM.run_id == run_id,
+                        BrowserSessionORM.nodeid == res.nodeid,
+                        BrowserSessionORM.case_execution_id.is_(None),
+                    )
+                    .values(case_execution_id=exec_orm.id)
                 )
 
                 # If failed, create FailureRecord
                 if status == RunStatus.FAILED:
                     diag = self.orchestrator.diagnose_failure(
-                        error_message=res.error_message or "Test failed",
-                        stack_trace=res.stack_trace or "",
+                        error_message=safe_error_message or "Test failed",
+                        stack_trace=safe_stack_trace,
                         test_nodeid=res.nodeid,
                     )
                     proposal = None
-                    if diag.failing_locator:
-                        p = self.orchestrator.propose_locator_repair(
-                            failing_locator=diag.failing_locator,
-                            error_message=res.error_message or "",
-                            file_path=res.nodeid.split("::")[0],
-                        )
-                        proposal = p.model_dump()
+                    # A traceback is failure evidence, not proof of a replacement locator.
+                    # Proposals are generated separately from observed browser/DOM candidates.
 
                     await run_repo.create_failure_record(
                         run_id=run_id,
@@ -363,6 +502,33 @@ class TestRunService:
                         suggested_action=diag.suggested_action,
                         repair_proposal=proposal,
                     )
+                    if workspace_id and workspace_dir:
+                        frame = last_user_code_frame(safe_stack_trace, workspace_dir)
+                        if frame:
+                            file_path, line_number = frame
+                            breakpoint_result = await session.execute(
+                                select(BreakpointORM).where(
+                                    BreakpointORM.workspace_id == workspace_id,
+                                    BreakpointORM.file_path == file_path,
+                                    BreakpointORM.line_number == line_number,
+                                    BreakpointORM.source == "auto_failure",
+                                )
+                            )
+                            auto_breakpoint = breakpoint_result.scalar_one_or_none()
+                            if auto_breakpoint is None:
+                                session.add(
+                                    BreakpointORM(
+                                        workspace_id=workspace_id,
+                                        file_path=file_path,
+                                        line_number=line_number,
+                                        enabled=True,
+                                        source="auto_failure",
+                                        run_id=run_id,
+                                    )
+                                )
+                            else:
+                                auto_breakpoint.enabled = True
+                                auto_breakpoint.run_id = run_id
 
                 await session.commit()
 
@@ -380,18 +546,33 @@ class TestRunService:
             finish_time = utc_now()
             final_status = self._verdict(suite_result.exit_code, len(suite_result.results), failed_count)
 
-            await run_repo.update_run_status(
-                run_id=run_id,
-                status=final_status,
+            # A worker can be cancelled or terminated before the pytest plugin emits its normal
+            # session.finished event. Close any such records before publishing the terminal run.
+            browser_result = await session.execute(select(BrowserSessionORM).where(BrowserSessionORM.run_id == run_id))
+            for browser_session in browser_result.scalars().all():
+                execution = executions_by_nodeid.get(browser_session.nodeid)
+                if execution and browser_session.case_execution_id is None:
+                    browser_session.case_execution_id = execution.id
+                if browser_session.status == "running":
+                    browser_session.status = execution.status.value.lower() if execution else "closed"
+                    browser_session.finished_at = finish_time
+
+            transitioned = await run_repo.transition_run_status(
+                run_id,
+                [RunStatus.QUEUED, RunStatus.RUNNING],
+                final_status,
                 passed=passed_count,
                 failed=failed_count,
                 skipped=skipped_count,
                 total=suite_result.total,
                 duration_ms=suite_result.duration_ms,
                 finished_at=finish_time,
-                log_output="\n".join(suite_result.raw_logs)[-20000:] or None,
+                log_output=SensitiveRedactor.redact_text("\n".join(suite_result.raw_logs))[-20000:] or None,
             )
             await session.commit()
+
+            if not transitioned:
+                return
 
             await event_bus.publish(
                 run_id,
@@ -412,25 +593,24 @@ class TestRunService:
             run_repo = TestRunRepository(session)
             runner_repo = RunnerProfileRepository(lambda: session)
             start_time = utc_now()
-            await run_repo.update_run_status(run_id, status=RunStatus.RUNNING, started_at=start_time)
+            started = await run_repo.transition_run_status(
+                run_id,
+                [RunStatus.QUEUED],
+                RunStatus.RUNNING,
+                started_at=start_time,
+            )
             await session.commit()
+            if not started:
+                return
 
             # Resolve runner profile config
             runner_profile = None
             if data.runner_profile_id:
                 runner_profile = await runner_repo.get_by_id(data.runner_profile_id)
 
-            cfg = runner_profile.config if runner_profile else {}
-            jenkins_cfg = JenkinsConfig(
-                base_url=cfg.get("base_url", "http://localhost:8080"),
-                job_name=cfg.get("job_name", "qa-automation-suite"),
-                user=cfg.get("user"),
-                api_token=cfg.get("api_token"),
-                default_parameters=cfg.get("default_parameters", {}),
-                parameter_mapping=cfg.get("parameter_mapping", {}),
-            )
-
+            jenkins_cfg = _jenkins_config_for_profile(runner_profile)
             backend = JenkinsRunnerBackend(config=jenkins_cfg)
+            _RUN_JENKINS_BACKENDS[run_id] = backend
 
             try:
                 await event_bus.publish(
@@ -456,36 +636,58 @@ class TestRunService:
                 trig_res = await backend.trigger(trigger_req)
                 external_job_id = trig_res.external_job_id
 
-                await run_repo.update_run_status(
-                    run_id=run_id,
-                    status=RunStatus.RUNNING,
+                attached = await run_repo.transition_run_status(
+                    run_id,
+                    [RunStatus.RUNNING],
+                    RunStatus.RUNNING,
                     external_job_id=external_job_id,
                 )
                 await session.commit()
+                if not attached:
+                    await backend.stop(run_id, external_job_id=external_job_id)
+                    return
 
-                # Resolve build number
-                build_num = None
                 build_url = None
-                if external_job_id and external_job_id.startswith("queue:"):
-                    qid = external_job_id.replace("queue:", "")
-                    build_num, build_url = await backend.resolve_build_number(qid, max_wait=20.0)
+                resolved_id = external_job_id or "1"
+                poll_interval = max(0.1, float(getattr(jenkins_cfg, "poll_interval_seconds", 1.0)))
+                while True:
+                    if await run_repo.current_status(run_id) != RunStatus.RUNNING.value:
+                        return
 
-                resolved_id = str(build_num) if build_num else (external_job_id or "1")
+                    final_status_res = await backend.get_status(run_id, external_job_id=resolved_id)
+                    if final_status_res.external_job_id and final_status_res.external_job_id != resolved_id:
+                        resolved_id = final_status_res.external_job_id
+                        build_url = final_status_res.external_build_url
+                        attached = await run_repo.transition_run_status(
+                            run_id,
+                            [RunStatus.RUNNING],
+                            RunStatus.RUNNING,
+                            external_job_id=resolved_id,
+                            external_build_url=SensitiveRedactor.redact_url(build_url) if build_url else None,
+                        )
+                        await session.commit()
+                        if not attached:
+                            await backend.stop(run_id, external_job_id=resolved_id)
+                            return
+                    elif final_status_res.external_build_url:
+                        build_url = final_status_res.external_build_url
 
-                # Stream logs to SSE
-                async for log_chunk in backend.stream_logs(run_id, external_job_id=resolved_id):
-                    await event_bus.publish(
-                        run_id,
-                        {
-                            "type": "LOG_STREAM",
-                            "run_id": run_id,
-                            "runner": "JENKINS",
-                            "log": log_chunk,
-                        },
-                    )
+                    if not resolved_id.startswith("queue:"):
+                        async for log_chunk in backend.stream_logs(run_id, external_job_id=resolved_id):
+                            await event_bus.publish(
+                                run_id,
+                                {
+                                    "type": "LOG_STREAM",
+                                    "run_id": run_id,
+                                    "runner": "JENKINS",
+                                    "log": SensitiveRedactor.redact_text(log_chunk),
+                                },
+                            )
 
-                # Poll status
-                final_status_res = await backend.get_status(run_id, external_job_id=resolved_id)
+                    if final_status_res.status != RunStatus.RUNNING:
+                        break
+                    await asyncio.sleep(poll_interval)
+
                 finish_time = utc_now()
 
                 # Record external artifacts (Allure, HTML Report)
@@ -494,18 +696,24 @@ class TestRunService:
                         run_id=run_id,
                         name=art["name"],
                         type=art["type"],
-                        url=art["url"],
+                        url=SensitiveRedactor.redact_url(art["url"]),
                     )
 
-                await run_repo.update_run_status(
-                    run_id=run_id,
-                    status=final_status_res.status,
+                transitioned = await run_repo.transition_run_status(
+                    run_id,
+                    [RunStatus.RUNNING],
+                    final_status_res.status,
                     duration_ms=final_status_res.duration_ms,
                     finished_at=finish_time,
                     external_job_id=resolved_id,
-                    external_build_url=final_status_res.external_build_url or build_url,
+                    external_build_url=SensitiveRedactor.redact_url(final_status_res.external_build_url or build_url)
+                    if final_status_res.external_build_url or build_url
+                    else None,
                 )
                 await session.commit()
+
+                if not transitioned:
+                    return
 
                 await event_bus.publish(
                     run_id,
@@ -514,28 +722,37 @@ class TestRunService:
                         "run_id": run_id,
                         "runner": "JENKINS",
                         "status": final_status_res.status.value,
-                        "build_url": final_status_res.external_build_url or build_url,
+                        "build_url": SensitiveRedactor.redact_url(final_status_res.external_build_url or build_url)
+                        if final_status_res.external_build_url or build_url
+                        else None,
                         "duration_ms": final_status_res.duration_ms,
                     },
                 )
 
             except Exception as e:
-                logger.error("Jenkins run execution encountered error: %s", e)
-                await run_repo.update_run_status(
-                    run_id=run_id,
-                    status=RunStatus.ERROR,
+                safe_error = SensitiveRedactor.redact_text(str(e))
+                logger.error("Jenkins run execution encountered error: %s", safe_error)
+                transitioned = await run_repo.transition_run_status(
+                    run_id,
+                    [RunStatus.RUNNING],
+                    RunStatus.ERROR,
                     finished_at=utc_now(),
+                    log_output=safe_error,
                 )
                 await session.commit()
+                if not transitioned:
+                    return
                 await event_bus.publish(
                     run_id,
                     {
                         "type": "RUN_ERROR",
                         "run_id": run_id,
                         "runner": "JENKINS",
-                        "error": str(e),
+                        "error": safe_error,
                     },
                 )
+            finally:
+                _RUN_JENKINS_BACKENDS.pop(run_id, None)
 
     async def recover_stale_runs(self, stale_after_seconds: float = DEFAULT_STALE_RUN_SECONDS) -> list[str]:
         """Close runs that can never finish.
@@ -545,25 +762,31 @@ class TestRunService:
         threshold are closed as CANCELLED rather than FAILED: the platform does not know their
         outcome, and must never invent a verdict.
 
-        This assumes a single API instance. Distributed execution belongs to the job queue, where
-        workers heartbeat, so an abandoned job is detected there instead.
+        This assumes a single API instance. It only recovers local runs; a worker heartbeat alone
+        does not prove its active job is abandoned, so distributed runs stay with queue recovery.
         """
         cutoff = utc_now() - timedelta(seconds=stale_after_seconds)
-        # Jenkins runs are left alone: the platform cannot stop the external build here, so marking
-        # the row CANCELLED would desync it from the CI job that is still running.
-        stale = await self.run_repo.list_unfinished_runs(older_than=cutoff, exclude_runner_types=["JENKINS"])
+        # Only local child processes are owned by this API. Distributed jobs use queue leases and
+        # Jenkins runs use the remote controller; recovering either here would orphan live work.
+        stale = await self.run_repo.list_unfinished_runs(older_than=cutoff, runner_types=["LOCAL"])
         recovered: list[str] = []
         for orm in stale:
-            await self.run_repo.update_run_status(run_id=orm.id, status=RunStatus.CANCELLED, finished_at=utc_now())
+            changed = await self.run_repo.cancel_active_run(orm.id, finished_at=utc_now())
+            if not changed:
+                continue
+            recovered.append(orm.id)
+
+        if recovered:
+            await self.run_repo.session.commit()
+        for run_id in recovered:
             await event_bus.publish(
-                orm.id,
+                run_id,
                 {
                     "type": "RUN_CANCELLED",
-                    "run_id": orm.id,
+                    "run_id": run_id,
                     "reason": "recovered as stale: the run never reached a terminal state",
                 },
             )
-            recovered.append(orm.id)
         return recovered
 
     def _project_interpreter(self, workspace_dir: Path) -> str | None:
@@ -587,25 +810,43 @@ class TestRunService:
             return RunStatus.ERROR
         if exit_code == 0:
             return RunStatus.PASSED if failed_count == 0 else RunStatus.FAILED
-        if result_count == 0:
-            return RunStatus.ERROR
         return RunStatus.FAILED
 
     async def cancel_run(self, run_id: str) -> TestRun | None:
         orm = await self.run_repo.get_by_id(run_id)
         if not orm:
             return None
+        if orm.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}:
+            return self._to_run_dto(orm)
 
-        if orm.runner_type == "JENKINS" and orm.external_job_id:
-            backend = JenkinsRunnerBackend()
-            await backend.stop(run_id, external_job_id=orm.external_job_id)
-
-        await self.run_repo.update_run_status(
-            run_id=run_id,
-            status=RunStatus.CANCELLED,
-            finished_at=utc_now(),
-        )
+        changed = await self.run_repo.cancel_active_run(run_id, finished_at=utc_now())
         await self.run_repo.session.commit()
+        if not changed:
+            return await self.get_run(run_id)
+
+        await JobRepository(self.run_repo.session).cancel_active_jobs_for_run(
+            run_id,
+            session=self.run_repo.session,
+        )
+        if orm.runner_type == "JENKINS" and orm.external_job_id:
+            try:
+                backend = _RUN_JENKINS_BACKENDS.get(run_id)
+                if backend is None and orm.runner_profile_id:
+                    profile = await self.runner_repo.get_by_id(orm.runner_profile_id)
+                    if profile:
+                        backend = JenkinsRunnerBackend(config=_jenkins_config_for_profile(profile))
+                elif backend is None:
+                    backend = JenkinsRunnerBackend()
+                stopped = await backend.stop(run_id, external_job_id=orm.external_job_id) if backend else False
+                if not stopped:
+                    logger.warning("Jenkins cancellation was not confirmed for run %s", run_id)
+            except Exception as error:
+                logger.error(
+                    "Failed to stop Jenkins run %s after marking it cancelled: %s",
+                    run_id,
+                    SensitiveRedactor.redact_text(str(error)),
+                )
+
         worker = _RUN_WORKER_TASKS.get(run_id)
         if worker and worker is not asyncio.current_task():
             worker.cancel()
@@ -624,35 +865,121 @@ class TestRunService:
         # In-memory Pub/Sub alone loses events during refresh and cannot cross worker processes.
         from app.persistence.database import get_session
 
-        yield f"data: {json.dumps({'type': 'CONNECTED', 'run_id': run_id})}\n\n"
+        queue = event_bus.subscribe(run_id)
         sent_log = 0
         seen_executions: set[str] = set()
+        seen_browser_sessions: dict[str, dict] = {}
         last_status: RunStatus | None = None
-        while True:
-            async with get_session() as session:
-                orm = await TestRunRepository(session).get_by_id(run_id)
-                if orm is None:
-                    return
-                run = self._to_run_dto(orm)
+        try:
+            yield f"data: {json.dumps({'type': 'CONNECTED', 'run_id': run_id})}\n\n"
+            while True:
+                while not queue.empty():
+                    event = queue.get_nowait()
+                    if event.get("type") in {"BROWSER_SESSION", "BROWSER_FRAME"}:
+                        yield f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
 
-            if run.status == RunStatus.RUNNING and last_status != RunStatus.RUNNING:
-                yield f"data: {json.dumps({'type': 'RUN_STARTED', 'run_id': run_id, 'status': 'RUNNING', 'total': run.total})}\n\n"
-            log = run.log_output or ""
-            if len(log) < sent_log:
-                sent_log = 0
-            if len(log) > sent_log:
-                chunk = log[sent_log:]
-                sent_log = len(log)
-                yield f"data: {json.dumps({'type': 'LOG_STREAM', 'run_id': run_id, 'log': chunk})}\n\n"
-            for execution in run.executions:
-                if execution.id not in seen_executions:
-                    seen_executions.add(execution.id)
-                    yield f"data: {json.dumps({'type': 'TEST_FINISHED', 'run_id': run_id, 'nodeid': execution.nodeid, 'status': execution.status.value, 'duration_ms': execution.duration_ms})}\n\n"
-            if run.status not in (RunStatus.QUEUED, RunStatus.RUNNING):
-                event_type = "RUN_CANCELLED" if run.status == RunStatus.CANCELLED else (
-                    "RUN_ERROR" if run.status == RunStatus.ERROR else "RUN_FINISHED"
-                )
-                yield f"data: {json.dumps({'type': event_type, 'run_id': run_id, 'status': run.status.value, 'passed': run.passed, 'failed': run.failed, 'duration_ms': run.duration_ms})}\n\n"
-                return
-            last_status = run.status
-            await asyncio.sleep(0.3)
+                async with get_session() as session:
+                    orm = await TestRunRepository(session).get_by_id(run_id)
+                    if orm is None:
+                        return
+                    run = self._to_run_dto(orm)
+
+                # Replay durable session metadata after refresh/reconnect, including events
+                # written by another process. Elapsed time alone must not trigger a replay.
+                for browser_session in run.browser_sessions:
+                    snapshot = browser_session.model_dump(mode="json", exclude={"elapsed_ms"})
+                    session_id = browser_session.browser_session_id
+                    if seen_browser_sessions.get(session_id) != snapshot:
+                        seen_browser_sessions[session_id] = snapshot
+                        yield f"data: {json.dumps({'type': 'BROWSER_SESSION', 'run_id': run_id, 'session': browser_session.model_dump(mode='json')})}\n\n"
+
+                if run.status == RunStatus.RUNNING and last_status != RunStatus.RUNNING:
+                    yield f"data: {json.dumps({'type': 'RUN_STARTED', 'run_id': run_id, 'status': 'RUNNING', 'total': run.total})}\n\n"
+                log = run.log_output or ""
+                if len(log) < sent_log:
+                    sent_log = 0
+                if len(log) > sent_log:
+                    chunk = log[sent_log:]
+                    sent_log = len(log)
+                    yield f"data: {json.dumps({'type': 'LOG_STREAM', 'run_id': run_id, 'log': chunk})}\n\n"
+                for execution in run.executions:
+                    if execution.id not in seen_executions:
+                        seen_executions.add(execution.id)
+                        yield f"data: {json.dumps({'type': 'TEST_FINISHED', 'run_id': run_id, 'nodeid': execution.nodeid, 'status': execution.status.value, 'duration_ms': execution.duration_ms})}\n\n"
+                if run.status not in (RunStatus.QUEUED, RunStatus.RUNNING):
+                    event_type = (
+                        "RUN_CANCELLED"
+                        if run.status == RunStatus.CANCELLED
+                        else ("RUN_ERROR" if run.status == RunStatus.ERROR else "RUN_FINISHED")
+                    )
+                    yield f"data: {json.dumps({'type': event_type, 'run_id': run_id, 'status': run.status.value, 'passed': run.passed, 'failed': run.failed, 'duration_ms': run.duration_ms})}\n\n"
+                    return
+                last_status = run.status
+                await asyncio.sleep(0.2)
+        finally:
+            event_bus.unsubscribe(run_id, queue)
+
+    async def _record_browser_event(self, run_id: str, event: dict) -> None:
+        """Persist session lifecycle metadata and publish ephemeral real page frames to SSE."""
+        from app.persistence.database import get_session
+
+        event_type = event.get("type")
+        session_id = event.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return
+        worker_id = str(event.get("worker_id") or "main")[:100]
+        nodeid = str(event.get("nodeid") or "")[:500]
+        case_name = str(event.get("case_name") or nodeid.split("::")[-1])[:250]
+        page_id = str(event.get("page_id") or session_id)[:36]
+        url = SensitiveRedactor.redact_url(str(event.get("url") or ""))[:2048]
+        status = str(event.get("status") or "running")[:30]
+
+        if event_type in {"session.started", "navigation", "session.finished"}:
+            async with get_session() as session:
+                row = await session.get(BrowserSessionORM, session_id)
+                if row is None and event_type == "session.started":
+                    row = BrowserSessionORM(
+                        id=session_id,
+                        run_id=run_id,
+                        browser_session_id=session_id,
+                        page_id=page_id,
+                        worker_id=worker_id,
+                        nodeid=nodeid,
+                        case_name=case_name,
+                        current_url=url,
+                        status=status,
+                    )
+                    session.add(row)
+                elif row is not None:
+                    row.current_url = url
+                    row.status = status
+                    if event_type == "session.finished":
+                        row.finished_at = utc_now()
+                        page_evidence = event.get("page_evidence")
+                        if isinstance(page_evidence, dict):
+                            safe_evidence = SensitiveRedactor.redact_value(page_evidence)
+                            row.page_evidence_json = json.dumps(safe_evidence, ensure_ascii=False)[:120_000]
+                if row is not None:
+                    await session.commit()
+                    session_dto = self._to_browser_session_dto(row).model_dump(mode="json")
+                    await event_bus.publish(
+                        run_id,
+                        {"type": "BROWSER_SESSION", "run_id": run_id, "session": session_dto},
+                    )
+        elif event_type == "frame" and isinstance(event.get("frame"), str):
+            await event_bus.publish(
+                run_id,
+                {
+                    "type": "BROWSER_FRAME",
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "page_id": page_id,
+                    "worker_id": worker_id,
+                    "nodeid": nodeid,
+                    "case_name": case_name,
+                    "url": url,
+                    "status": status,
+                    "mime_type": event.get("mime_type") or "image/jpeg",
+                    "frame": event["frame"],
+                },
+            )

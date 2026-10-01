@@ -190,10 +190,10 @@ def test_policy_table_covers_every_privileged_route_family():
     assert Permission.AUTOMATION_EDIT not in ROLE_PERMISSIONS[UserRole.VIEWER]
 
 
-async def test_run_event_stream_accepts_the_token_as_a_query_parameter(
+async def test_run_event_stream_requires_a_scoped_ticket_and_never_accepts_a_full_bearer_in_url(
     client: AsyncClient, anonymous_client: AsyncClient
 ):
-    """The browser's EventSource cannot send headers, so this one route reads the token from the URL."""
+    """Native streams receive short-lived, resource-scoped tickets instead of full API credentials."""
     project = await client.post("/api/projects", json={"name": "SSE Authorization"})
     run = await client.post(
         "/api/runs", json={"project_id": project.json()["id"], "workspace_id": project.json()["id"]}
@@ -208,9 +208,30 @@ async def test_run_event_stream_accepts_the_token_as_a_query_parameter(
     other = await anonymous_client.get(f"/api/runs/{run_id}?access_token={'x' * 10}")
     assert other.status_code == 401
 
-    # With a valid query token the stream opens and delivers its first event.
     token = await login_token(client, *ROLE_CREDENTIALS["ADMIN"])
-    async with client.stream("GET", f"/api/runs/{run_id}/events?access_token={token}") as stream:
+    headers = {"Authorization": f"Bearer {token}"}
+    full_token_url = await anonymous_client.get(f"/api/runs/{run_id}/events?access_token={token}")
+    assert full_token_url.status_code == 401
+
+    issued = await client.post(
+        "/api/auth/stream-ticket",
+        headers=headers,
+        json={"kind": "run", "resource_id": run_id},
+    )
+    assert issued.status_code == 200, issued.text
+    ticket = issued.json()["stream_ticket"]
+    assert ticket != token
+
+    # A stream ticket cannot be reused as an ordinary bearer credential.
+    ticket_as_bearer = await anonymous_client.get(f"/api/runs/{run_id}", headers={"Authorization": f"Bearer {ticket}"})
+    assert ticket_as_bearer.status_code == 401
+
+    query_ticket = await anonymous_client.get(f"/api/runs/{run_id}/events?stream_ticket={ticket}")
+    assert query_ticket.status_code == 401
+
+    async with anonymous_client.stream(
+        "GET", f"/api/runs/{run_id}/events", headers={"Authorization": f"Bearer {ticket}"}
+    ) as stream:
         assert stream.status_code == 200
         assert stream.headers["content-type"].startswith("text/event-stream")
         first_line = ""
@@ -219,3 +240,68 @@ async def test_run_event_stream_accepts_the_token_as_a_query_parameter(
                 first_line = line
                 break
     assert '"type": "CONNECTED"' in first_line
+
+    other_run = await client.post(
+        "/api/runs", headers=headers, json={"project_id": project.json()["id"], "workspace_id": project.json()["id"]}
+    )
+    cross_resource = await anonymous_client.get(
+        f"/api/runs/{other_run.json()['id']}/events", headers={"Authorization": f"Bearer {ticket}"}
+    )
+    assert cross_resource.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_stream_query_credentials_are_removed_before_asgi_access_logging():
+    from app.api.authz import StreamTicketQuerySanitizer
+
+    observed = {}
+
+    async def capture(scope, receive, send):
+        observed["query_string"] = scope["query_string"]
+        observed["ticket"] = scope.get("state", {}).get("stream_ticket")
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def empty_send(_message):
+        return None
+
+    scope = {
+        "type": "http",
+        "path": "/api/runs/run_safe/events",
+        "query_string": b"stream_ticket=short-lived&after=8&access_token=long-lived",
+    }
+    await StreamTicketQuerySanitizer(capture)(scope, empty_receive, empty_send)
+    assert observed == {"query_string": b"after=8", "ticket": None}
+
+
+@pytest.mark.asyncio
+async def test_websocket_stream_authenticates_first_frame_without_url_credentials(client: AsyncClient):
+    from app.api.authz import auth_service, authenticate_websocket_stream
+
+    admin = await auth_service.user_repo.get_by_email("admin@ai-qa.local")
+    assert admin is not None
+    ticket = auth_service.issue_stream_ticket(admin.id, "debug:debug-safe")
+
+    class FakeWebSocket:
+        accepted = False
+        close_code = None
+
+        async def accept(self):
+            self.accepted = True
+
+        async def receive_json(self):
+            return {"type": "auth", "stream_ticket": ticket}
+
+        async def close(self, *, code, reason=None):
+            self.close_code = code
+
+    websocket = FakeWebSocket()
+    user = await authenticate_websocket_stream(websocket, "debug:debug-safe")
+    assert websocket.accepted is True
+    assert websocket.close_code is None
+    assert user is not None and user.email == "admin@ai-qa.local"
+
+    rejected = FakeWebSocket()
+    assert await authenticate_websocket_stream(rejected, "debug:another-resource") is None
+    assert rejected.close_code == 4401

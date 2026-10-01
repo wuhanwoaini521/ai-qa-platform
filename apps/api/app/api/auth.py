@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from project_model.models import (
@@ -9,16 +9,63 @@ from project_model.models import (
     ApiKeyCreatedResponse,
     LoginRequest,
     LoginResponse,
+    Permission,
     User,
 )
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.authz import get_current_user
+from app.api.authz import get_current_user, has_permission
+from app.persistence.database import get_db
 from app.repositories.api_key_repo import ApiKeyRepository
+from app.repositories.task_repo import TaskRepository
+from app.repositories.test_run_repo import TestRunRepository
 from app.services.auth_service import AuthService
+from app.services.debug_session_service import debug_session_service
+from app.services.recorder_service import recorder_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 auth_service = AuthService()
 api_key_repo = ApiKeyRepository()
+
+
+class StreamTicketRequest(BaseModel):
+    kind: Literal["run", "task", "recorder", "debug"]
+    resource_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/stream-ticket")
+async def create_stream_ticket(
+    payload: StreamTicketRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str | int]:
+    permission = {
+        "run": Permission.PROJECT_READ,
+        "task": Permission.PROJECT_READ,
+        "recorder": Permission.AUTOMATION_EDIT,
+        "debug": Permission.RUN_EXECUTE,
+    }[payload.kind]
+    if not has_permission(user, permission):
+        raise HTTPException(status_code=403, detail="Insufficient permission for this stream")
+
+    exists = False
+    if payload.kind == "run":
+        exists = await TestRunRepository(session).get_by_id(payload.resource_id) is not None
+    elif payload.kind == "task":
+        exists = await TaskRepository(session).get(payload.resource_id, str(user.id)) is not None
+    elif payload.kind == "recorder":
+        exists = await recorder_service.get(payload.resource_id, str(user.id)) is not None
+    elif payload.kind == "debug":
+        exists = await debug_session_service.get(payload.resource_id, str(user.id)) is not None
+    if not exists:
+        raise HTTPException(status_code=404, detail="Stream resource not found")
+
+    scope = f"{payload.kind}:{payload.resource_id}"
+    return {
+        "stream_ticket": auth_service.issue_stream_ticket(str(user.id), scope),
+        "expires_in": 300,
+    }
 
 
 @router.post("/login", response_model=LoginResponse)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from project_model.models import (
     ApplyRepairRequest,
     FailureRecord,
@@ -15,7 +16,8 @@ from app.repositories.ai_repo import AIRepository
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
-from app.services.failure_service import FailureService
+from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
+from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/failures", tags=["Failures & Healing"])
@@ -25,8 +27,11 @@ def get_failure_service(session: AsyncSession = Depends(get_db)) -> FailureServi
     run_repo = TestRunRepository(session)
     workspace_repo = WorkspaceRepository(session)
     workspace_service = WorkspaceService()
-    history_repo = RunHistoryRepository(lambda: session)
-    ai_repo = AIRepository(lambda: session)
+    # RunHistoryRepository manages its own session context; keep it separate from this request's
+    # session so history reads cannot detach ORM rows that the failure service later updates.
+    history_repo = RunHistoryRepository()
+    # Invocation telemetry owns its transaction; keep the request session attached to its ORM rows.
+    ai_repo = AIRepository()
     return FailureService(
         run_repo=run_repo,
         workspace_repo=workspace_repo,
@@ -67,6 +72,46 @@ async def diagnose_failure(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/{failure_id}/analyses")
+async def list_failure_analyses(failure_id: str, service: FailureService = Depends(get_failure_service)):
+    if await service.get_failure(failure_id) is None:
+        raise HTTPException(status_code=404, detail="Failure record not found")
+    return await FailureWorkflowService(service).list_history(failure_id)
+
+
+@router.post("/{failure_id}/analyses/{analysis_id}/verification")
+async def link_analysis_verification(
+    failure_id: str, analysis_id: str, run_id: str = Query(...), service: FailureService = Depends(get_failure_service)
+):
+    try:
+        await FailureWorkflowService(service).attach_verification(failure_id, analysis_id, run_id)
+        return {"analysis_id": analysis_id, "run_id": run_id, "verified": False}
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{failure_id}/analyze/stream")
+async def stream_failure_workflow(
+    failure_id: str, request: Request, service: FailureService = Depends(get_failure_service)
+):
+    if await service.get_failure(failure_id) is None:
+        raise HTTPException(status_code=404, detail="Failure record not found")
+
+    async def events():
+        stream = FailureWorkflowService(service).stream(failure_id)
+        try:
+            async for event in stream:
+                if await request.is_disconnected():
+                    break
+                yield f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+        finally:
+            await stream.aclose()
+
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
 @router.post("/{failure_id}/diagnose-ai", response_model=FailureAnalysisResponse)
 async def diagnose_failure_ai(
     failure_id: str,
@@ -81,6 +126,32 @@ async def diagnose_failure_ai(
         raise HTTPException(status_code=500, detail=f"AI failure diagnosis failed: {e}")
 
 
+@router.post("/{failure_id}/diagnose-ai/stream")
+async def stream_failure_diagnosis(
+    failure_id: str,
+    request: Request,
+    service: FailureService = Depends(get_failure_service),
+):
+    if await service.get_failure(failure_id) is None:
+        raise HTTPException(status_code=404, detail="Failure record not found")
+
+    async def events():
+        stream = service.stream_diagnosis(failure_id)
+        try:
+            async for event in stream:
+                if await request.is_disconnected():
+                    break
+                yield f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+        finally:
+            await stream.aclose()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/{failure_id}/repair-proposal", response_model=LocatorRepairProposal)
 async def generate_repair_proposal(
     failure_id: str,
@@ -88,6 +159,8 @@ async def generate_repair_proposal(
 ):
     try:
         return await service.generate_repair_proposal(failure_id)
+    except LocatorRepairNotApplicableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -101,6 +174,8 @@ async def review_semantic_repair(
     """Review proposed locator repair for semantic equivalence."""
     try:
         return await service.review_semantic_repair(failure_id, candidate_locator=candidate_locator)
+    except LocatorRepairNotApplicableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -127,6 +202,8 @@ async def apply_repair_proposal(
     service: FailureService = Depends(get_failure_service),
 ):
     try:
-        return await service.apply_repair(workspace_id, payload)
+        return await service.apply_repair(workspace_id, payload, failure_id=failure_id)
+    except LocatorRepairNotApplicableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

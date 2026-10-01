@@ -12,6 +12,7 @@ from app.services.recorder_service import (
     generate_python_case,
 )
 from app.settings import settings
+from project_model.models import DecisionResult
 
 
 def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
@@ -38,8 +39,8 @@ def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
 
     compile(source, "recorded_case.py", "exec")
     assert "def test_submit_order():" in source
-    assert "page.frame_locator(\"iframe#checkout\").get_by_role" in source
-    assert "expect(page.locator(\"#status\")).to_contain_text(\"Order saved\")" in source
+    assert 'page.frame_locator("iframe#checkout").get_by_role' in source
+    assert 'expect(page.locator("#status")).to_contain_text("Order saved")' in source
 
 
 def test_locator_nth_zero_is_preserved_for_duplicate_matches() -> None:
@@ -54,23 +55,121 @@ def test_locator_nth_zero_is_preserved_for_duplicate_matches() -> None:
         )
     )
 
-    assert '.nth(0).click()' in source
+    assert ".nth(0).click()" in source
 
 
 def test_recorder_prefers_semantic_locator_candidates():
-    steps = BrowserRecorderService.events_to_steps([{
-        "action": "click",
-        "tag": "button",
-        "name": "Save",
-        "candidates": [
-            {"kind": "css", "value": "button.primary"},
-            {"kind": "role", "value": "button", "name": "Save", "exact": True},
-            {"kind": "test_id", "value": "save"},
-        ],
-    }])
+    steps = BrowserRecorderService.events_to_steps(
+        [
+            {
+                "action": "click",
+                "tag": "button",
+                "name": "Save",
+                "candidates": [
+                    {"kind": "css", "value": "button.primary"},
+                    {"kind": "role", "value": "button", "name": "Save", "exact": True},
+                    {"kind": "test_id", "value": "save"},
+                ],
+            }
+        ]
+    )
 
     assert steps[0]["locator"]["kind"] == "role"
     assert steps[0]["locator"]["name"] == "Save"
+
+
+def test_recorder_step_uses_selected_candidate_and_keeps_decision_metadata():
+    steps = BrowserRecorderService.events_to_steps(
+        [
+            {
+                "action": "click",
+                "tag": "button",
+                "candidates": [
+                    {"kind": "role", "value": "button", "name": "Save", "exact": True},
+                    {"kind": "test_id", "value": "save"},
+                ],
+                "locator_selection": {
+                    "selected_candidate": {"kind": "test_id", "value": "save"},
+                    "summary": {
+                        "provider": "jev",
+                        "model": "jev-test",
+                        "confidence": 0.91,
+                        "candidate_count": 2,
+                        "candidate_id": "candidate_2",
+                        "verified": True,
+                        "fallback_reason": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert steps[0]["locator"]["kind"] == "test_id"
+    assert steps[0]["locator_decision"]["provider"] == "jev"
+    assert steps[0]["locator_decision"]["confidence"] == 0.91
+
+
+@pytest.mark.asyncio
+async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
+    class LocatorStub:
+        async def count(self):
+            return 1
+
+        async def is_visible(self):
+            return True
+
+        async def is_enabled(self):
+            return True
+
+        async def click(self, **_kwargs):
+            return None
+
+    settings_service = SimpleNamespace(
+        get_runtime_config=AsyncMock(return_value=SimpleNamespace(enabled=True, timeout=2))
+    )
+    decision_service = SimpleNamespace(
+        choose=AsyncMock(
+            return_value=DecisionResult(
+                choice="candidate_2",
+                confidence=0.91,
+                probabilities={"candidate_2": 0.91},
+                provider="jev",
+                model="jev-test",
+            )
+        )
+    )
+    page = MagicMock()
+    page.get_by_test_id.return_value = LocatorStub()
+    service = BrowserRecorderService(decision_service, settings_service)
+    event = {
+        "action": "click",
+        "tag": "button",
+        "role": "button",
+        "name": "Save",
+        "text": "Save",
+        "url": "https://example.test/form",
+        "candidates": [
+            {"kind": "role", "value": "button", "name": "Save", "exact": True},
+            {"kind": "test_id", "value": "save"},
+            {"kind": "css", "value": "button.primary"},
+        ],
+    }
+
+    selection = await service._select_locator_candidate(page, event, "recorder-session")
+
+    assert selection["selected_candidate"]["kind"] == "test_id"
+    assert selection["summary"]["provider"] == "jev"
+    assert selection["summary"]["confidence"] == 0.91
+    assert selection["verification"] == {
+        "unique": True,
+        "visible": True,
+        "enabled": True,
+        "editable": None,
+        "clickable": True,
+        "verified": True,
+    }
+    assert any(item["type"] == "decision_completed" for item in selection["trace"])
+    decision_service.choose.assert_awaited_once()
 
 
 def test_browser_proxy_splits_credentials_and_bypasses_local_hosts(monkeypatch: pytest.MonkeyPatch) -> None:

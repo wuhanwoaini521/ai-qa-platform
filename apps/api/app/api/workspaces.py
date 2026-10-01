@@ -1,5 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import re
+from pathlib import PurePosixPath
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from project_model.models import (
+    Breakpoint,
+    BreakpointUpsert,
     CollectionReport,
     CreateFilePayload,
     FileContentPayload,
@@ -13,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.database import get_db
-from app.persistence.models import WorkspaceORM
+from app.persistence.models import BreakpointORM, WorkspaceORM
 from app.repositories.project_repo import ProjectRepository
 from app.services.workspace_service import SecurityException, WorkspaceService
 
@@ -30,10 +35,18 @@ async def list_workspaces(
     )
     # The existing workspace/file/run APIs use project_id as their workspace key. Return that
     # canonical key instead of exposing the unused internal WorkspaceORM row ID.
-    return [Workspace(
-        id=row.project_id, project_id=row.project_id, path=row.path, branch=row.branch,
-        status=row.status, created_at=row.created_at, updated_at=row.updated_at,
-    ) for row in result.scalars().all()]
+    return [
+        Workspace(
+            id=row.project_id,
+            project_id=row.project_id,
+            path=row.path,
+            branch=row.branch,
+            status=row.status,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in result.scalars().all()
+    ]
 
 
 def get_workspace_service() -> WorkspaceService:
@@ -49,6 +62,77 @@ async def get_workspace_files(
         return await service.get_file_tree(workspace_id)
     except SecurityException as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{workspace_id}/breakpoints", response_model=list[Breakpoint])
+async def list_breakpoints(
+    workspace_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> list[BreakpointORM]:
+    result = await session.execute(
+        select(BreakpointORM)
+        .where(BreakpointORM.workspace_id == workspace_id)
+        .order_by(BreakpointORM.file_path, BreakpointORM.line_number, BreakpointORM.source)
+    )
+    return list(result.scalars().all())
+
+
+@router.put("/{workspace_id}/breakpoints", response_model=Breakpoint)
+async def upsert_breakpoint(
+    workspace_id: str,
+    payload: BreakpointUpsert,
+    session: AsyncSession = Depends(get_db),
+) -> BreakpointORM:
+    if payload.source != "manual":
+        raise HTTPException(status_code=400, detail="Only auto failure analysis can create auto_failure breakpoints")
+    file_path = payload.file_path.replace("\\", "/")
+    path = PurePosixPath(file_path)
+    if path.is_absolute() or re.match(r"^[A-Za-z]:", file_path) or any(part in ("", ".", "..") for part in path.parts):
+        raise HTTPException(status_code=400, detail="Breakpoint file_path must be a safe workspace-relative path")
+
+    result = await session.execute(
+        select(BreakpointORM).where(
+            BreakpointORM.workspace_id == workspace_id,
+            BreakpointORM.file_path == path.as_posix(),
+            BreakpointORM.line_number == payload.line_number,
+            BreakpointORM.source == "manual",
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = BreakpointORM(
+            workspace_id=workspace_id,
+            file_path=path.as_posix(),
+            line_number=payload.line_number,
+            enabled=payload.enabled,
+            source="manual",
+        )
+        session.add(row)
+    else:
+        row.enabled = payload.enabled
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+@router.delete("/{workspace_id}/breakpoints/{breakpoint_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_breakpoint(
+    workspace_id: str,
+    breakpoint_id: str,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    result = await session.execute(
+        select(BreakpointORM).where(
+            BreakpointORM.workspace_id == workspace_id,
+            BreakpointORM.id == breakpoint_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Breakpoint not found")
+    await session.delete(row)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{workspace_id}/file")

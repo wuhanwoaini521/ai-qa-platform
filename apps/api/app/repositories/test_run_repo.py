@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from project_model.models import RunStatus, TestRunCreate
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +27,11 @@ class TestRunRepository:
     async def list_runs(self, project_id: str | None = None, limit: int = 50) -> list[TestRunORM]:
         query = (
             select(TestRunORM)
-            .options(selectinload(TestRunORM.executions), selectinload(TestRunORM.external_artifacts))
+            .options(
+                selectinload(TestRunORM.executions),
+                selectinload(TestRunORM.external_artifacts),
+                selectinload(TestRunORM.browser_sessions),
+            )
             .order_by(desc(TestRunORM.created_at))
         )
         if project_id:
@@ -38,9 +42,17 @@ class TestRunRepository:
     async def get_by_id(self, run_id: str) -> TestRunORM | None:
         result = await self.session.execute(
             select(TestRunORM)
-            .options(selectinload(TestRunORM.executions), selectinload(TestRunORM.external_artifacts))
+            .options(
+                selectinload(TestRunORM.executions),
+                selectinload(TestRunORM.external_artifacts),
+                selectinload(TestRunORM.browser_sessions),
+            )
             .where(TestRunORM.id == run_id)
         )
+        return result.scalar_one_or_none()
+
+    async def current_status(self, run_id: str) -> str | None:
+        result = await self.session.execute(select(TestRunORM.status).where(TestRunORM.id == run_id))
         return result.scalar_one_or_none()
 
     async def create_run(self, data: TestRunCreate) -> TestRunORM:
@@ -56,6 +68,7 @@ class TestRunRepository:
             runner_profile_id=data.runner_profile_id,
             environment=data.environment,
             browser=data.browser,
+            parallel_workers=data.parallel_workers,
             markers=data.markers,
             nodeids=data.nodeids,
             total=len(data.nodeids),
@@ -116,6 +129,119 @@ class TestRunRepository:
             orm.log_output = log_output
         await self.session.flush()
         return orm
+
+    async def transition_run_status(
+        self,
+        run_id: str,
+        expected_statuses: list[RunStatus],
+        status: RunStatus,
+        *,
+        passed: int | None = None,
+        failed: int | None = None,
+        skipped: int | None = None,
+        total: int | None = None,
+        duration_ms: float | None = None,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+        external_job_id: str | None = None,
+        external_build_url: str | None = None,
+        log_output: str | None = None,
+    ) -> bool:
+        """Atomically change a run only while it is in an expected state."""
+        values: dict[str, Any] = {"status": status.value}
+        for key, value in (
+            ("passed", passed),
+            ("failed", failed),
+            ("skipped", skipped),
+            ("total", total),
+            ("duration_ms", duration_ms),
+            ("started_at", started_at),
+            ("finished_at", finished_at),
+            ("external_job_id", external_job_id),
+            ("external_build_url", external_build_url),
+            ("log_output", log_output),
+        ):
+            if value is not None:
+                values[key] = value
+        result = await self.session.execute(
+            update(TestRunORM)
+            .where(
+                TestRunORM.id == run_id,
+                TestRunORM.status.in_([item.value for item in expected_statuses]),
+            )
+            .values(**values)
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.session.flush()
+        return result.rowcount == 1
+
+    async def update_run_log_if_active(self, run_id: str, log_output: str) -> bool:
+        """Update live logs without allowing a late chunk to revive a terminal run."""
+        result = await self.session.execute(
+            update(TestRunORM)
+            .where(
+                TestRunORM.id == run_id,
+                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+            )
+            .values(log_output=log_output)
+        )
+        await self.session.flush()
+        return result.rowcount == 1
+
+    async def reserve_active_run_for_result(self, run_id: str) -> bool:
+        """Serialize one result write against cancellation by taking the run row's write lock."""
+        result = await self.session.execute(
+            update(TestRunORM)
+            .where(
+                TestRunORM.id == run_id,
+                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+            )
+            .values(status=TestRunORM.status)
+        )
+        await self.session.flush()
+        return result.rowcount == 1
+
+    async def cancel_active_run(self, run_id: str, finished_at: datetime) -> bool:
+        """Lock the run before counting committed executions and transitioning it to cancelled."""
+        locked = await self.session.execute(
+            select(TestRunORM.id)
+            .where(
+                TestRunORM.id == run_id,
+                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+            )
+            .with_for_update()
+        )
+        if locked.scalar_one_or_none() is None:
+            return False
+
+        async def count(status: RunStatus) -> int:
+            result = await self.session.execute(
+                select(func.count(TestExecutionORM.id)).where(
+                    TestExecutionORM.run_id == run_id,
+                    TestExecutionORM.status == status.value,
+                )
+            )
+            return result.scalar_one()
+
+        passed = await count(RunStatus.PASSED)
+        failed = await count(RunStatus.FAILED)
+        skipped = await count(RunStatus.SKIPPED)
+        result = await self.session.execute(
+            update(TestRunORM)
+            .where(
+                TestRunORM.id == run_id,
+                TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
+            )
+            .values(
+                status=RunStatus.CANCELLED.value,
+                finished_at=finished_at,
+                passed=passed,
+                failed=failed,
+                skipped=skipped,
+            )
+        )
+        await self.session.flush()
+        return result.rowcount == 1
 
     async def add_execution(
         self,
@@ -216,7 +342,7 @@ class TestRunRepository:
         return orm
 
     async def list_unfinished_runs(
-        self, older_than: datetime, exclude_runner_types: list[str] | None = None
+        self, older_than: datetime, runner_types: list[str] | None = None
     ) -> list[TestRunORM]:
         """Runs that were started but never reached a terminal state before `older_than`.
 
@@ -227,8 +353,8 @@ class TestRunRepository:
             TestRunORM.status.in_([RunStatus.QUEUED.value, RunStatus.RUNNING.value]),
             func.coalesce(TestRunORM.started_at, TestRunORM.created_at) < older_than,
         )
-        if exclude_runner_types:
-            query = query.where(TestRunORM.runner_type.notin_(exclude_runner_types))
+        if runner_types:
+            query = query.where(TestRunORM.runner_type.in_(runner_types))
         result = await self.session.execute(query)
         return list(result.scalars().all())
 

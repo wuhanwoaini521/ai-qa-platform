@@ -21,6 +21,8 @@ from app.repositories.security_audit_repo import SecurityAuditRepository
 from app.repositories.user_repo import UserRepository
 from app.settings import TOKEN_TTL_SECONDS, settings
 
+STREAM_TICKET_TTL_SECONDS = 300
+
 
 class AuthService:
     def __init__(
@@ -134,6 +136,29 @@ class AuthService:
             return None
         return payload
 
+    def issue_stream_ticket(self, user_id: str, scope: str) -> str:
+        """Issue a short-lived credential that can read only one stream resource."""
+        return self._issue_token(
+            {
+                "typ": "stream",
+                "sub": user_id,
+                "scope": scope,
+                "exp": int(time.time()) + STREAM_TICKET_TTL_SECONDS,
+            }
+        )
+
+    async def authenticate_stream_ticket(self, token: str | None, expected_scope: str | None) -> User | None:
+        if not token or not expected_scope:
+            return None
+        payload = self._decode_token(token)
+        if not payload or payload.get("typ") != "stream" or payload.get("scope") != expected_scope:
+            return None
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return None
+        user = await self.user_repo.get_by_id(user_id)
+        return user if user and user.is_active else None
+
     async def authenticate_token_or_key(self, auth_header: str | None) -> tuple[User | None, list[str]]:
         if not auth_header:
             # Only reachable when AUTH_REQUIRED=false: development mode impersonates the seeded
@@ -162,7 +187,7 @@ class AuthService:
 
             # 2. Verify and decode the signed session token
             payload = self._decode_token(token)
-            if payload:
+            if payload and payload.get("typ") != "stream":
                 user_id = payload.get("sub")
                 if user_id:
                     user = await self.user_repo.get_by_id(user_id)

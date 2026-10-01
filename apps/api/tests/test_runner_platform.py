@@ -76,6 +76,8 @@ async def test_jenkins_runner_backend_with_fake_server(monkeypatch):
         logs.append(chunk)
     assert len(logs) > 0
     assert "Running automated test suite on Jenkins" in "".join(logs)
+    later_logs = [chunk async for chunk in backend.stream_logs("run_jenkins_456", external_job_id=str(build_num))]
+    assert later_logs == []
 
     # 5. Status check & Artifacts
     status_res = await backend.get_status("run_jenkins_456", external_job_id=str(build_num))
@@ -184,3 +186,21 @@ async def test_jenkins_parameter_mapping_matches_the_configured_job_contract(mon
     empty_mapping = backend._apply_parameter_mapping(RunnerTriggerRequest(run_id="run_empty", project_id="proj_1"))
     assert "CASES_SPECIFIED" not in empty_mapping
     assert "TARGET_TESTS" not in empty_mapping
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_jenkins_stop_cancels_queued_items_and_stops_started_builds(monkeypatch):
+    server = FakeJenkinsServer(base_url="http://jenkins.mock.ci:8080", job_name="qa-e2e-suite")
+    transport = httpx.MockTransport(server.handle_request)
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: original_client(transport=transport))
+    backend = JenkinsRunnerBackend(config=JenkinsConfig(base_url=server.base_url, job_name=server.job_name))
+
+    server.queue["100"] = {}
+    assert await backend.stop("run-queued", external_job_id="queue:100")
+    assert server.cancelled_queue_ids == {"100"}
+
+    server.queue["101"] = {"executable": {"number": 42}}
+    assert await backend.stop("run-started", external_job_id="queue:101")
+    assert server.stopped_build_ids == {"42"}

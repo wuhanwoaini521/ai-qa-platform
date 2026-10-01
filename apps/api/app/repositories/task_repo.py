@@ -114,7 +114,21 @@ class TaskRepository:
                 for row in evidence_rows
             ],
             artifacts=[TaskArtifact.model_validate(row, from_attributes=True) for row in artifact_rows],
-            decisions=[TaskDecision.model_validate(row, from_attributes=True) for row in decision_rows],
+            decisions=[
+                TaskDecision(
+                    id=row.id,
+                    task_id=row.task_id,
+                    step_id=row.step_id,
+                    name=row.name,
+                    provider=row.provider,
+                    choice=row.choice,
+                    confidence=row.confidence if row.confidence else None,
+                    rationale=row.rationale,
+                    escalated=row.escalated,
+                    created_at=row.created_at,
+                )
+                for row in decision_rows
+            ],
             events=[TaskEvent.model_validate(row, from_attributes=True) for row in event_rows],
         )
 

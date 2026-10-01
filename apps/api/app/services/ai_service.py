@@ -53,17 +53,14 @@ class AIService:
         primary_health = await primary.check_health()
         primary_name = getattr(primary, "provider_name", primary_health.provider)
         health_status = self._health_status(primary_health.status.value)
-        real_available = (
-            primary_name != "fake"
-            and primary_health.status.value == "AVAILABLE"
-        )
+        real_available = primary_name != "fake" and primary_health.status.value == "AVAILABLE"
         if primary_name == "fake":
             health_status = AIProviderStatus.DISABLED
         fallback_active = False
         fallback_health = None
 
         if real_available:
-            state = AIProviderRuntimeState.REAL_AVAILABLE
+            state = AIProviderRuntimeState.REAL_CONNECTED
             model = primary_health.model
             message = primary_health.message
             failure_reason = None
@@ -73,20 +70,24 @@ class AIService:
                 if candidate.status.value in ("AVAILABLE", "FALLBACK_ONLY"):
                     fallback_health = candidate
                     break
-            fallback_active = primary_name == "fake" or fallback_health is not None
-            if fallback_active:
-                state = AIProviderRuntimeState.FALLBACK_ONLY
+            fallback_active = fallback_health is not None
+            if primary_name == "fake":
+                state = AIProviderRuntimeState.SIMULATION
+                model = primary_health.model
+                message = "Simulation provider is selected; no real model is active."
+            elif fallback_health is not None:
+                state = AIProviderRuntimeState.FALLBACK
                 model = fallback_health.model if fallback_health else primary_health.model
-                message = (
-                    "Fake provider is selected; no real model is active."
-                    if primary_name == "fake"
-                    else f"Real provider is unavailable; fallback to {fallback_health.provider} is active."
-                )
+                message = f"Real provider is unavailable; fallback to {fallback_health.provider} is active."
             else:
                 state = AIProviderRuntimeState.UNAVAILABLE
                 model = primary_health.model
                 message = primary_health.message or "No AI provider is available."
-            failure_reason = "fake_provider_selected" if primary_name == "fake" else self._failure_reason(primary_health.status.value)
+            failure_reason = (
+                "fake_provider_selected"
+                if primary_name == "fake"
+                else self._failure_reason(primary_health.status.value)
+            )
 
         return AIStatusResponse(
             provider=primary_name,
@@ -137,7 +138,15 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
-        log_ai_execution(logger, feature="requirement_analysis", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
+        log_ai_execution(
+            logger,
+            feature="requirement_analysis",
+            provider=invocation["provider"],
+            model=invocation["model"],
+            duration_ms=duration_ms,
+            status="SUCCESS",
+            fallback_used=invocation["fallback_used"],
+        )
         await self.ai_repo.record_invocation(
             task="requirement_analysis",
             provider=invocation["provider"],
@@ -176,7 +185,15 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
-        log_ai_execution(logger, feature="test_design", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
+        log_ai_execution(
+            logger,
+            feature="test_design",
+            provider=invocation["provider"],
+            model=invocation["model"],
+            duration_ms=duration_ms,
+            status="SUCCESS",
+            fallback_used=invocation["fallback_used"],
+        )
         await self.ai_repo.record_invocation(
             task="test_design",
             provider=invocation["provider"],
@@ -220,7 +237,15 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
-        log_ai_execution(logger, feature="test_case_generation", provider=invocation["provider"], model=invocation["model"], duration_ms=duration_ms, status="SUCCESS", fallback_used=invocation["fallback_used"])
+        log_ai_execution(
+            logger,
+            feature="test_case_generation",
+            provider=invocation["provider"],
+            model=invocation["model"],
+            duration_ms=duration_ms,
+            status="SUCCESS",
+            fallback_used=invocation["fallback_used"],
+        )
         await self.ai_repo.record_invocation(
             task="test_case_generation",
             provider=invocation["provider"],

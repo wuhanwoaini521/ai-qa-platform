@@ -7,7 +7,6 @@ from app.services.ai_service import AIService
 from app.services.qa_assistant_service import QAAssistantService
 from app.services.task_runtime_service import TaskRuntimeService
 from project_model.models import (
-    DecisionResult,
     QAChatRequest,
     QAContext,
 )
@@ -29,15 +28,15 @@ def assistant_request(action: str = "chat") -> QAChatRequest:
 
 
 @pytest.mark.asyncio
-async def test_fake_provider_status_is_fallback_only():
+async def test_fake_provider_status_is_simulation_not_real_or_fallback():
     service = object.__new__(AIService)
     service.orchestrator = SimpleNamespace(ai_provider=FakeAIProvider())
     status = await service.get_status()
-    assert status.status == "FALLBACK_ONLY"
+    assert status.status == "SIMULATION"
     assert status.provider == "fake"
     assert status.model == "fake-qa-model"
     assert status.real_model_available is False
-    assert status.fallback_active is True
+    assert status.fallback_active is False
     assert status.failure_reason == "fake_provider_selected"
 
 
@@ -56,11 +55,11 @@ class HealthyRealProvider:
 
 
 @pytest.mark.asyncio
-async def test_real_provider_status_is_explicitly_real_available():
+async def test_real_provider_status_is_explicitly_connected():
     service = object.__new__(AIService)
     service.orchestrator = SimpleNamespace(ai_provider=HealthyRealProvider())
     status = await service.get_status()
-    assert status.status == "REAL_AVAILABLE"
+    assert status.status == "REAL_CONNECTED"
     assert status.provider == "openai-compatible"
     assert status.model == "test-model"
     assert status.real_model_available is True
@@ -68,7 +67,7 @@ async def test_real_provider_status_is_explicitly_real_available():
 
 
 @pytest.mark.asyncio
-async def test_openai_health_failure_with_fake_backup_is_fallback_only():
+async def test_openai_health_failure_with_fake_backup_is_fallback_not_real():
     class UnhealthyProvider(HealthyRealProvider):
         async def check_health(self):
             return ProviderHealthStatus(
@@ -82,7 +81,7 @@ async def test_openai_health_failure_with_fake_backup_is_fallback_only():
     service = object.__new__(AIService)
     service.orchestrator = SimpleNamespace(ai_provider=FallbackAIProvider(UnhealthyProvider(), [FakeAIProvider()]))
     status = await service.get_status()
-    assert status.status == "FALLBACK_ONLY"
+    assert status.status == "FALLBACK"
     assert status.provider == "openai-compatible"
     assert status.model == "fake-qa-model"
     assert status.real_model_available is False
@@ -167,30 +166,38 @@ async def test_browser_jev_decision_is_saved_as_reusable_trace(monkeypatch):
     monkeypatch.setattr("app.services.task_runtime_service.async_session_factory", Session)
     monkeypatch.setattr("app.services.task_runtime_service.TaskRepository", Repository)
 
-    class DecisionServiceStub:
-        async def choose(self, _, **kwargs):
-            return DecisionResult(
-                choice="1",
-                confidence=0.91,
-                probabilities={"1": 0.91},
-                provider="jev",
-                model="jev-test",
-            )
-
-    monkeypatch.setattr("app.services.task_runtime_service.DecisionService", DecisionServiceStub)
-    task = SimpleNamespace(id="task-1", goal="Add product to cart")
-    result = await runtime._decision_select(task, {
-        "inspect": {
-            "url": "https://shop.invalid",
-            "title": "Shop",
-            "candidates": [
-                {"index": 1, "role": "button", "name": "Add to cart", "safe": True},
-                {"index": 2, "role": "link", "name": "View cart", "safe": True},
-            ],
+    async def verify_with_shared_pipeline(_task, _observed, _event, _candidates, _pipeline, _run_id):
+        return {
+            "selected_candidate": {"task_candidate_index": 1},
+            "summary": {
+                "engine": "Jev",
+                "candidate_id": "candidate_1",
+                "candidate_count": 2,
+                "confidence": 0.91,
+                "model": "jev-test",
+                "latency_ms": 15.0,
+                "verified": True,
+            },
+            "trace": [],
         }
-    })
 
-    decision_trace = next(event for event in traces if event.type == "decision.completed")
+    monkeypatch.setattr(runtime, "_run_locator_decision", verify_with_shared_pipeline)
+    task = SimpleNamespace(id="task-1", goal="Add product to cart")
+    result = await runtime._decision_select(
+        task,
+        {
+            "inspect": {
+                "url": "https://shop.invalid",
+                "title": "Shop",
+                "candidates": [
+                    {"index": 1, "role": "button", "name": "Add to cart", "safe": True},
+                    {"index": 2, "role": "link", "name": "View cart", "safe": True},
+                ],
+            }
+        },
+    )
+
+    decision_trace = next(event for event in traces if event.type == "decision_completed")
     assert decision_trace.metadata["provider"] == "jev"
     assert decision_trace.metadata["candidate_count"] == 2
     assert decision_trace.metadata["selected_action"]["name"] == "Add to cart"
