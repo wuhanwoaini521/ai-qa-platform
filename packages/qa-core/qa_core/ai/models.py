@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from qa_core.ai.trace import AITraceEvent
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -125,6 +127,8 @@ class FailureAnalysisResponse(BaseModel):
     confidence: float = 0.8
     provider: str = ""
     fallback_used: bool = False
+    duration_ms: float | None = None
+    execution_trace: list[AITraceEvent] = Field(default_factory=list)
 
 
 class LocatorSemanticReview(BaseModel):

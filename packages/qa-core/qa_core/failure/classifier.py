@@ -12,6 +12,14 @@ class FailureClassifier:
     def classify(cls, error_message: str, stack_trace: str = "") -> tuple[FailureCategory, str, str | None]:
         combined = f"{error_message}\n{stack_trace}".lower()
 
+        # Classify the current assertion itself before incidental locator names in the traceback.
+        if "assertionerror" in error_message.lower() or re.search(r"(?:^|\n)\s*(?:E\s+)?assert\b", error_message):
+            return (
+                FailureCategory.ASSERTION_FAILURE,
+                "State or attribute did not match expected test assertion.",
+                None,
+            )
+
         # 1. Locator Changed / Not Found
         if any(
             kw in combined

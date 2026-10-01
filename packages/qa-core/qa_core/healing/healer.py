@@ -42,7 +42,13 @@ class _DOMTargets(HTMLParser):
         text = " ".join(part for part in self._text if part)
         if tag == self._tag and text and self._tag in {"button", "a", "label"}:
             self.targets.append({"kind": "text", "value": text[:120]})
-            self.targets.append({"kind": "role", "value": "button" if self._tag == "button" else "link", "name": text[:120]})
+            self.targets.append(
+                {"kind": "role", "value": "button" if self._tag == "button" else "link", "name": text[:120]}
+            )
+
+
+class NoLocatorCandidateError(ValueError):
+    """The observed DOM does not support a distinct replacement locator."""
 
 
 class LocatorHealer:
@@ -56,17 +62,18 @@ class LocatorHealer:
         error_message: str = "",
         file_path: str | None = None,
     ) -> LocatorRepairProposal:
-        candidates = cls._generate_candidates(old_locator, dom_snapshot)
-        best = (
-            candidates[0]
-            if candidates
-            else LocatorCandidate(
-                selector=old_locator,
-                strategy="fallback",
-                confidence=0.0,
-                reason="DOM snapshot did not provide a locator candidate. No replacement is recommended.",
+        if not old_locator.strip():
+            raise NoLocatorCandidateError("No failed locator was recorded; no replacement is recommended.")
+        candidates = [
+            candidate
+            for candidate in cls._generate_candidates(old_locator, dom_snapshot)
+            if candidate.selector.strip() != old_locator.strip()
+        ]
+        if not candidates:
+            raise NoLocatorCandidateError(
+                "The DOM provides no distinct, evidence-backed locator candidate; no replacement is recommended."
             )
-        )
+        best = candidates[0]
 
         diff = f"- locator('{old_locator}')\n+ locator('{best.selector}')"
 
@@ -106,21 +113,28 @@ class LocatorHealer:
                 continue
             kind = target["kind"]
             if kind == "test_id":
-                selector = f'[data-testid={json.dumps(value)}]'
+                selector = f"[data-testid={json.dumps(value)}]"
             elif kind == "id":
-                selector = f'#{value}'
+                selector = f"#{value}"
             elif kind == "name":
-                selector = f'[name={json.dumps(value)}]'
+                selector = f"[name={json.dumps(value)}]"
             elif kind == "role":
-                selector = f'role={value}[name={json.dumps(target["name"])}]'
+                selector = f"role={value}[name={json.dumps(target['name'])}]"
             elif kind == "text":
-                selector = f'text={json.dumps(value)}'
+                selector = f"text={json.dumps(value)}"
             elif kind == "label":
-                selector = f'label={json.dumps(value)}'
+                selector = f"label={json.dumps(value)}"
             else:
-                selector = f'placeholder={json.dumps(value)}'
-            observed.append({"kind": kind, "value": selector, "name": target.get("name"), "exact": True,
-                             "evidence": f"DOM 中存在与旧定位器词项重合的 {kind} 值：{value}"})
+                selector = f"placeholder={json.dumps(value)}"
+            observed.append(
+                {
+                    "kind": kind,
+                    "value": selector,
+                    "name": target.get("name"),
+                    "exact": True,
+                    "evidence": f"DOM 中存在与旧定位器词项重合的 {kind} 值：{value}",
+                }
+            )
 
         ranked = rank_locator_candidates(observed)
         return [

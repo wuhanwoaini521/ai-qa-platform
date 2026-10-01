@@ -10,7 +10,7 @@ from qa_core.author.models import AuthoringRequest
 from qa_core.failure.classifier import FailureClassifier
 from qa_core.failure.models import FailureCategory
 from qa_core.failure.redactor import SensitiveRedactor
-from qa_core.healing.healer import LocatorHealer
+from qa_core.healing.healer import LocatorHealer, NoLocatorCandidateError
 from qa_core.knowledge.loader import KnowledgeLoader
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
@@ -34,6 +34,14 @@ def test_failure_classifier():
     assert cat2 == FailureCategory.ASSERTION_FAILURE
 
 
+def test_assertion_is_not_overridden_by_incidental_locator_text():
+    category, _, locator = FailureClassifier.classify(
+        "E assert 1 == 2", "tests/test_login.py:20: AssertionError\nhelper = page.locator('element')"
+    )
+    assert category == FailureCategory.ASSERTION_FAILURE
+    assert locator is None
+
+
 def test_locator_healer_proposal():
     proposal = LocatorHealer.generate_repair_proposal(
         old_locator="button#submit-btn",
@@ -48,43 +56,53 @@ def test_locator_healer_proposal():
 
 
 def test_locator_healer_does_not_invent_candidates_without_dom_evidence():
-    proposal = LocatorHealer.generate_repair_proposal(
-        old_locator="button#missing-submit",
-        dom_snapshot="<main><button>Continue</button></main>",
-    )
-    assert proposal.proposed_locator == "button#missing-submit"
-    assert proposal.confidence == 0
-    assert "No replacement is recommended" in proposal.reason
+    with pytest.raises(NoLocatorCandidateError, match="no distinct"):
+        LocatorHealer.generate_repair_proposal(
+            old_locator="button#missing-submit",
+            dom_snapshot="<main><button>Continue</button></main>",
+        )
+    with pytest.raises(NoLocatorCandidateError, match="no distinct"):
+        LocatorHealer.generate_repair_proposal(
+            old_locator="button#submit-btn",
+            dom_snapshot='<button data-testid="submit-btn">Submit</button><button data-testid="submit-btn">Submit</button>',
+        )
 
-    ambiguous = LocatorHealer.generate_repair_proposal(
-        old_locator="button#submit-btn",
-        dom_snapshot='<button data-testid="submit-btn">Submit</button><button data-testid="submit-btn">Submit</button>',
-    )
-    assert ambiguous.confidence == 0
+
+def test_locator_healer_rejects_missing_or_unchanged_targets():
+    with pytest.raises(NoLocatorCandidateError):
+        LocatorHealer.generate_repair_proposal(old_locator="")
+    with pytest.raises(NoLocatorCandidateError):
+        LocatorHealer.generate_repair_proposal(old_locator="element")
+    with pytest.raises(NoLocatorCandidateError):
+        LocatorHealer.generate_repair_proposal(old_locator="#submit", dom_snapshot='<button id="submit"></button>')
 
 
 def test_locator_candidates_rank_semantic_unique_targets_first():
     from qa_core.healing.locator_intelligence import rank_locator_candidates
 
-    ranked = rank_locator_candidates([
-        {"kind": "css", "value": "button.primary"},
-        {"kind": "role", "value": "button", "name": "Save", "exact": True},
-        {"kind": "test_id", "value": "save", "nth": 1},
-    ])
+    ranked = rank_locator_candidates(
+        [
+            {"kind": "css", "value": "button.primary"},
+            {"kind": "role", "value": "button", "name": "Save", "exact": True},
+            {"kind": "test_id", "value": "save", "nth": 1},
+        ]
+    )
     assert [item["kind"] for item in ranked] == ["role", "test_id", "css"]
 
 
 def test_ai_provider_registry_uses_runtime_settings():
     AIProviderRegistry.reset()
     try:
-        AIProviderRegistry.configure_runtime({
-            "provider": "openai-compatible",
-            "api_key": "runtime-secret",
-            "model": "runtime-model",
-            "base_url": "https://ai.example/v1",
-            "timeout": "12",
-            "max_retries": "1",
-        })
+        AIProviderRegistry.configure_runtime(
+            {
+                "provider": "openai-compatible",
+                "api_key": "runtime-secret",
+                "model": "runtime-model",
+                "base_url": "https://ai.example/v1",
+                "timeout": "12",
+                "max_retries": "1",
+            }
+        )
         provider = AIProviderRegistry.get_provider()
         assert isinstance(provider, FallbackAIProvider)
         assert provider.primary.api_key == "runtime-secret"
@@ -95,13 +113,15 @@ def test_ai_provider_registry_uses_runtime_settings():
 
 
 def test_provider_settings_and_qa_assistant_contracts_are_validated():
-    settings = AIProviderSettingsUpdate.model_validate({
-        "provider": "openai-compatible",
-        "model": "gpt-test",
-        "base_url": "https://ai.example/v1",
-        "timeout": 15,
-        "max_retries": 2,
-    })
+    settings = AIProviderSettingsUpdate.model_validate(
+        {
+            "provider": "openai-compatible",
+            "model": "gpt-test",
+            "base_url": "https://ai.example/v1",
+            "timeout": 15,
+            "max_retries": 2,
+        }
+    )
     assert settings.provider == "openai-compatible"
 
     with pytest.raises(ValidationError):

@@ -137,7 +137,7 @@ class TaskDecision(BaseModel):
     name: str
     provider: str
     choice: str
-    confidence: float = 0.0
+    confidence: float | None = None
     rationale: str = ""
     escalated: bool = False
     created_at: datetime

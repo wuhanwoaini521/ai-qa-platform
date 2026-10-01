@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def utc_now() -> datetime:
@@ -368,6 +368,55 @@ class TestExecution(EntityBase):
     finished_at: datetime | None = None
 
 
+class TestBrowserSession(EntityBase):
+    id: str
+    run_id: str
+    case_execution_id: str | None = None
+    worker_id: str
+    browser_session_id: str
+    page_id: str
+    nodeid: str
+    case_name: str
+    current_url: str = ""
+    status: str = "running"
+    elapsed_ms: float = 0.0
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+class Breakpoint(EntityBase):
+    id: str
+    workspace_id: str
+    file_path: str
+    line_number: int
+    enabled: bool = True
+    source: str = "manual"
+    run_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BreakpointUpsert(BaseModel):
+    file_path: str = Field(min_length=1, max_length=500)
+    line_number: int = Field(ge=1, le=1_000_000)
+    enabled: bool = True
+    source: str = Field(default="manual", pattern=r"^(manual|auto_failure)$")
+    run_id: str | None = Field(default=None, max_length=36)
+
+
+class DebugSessionCreate(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=36)
+    nodeid: str = Field(min_length=1, max_length=1000)
+
+
+class DebugSessionBootstrap(BaseModel):
+    id: str
+    workspace_id: str
+    nodeid: str
+    status: str = "STARTING"
+    breakpoints: list[Breakpoint] = Field(default_factory=list)
+
+
 class TestRun(EntityBase):
     __test__ = False
     id: str
@@ -377,6 +426,7 @@ class TestRun(EntityBase):
     requested_by: str = "user"
     environment: dict[str, str] = Field(default_factory=dict)
     browser: str = "chromium"
+    parallel_workers: int = 1
     markers: list[str] = Field(default_factory=list)
     nodeids: list[str] = Field(default_factory=list)
     total: int = 0
@@ -396,6 +446,7 @@ class TestRun(EntityBase):
     finished_at: datetime | None = None
     created_at: datetime
     executions: list[TestExecution] = Field(default_factory=list)
+    browser_sessions: list[TestBrowserSession] = Field(default_factory=list)
     external_artifacts: list[ExternalArtifactReference] = Field(default_factory=list)
 
 
@@ -407,10 +458,17 @@ class TestRunCreate(BaseModel):
     environment: dict[str, str] = Field(default_factory=dict)
     browser: str = "chromium"
     headless: bool = True
+    parallel_workers: int = Field(default=1, ge=1, le=16)
     requested_by: str = "user"
     runner_type: str = "LOCAL"
     runner_profile_id: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_parallel_runner(self) -> TestRunCreate:
+        if self.parallel_workers > 1 and self.runner_type.upper() != "LOCAL":
+            raise ValueError("Parallel pytest workers are supported by the local runner only.")
+        return self
 
 
 # --- Failure Diagnosis & Repair Models ---
@@ -451,8 +509,9 @@ class AIProviderStatus(str, Enum):
 
 
 class AIProviderRuntimeState(str, Enum):
-    REAL_AVAILABLE = "REAL_AVAILABLE"
-    FALLBACK_ONLY = "FALLBACK_ONLY"
+    REAL_CONNECTED = "REAL_CONNECTED"
+    FALLBACK = "FALLBACK"
+    SIMULATION = "SIMULATION"
     UNAVAILABLE = "UNAVAILABLE"
 
 

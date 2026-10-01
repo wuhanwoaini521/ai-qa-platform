@@ -13,9 +13,13 @@ class AITraceEvent(BaseModel):
     """Safe, provider-neutral progress event for one AI execution run."""
 
     run_id: str
+    case_execution_id: str | None = None
+    step_id: str | None = None
     event_id: str = Field(default_factory=lambda: uuid4().hex)
     type: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    status: str = "COMPLETED"
+    duration_ms: float | None = None
     stage: str
     title: str
     message: str = ""
@@ -44,10 +48,18 @@ def make_trace_event(
     message: str = "",
     metadata: dict[str, Any] | None = None,
     content: str | None = None,
+    case_execution_id: str | None = None,
+    step_id: str | None = None,
+    status: str = "COMPLETED",
+    duration_ms: float | None = None,
 ) -> AITraceEvent:
     return AITraceEvent(
         run_id=run_id,
+        case_execution_id=case_execution_id,
+        step_id=step_id,
         type=event_type,
+        status=status,
+        duration_ms=duration_ms,
         stage=stage,
         title=title,
         message=message,

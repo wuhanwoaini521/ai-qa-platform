@@ -98,3 +98,41 @@ async def test_cancelling_pytest_kills_the_real_child_process_tree(
     with pytest.raises(asyncio.CancelledError):
         await run
     assert killed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fallback", [False, True])
+async def test_pytest_log_callback_error_kills_the_child_process_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fallback: bool,
+):
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_slow.py").write_text(
+        "import time\n\ndef test_slow():\n    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    original_kill = PytestRunner._kill_process_tree
+    killed: list[int] = []
+
+    def observe_kill(pid: int) -> None:
+        killed.append(pid)
+        original_kill(pid)
+
+    monkeypatch.setattr(PytestRunner, "_kill_process_tree", staticmethod(observe_kill))
+
+    if fallback:
+
+        async def unsupported_subprocess(*args, **kwargs):  # noqa: ANN002, ANN003
+            raise NotImplementedError("exercise Windows selector-loop fallback")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", unsupported_subprocess)
+
+    async def reject_log(_line: str) -> None:
+        raise RuntimeError("log stream disconnected")
+
+    with pytest.raises(RuntimeError, match="log stream disconnected"):
+        await PytestRunner(default_timeout_sec=60).run_suite(tmp_path, on_log=reject_log)
+
+    assert killed

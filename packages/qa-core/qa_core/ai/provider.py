@@ -35,14 +35,12 @@ def _fake_failure_analysis(prompt: str) -> FailureAnalysisResponse:
     """Build a conservative offline diagnosis from the supplied failure text only."""
     context = re.search(
         r"Error Message:\s*(.*?)\nStack Trace:\s*(.*?)\nFailing Locator:\s*(.*?)"
-        r"\n\nHistorical Context:",
+        r"\n\nHistorical Context(?:\s*\([^\n]*\))?:",
         prompt,
         flags=re.IGNORECASE | re.DOTALL,
     )
     if context:
-        error_message, stack_trace, failing_locator = (
-            value.strip() for value in context.groups()
-        )
+        error_message, stack_trace, failing_locator = (value.strip() for value in context.groups())
     else:
         # Keep direct FakeAIProvider use useful even when the standard prompt template
         # is not used, while avoiding classification from instructions/schema text.
