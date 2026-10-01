@@ -121,7 +121,7 @@ export const useEditorTabs = ({
   };
 
   const saveActiveTab = useCallback(async () => {
-    if (!projectId || !activeTab || saving) return;
+    if (!projectId || !activeTab || saving) return false;
     try {
       setSaving(true);
       await api.writeWorkspaceFile(projectId, activeTab.path, activeTab.content);
@@ -133,8 +133,10 @@ export const useEditorTabs = ({
         )
       );
       await afterSaveRef.current?.(activeTab.path);
+      return true;
     } catch (err) {
       console.error(`Failed to save file ${activeTab.path}`, err);
+      return false;
     } finally {
       setSaving(false);
     }

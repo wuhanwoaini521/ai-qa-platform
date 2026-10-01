@@ -79,12 +79,12 @@ export const Header: React.FC<HeaderProps> = ({
               fontSize: '11px',
               padding: '3px 8px',
               borderRadius: '12px',
-              background: aiStatus.status === 'REAL_AVAILABLE' ? '#eff6ff' : aiStatus.status === 'FALLBACK_ONLY' ? '#fff7e3' : '#fef2f2',
-              color: aiStatus.status === 'REAL_AVAILABLE' ? '#1d4ed8' : aiStatus.status === 'FALLBACK_ONLY' ? '#7c5600' : '#b91c1c',
-              border: `1px solid ${aiStatus.status === 'REAL_AVAILABLE' ? '#bfdbfe' : aiStatus.status === 'FALLBACK_ONLY' ? '#e9d7a4' : '#fecaca'}`,
+              background: aiStatus.status === 'REAL_CONNECTED' ? '#eff6ff' : aiStatus.status === 'UNAVAILABLE' ? '#fef2f2' : '#fff7e3',
+              color: aiStatus.status === 'REAL_CONNECTED' ? '#1d4ed8' : aiStatus.status === 'UNAVAILABLE' ? '#b91c1c' : '#7c5600',
+              border: `1px solid ${aiStatus.status === 'REAL_CONNECTED' ? '#bfdbfe' : aiStatus.status === 'UNAVAILABLE' ? '#fecaca' : '#e9d7a4'}`,
             }}
           >
-            <Sparkles size={12} color={aiStatus.status === 'REAL_AVAILABLE' ? '#2563eb' : aiStatus.status === 'FALLBACK_ONLY' ? '#8a5a00' : '#dc2626'} />
+            <Sparkles size={12} color={aiStatus.status === 'REAL_CONNECTED' ? '#2563eb' : aiStatus.status === 'UNAVAILABLE' ? '#dc2626' : '#8a5a00'} />
             <span style={{ fontWeight: 600 }}>AI: {aiStatus.status} · {aiStatus.provider}</span>
           </div>
         )}

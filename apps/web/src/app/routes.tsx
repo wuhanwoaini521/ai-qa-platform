@@ -1,6 +1,6 @@
 import React, { lazy } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { AppLayout } from './AppLayout';
@@ -84,6 +84,7 @@ const TestCasesRoute: React.FC = () => {
 const StudioRoute: React.FC = () => {
   const params = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const nav = useAppNavigation();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
   const projectId = params.projectId;
@@ -100,6 +101,8 @@ const StudioRoute: React.FC = () => {
       }}
       onNavigateToRuns={nav.toRun}
       initialOpenFilePath={splat ?? null}
+      initialOpenLineNumber={Number(new URLSearchParams(location.search).get('line')) || null}
+      initialDebugNodeId={new URLSearchParams(location.search).get('nodeid')}
     />
   );
 };

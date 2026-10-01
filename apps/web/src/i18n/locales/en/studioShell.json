@@ -12,12 +12,25 @@
     "runTestTooltip": "Execute tests in current file",
     "running": "Running...",
     "runTest": "Run Test",
+    "debugTest": "Debug",
+    "debugTarget": "Debug {{nodeid}}",
+    "noDebugTarget": "No collected pytest case",
     "gitDiffTitle": "Git Working Tree Diff",
     "noUncommittedChanges": "No uncommitted changes detected in working tree.",
     "loadingFile": "Loading file content...",
     "emptySelectFile": "Select a file from the explorer or press",
     "emptyHint": "Write Playwright test suites, Page Objects, and test fixtures.",
     "problemsShort": "Problems"
+  },
+  "debug": {
+    "starting": "Starting…",
+    "controls": "Debugger controls",
+    "continue": "Continue",
+    "stepOver": "Step Over",
+    "stepIn": "Step In",
+    "stepOut": "Step Out",
+    "pause": "Pause",
+    "stop": "Stop"
   },
   "tabs": {
     "noOpenTabs": "No open tabs (Press Cmd+P to open file)"

@@ -23,6 +23,15 @@ export interface RecorderStep {
   value?: string | null;
   key?: string | null;
   description: string;
+  locator_decision?: {
+    provider: string;
+    model?: string | null;
+    confidence?: number | null;
+    candidate_count: number;
+    candidate_id: string;
+    verified: boolean;
+    fallback_reason?: string | null;
+  } | null;
 }
 
 export type AutomationStatus = 'MANUAL' | 'DRAFT' | 'AUTOMATED';
@@ -268,6 +277,7 @@ export interface TestRun {
   queue_duration_ms?: number;
   environment: Record<string, string>;
   browser: string;
+  parallel_workers?: number;
   markers: string[];
   nodeids: string[];
   total: number;
@@ -283,8 +293,45 @@ export interface TestRun {
   finished_at: string | null;
   created_at: string;
   executions: TestExecution[];
+  browser_sessions?: TestBrowserSession[];
   external_artifacts?: ExternalArtifactReference[];
   log_output?: string;
+}
+
+export interface TestBrowserSession {
+  id: string;
+  run_id: string;
+  case_execution_id?: string | null;
+  worker_id: string;
+  browser_session_id: string;
+  page_id: string;
+  nodeid: string;
+  case_name: string;
+  current_url: string;
+  status: 'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'closed' | string;
+  elapsed_ms: number;
+  started_at: string;
+  finished_at?: string | null;
+}
+
+export interface Breakpoint {
+  id: string;
+  workspace_id: string;
+  file_path: string;
+  line_number: number;
+  enabled: boolean;
+  source: 'manual' | 'auto_failure';
+  run_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DebugSessionBootstrap {
+  id: string;
+  workspace_id: string;
+  nodeid: string;
+  status: string;
+  breakpoints: Breakpoint[];
 }
 
 export interface TestRunCreate {
@@ -295,6 +342,7 @@ export interface TestRunCreate {
   markers?: string[];
   environment?: Record<string, string>;
   browser?: string;
+  parallel_workers?: number;
   requested_by?: string;
   runner_type?: RunnerType;
   runner_profile_id?: string | null;
@@ -364,7 +412,7 @@ export interface LocatorRepairProposal {
   /** The locator currently in the code (the API's field name). */
   old_locator: string;
   proposed_locator: string;
-  confidence: number;
+  confidence: number | null;
   strategy: string;
   reason?: string;
   code_diff?: string;
@@ -373,6 +421,7 @@ export interface LocatorRepairProposal {
   /** Always false from the API: applying a repair is a separate, human-triggered call. */
   applied: boolean;
   candidates?: CandidateLocator[];
+  execution_trace?: AITraceEvent[];
 }
 
 export interface ApplyRepairRequest {
@@ -505,7 +554,7 @@ export type AIProviderHealth = 'AVAILABLE' | 'FALLBACK_ONLY' | 'DISABLED' | 'AUT
 
 export interface AIStatusResponse {
   provider: string;
-  status: 'REAL_AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
+  status: 'REAL_CONNECTED' | 'FALLBACK' | 'SIMULATION' | 'UNAVAILABLE';
   message: string;
   model: string;
   base_url?: string | null;
@@ -517,9 +566,13 @@ export interface AIStatusResponse {
 
 export interface AITraceEvent {
   run_id: string;
+  case_execution_id?: string | null;
+  step_id?: string | null;
   event_id: string;
   type: string;
   timestamp: string;
+  status?: string;
+  duration_ms?: number | null;
   stage: string;
   title: string;
   message: string;
@@ -729,6 +782,18 @@ export interface AIFailureDiagnosisResponse {
   confidence: number;
   provider: string;
   fallback_used: boolean;
+  duration_ms?: number | null;
+  execution_trace?: AITraceEvent[];
+}
+
+export interface FailureAnalysisRun {
+  id: string;
+  failure_id: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
+  events: AITraceEvent[];
+  result: { domain?: string; diagnosis?: AIFailureDiagnosisResponse; selection?: Record<string, unknown> | null; verified?: boolean; verification_run_id?: string; verification_run_status?: string };
+  created_at: string;
+  finished_at: string | null;
 }
 
 export interface LocatorSemanticReviewResponse {

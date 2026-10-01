@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
+import { ExternalArtifactReference, Project, RunnerProfile, RunnerType, TestBrowserSession, TestRailPublishPreview, TestRailPublishResponse, TestRun, TestRunCreate } from '../types';
 import { TestExecution } from '../types';
-import { api } from '../api/client';
+import { api, EventStreamError } from '../api/client';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
+import { LiveBrowserPanel } from '../features/runs/LiveBrowserPanel';
 import {
   PlayCircle,
   Plus,
@@ -39,6 +40,11 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
+  const [runDetailTab, setRunDetailTab] = useState<'live' | 'results' | 'logs' | 'artifacts'>('live');
+  const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'>('idle');
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [browserSessions, setBrowserSessions] = useState<TestBrowserSession[]>([]);
+  const [browserFrames, setBrowserFrames] = useState<Record<string, string>>({});
   const regressionTask = useContextTask(currentProjectId, 'run', selectedRun?.id ?? currentProjectId);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
   const [externalArtifacts, setExternalArtifacts] = useState<ExternalArtifactReference[]>([]);
@@ -53,6 +59,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     requested_by: 'Web UI Manual Trigger',
     runner_type: 'LOCAL',
     runner_profile_id: undefined,
+    parallel_workers: 1,
   });
   const [targetNodeidsText, setTargetNodeidsText] = useState<string>('');
   const [triggering, setTriggering] = useState<boolean>(false);
@@ -67,43 +74,60 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   // Live SSE streaming ref
   const unsubscribeSSERef = useRef<(() => void) | null>(null);
   const terminalLogRef = useRef<HTMLDivElement | null>(null);
+  const activeRunIdRef = useRef<string | null>(initialRunId ?? null);
+  const detailRequestRef = useRef(0);
+  const listRequestRef = useRef(0);
+  const reconnectSyncRef = useRef(false);
 
   const fetchRuns = async () => {
+    const requestId = ++listRequestRef.current;
     try {
       setLoading(true);
       const [data, profiles] = await Promise.all([
         api.getTestRuns(currentProjectId || undefined),
         api.getRunnerProfiles(currentProjectId || undefined),
       ]);
+      if (requestId !== listRequestRef.current) return;
       setRuns(data);
       setRunnerProfiles(profiles);
-      if (!selectedRun && initialRunId) {
+      if (initialRunId) {
         const match = data.find((r) => r.id === initialRunId);
         if (match) {
           handleSelectRun(match);
           return;
         }
         // Deep link to a run that is not in the fetched window: load it directly.
-        await fetchRunDetail(initialRunId);
+        activeRunIdRef.current = initialRunId;
+        const linkedRun = await api.getTestRun(initialRunId);
+        if (requestId === listRequestRef.current && activeRunIdRef.current === initialRunId) handleSelectRun(linkedRun);
         return;
       }
-      if (data.length > 0 && !selectedRun) {
+      if (data.length > 0 && !activeRunIdRef.current) {
         handleSelectRun(data[0]);
+      } else if (!data.length) {
+        activeRunIdRef.current = null;
+        setSelectedRun(null);
+        setBrowserSessions([]);
+        setBrowserFrames({});
       }
     } catch (err) {
       console.error('Failed to load runs', err);
     } finally {
-      setLoading(false);
+      if (requestId === listRequestRef.current) setLoading(false);
     }
   };
 
   const fetchRunDetail = async (runId: string) => {
+    if (activeRunIdRef.current !== runId) return;
+    const requestId = ++detailRequestRef.current;
     try {
       const [run, artifacts] = await Promise.all([
         api.getTestRun(runId),
         api.getExternalArtifacts(runId).catch(() => [] as ExternalArtifactReference[]),
       ]);
+      if (activeRunIdRef.current !== runId || requestId !== detailRequestRef.current) return;
       setSelectedRun(run);
+      setBrowserSessions(run.browser_sessions ?? []);
       setExternalArtifacts(artifacts);
       // Update in list
       setRuns((prev) => prev.map((r) => (r.id === run.id ? run : r)));
@@ -138,7 +162,15 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   }, [artifactPreview]);
 
   const handleSelectRun = (run: TestRun) => {
+    activeRunIdRef.current = run.id;
+    detailRequestRef.current += 1;
+    reconnectSyncRef.current = false;
     setSelectedRun(run);
+    setRunDetailTab(run.status === 'RUNNING' || run.status === 'QUEUED' ? 'live' : 'results');
+    setStreamStatus(run.status === 'RUNNING' || run.status === 'QUEUED' ? 'connecting' : 'idle');
+    setStreamError(null);
+    setBrowserSessions(run.browser_sessions ?? []);
+    setBrowserFrames({});
     fetchRunDetail(run.id);
 
     // Clean up previous SSE
@@ -152,6 +184,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       const unsub = api.streamRunEvents(
         run.id,
         (event) => {
+          if (activeRunIdRef.current !== run.id) return;
+          if (event.type === 'CONNECTED') {
+            reconnectSyncRef.current = false;
+            setStreamStatus('connected');
+            setStreamError(null);
+          } else {
+            detailRequestRef.current += 1;
+          }
           // Event names and payloads are the ones the API publishes (see test_run_service):
           // RUN_STARTED / TEST_FINISHED / LOG_STREAM / RUN_FINISHED / RUN_ERROR / RUN_CANCELLED.
           switch (event.type) {
@@ -193,7 +233,45 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 prev ? { ...prev, log_output: (prev.log_output || '') + (event.log ?? '') } : prev
               );
               break;
+            case 'BROWSER_SESSION': {
+              const session = event.session as TestBrowserSession;
+              if (!session?.browser_session_id) break;
+              setBrowserSessions((previous) => {
+                const index = previous.findIndex((entry) => entry.browser_session_id === session.browser_session_id);
+                if (index < 0) return [...previous, session];
+                return previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...session } : entry);
+              });
+              break;
+            }
+            case 'BROWSER_FRAME': {
+              if (!event.session_id || !event.frame) break;
+              const frameUrl = `data:${event.mime_type || 'image/jpeg'};base64,${event.frame}`;
+              setBrowserFrames((previous) => ({ ...previous, [event.session_id]: frameUrl }));
+              setBrowserSessions((previous) => {
+                const existing = previous.find((entry) => entry.browser_session_id === event.session_id);
+                const session: TestBrowserSession = {
+                  id: event.session_id,
+                  run_id: run.id,
+                  worker_id: event.worker_id || 'main',
+                  browser_session_id: event.session_id,
+                  page_id: event.page_id || event.session_id,
+                  nodeid: event.nodeid || '',
+                  case_name: event.case_name || '',
+                  current_url: event.url || '',
+                  status: event.status || 'running',
+                  elapsed_ms: existing?.elapsed_ms ?? 0,
+                  started_at: existing?.started_at ?? new Date().toISOString(),
+                  finished_at: existing?.finished_at ?? null,
+                };
+                if (!existing) return [...previous, session];
+                return previous.map((entry) => entry.browser_session_id === event.session_id
+                  ? { ...entry, current_url: session.current_url || entry.current_url }
+                  : entry);
+              });
+              break;
+            }
             case 'RUN_FINISHED':
+              setStreamStatus('idle');
               setSelectedRun((prev) =>
                 prev
                   ? {
@@ -209,15 +287,24 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               break;
             case 'RUN_ERROR':
             case 'RUN_CANCELLED':
+              setStreamStatus('idle');
               fetchRunDetail(run.id);
               break;
             default:
               break;
           }
         },
-        () => {
-          // On error, poll once
-          fetchRunDetail(run.id);
+        (error: unknown) => {
+          if (activeRunIdRef.current !== run.id) return;
+          const permanent = error instanceof EventStreamError && !error.retryable;
+          setStreamStatus(permanent ? 'failed' : 'reconnecting');
+          setStreamError(permanent
+            ? t(error.status === 404 ? 'streamEndpointUnavailable' : 'streamConnectionFailed', { status: error.status })
+            : null);
+          if (!reconnectSyncRef.current) {
+            reconnectSyncRef.current = true;
+            fetchRunDetail(run.id);
+          }
         }
       );
       unsubscribeSSERef.current = unsub;
@@ -225,13 +312,21 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   };
 
   useEffect(() => {
+    activeRunIdRef.current = initialRunId ?? null;
+    setSelectedRun(null);
+    setBrowserSessions([]);
+    setBrowserFrames({});
     fetchRuns();
     return () => {
+      listRequestRef.current += 1;
+      detailRequestRef.current += 1;
+      activeRunIdRef.current = null;
       if (unsubscribeSSERef.current) {
         unsubscribeSSERef.current();
+        unsubscribeSSERef.current = null;
       }
     };
-  }, [currentProjectId]);
+  }, [currentProjectId, initialRunId]);
 
   // Auto-scroll terminal log
   useEffect(() => {
@@ -257,6 +352,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         requested_by: runFormData.requested_by || 'Web UI Manual Trigger',
         runner_type: runFormData.runner_type,
         runner_profile_id: runFormData.runner_type === 'JENKINS' ? runFormData.runner_profile_id : undefined,
+        parallel_workers: runFormData.runner_type === 'LOCAL' ? (runFormData.parallel_workers ?? 1) : 1,
       });
 
       setRuns([newRun, ...runs]);
@@ -292,7 +388,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const handleCancelRun = async (runId: string) => {
     try {
       const updated = await api.cancelTestRun(runId);
-      setSelectedRun(updated);
+      if (activeRunIdRef.current === runId) {
+        setSelectedRun(updated);
+        setStreamStatus('idle');
+        unsubscribeSSERef.current?.();
+        unsubscribeSSERef.current = null;
+      }
       setRuns(runs.map((r) => (r.id === runId ? updated : r)));
     } catch (err: any) {
       alert(t('cancelFailed', { message: err.message || err }));
@@ -378,6 +479,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 requested_by: 'Web UI Manual Trigger',
                 runner_type: 'LOCAL',
                 runner_profile_id: runnerProfiles[0]?.id,
+                parallel_workers: 1,
               });
               setIsModalOpen(true);
             }}
@@ -550,8 +652,37 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 </div>
               </div>
 
+              <div role="tablist" aria-label={t('runDetailSections')} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(['live', 'results', 'logs', 'artifacts'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={runDetailTab === tab}
+                    className={runDetailTab === tab ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                    onClick={() => setRunDetailTab(tab)}
+                  >
+                    {t(`tab${tab[0].toUpperCase()}${tab.slice(1)}`)}
+                    {tab === 'results' && selectedRun.executions.length > 0 && ` (${selectedRun.executions.length})`}
+                    {tab === 'artifacts' && externalArtifacts.length > 0 && ` (${externalArtifacts.length})`}
+                  </button>
+                ))}
+              </div>
+
+              {runDetailTab === 'live' && (
+                <div role="tabpanel">
+                  <LiveBrowserPanel
+                    sessions={browserSessions}
+                    frames={browserFrames}
+                    runStatus={selectedRun.status}
+                    streamStatus={streamStatus}
+                    streamError={streamError}
+                  />
+                </div>
+              )}
+
               {/* External Artifacts References Card */}
-              {externalArtifacts.length > 0 && (
+              {runDetailTab === 'artifacts' && externalArtifacts.length > 0 && (
                 <div className="card">
                   <div className="card-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -607,9 +738,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   </div>
                 </div>
               )}
+              {runDetailTab === 'artifacts' && externalArtifacts.length === 0 && (
+                <div className="card" role="tabpanel" style={{ padding: 20, color: 'var(--text-muted)' }}>
+                  <p role="status" style={{ margin: 0 }}>{t('noArtifacts')}</p>
+                </div>
+              )}
 
               {/* Individual Test Executions Table */}
-              <div className="card">
+              {runDetailTab === 'results' && <div className="card" role="tabpanel">
                 <div className="card-header">
                   <span className="card-title">{t('outcomesTitle', { count: selectedRun.executions.length })}</span>
                   {((selectedRun.failed ?? selectedRun.failed_tests ?? 0) > 0) && onNavigateToFailures && (
@@ -658,9 +794,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     </div>
                   )}
                 </div>
-              </div>
+              </div>}
 
-              <details
+              {runDetailTab === 'logs' && <details
+                role="tabpanel"
                 className="card run-console"
                 open={selectedRun.status === 'RUNNING' || selectedRun.status === 'QUEUED'}
                 onToggle={(event) => {
@@ -687,7 +824,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       ? t('awaitingStream')
                       : t('noConsoleOutput'))}
                 </div>
-              </details>
+              </details>}
             </div>
           ) : (
             <div className="card">
@@ -785,6 +922,25 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     }
                   />
                 </div>
+
+                {runFormData.runner_type === 'LOCAL' && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="parallel-workers">{t('parallelWorkers')}</label>
+                    <input
+                      id="parallel-workers"
+                      className="form-control"
+                      type="number"
+                      min={1}
+                      max={16}
+                      step={1}
+                      value={runFormData.parallel_workers ?? 1}
+                      onChange={(event) => setRunFormData({
+                        ...runFormData,
+                        parallel_workers: Math.max(1, Math.min(16, Number(event.target.value) || 1)),
+                      })}
+                    />
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">{t('targetNodeIds')}</label>

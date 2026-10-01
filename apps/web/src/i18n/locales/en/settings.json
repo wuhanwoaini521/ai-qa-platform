@@ -34,8 +34,9 @@
     "testConnection": "Test connection",
     "testing": "Connecting…",
     "connectionFailed": "Connection test failed. Check the configuration, permissions and network.",
-    "status_REAL_AVAILABLE": "Real AI available",
-    "status_FALLBACK_ONLY": "Fallback only",
+    "status_REAL_CONNECTED": "Real AI connected",
+    "status_FALLBACK": "Fallback mode",
+    "status_SIMULATION": "Simulation mode",
     "status_UNAVAILABLE": "AI unavailable",
     "fallbackActive": "A fallback provider is active; no real model is serving this status.",
     "realProviderStatus": "The configured real provider passed its health check."

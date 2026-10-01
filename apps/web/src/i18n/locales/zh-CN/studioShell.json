@@ -12,12 +12,25 @@
     "runTestTooltip": "执行当前文件中的测试",
     "running": "执行中...",
     "runTest": "运行测试",
+    "debugTest": "调试",
+    "debugTarget": "调试 {{nodeid}}",
+    "noDebugTarget": "没有已收集的 pytest 用例",
     "gitDiffTitle": "Git 工作区差异",
     "noUncommittedChanges": "工作区中没有未提交的改动。",
     "loadingFile": "正在加载文件内容...",
     "emptySelectFile": "从资源管理器中选择文件，或按",
     "emptyHint": "编写 Playwright 测试套件、页面对象（Page Object）和测试夹具。",
     "problemsShort": "问题"
+  },
+  "debug": {
+    "starting": "正在启动…",
+    "controls": "调试控制",
+    "continue": "继续",
+    "stepOver": "单步跳过",
+    "stepIn": "单步进入",
+    "stepOut": "单步跳出",
+    "pause": "暂停",
+    "stop": "停止"
   },
   "tabs": {
     "noOpenTabs": "没有打开的标签页（按 Cmd+P 打开文件）"

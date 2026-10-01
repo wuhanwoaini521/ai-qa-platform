@@ -2165,6 +2165,36 @@ button, input, select, textarea {
 
 .worker-heartbeat svg { color: var(--success); }
 
+.failure-workflow { margin-top: 16px; padding: 16px; min-width: 0; border: 1px solid var(--ui-line); border-radius: var(--ui-r-md); background: var(--ui-surface-raised); }
+.failure-workflow-heading, .failure-workflow-heading > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.failure-workflow-heading { justify-content: space-between; color: var(--ui-ink); }
+.failure-workflow-domain { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: #eef2ff; color: #4338ca; }
+.failure-workflow-provider { margin-top: 9px; font-size: 11px; color: #047857; overflow-wrap: anywhere; }
+.failure-workflow-provider.is-fallback { color: #92400e; }
+.failure-workflow-steps { display: grid; gap: 0; margin: 14px 0; padding: 0; list-style: none; }
+.failure-workflow-step { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--ui-line); color: var(--ui-ink-muted); min-width: 0; }
+.failure-workflow-step:last-child { border-bottom: 0; }
+.failure-workflow-step > svg { flex: 0 0 auto; margin-top: 2px; }
+.failure-workflow-step.is-completed > svg { color: #059669; }
+.failure-workflow-step.is-running > svg { color: #4f46e5; animation: failure-workflow-spin 1s linear infinite; }
+@keyframes failure-workflow-spin { to { transform: rotate(360deg); } }
+.failure-workflow-step.is-blocked > svg, .failure-workflow-step.is-interrupted > svg { color: #b45309; }
+.failure-workflow-step.is-failed > svg { color: #dc2626; }
+.failure-workflow-step-content { flex: 1; min-width: 0; }
+.failure-workflow-step-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.failure-workflow-step-title strong { color: var(--ui-ink); font-size: 12px; }
+.failure-workflow-step-title > span, .failure-workflow-step-title time { font-size: 10px; }
+.failure-workflow-step.is-running .failure-workflow-step-title strong { color: #4338ca; }
+.failure-workflow-step p { font-size: 12px; line-height: 1.5; margin: 5px 0 0; overflow-wrap: anywhere; }
+.failure-workflow-evidence { margin-top: 5px; font-size: 10px; }
+.failure-workflow-evidence summary, .failure-workflow-audit summary { cursor: pointer; color: var(--ui-primary-strong); }
+.failure-workflow-evidence pre, .failure-workflow-audit pre { max-height: 240px; overflow: auto; padding: 10px; background: var(--ui-surface-sunken); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.failure-workflow-error { padding: 8px 10px; background: #fffbeb; color: #92400e; font-size: 12px; overflow-wrap: anywhere; }
+.failure-workflow-verification { padding: 9px 11px; background: #f7f8fc; border-radius: 6px; color: var(--ui-ink-muted); font-size: 11px; line-height: 1.5; }
+.failure-workflow-history { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; margin-top: 10px; color: var(--ui-ink-muted); }
+.failure-workflow-history select { flex: 1; min-width: 150px; font-size: 11px; }
+.failure-workflow-audit { margin-top: 10px; font-size: 11px; }
+
 .recorder-page {
   display: flex;
   flex-direction: column;
@@ -2399,9 +2429,43 @@ button, input, select, textarea {
 
 .recorder-inspector-panel {
   display: grid;
-  grid-template-rows: auto minmax(120px, 0.7fr) auto minmax(180px, 1fr);
+  grid-template-rows: auto minmax(140px, 1fr) auto minmax(220px, 1.2fr);
   gap: 9px;
   padding: 10px;
+}
+
+.recorder-inspector-panel.has-locator-trace {
+  grid-template-rows: auto minmax(90px, 0.5fr) minmax(140px, 1fr) auto minmax(220px, 1.2fr);
+}
+
+.recorder-locator-trace {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  overflow: hidden;
+}
+
+.recorder-locator-summary {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-r-sm);
+  background: var(--ui-surface-raised);
+  color: var(--ui-ink-soft);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.recorder-locator-summary.is-verified { border-color: color-mix(in srgb, var(--ui-mint-strong) 40%, var(--ui-line)); }
+.recorder-locator-summary.is-unverified { border-color: color-mix(in srgb, var(--danger-color, #dc2626) 40%, var(--ui-line)); }
+
+.recorder-inspector-panel .recorder-locator-trace > .ai-execution {
+  min-height: 0;
+  overflow: auto;
 }
 
 .recorder-steps-heading {
@@ -2523,7 +2587,11 @@ button, input, select, textarea {
   overflow: hidden;
 }
 
-.recorder-editor-surface > div { height: 100%; }
+.recorder-editor-surface > div { position: absolute; inset: 0; height: 100%; }
+
+.recorder-editor-actions { display: flex; align-items: center; gap: 8px; }
+.recorder-editor-actions > span { color: var(--ui-ink-muted); font-size: 10px; }
+.recorder-editor-actions .btn { min-height: 26px; padding: 3px 7px; }
 
 .recorder-editor-surface textarea {
   position: absolute;
@@ -2572,7 +2640,8 @@ button, input, select, textarea {
   .recorder-urlbar .recorder-url-input { flex-basis: 100%; }
   .recorder-urlbar > button:last-child { flex: 1 1 auto; }
   .recorder-browser-panel { min-height: 340px; }
-  .recorder-inspector-panel { grid-template-rows: auto minmax(160px, auto) auto minmax(220px, 300px); min-height: 720px; }
+  .recorder-inspector-panel { grid-template-rows: auto minmax(160px, 1fr) auto minmax(220px, 300px); min-height: 720px; }
+  .recorder-inspector-panel.has-locator-trace { grid-template-rows: auto minmax(90px, auto) minmax(160px, 1fr) auto minmax(220px, 300px); }
   .recorder-settings-grid { grid-template-columns: minmax(0, 1fr); }
   .recorder-error { align-items: flex-start; flex-direction: column; }
 }
@@ -2590,3 +2659,58 @@ button, input, select, textarea {
   }
 }
 
+/* Monaco gutter markers: red manual breakpoints and orange failure-derived breakpoints. */
+.monaco-editor .glyph-margin-widgets .qa-breakpoint-glyph {
+  position: relative;
+  width: 10px !important;
+  height: 10px !important;
+  margin: 4px 0 0 5px;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.monaco-editor .glyph-margin-widgets .qa-breakpoint-glyph::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  content: "";
+}
+
+.monaco-editor .glyph-margin-widgets .qa-breakpoint-manual::before {
+  background: #dc2626;
+  border: 1px solid #991b1b;
+}
+
+.monaco-editor .glyph-margin-widgets .qa-breakpoint-auto::before {
+  background: #f59e0b;
+  border: 1px solid #b45309;
+}
+
+.monaco-editor .view-overlays .qa-failure-line {
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.monaco-editor .view-overlays .qa-debug-execution-line {
+  background: rgba(59, 130, 246, 0.15);
+  border-left: 2px solid #2563eb;
+}
+
+.monaco-editor .glyph-margin-widgets .qa-debug-execution-glyph {
+  position: relative;
+  width: 10px !important;
+  height: 10px !important;
+  margin: 4px 0 0 5px;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.monaco-editor .glyph-margin-widgets .qa-debug-execution-glyph::after {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid #2563eb;
+  content: "";
+}

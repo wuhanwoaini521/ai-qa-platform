@@ -7,6 +7,8 @@ import {
   AIProviderConnectionResult,
   AITraceEvent,
   AIUsageSummary,
+  Breakpoint,
+  DebugSessionBootstrap,
   AutomationBinding,
   AutomationBindingCreate,
   BranchInfo,
@@ -16,6 +18,7 @@ import {
   DecisionResult,
   DashboardStats,
   FailureRecord,
+  FailureAnalysisRun,
   FailureRecurrenceItem,
   FileNode,
   FlakyTestItem,
@@ -127,13 +130,154 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
-/** Appends the session token for the routes whose client cannot send an Authorization header. */
-function withAccessToken(path: string): string {
-  if (!authToken) {
-    return path;
+type StreamKind = 'run' | 'task' | 'recorder' | 'debug';
+
+export class EventStreamError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'EventStreamError';
   }
-  const separator = path.includes('?') ? '&' : '?';
-  return `${path}${separator}access_token=${encodeURIComponent(authToken)}`;
+
+  get retryable(): boolean {
+    return this.status < 400 || this.status >= 500 || this.status === 408 || this.status === 429;
+  }
+}
+
+async function createStreamTicket(kind: StreamKind, resourceId: string): Promise<string> {
+  const response = await request<{ stream_ticket: string }>(
+    '/auth/stream-ticket',
+    { method: 'POST', body: JSON.stringify({ kind, resource_id: resourceId }) },
+  );
+  return response.stream_ticket;
+}
+
+function streamUrl(path: string, afterId?: string): string {
+  const url = new URL(`${BASE_URL}/api${path}`, window.location.origin);
+  if (afterId) url.searchParams.set('after', afterId);
+  return url.toString();
+}
+
+function openEventStream(
+  path: string,
+  kind: StreamKind,
+  resourceId: string,
+  onEvent: (event: MessageEvent<string>) => void,
+  onError?: (error: Event | Error) => void,
+  reconnectFromEventId = false,
+): () => void {
+  let stopped = false;
+  let controller: AbortController | null = null;
+  let reconnectTimer: number | null = null;
+  let reconnectDelay = 500;
+  let lastEventId = '';
+
+  const scheduleReconnect = () => {
+    if (stopped || reconnectTimer !== null) return;
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      void connect();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 5000);
+  };
+
+  const connect = async () => {
+    try {
+      const ticket = await createStreamTicket(kind, resourceId);
+      if (stopped) return;
+      const abortController = new AbortController();
+      controller = abortController;
+      const headers: Record<string, string> = { Accept: 'text/event-stream', Authorization: `Bearer ${ticket}` };
+      if (reconnectFromEventId && lastEventId) headers['Last-Event-ID'] = lastEventId;
+      const response = await fetch(streamUrl(path, reconnectFromEventId ? lastEventId : undefined), {
+        headers,
+        signal: abortController.signal,
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAuthToken(null);
+          unauthorizedHandler?.();
+        }
+        throw new EventStreamError(`Stream request failed (${response.status}).`, response.status);
+      }
+      if (!response.body) throw new Error('Stream response body is unavailable.');
+      reconnectDelay = 500;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = '';
+      let dataLines: string[] = [];
+      let eventName = '';
+      let eventId = '';
+      const dispatch = () => {
+        if (!dataLines.length) {
+          eventName = '';
+          return;
+        }
+        if (eventId && !eventId.includes('\0')) lastEventId = eventId;
+        onEvent(new MessageEvent<string>(eventName || 'message', {
+          data: dataLines.join('\n'),
+          lastEventId,
+        }));
+        dataLines = [];
+        eventName = '';
+      };
+      const consumeFrame = (frame: string) => {
+        for (const line of frame.split(/\r?\n/)) {
+          if (!line || line.startsWith(':')) continue;
+          const separator = line.indexOf(':');
+          const field = separator < 0 ? line : line.slice(0, separator);
+          const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '');
+          if (field === 'data') dataLines.push(value);
+          else if (field === 'event') eventName = value;
+          else if (field === 'id') eventId = value;
+        }
+        dispatch();
+      };
+
+      try {
+        while (!stopped && !abortController.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          pending += decoder.decode(value, { stream: true });
+          let boundary: number;
+          while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
+            const separator = pending.match(/\r?\n\r?\n/)?.[0] ?? '\n\n';
+            consumeFrame(pending.slice(0, boundary));
+            pending = pending.slice(boundary + separator.length);
+          }
+        }
+        pending += decoder.decode();
+        if (pending.trim()) consumeFrame(pending);
+      } finally {
+        reader.releaseLock();
+      }
+      if (controller === abortController) controller = null;
+      if (!stopped) scheduleReconnect();
+    } catch (error) {
+      if (controller?.signal.aborted || stopped) return;
+      controller = null;
+      const originalError = error instanceof Error ? error : new Error(String(error));
+      const apiStatus = originalError.message.match(/API Error \[(\d{3})\]/)?.[1];
+      const streamError = apiStatus
+        ? new EventStreamError(originalError.message, Number(apiStatus))
+        : originalError;
+      if (streamError instanceof EventStreamError && !streamError.retryable) {
+        stopped = true;
+        onError?.(streamError);
+        return;
+      }
+      onError?.(streamError);
+      scheduleReconnect();
+    }
+  };
+
+  void connect();
+  return () => {
+    stopped = true;
+    controller?.abort();
+    controller = null;
+    if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+  };
 }
 
 /** Registers the handler invoked when the API rejects a request with 401. */
@@ -146,11 +290,17 @@ export function hasAuthToken(): boolean {
   return authToken !== null;
 }
 
-export function getRecorderSocketUrl(sessionId: string): string {
+export async function getRecorderSocketUrl(sessionId: string): Promise<string> {
   const base = BASE_URL || window.location.origin;
   const url = new URL(`/api/recorder/sessions/${encodeURIComponent(sessionId)}/stream`, base);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (authToken) url.searchParams.set('access_token', authToken);
+  return url.toString();
+}
+
+export async function getDebugSocketUrl(sessionId: string): Promise<string> {
+  const base = BASE_URL || window.location.origin;
+  const url = new URL(`/api/debug/sessions/${encodeURIComponent(sessionId)}/stream`, base);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }
 
@@ -188,66 +338,82 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json();
 }
 
-export const api = {
-  streamQAAssistant: async (
-    data: QAChatRequest,
-    onEvent: (event: AITraceEvent) => void,
-    signal: AbortSignal,
-  ): Promise<void> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const response = await fetch(`${BASE_URL}/api/qa-assistant/chat/stream`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-      signal,
-    });
-    if (response.status === 401) {
-      setAuthToken(null);
-      unauthorizedHandler?.();
-    }
-    if (!response.ok) {
-      throw new Error(`API Error [${response.status}]: ${(await response.text()) || response.statusText}`);
-    }
-    if (!response.body) throw new Error('Streaming response body is unavailable.');
+async function streamAITraceRequest(
+  path: string,
+  data: unknown,
+  onEvent: (event: AITraceEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const response = await fetch(`${BASE_URL}/api${path}`, {
+    method: 'POST',
+    headers,
+    body: data === undefined ? undefined : JSON.stringify(data),
+    signal,
+  });
+  if (response.status === 401) {
+    setAuthToken(null);
+    unauthorizedHandler?.();
+  }
+  if (!response.ok) {
+    throw new Error(`API Error [${response.status}]: ${(await response.text()) || response.statusText}`);
+  }
+  if (!response.body) throw new Error('Streaming response body is unavailable.');
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let pending = '';
-    const dispatch = (frame: string) => {
-      let eventName = '';
-      let payload = '';
-      for (const line of frame.split(/\r?\n/)) {
-        if (line.startsWith('event:')) eventName = line.slice(6).trim();
-        if (line.startsWith('data:')) payload += line.slice(5).trim();
-      }
-      if (!payload) return;
-      try {
-        const event = JSON.parse(payload) as AITraceEvent;
-        if (!event.type && eventName) event.type = eventName;
-        onEvent(event);
-      } catch {
-        throw new Error(`Invalid AI stream event: ${eventName || 'unknown'}`);
-      }
-    };
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        pending += decoder.decode(value, { stream: true });
-        let boundary: number;
-        while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
-          const separator = pending.match(/\r?\n\r?\n/)?.[0] ?? '\n\n';
-          dispatch(pending.slice(0, boundary));
-          pending = pending.slice(boundary + separator.length);
-        }
-      }
-      pending += decoder.decode();
-      if (pending.trim()) dispatch(pending);
-    } finally {
-      reader.releaseLock();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  const dispatch = (frame: string) => {
+    let eventName = '';
+    const dataLines: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
     }
-  },
+    if (!dataLines.length) return;
+    let event: AITraceEvent;
+    try {
+      event = JSON.parse(dataLines.join('\n')) as AITraceEvent;
+    } catch {
+      throw new Error(`Invalid AI stream event: ${eventName || 'unknown'}`);
+    }
+    if (!event.type && eventName) event.type = eventName;
+    onEvent(event);
+  };
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      let boundary: number;
+      while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
+        const separator = pending.match(/\r?\n\r?\n/)?.[0] ?? '\n\n';
+        dispatch(pending.slice(0, boundary));
+        pending = pending.slice(boundary + separator.length);
+      }
+    }
+    pending += decoder.decode();
+    if (pending.trim()) dispatch(pending);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
+export const api = {
+  createStreamTicket,
+  streamQAAssistant: (data: QAChatRequest, onEvent: (event: AITraceEvent) => void, signal: AbortSignal) =>
+    streamAITraceRequest('/qa-assistant/chat/stream', data, onEvent, signal),
+  streamFailureDiagnosis: (id: string, onEvent: (event: AITraceEvent) => void, signal: AbortSignal) =>
+    streamAITraceRequest(`/failures/${encodeURIComponent(id)}/diagnose-ai/stream`, undefined, onEvent, signal),
+  streamFailureWorkflow: (id: string, onEvent: (event: AITraceEvent) => void, signal: AbortSignal) =>
+    streamAITraceRequest(`/failures/${encodeURIComponent(id)}/analyze/stream`, undefined, onEvent, signal),
+  getFailureAnalyses: (id: string) => request<FailureAnalysisRun[]>(`/failures/${encodeURIComponent(id)}/analyses`),
+  linkFailureVerification: (id: string, analysisId: string, runId: string) => request(
+    `/failures/${encodeURIComponent(id)}/analyses/${encodeURIComponent(analysisId)}/verification?run_id=${encodeURIComponent(runId)}`,
+    { method: 'POST' },
+  ),
   getWorkspaces: (projectId: string) => request<Workspace[]>(`/workspaces?project_id=${encodeURIComponent(projectId)}`),
   getTasks: (projectId?: string) => request<AgentTask[]>(`/tasks${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
   getTask: (taskId: string) => request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}`),
@@ -258,14 +424,25 @@ export const api = {
   cancelTask: (taskId: string) => request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' }),
   replanTask: (taskId: string, instructions: string) =>
     request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/replan?instructions=${encodeURIComponent(instructions)}`, { method: 'POST' }),
-  streamTaskEvents: (taskId: string, onEvent: (event: AgentTaskEvent) => void, onError?: (error: Event) => void) => {
-    const url = `${BASE_URL}/api${withAccessToken(`/tasks/${encodeURIComponent(taskId)}/events`)}`;
-    const source = new EventSource(url);
-    source.onmessage = (event) => {
-      try { onEvent(JSON.parse(event.data) as AgentTaskEvent); } catch (error) { console.error('Failed to parse task event', error); }
-    };
-    source.onerror = (error) => onError?.(error);
-    return () => source.close();
+  streamTaskEvents: (taskId: string, onEvent: (event: AgentTaskEvent) => void, onError?: (error: Event | Error) => void) => {
+    let closeStream: () => void = () => {};
+    closeStream = openEventStream(
+      `/tasks/${encodeURIComponent(taskId)}/events`,
+      'task',
+      taskId,
+      (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as AgentTaskEvent;
+          onEvent(parsed);
+          if (['task.completed', 'task.failed', 'task.blocked', 'task.cancelled'].includes(parsed.type)) closeStream();
+        } catch (error) {
+          console.error('Failed to parse task event', error);
+        }
+      },
+      onError,
+      true,
+    );
+    return () => closeStream();
   },
     createRecorderSession: (projectId: string, startUrl: string, recoveredSteps: RecorderStep[] = []) =>
       request<{ id: string; project_id: string; state: string; url: string; requested_url: string; navigation_error: string | null }>('/recorder/sessions', {
@@ -352,6 +529,22 @@ export const api = {
     ),
 
   // Automation Workspace & Studio
+  getBreakpoints: (workspaceId: string) =>
+    request<Breakpoint[]>(`/workspaces/${encodeURIComponent(workspaceId)}/breakpoints`),
+  upsertBreakpoint: (workspaceId: string, input: Pick<Breakpoint, 'file_path' | 'line_number' | 'enabled' | 'source'>) =>
+    request<Breakpoint>(`/workspaces/${encodeURIComponent(workspaceId)}/breakpoints`, {
+      method: 'PUT', body: JSON.stringify(input),
+    }),
+  deleteBreakpoint: (workspaceId: string, breakpointId: string) =>
+    request<void>(`/workspaces/${encodeURIComponent(workspaceId)}/breakpoints/${encodeURIComponent(breakpointId)}`, {
+      method: 'DELETE',
+    }),
+  createDebugSession: (workspaceId: string, nodeid: string) =>
+    request<DebugSessionBootstrap>('/debug/sessions', {
+      method: 'POST', body: JSON.stringify({ workspace_id: workspaceId, nodeid }),
+    }),
+  closeDebugSession: (sessionId: string) =>
+    request<{ closed: boolean }>(`/debug/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   getWorkspaceFiles: (workspaceId: string) =>
     request<FileNode[]>(`/workspaces/${workspaceId}/files`),
   readWorkspaceFile: (workspaceId: string, path: string) =>
@@ -810,25 +1003,22 @@ export const api = {
     onEvent: (event: any) => void,
     onError?: (err: any) => void
   ): (() => void) => {
-    const url = `${BASE_URL}/api${withAccessToken(`/runs/${runId}/events`)}`;
-    const eventSource = new EventSource(url);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        onEvent(parsed);
-      } catch (e) {
-        console.error('Failed to parse SSE event data', e);
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      if (onError) onError(err);
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    let closeStream: () => void = () => {};
+    closeStream = openEventStream(
+      `/runs/${encodeURIComponent(runId)}/events`,
+      'run',
+      runId,
+      (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          onEvent(parsed);
+          if (['RUN_FINISHED', 'RUN_ERROR', 'RUN_CANCELLED'].includes(parsed.type)) closeStream();
+        } catch (error) {
+          console.error('Failed to parse SSE event data', error);
+        }
+      },
+      onError,
+    );
+    return () => closeStream();
   },
 };

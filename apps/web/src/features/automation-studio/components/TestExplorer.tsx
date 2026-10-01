@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Play } from 'lucide-react';
+import { Bug, Play } from 'lucide-react';
 import { CollectedTest } from '../../../types';
 
 interface TestExplorerProps {
@@ -9,6 +9,7 @@ interface TestExplorerProps {
   runningTest: boolean;
   onOpenFile: (path: string) => void;
   onRunTest: (nodeid: string) => void;
+  onDebugTest: (nodeid: string) => void;
 }
 
 export const TestExplorer: React.FC<TestExplorerProps> = ({
@@ -17,6 +18,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
   runningTest,
   onOpenFile,
   onRunTest,
+  onDebugTest,
 }) => {
   const { t } = useTranslation('studioPanels');
 
@@ -58,15 +60,26 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
               >
                 {test.name}
               </div>
-              <button
-                className="btn btn-primary btn-sm"
-                style={{ padding: '2px 6px', fontSize: '11px' }}
-                disabled={runningTest}
-                onClick={() => onRunTest(test.nodeid)}
-                title={t('testExplorer.runThisTest')}
-              >
-                <Play size={10} /> {t('common:run')}
-              </button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 6px', fontSize: '11px' }}
+                  disabled={runningTest}
+                  onClick={() => onDebugTest(test.nodeid)}
+                  title={t('testExplorer.debugThisTest')}
+                >
+                  <Bug size={10} /> {t('testExplorer.debug')}
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ padding: '2px 6px', fontSize: '11px' }}
+                  disabled={runningTest}
+                  onClick={() => onRunTest(test.nodeid)}
+                  title={t('testExplorer.runThisTest')}
+                >
+                  <Play size={10} /> {t('common:run')}
+                </button>
+              </div>
             </div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
               {test.path}:{test.line}

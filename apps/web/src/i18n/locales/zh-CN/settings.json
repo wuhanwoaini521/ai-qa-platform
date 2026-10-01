@@ -34,8 +34,9 @@
     "testConnection": "测试连接",
     "testing": "正在连接…",
     "connectionFailed": "连接测试失败，请检查配置、权限和服务网络。",
-    "status_REAL_AVAILABLE": "真实 AI 可用",
-    "status_FALLBACK_ONLY": "仅回退模式可用",
+    "status_REAL_CONNECTED": "真实 AI 已连接",
+    "status_FALLBACK": "回退模式",
+    "status_SIMULATION": "模拟模式",
     "status_UNAVAILABLE": "AI 不可用",
     "fallbackActive": "当前由回退 Provider 响应；真实模型未通过状态检查。",
     "realProviderStatus": "已配置的真实 Provider 通过健康检查。"

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AIFailureDiagnosisResponse,
+  FailureAnalysisRun,
+  AITraceEvent,
   FailureCategory,
   FailureRecurrenceItem,
   FailureRecord,
@@ -10,8 +12,11 @@ import {
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
   Project,
+  RunnerType,
 } from '../types';
 import { api } from '../api/client';
+import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
+import { FailureWorkflowPanel } from '../components/FailureWorkflowPanel';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import {
   AlertTriangle,
@@ -38,7 +43,7 @@ interface FailuresPageProps {
   /** Lets the router shell mirror row selection into the URL. */
   onSelectFailure?: (failureId: string) => void;
   /** Opens the failing test file in the Automation Studio. */
-  onOpenInStudio?: (filePath: string) => void;
+  onOpenInStudio?: (filePath: string, lineNumber?: number, debugNodeId?: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
 }
 
@@ -60,10 +65,55 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   // Diagnosis State
   const [diagnosing, setDiagnosing] = useState<boolean>(false);
   const [aiDiagnosis, setAiDiagnosis] = useState<AIFailureDiagnosisResponse | null>(null);
+  const [diagnosisEvents, setDiagnosisEvents] = useState<AITraceEvent[]>([]);
+  const [diagnosisError, setDiagnosisError] = useState('');
+  const [analysisHistory, setAnalysisHistory] = useState<FailureAnalysisRun[]>([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState('');
+  const selectedFailureIdRef = useRef<string | null>(null);
+  selectedFailureIdRef.current = selectedFailure?.id ?? null;
+  const diagnosisController = useRef<AbortController | null>(null);
+
+  const restoreAnalysis = (analysis: FailureAnalysisRun) => {
+    setSelectedAnalysisId(analysis.id);
+    setDiagnosisEvents(analysis.events);
+    setAiDiagnosis(analysis.result.diagnosis ?? null);
+    setDiagnosisError('');
+  };
+
+  useEffect(() => {
+    setAnalysisHistory([]);
+    setSelectedAnalysisId('');
+    if (!selectedFailure?.id) return;
+    let active = true;
+    void api.getFailureAnalyses(selectedFailure.id).then((rows) => {
+      if (!active) return;
+      setAnalysisHistory(rows);
+      if (rows[0] && !diagnosisController.current) restoreAnalysis(rows[0]);
+    }).catch((error) => { if (active) setDiagnosisError(String(error)); });
+    return () => { active = false; };
+  }, [selectedFailure?.id]);
+
+  const verificationRunStatus = analysisHistory.find((item) => item.id === selectedAnalysisId)?.result.verification_run_status;
+  useEffect(() => {
+    if (!selectedFailure?.id || !['QUEUED', 'RUNNING'].includes(verificationRunStatus ?? '')) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void api.getFailureAnalyses(selectedFailure.id).then((rows) => {
+        if (!active || diagnosisController.current) return;
+        setAnalysisHistory(rows);
+        const selected = rows.find((item) => item.id === selectedAnalysisId);
+        if (selected) restoreAnalysis(selected);
+      }).catch(() => undefined);
+    }, 2000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [selectedFailure?.id, selectedAnalysisId, verificationRunStatus]);
+
+  useEffect(() => () => diagnosisController.current?.abort(), []);
 
   // Locator Repair Proposal State
   const [generatingProposal, setGeneratingProposal] = useState<boolean>(false);
   const [repairProposal, setRepairProposal] = useState<LocatorRepairProposal | null>(null);
+  const [repairError, setRepairError] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<string>('');
 
   // Semantic Review State
@@ -83,9 +133,17 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
   const [repairApplied, setRepairApplied] = useState<boolean>(false);
-  // Failures repaired in this session. The API records the patch on the workspace, not on the
-  // failure row, so "resolved" is deliberately a local view state rather than a fabricated field.
-  const [resolvedFailureIds, setResolvedFailureIds] = useState<string[]>([]);
+  const [patchedFailureIds, setPatchedFailureIds] = useState<string[]>([]);
+  const repairVerified = Boolean(repairProposal?.execution_trace?.some(
+    (event) => event.type === 'verification_completed' && event.metadata?.verified === true,
+  ));
+  const locatorRepairApplicable = selectedFailure?.classification === 'LOCATOR_CHANGED'
+    && Boolean(selectedFailure.failing_locator?.trim());
+  const locatorRepairReason = selectedFailure?.classification === 'ASSERTION_FAILURE'
+    ? t('assertionRepairNotApplicable')
+    : selectedFailure?.classification === 'LOCATOR_CHANGED'
+      ? t('missingFailedLocator')
+      : t('locatorRepairNotApplicable', { classification: selectedFailure?.classification ?? 'UNKNOWN' });
 
   const [rerunning, setRerunning] = useState<boolean>(false);
   const [rerunMessage, setRerunMessage] = useState<string | null>(null);
@@ -110,6 +168,18 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       },
     });
     setStartingFix(false);
+  };
+
+  const handleOpenFailureInStudio = async (startDebug = false) => {
+    if (!selectedFailure || !onOpenInStudio) return;
+    const filePath = selectedFailure.test_nodeid.split('::')[0];
+    const breakpoints = currentProjectId
+      ? await api.getBreakpoints(currentProjectId).catch(() => [])
+      : [];
+    const failureBreakpoint = breakpoints.find((item) =>
+      item.source === 'auto_failure' && item.run_id === selectedFailure.run_id && item.file_path === filePath,
+    );
+    onOpenInStudio(filePath, failureBreakpoint?.line_number, startDebug ? selectedFailure.test_nodeid : undefined);
   };
 
   const fetchFailures = async () => {
@@ -137,9 +207,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   }, [currentProjectId]);
 
   const handleSelectFailure = (f: FailureRecord) => {
+    diagnosisController.current?.abort();
+    diagnosisController.current = null;
+    setDiagnosing(false);
+    setDiagnosisEvents([]);
+    setDiagnosisError('');
     setSelectedFailure(f);
     setAiDiagnosis(null);
     setRepairProposal(null);
+    setRepairError('');
     setSelectedCandidate('');
     setSemanticReview(null);
     setRepairApplied(false);
@@ -162,29 +238,80 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const handleDiagnoseAI = async () => {
     if (!selectedFailure) return;
+    diagnosisController.current?.abort();
+    const controller = new AbortController();
+    diagnosisController.current = controller;
+    setAiDiagnosis(null);
+    setDiagnosisEvents([]);
+    setDiagnosisError('');
+    setDiagnosing(true);
+    let terminal = false;
+    let analysisId = '';
     try {
-      setDiagnosing(true);
-      const res = await api.diagnoseFailureAI(selectedFailure.id);
-      setAiDiagnosis(res);
-    } catch (err: any) {
-      alert(t('alertDiagnoseFailed', { error: err.message || err }));
+      await api.streamFailureWorkflow(selectedFailure.id, (event) => {
+        if (diagnosisController.current !== controller || controller.signal.aborted) return;
+        setDiagnosisEvents((previous) => [...previous, event]);
+        if (typeof event.metadata?.analysis_id === 'string') {
+          analysisId = event.metadata.analysis_id;
+          setSelectedAnalysisId(analysisId);
+        }
+        if (event.type === 'run.completed') {
+          const result = event.metadata?.diagnosis as unknown as AIFailureDiagnosisResponse | undefined;
+          if (!result) throw new Error(t('diagnosisStreamIncomplete'));
+          terminal = true;
+          setAiDiagnosis(result);
+        } else if (event.type === 'run.failed') {
+          terminal = true;
+        }
+      }, controller.signal);
+      if (!terminal && !controller.signal.aborted) throw new Error(t('diagnosisStreamIncomplete'));
+    } catch (err: unknown) {
+      if (diagnosisController.current === controller && !controller.signal.aborted) {
+        setDiagnosisError(t('alertDiagnoseFailed', { error: err instanceof Error ? err.message : String(err) }));
+      }
     } finally {
-      setDiagnosing(false);
+      if (diagnosisController.current === controller) {
+        diagnosisController.current = null;
+        setDiagnosing(false);
+      }
+      void api.getFailureAnalyses(selectedFailure.id).then((rows) => {
+        if (selectedFailureIdRef.current !== selectedFailure.id || diagnosisController.current) return;
+        setAnalysisHistory(rows);
+        const saved = rows.find((item) => item.id === analysisId);
+        if (saved) restoreAnalysis(saved);
+      }).catch(() => undefined);
     }
+  };
+
+  const handleCancelDiagnosis = () => {
+    diagnosisController.current?.abort();
+    diagnosisController.current = null;
+    setDiagnosing(false);
+    setDiagnosisError(t('diagnosisCancelled'));
   };
 
   const handleGenerateProposal = async () => {
     if (!selectedFailure) return;
+    if (!locatorRepairApplicable) {
+      setRepairError(locatorRepairReason);
+      return;
+    }
     try {
       setGeneratingProposal(true);
+      setRepairError('');
+      setRepairProposal(null);
       const proposal = await api.generateRepairProposal(selectedFailure.id);
+      if (!proposal.proposed_locator.trim() || proposal.proposed_locator.trim() === proposal.old_locator.trim()) {
+        setRepairError(t('noAlternativeLocator'));
+        return;
+      }
       setRepairProposal(proposal);
       setSemanticReview(null);
       if (proposal.proposed_locator) {
         setSelectedCandidate(proposal.proposed_locator);
       }
     } catch (err: any) {
-      alert(t('alertProposalFailed', { error: err.message || err }));
+      setRepairError(t('alertProposalFailed', { error: err.message || err }));
     } finally {
       setGeneratingProposal(false);
     }
@@ -209,8 +336,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   };
 
   const handleApplyRepair = async () => {
-    if (!selectedFailure || !repairProposal || !currentProjectId) return;
+    if (!selectedFailure || !repairProposal || !currentProjectId || !locatorRepairApplicable || !repairVerified) return;
     const chosenLocator = selectedCandidate || repairProposal.proposed_locator;
+    if (!chosenLocator.trim() || chosenLocator.trim() === repairProposal.old_locator.trim()) {
+      setRepairError(t('noAlternativeLocator'));
+      return;
+    }
     const filePath = repairProposal.file_path || selectedFailure.test_nodeid.split('::')[0];
     try {
       setApplyingRepair(true);
@@ -233,7 +364,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         currentProjectId
       );
       setRepairApplied(true);
-      setResolvedFailureIds((prev) =>
+      setPatchedFailureIds((prev) =>
         prev.includes(selectedFailure.id) ? prev : [...prev, selectedFailure.id]
       );
       alert(t('alertRepairApplied', { file: filePath }));
@@ -250,12 +381,26 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setRerunning(true);
       setRerunMessage(t('rerunTriggering'));
       const target = selectedFailure.test_nodeid;
+      const originalRun = await api.getTestRun(selectedFailure.run_id);
       const run = await api.createTestRun({
         project_id: currentProjectId,
         workspace_id: currentProjectId,
         nodeids: [target],
+        environment: originalRun.environment,
+        browser: originalRun.browser,
+        runner_type: originalRun.runner_type as RunnerType | undefined,
+        runner_profile_id: originalRun.runner_profile_id,
         requested_by: `Re-run verification for failure #${selectedFailure.id.slice(0, 8)}`,
       });
+      if (selectedAnalysisId && analysisHistory.some((item) => item.id === selectedAnalysisId)) {
+        await api.linkFailureVerification(selectedFailure.id, selectedAnalysisId, run.id);
+        const rows = await api.getFailureAnalyses(selectedFailure.id);
+        if (selectedFailureIdRef.current === selectedFailure.id) {
+          setAnalysisHistory(rows);
+          const selected = rows.find((item) => item.id === selectedAnalysisId);
+          if (selected) restoreAnalysis(selected);
+        }
+      }
       setRerunMessage(
         t('rerunDispatched', { runId: run.id.slice(0, 8), status: run.status })
       );
@@ -404,9 +549,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                             {getCategoryBadge(f.classification)}
-                            {resolvedFailureIds.includes(f.id) && (
-                              <span className="badge badge-ready" style={{ fontSize: '10px' }}>
-                                {t('resolved')}
+                            {patchedFailureIds.includes(f.id) && (
+                              <span className="badge" style={{ fontSize: '10px', background: 'var(--warning-light)', color: 'var(--warning)' }}>
+                                {t('patchAwaitingVerification')}
                               </span>
                             )}
                           </div>
@@ -474,7 +619,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
-                      disabled={generatingProposal}
+                      disabled={generatingProposal || !locatorRepairApplicable}
+                      title={!locatorRepairApplicable ? locatorRepairReason : undefined}
                       onClick={handleGenerateProposal}
                     >
                       <Sparkles size={13} />{' '}
@@ -498,21 +644,39 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       <Bug size={13} color="#e11d48" /> {t('createJiraDraft')}
                     </button>
                     {onOpenInStudio && (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => onOpenInStudio(selectedFailure.test_nodeid.split('::')[0])}
-                        title={t('openInStudioTitle')}
-                      >
-                        <Code2 size={13} /> {t('openInStudio')}
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => void handleOpenFailureInStudio()}
+                          title={t('openInStudioTitle')}
+                        >
+                          <Code2 size={13} /> {t('openInStudio')}
+                        </button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => void handleOpenFailureInStudio(true)}
+                          title={t('debugFromFailureTitle')}
+                        >
+                          <Bug size={13} /> {t('debugFromFailure')}
+                        </button>
+                      </>
                     )}
                   </div>
 
+                  {!locatorRepairApplicable && (
+                    <p role="status" style={{ margin: '12px 0 0', padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, color: '#92400e', fontSize: 12 }}>
+                      {locatorRepairReason}
+                    </p>
+                  )}
+                  {repairError && <div className="alert alert-error" role="alert" style={{ marginTop: 12 }}>{repairError}</div>}
                   {rerunMessage && (
                     <div style={{ marginTop: '8px', padding: '8px 12px', background: '#eff6ff', borderRadius: '4px', fontSize: '12px', color: '#1d4ed8' }}>
                       {rerunMessage}
                     </div>
                   )}
+                  <FailureWorkflowPanel events={diagnosisEvents} running={diagnosing} history={analysisHistory}
+                    selectedId={selectedAnalysisId} error={diagnosisError} onCancel={handleCancelDiagnosis}
+                    onSelect={(id) => { const analysis = analysisHistory.find((item) => item.id === id); if (analysis) restoreAnalysis(analysis); }} />
                   <ContextTaskProgress task={fixTask.task} error={fixTask.error} />
                 </div>
               </div>
@@ -527,9 +691,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         {t('diagnosisTitle', { classification: aiDiagnosis.classification })}
                       </span>
                     </div>
-                    <span className="badge badge-ready" style={{ fontSize: '11px' }}>
-                      {t('confidence', { value: (aiDiagnosis.confidence * 100).toFixed(0) })}
-                    </span>
+                    {aiDiagnosis.provider !== 'fake' && (
+                      <span className="badge badge-ready" style={{ fontSize: '11px' }}>
+                        {t('confidence', { value: (aiDiagnosis.confidence * 100).toFixed(0) })}
+                      </span>
+                    )}
                   </div>
                   <div className="card-body">
                     <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -537,7 +703,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </p>
                     {(aiDiagnosis.fallback_used || aiDiagnosis.provider === 'fake') && (
                       <p role="status" style={{ color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '8px 10px', fontSize: '12px', margin: '0 0 12px' }}>
-                        {t('fallbackDiagnosis')}
+                        {t(aiDiagnosis.provider === 'fake' ? 'simulatedDiagnosis' : 'fallbackDiagnosis')}
                       </p>
                     )}
                     <p style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.6, marginBottom: '12px' }}>
@@ -588,14 +754,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               )}
 
               {/* Locator Repair Proposal Card */}
-              {repairProposal && (
+              {locatorRepairApplicable && repairProposal && (
                 <div className="card" style={{ borderLeft: '4px solid #16a34a' }}>
                   <div className="card-header" style={{ background: '#f0fdf4' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Sparkles size={16} color="#16a34a" />
                       <span className="card-title" style={{ color: '#166534' }}>
                         {t('proposalTitle', {
-                          value: (repairProposal.confidence * 100).toFixed(0),
+                          value: repairProposal.confidence === null ? t('unrated') : (repairProposal.confidence * 100).toFixed(0),
                         })}
                       </span>
                     </div>
@@ -614,15 +780,41 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         <button
                           className="btn btn-primary btn-sm"
                           style={{ background: '#16a34a', borderColor: '#16a34a' }}
-                          disabled={applyingRepair}
+                          disabled={applyingRepair || !repairVerified}
                           onClick={handleApplyRepair}
                         >
                           <Check size={13} /> {applyingRepair ? t('applying') : t('applyRepair')}
                         </button>
                       )}
+                      {!repairApplied && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setRepairProposal(null);
+                            setSelectedCandidate('');
+                            setSemanticReview(null);
+                          }}
+                        >
+                          {t('ignoreProposal')}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="card-body">
+                    {!repairVerified && (
+                      <p role="status" style={{ margin: '0 0 12px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
+                        {t('repairNotVerified')}
+                      </p>
+                    )}
+                    <details style={{ marginBottom: 12 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>{t('viewEvidence')}</summary>
+                      <div style={{ paddingTop: 8 }}>
+                        <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                          {t('caseExecution')}: {selectedFailure?.execution_id}
+                        </div>
+                        <AIExecutionTimeline events={repairProposal.execution_trace ?? []} running={generatingProposal} />
+                      </div>
+                    </details>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
                         <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>{t('brokenLocator')}</div>

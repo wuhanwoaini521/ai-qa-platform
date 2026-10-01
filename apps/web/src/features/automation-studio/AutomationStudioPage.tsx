@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Play, Save } from 'lucide-react';
-import { Project } from '../../types';
+import { Bug, CheckCircle2, Play, Save } from 'lucide-react';
+import { api } from '../../api/client';
+import { Breakpoint, Project } from '../../types';
 import { FileOpModalState, SidebarTab } from './types';
 import { errorText } from './errorText';
 import { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
@@ -11,6 +12,7 @@ import { useTestExplorer } from './hooks/useTestExplorer';
 import { useProblems } from './hooks/useProblems';
 import { useQAAssistant } from './hooks/useQAAssistant';
 import { useRunExecution } from './hooks/useRunExecution';
+import { useDebugSession, type DebugStackFrame } from './hooks/useDebugSession';
 import { MonacoEditorInstance, MonacoEditorPane } from './components/MonacoEditorPane';
 import { ProjectSelector } from './components/ProjectSelector';
 import { SidebarViewSwitcher } from './components/SidebarViewSwitcher';
@@ -29,6 +31,7 @@ import { QuickOpen } from './components/QuickOpen';
 import { FileOpModal } from './components/FileOpModal';
 import { BranchModal } from './components/BranchModal';
 import { PullRequestModal } from './components/PullRequestModal';
+import { DebugPanel } from './components/DebugPanel';
 
 export interface AutomationStudioPageProps {
   projects: Project[];
@@ -36,6 +39,8 @@ export interface AutomationStudioPageProps {
   onSelectProject: (id: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
   initialOpenFilePath?: string | null;
+  initialOpenLineNumber?: number | null;
+  initialDebugNodeId?: string | null;
 }
 
 export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
@@ -44,6 +49,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   onSelectProject,
   onNavigateToRuns,
   initialOpenFilePath,
+  initialOpenLineNumber,
+  initialDebugNodeId,
 }) => {
   const { t } = useTranslation('studioShell');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
@@ -56,6 +63,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [showQuickOpen, setShowQuickOpen] = useState<boolean>(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState<string>('');
   const [quickOpenSelectedIndex, setQuickOpenSelectedIndex] = useState<number>(0);
+  const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
+  const [executionLocation, setExecutionLocation] = useState<{ path: string; line: number } | null>(null);
 
   // Monaco Editor Ref
   const editorRef = useRef<MonacoEditorInstance | null>(null);
@@ -97,6 +106,28 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     onInsertFallback: editor.updateContent,
   });
   const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns });
+  const debug = useDebugSession({
+    projectId: currentProjectId,
+    breakpoints,
+    onOpenFile: editor.openFile,
+    onExecutionLine: setExecutionLocation,
+    onBreakpoints: (sessionBreakpoints) => {
+      setBreakpoints((items) => [
+        ...items.filter((item) => !sessionBreakpoints.some((sessionBreakpoint) => sessionBreakpoint.id === item.id)),
+        ...sessionBreakpoints,
+      ]);
+    },
+  });
+  const debugStartRef = useRef(debug.start);
+  const autoDebugStartedRef = useRef<string | null>(null);
+  const autoSelectedFrameRef = useRef<DebugStackFrame | null>(null);
+  debugStartRef.current = debug.start;
+  const activeFilePath = editor.activeTab?.path.replace(/\\/g, '/').replace(/^\/+/, '');
+  // The toolbar debugs the active test module, so breakpoints in any of its cases can be hit.
+  // Explicit case debugging remains available in the test explorer and failure deep links.
+  const debugTargetNodeId = activeFilePath && tests.collectedTests.some(
+    (test) => test.path.replace(/\\/g, '/').replace(/^\/+/, '') === activeFilePath,
+  ) ? activeFilePath : null;
 
   fetchFilesRef.current = workspace.fetchFiles;
   openFileRef.current = editor.openFile;
@@ -109,10 +140,66 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   }, [currentProjectId]);
 
   useEffect(() => {
+    let active = true;
+    setBreakpoints([]);
+    if (currentProjectId) {
+      void api.getBreakpoints(currentProjectId).then((items) => {
+        if (active) setBreakpoints(items);
+      }).catch((error) => console.error('Failed to load workspace breakpoints', error));
+    }
+    return () => { active = false; };
+  }, [currentProjectId]);
+
+  const toggleBreakpoint = async (filePath: string, lineNumber: number) => {
+    if (!currentProjectId || !filePath) return;
+    const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const current = breakpoints.find((item) => item.file_path === normalizedPath && item.line_number === lineNumber);
+    try {
+      if (current) {
+        await api.deleteBreakpoint(currentProjectId, current.id);
+        setBreakpoints((items) => items.filter((item) => item.id !== current.id));
+      } else {
+        const created = await api.upsertBreakpoint(currentProjectId, {
+          file_path: normalizedPath,
+          line_number: lineNumber,
+          enabled: true,
+          source: 'manual',
+        });
+        setBreakpoints((items) => [...items, created]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle breakpoint', error);
+    }
+  };
+
+  useEffect(() => {
     if (initialOpenFilePath) {
       editor.openFile(initialOpenFilePath);
     }
   }, [initialOpenFilePath]);
+
+  useEffect(() => {
+    if (!initialDebugNodeId || !currentProjectId) return;
+    const target = currentProjectId + '::' + initialDebugNodeId;
+    if (autoDebugStartedRef.current === target) return;
+    autoDebugStartedRef.current = target;
+    void debugStartRef.current(initialDebugNodeId);
+  }, [currentProjectId, initialDebugNodeId]);
+
+  useEffect(() => {
+    const frame = debug.frames[0];
+    const framePath = frame?.source?.path?.replace(/\\/g, '/').replace(/^\/+/, '');
+    const activePath = editor.activeTab?.path.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (
+      debug.state !== 'paused' ||
+      !frame ||
+      !framePath ||
+      framePath !== activePath ||
+      autoSelectedFrameRef.current === frame
+    ) return;
+    autoSelectedFrameRef.current = frame;
+    void debug.selectFrame(frame);
+  }, [debug.frames, debug.selectFrame, debug.state, editor.activeTab?.path, workspace.loadingFile]);
 
   // Keyboard Shortcuts (Cmd/Ctrl + S, Cmd/Ctrl + Shift + S, Cmd/Ctrl + P)
   useEffect(() => {
@@ -326,6 +413,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               runningTest={run.runningTest}
               onOpenFile={editor.openFile}
               onRunTest={run.runExecution}
+              onDebugTest={(nodeid) => { void debug.start(nodeid); }}
             />
           )}
 
@@ -413,6 +501,34 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 {run.runningTest ? t('editor.running') : t('editor.runTest')}
               </button>
             )}
+            <button
+              className="studio-tool"
+              disabled={!debugTargetNodeId || run.runningTest || debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'}
+              onClick={async () => {
+                if (!debugTargetNodeId) return;
+                if (editor.activeTab?.isDirty && !await editor.saveActiveTab()) return;
+                await debug.start(debugTargetNodeId);
+              }}
+              title={debugTargetNodeId ? t('editor.debugTarget', { nodeid: debugTargetNodeId }) : t('editor.noDebugTarget')}
+            >
+              <Bug size={14} />
+              {debug.state === 'starting' ? t('debug.starting') : t('editor.debugTest')}
+            </button>
+            {(debug.state === 'running' || debug.state === 'paused') && (
+              <div className="studio-toolbar-group no-chrome" aria-label={t('debug.controls')}>
+                {debug.state === 'paused' ? (
+                  <>
+                    <button className="studio-tool is-primary" onClick={() => debug.control('continue')}>{t('debug.continue')}</button>
+                    <button className="studio-tool" onClick={() => debug.control('next')}>{t('debug.stepOver')}</button>
+                    <button className="studio-tool" onClick={() => debug.control('stepIn')}>{t('debug.stepIn')}</button>
+                    <button className="studio-tool" onClick={() => debug.control('stepOut')}>{t('debug.stepOut')}</button>
+                  </>
+                ) : (
+                  <button className="studio-tool" onClick={() => debug.control('pause')}>{t('debug.pause')}</button>
+                )}
+                <button className="studio-tool" onClick={() => { void debug.stop(); }}>{t('debug.stop')}</button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -425,9 +541,25 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           diffResult={git.diffResult}
           editorRef={editorRef}
           onChange={editor.updateContent}
+          breakpoints={breakpoints}
+          onToggleBreakpoint={toggleBreakpoint}
+          initialFocusLineNumber={initialOpenLineNumber ?? undefined}
+          executionLocation={executionLocation}
         />
 
         </div>
+
+        {(debug.state !== 'idle' || initialDebugNodeId) && (
+          <DebugPanel
+            state={debug.state}
+            nodeid={debug.targetNodeid}
+            error={debug.error}
+            frames={debug.frames}
+            locals={debug.locals}
+            output={debug.output}
+            onSelectFrame={debug.selectFrame}
+          />
+        )}
 
         {/* Collapsible Bottom Problems Panel */}
         <div style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>

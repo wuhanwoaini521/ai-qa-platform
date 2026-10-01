@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import '../monaco';
 import { useTranslation } from 'react-i18next';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { FileCode } from 'lucide-react';
-import { GitDiffResult } from '../../../types';
+import { Breakpoint, GitDiffResult } from '../../../types';
 import { EditorTab } from '../types';
 
 /** Monaco instance handed to `onMount`; `monaco-editor` is not a direct dependency, so the type is derived. */
@@ -17,7 +17,12 @@ interface MonacoEditorPaneProps {
   /** Imperative handle shared with the problems panel and the QA assistant. */
   editorRef: React.RefObject<MonacoEditorInstance | null>;
   onEditorReady?: () => void;
+  stickyScroll?: boolean;
   onChange: (value: string | undefined) => void;
+  breakpoints?: Breakpoint[];
+  onToggleBreakpoint?: (filePath: string, lineNumber: number) => void;
+  initialFocusLineNumber?: number;
+  executionLocation?: { path: string; line: number } | null;
 }
 
 const getLanguage = (path: string | null): string => {
@@ -38,13 +43,104 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   diffResult,
   editorRef,
   onEditorReady,
+  stickyScroll = true,
   onChange,
+  breakpoints = [],
+  onToggleBreakpoint,
+  initialFocusLineNumber,
+  executionLocation,
 }) => {
   const { t } = useTranslation('studioShell');
-  const handleEditorDidMount: OnMount = (editor) => {
+  const [editorReady, setEditorReady] = useState(false);
+  const [editorMountVersion, setEditorMountVersion] = useState(0);
+  const decorationIds = useRef<string[]>([]);
+  const focusDecorationIds = useRef<string[]>([]);
+  const executionDecorationIds = useRef<string[]>([]);
+  const toggleRef = useRef(onToggleBreakpoint);
+  const activePathRef = useRef(activeTab?.path ?? '');
+  toggleRef.current = onToggleBreakpoint;
+  activePathRef.current = activeTab?.path ?? '';
+
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    setEditorReady(true);
+    setEditorMountVersion((version) => version + 1);
+    editor.onMouseDown((event) => {
+      const target = event.target.type;
+      if (
+        (target === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+          target === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS) &&
+        event.target.position
+      ) {
+        toggleRef.current?.(activePathRef.current, event.target.position.lineNumber);
+      }
+    });
     onEditorReady?.();
   };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editorReady || loadingFile || !editor || !activeTab?.path) return;
+    const filePath = activeTab.path.replace(/\\/g, '/').replace(/^\/+/, '');
+    const breakpointsByLine = new Map<number, Breakpoint>();
+    for (const item of breakpoints) {
+      if (!item.enabled || item.file_path.replace(/\\/g, '/') !== filePath) continue;
+      const existing = breakpointsByLine.get(item.line_number);
+      if (!existing || (existing.source === 'auto_failure' && item.source === 'manual')) {
+        breakpointsByLine.set(item.line_number, item);
+      }
+    }
+    const decorations = [...breakpointsByLine.values()].map((item) => ({
+        range: {
+          startLineNumber: item.line_number,
+          endLineNumber: item.line_number,
+          startColumn: 1,
+          endColumn: 1,
+        },
+        options: {
+          isWholeLine: false,
+          glyphMarginClassName: `qa-breakpoint-glyph qa-breakpoint-${item.source === 'auto_failure' ? 'auto' : 'manual'}`,
+          glyphMarginHoverMessage: { value: item.source === 'auto_failure' ? 'Auto failure breakpoint' : 'Manual breakpoint' },
+        },
+      }));
+    decorationIds.current = editor.deltaDecorations(decorationIds.current, decorations);
+  }, [activeTab?.path, breakpoints, editorMountVersion, editorReady, editorRef, loadingFile]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editorReady || loadingFile || !editor || !activeTab || !initialFocusLineNumber || initialFocusLineNumber < 1) return;
+    const lineNumber = Math.min(initialFocusLineNumber, editor.getModel()?.getLineCount() ?? initialFocusLineNumber);
+    editor.revealLineInCenter(lineNumber);
+    editor.setPosition({ lineNumber, column: 1 });
+    focusDecorationIds.current = editor.deltaDecorations(focusDecorationIds.current, [{
+      range: { startLineNumber: lineNumber, endLineNumber: lineNumber, startColumn: 1, endColumn: 1 },
+      options: { isWholeLine: true, className: 'qa-failure-line' },
+    }]);
+  }, [activeTab?.path, editorMountVersion, editorReady, editorRef, initialFocusLineNumber, loadingFile]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editorReady || loadingFile || !editor || !activeTab?.path || !executionLocation) {
+      if (editor) executionDecorationIds.current = editor.deltaDecorations(executionDecorationIds.current, []);
+      return;
+    }
+    const activePath = activeTab.path.replace(/\\/g, '/').replace(/^\/+/, '');
+    const executionPath = executionLocation.path.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (activePath !== executionPath) {
+      executionDecorationIds.current = editor.deltaDecorations(executionDecorationIds.current, []);
+      return;
+    }
+    const lineNumber = Math.min(executionLocation.line, editor.getModel()?.getLineCount() ?? executionLocation.line);
+    editor.revealLineInCenter(lineNumber);
+    executionDecorationIds.current = editor.deltaDecorations(executionDecorationIds.current, [{
+      range: { startLineNumber: lineNumber, endLineNumber: lineNumber, startColumn: 1, endColumn: 1 },
+      options: {
+        isWholeLine: true,
+        className: 'qa-debug-execution-line',
+        glyphMarginClassName: 'qa-debug-execution-glyph',
+      },
+    }]);
+  }, [activeTab?.path, editorMountVersion, editorReady, editorRef, executionLocation, loadingFile]);
 
   return (
     <div style={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -83,7 +179,9 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
             fontFamily: "'JetBrains Mono', Consolas, Menlo, monospace",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
+            stickyScroll: { enabled: stickyScroll },
             lineNumbers: 'on',
+            glyphMargin: true,
             renderLineHighlight: 'all',
             automaticLayout: true,
             tabSize: 4,

@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
+import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import { MonacoEditorPane, MonacoEditorInstance } from '../features/automation-studio/components/MonacoEditorPane';
 import { EditorTab } from '../features/automation-studio/types';
-import { GitDiffResult, Project, RecorderStep, TestCasePriority } from '../types';
+import { AITraceEvent, GitDiffResult, Project, RecorderStep, TestCasePriority } from '../types';
 
 type StepAction = RecorderStep['action'];
-type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][] } | null; message?: string };
+type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][]; selection?: { selected_candidate?: RecorderStep['locator']; summary?: RecorderStep['locator_decision'] } | null } | null; message?: string };
 
 const actions: StepAction[] = ['navigate','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
 const labels: Record<StepAction, string> = { navigate:'打开页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
@@ -47,9 +48,11 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const [tagsText, setTagsText] = useState('recorder');
   const [markersText, setMarkersText] = useState('');
   const [code, setCode] = useState('');
+  const [scriptGeneration, setScriptGeneration] = useState(0);
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
+  const [locatorTraceEvents, setLocatorTraceEvents] = useState<AITraceEvent[]>([]);
   const pickTargetStepRef = useRef<string | null>(null);
   const [priority, setPriority] = useState<TestCasePriority>('P2');
   const aiTask = useContextTask(projectId, 'recorder', sessionId);
@@ -62,6 +65,12 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const projectStepsKey = projectId ? `ai-qa.recorder.draft-steps.${projectId}` : '';
   const projectCodeKey = projectId ? `ai-qa.recorder.code.${projectId}` : '';
   const tab = useMemo<EditorTab | undefined>(() => code ? ({ path: filePath, name: filePath.split('/').pop() || 'test.py', content: code, initialContent: code, isDirty: false }) : undefined, [code, filePath]);
+
+  useEffect(() => {
+    if (!scriptGeneration || !editorReady) return;
+    editorRef.current?.setPosition({ lineNumber: 1, column: 1 });
+    editorRef.current?.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
+  }, [scriptGeneration, editorReady]);
 
   useEffect(() => {
     if (!code) { setEditorReady(false); setShowCodeFallback(false); return; }
@@ -101,23 +110,37 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
 
   useEffect(() => {
     if (!sessionId) return;
-    const ws = new WebSocket(getRecorderSocketUrl(sessionId));
-    wsRef.current = ws;
-    ws.onopen = () => setSocketState('已连接');
-    ws.onclose = (event) => { setSocketState(event.code === 1000 ? '已关闭' : `连接中断 (${event.code})`); };
-    ws.onerror = () => setSocketState('连接错误');
-    ws.onmessage = (event) => {
+    let active = true;
+    let socket: WebSocket | null = null;
+    void Promise.all([
+      getRecorderSocketUrl(sessionId),
+      api.createStreamTicket('recorder', sessionId),
+    ]).then(([url, streamTicket]) => {
+      if (!active) return;
+      const ws = new WebSocket(url);
+      socket = ws;
+      wsRef.current = ws;
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'auth', stream_ticket: streamTicket }));
+        setSocketState('已连接');
+      };
+      ws.onclose = (event) => { setSocketState(event.code === 1000 ? '已关闭' : `连接中断 (${event.code})`); };
+      ws.onerror = () => setSocketState('连接错误');
+      ws.onmessage = (event) => {
       const data = JSON.parse(event.data) as Frame;
       if (data.type === 'frame') {
         setFrame(data);
         if (data.steps) setSteps(data.steps);
+        if (data.locator_trace?.length) {
+          setLocatorTraceEvents((current) => current[0]?.event_id === data.locator_trace?.[0]?.event_id ? current : data.locator_trace ?? []);
+        }
         if (data.picked && pickTargetStepRef.current) {
-          const best = data.picked.ranked_candidates?.[0];
+          const best = data.picked.selection?.selected_candidate ?? data.picked.ranked_candidates?.[0];
           if (best) {
             setCode('');
             setSteps((current) => current.map((step) => {
               if (step.id !== pickTargetStepRef.current) return step;
-              const updated = { ...step, locator: best, frame_path: data.picked?.frame_path || [] };
+              const updated = { ...step, locator: best, frame_path: data.picked?.frame_path || [], locator_decision: data.picked?.selection?.summary ?? null };
               send('edit_step', { step: updated });
               return updated;
             }));
@@ -135,8 +158,15 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
         if (data.type === 'command_error' && data.url) pendingUrlRef.current = data.url;
         setError(recorderErrorMessage(data.message || '浏览器操作失败', data.url));
       }
-    };
-    return () => { ws.close(); if (wsRef.current === ws) wsRef.current = null; };
+      };
+    }).catch((error) => {
+      if (active) setSocketState(error instanceof Error ? error.message : '连接错误');
+    });
+    return () => { active = false; socket?.close(); if (wsRef.current === socket) wsRef.current = null; };
+  }, [sessionId]);
+
+  useEffect(() => {
+    setLocatorTraceEvents([]);
   }, [sessionId]);
 
   useEffect(() => {
@@ -224,11 +254,12 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   };
 
   const generate = async () => {
-    if (!sessionId) return;
+    if (!sessionId || busy) return;
     setBusy(true); setError('');
     try {
       const result = await api.generateRecorderCode(sessionId, { case_name: caseName, file_path: filePath, test_name: testName, steps });
       setCode(result.code);
+      setScriptGeneration((current) => current + 1);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -281,6 +312,14 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
 
   const projectName = projects.find((project) => project.id === projectId)?.name;
   const isConnected = socketState === '已连接';
+  const locatorDecisionMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'decision_completed')?.metadata ?? {};
+  const locatorVerificationMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'verification_completed')?.metadata ?? {};
+  const verificationFacts = (['unique', 'visible', 'enabled', 'editable', 'clickable'] as const)
+    .filter((key) => typeof locatorVerificationMetadata[key] === 'boolean')
+    .map((key) => `${key}=${locatorVerificationMetadata[key] === true ? 'yes' : 'no'}`);
+  const locatorEngine = String(locatorDecisionMetadata.engine ?? 'Local Strategy');
+  const locatorModel = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.model === 'string' ? locatorDecisionMetadata.model : '';
+  const locatorLatency = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.latency_ms === 'number' ? `${locatorDecisionMetadata.latency_ms.toFixed(1)} ms` : '';
 
   return (
     <div className="recorder-page">
@@ -308,7 +347,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
             <Square size={15} /> 停止
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || busy} onClick={generate}>
-            <Code2 size={16} /> 生成脚本
+            <Code2 size={16} /> {busy ? '正在处理…' : code ? '重新生成脚本' : '生成脚本'}
           </button>
           <button className="btn btn-primary" disabled={!sessionId || !steps.length || busy || aiTask.busy} onClick={() => startAiTask('CREATE_TEST')}>
             <Code2 size={16} /> 生成自动化测试
@@ -429,7 +468,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
           )}
         </section>
 
-        <section className="recorder-panel recorder-inspector-panel">
+        <section className={`recorder-panel recorder-inspector-panel${locatorTraceEvents.length ? ' has-locator-trace' : ''}`}>
           <div className="recorder-steps-heading">
             <div>
               <strong>执行步骤</strong>
@@ -445,6 +484,27 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
             </select>
           </div>
 
+          {locatorTraceEvents.length > 0 && (
+            <div className="recorder-locator-trace">
+              <strong>Locator Decision</strong>
+              <div className={`recorder-locator-summary${locatorVerificationMetadata.verified === true ? ' is-verified' : locatorVerificationMetadata.verified === false ? ' is-unverified' : ''}`} role="status">
+                <span>
+                  Decision Engine: {locatorEngine}
+                  {locatorModel ? ` · Model ${locatorModel}` : ''}
+                  {locatorLatency ? ` · Latency ${locatorLatency}` : ''}
+                  {' · Selected '}{String(locatorDecisionMetadata.candidate_id ?? 'unavailable')}
+                  {' · '}{typeof locatorDecisionMetadata.candidate_count === 'number' ? locatorDecisionMetadata.candidate_count : '—'} 候选
+                </span>
+                <span>
+                  Verification: {locatorVerificationMetadata.verified === true ? 'PASS' : locatorVerificationMetadata.verified === false ? 'FAILED' : 'UNKNOWN'}
+                  {typeof locatorDecisionMetadata.selected_locator === 'string' ? ` · ${locatorDecisionMetadata.selected_locator}` : ''}
+                  {verificationFacts.length > 0 ? ` · ${verificationFacts.join(' · ')}` : ''}
+                </span>
+              </div>
+              <AIExecutionTimeline events={locatorTraceEvents} running={false} />
+            </div>
+          )}
+
           <div className="recorder-steps-list">
             {steps.map((step, index) => (
               <div key={step.id} className="recorder-step-row">
@@ -458,7 +518,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
                   className="btn btn-secondary btn-sm recorder-step-pick"
                   title="从内置浏览器拾取此步骤定位器"
                   disabled={!sessionId}
-                  onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); send('pick_element'); }}
+                  onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); send('pick_element', { step_action: step.action }); }}
                 >
                   <Crosshair size={14} />{pickTargetStep === step.id ? '请在页面点击' : '拾取'}
                 </button>
@@ -486,9 +546,19 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
           </details>
 
           <div className="recorder-editor-panel">
-            <div className="recorder-panel-heading"><strong>生成的 Python 脚本</strong><span>Playwright</span></div>
+            <div className="recorder-panel-heading">
+              <strong>生成的 Python 脚本</strong>
+              <div className="recorder-editor-actions">
+                <span>Playwright</span>
+                {code && (
+                  <button type="button" className="btn btn-secondary btn-sm" aria-label="重新生成 Python 脚本" title="按当前执行步骤重新生成，替换当前脚本内容" disabled={!sessionId || busy} onClick={generate}>
+                    <RotateCw size={13} aria-hidden="true" /> 重新生成
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="recorder-editor-surface">
-              <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
+              <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
               {showCodeFallback && !editorReady && (
                 <textarea aria-label="生成的 Python 脚本" value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} />
               )}

@@ -15,6 +15,9 @@ const STARTED_TO_COMPLETED: Record<string, string> = {
   'model.started': 'model.completed',
   'decision.started': 'decision.completed',
   'validation.started': 'validation.completed',
+  analysis_started: 'diagnosis_completed',
+  decision_started: 'decision_completed',
+  verification_started: 'verification_completed',
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -34,6 +37,16 @@ const EVENT_LABELS: Record<string, string> = {
   'run.completed': 'traceRunCompleted',
   'run.failed': 'traceRunFailed',
   'run.cancelled': 'traceRunCancelled',
+  analysis_started: 'traceAnalysisStarted',
+  evidence_collected: 'traceEvidenceCollected',
+  candidates_generated: 'traceCandidatesGenerated',
+  decision_started: 'traceDecisionStarted',
+  decision_completed: 'traceDecisionCompleted',
+  verification_started: 'traceVerificationStarted',
+  verification_completed: 'traceVerificationCompleted',
+  diagnosis_completed: 'traceDiagnosisCompleted',
+  repair_suggested: 'traceRepairSuggested',
+  failed: 'traceFailed',
 };
 
 export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
@@ -45,18 +58,22 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
   const { t } = useTranslation('studioPanels');
   const [expanded, setExpanded] = useState(true);
   const visibleEvents = useMemo(() => events.filter((event) => event.type !== 'model.delta'), [events]);
-  if (!visibleEvents.length) return null;
+  if (!visibleEvents.length && !running) return null;
 
   const latestModelEvent = [...events].reverse().find((event) => typeof event.metadata?.provider === 'string' || typeof event.metadata?.model === 'string');
   const modelMetadata = latestModelEvent?.metadata ?? {};
   const provider = typeof modelMetadata.provider === 'string' ? modelMetadata.provider : '';
   const model = typeof modelMetadata.model === 'string' ? modelMetadata.model : '';
-  const fallback = modelMetadata.fallback_used === true || ['fake', 'local-policy', 'fallback'].includes(provider);
+  const simulation = provider === 'fake';
+  const fallback = !simulation && (modelMetadata.fallback_used === true || ['local-policy', 'local-strategy', 'fallback'].includes(provider));
   const failure = [...events].reverse().find((event) => event.type === 'run.failed');
   const providerUnavailable = Boolean(failure) && !fallback;
   const cancelled = [...events].reverse().find((event) => event.type === 'run.cancelled');
 
   const getState = (event: AITraceEvent, index: number): 'done' | 'active' | 'error' | 'pending' => {
+    if (['FAILED', 'BLOCKED'].includes(event.status ?? '') || event.metadata?.status === 'FAILED') return 'error';
+    if (['PENDING', 'SKIPPED', 'CANCELLED', 'UNVERIFIED'].includes(event.status ?? '')) return 'pending';
+    if (event.type === 'verification_completed' && event.metadata?.verified === false) return 'error';
     if (event.type === 'run.failed') return 'error';
     if (event.type === 'run.cancelled') return 'pending';
     const completionType = STARTED_TO_COMPLETED[event.type];
@@ -66,6 +83,7 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
       if (running) return 'active';
       return 'pending';
     }
+    if (['_collected', '_generated', '_completed', '_suggested'].some((suffix) => event.type.endsWith(suffix))) return 'done';
     if (event.type.endsWith('.completed') || event.type.endsWith('.collected') || event.type.endsWith('.loaded')) return 'done';
     if (event.type.endsWith('.failed')) return 'error';
     return 'pending';
@@ -78,7 +96,7 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
           <span className="ai-execution-title">{running ? t('assistant.aiAnalyzing') : t('assistant.aiExecution')}</span>
           {(provider || model) && (
             <span className={`ai-provider-badge${providerUnavailable ? ' is-unavailable' : fallback ? ' is-fallback' : ' is-real'}`}>
-              {providerUnavailable ? t('assistant.providerUnavailable') : fallback ? t('assistant.fallbackMode') : t('assistant.realProvider')}
+              {providerUnavailable ? t('assistant.providerUnavailable') : simulation ? t('assistant.simulationMode') : fallback ? t('assistant.fallbackMode') : t('assistant.realProvider')}
               {[provider, model].filter(Boolean).join(' · ') && ` · ${[provider, model].filter(Boolean).join(' · ')}`}
             </span>
           )}
@@ -95,6 +113,12 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
           <ChevronDown size={13} aria-hidden="true" /> {expanded ? t('assistant.hideTimeline') : t('assistant.showTimeline')}
         </summary>
         <ol className="ai-execution-list">
+          {!visibleEvents.length && running && (
+            <li className="ai-execution-step is-active">
+              <LoaderCircle size={14} aria-hidden="true" />
+              <div><strong>{t('assistant.waitingProgress')}</strong></div>
+            </li>
+          )}
           {visibleEvents.map((event, index) => {
             const state = getState(event, index);
             const detail = event.message && !event.message.includes('evidence source') && event.type !== 'run.failed' ? event.message : '';
@@ -116,9 +140,14 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
         </ol>
       </details>
 
+      {simulation && (
+        <p className="ai-fallback-notice" role="status">
+          {t('assistant.simulationModeMessage', { model: model || provider || 'fake-qa-model' })}
+        </p>
+      )}
       {fallback && (
         <p className="ai-fallback-notice" role="status">
-          {t(provider === 'local-policy' || provider === 'fallback' ? 'assistant.localFallbackMessage' : 'assistant.fakeFallbackMessage', { model: model || provider || 'fake-qa-model' })}
+          {t(['local-policy', 'local-strategy', 'fallback'].includes(provider) ? 'assistant.localFallbackMessage' : 'assistant.fakeFallbackMessage', { model: model || provider || 'local-strategy' })}
         </p>
       )}
       {failure && (
