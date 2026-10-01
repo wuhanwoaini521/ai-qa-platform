@@ -219,14 +219,35 @@ class WorkerDaemon:
                 )
                 response.raise_for_status()
 
-            result = await self._runner.run_suite(
-                workspace_dir=workspace_dir,
-                nodeids=job_data["nodeids"],
-                markers=run["markers"],
-                environment={**run["environment"], "QA_ARTIFACT_DIR": str(artifact_dir)},
-                interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
-                on_log=send_log,
+            runner_task = asyncio.create_task(
+                self._runner.run_suite(
+                    workspace_dir=workspace_dir,
+                    nodeids=job_data["nodeids"],
+                    markers=run["markers"],
+                    environment={**run["environment"], "QA_ARTIFACT_DIR": str(artifact_dir)},
+                    interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
+                    on_log=send_log,
+                )
             )
+            cancellation_task = asyncio.create_task(self._watch_job_cancellation(job_id))
+            try:
+                done, _ = await asyncio.wait(
+                    {runner_task, cancellation_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if cancellation_task in done and cancellation_task.result():
+                    runner_task.cancel()
+                    await asyncio.gather(runner_task, return_exceptions=True)
+                    logger.info("Job %s cancelled by the platform", job_id)
+                    return
+                result = await runner_task
+            finally:
+                if not cancellation_task.done():
+                    cancellation_task.cancel()
+                if not runner_task.done():
+                    runner_task.cancel()
+                await asyncio.gather(cancellation_task, runner_task, return_exceptions=True)
+
             result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
             response = await self._http_client.post(
                 f"/api/jobs/{job_id}/result",
@@ -235,6 +256,9 @@ class WorkerDaemon:
             response.raise_for_status()
             logger.info("Successfully completed job %s", job_id)
 
+        except asyncio.CancelledError:
+            logger.info("Worker is shutting down while processing job %s", job_id)
+            return
         except Exception as exc:
             logger.exception("Failed to execute job %s: %s", job_id, exc)
             if self._http_client is not None:
@@ -242,3 +266,17 @@ class WorkerDaemon:
                     await self._http_client.post(f"/api/jobs/{job_id}/fail", json={"error_message": str(exc)})
                 except Exception:
                     pass
+
+    async def _watch_job_cancellation(self, job_id: str) -> bool:
+        """Poll the durable job state so an API cancellation stops the local pytest process."""
+        assert self._http_client is not None
+        while True:
+            try:
+                response = await self._http_client.get(f"/api/jobs/{job_id}")
+                if response.status_code == 200 and response.json().get("status") == "CANCELLED":
+                    return True
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("Job cancellation poll failed for %s: %s", job_id, exc)
+            await asyncio.sleep(2.0)

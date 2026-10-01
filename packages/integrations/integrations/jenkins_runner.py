@@ -51,6 +51,7 @@ class JenkinsRunnerBackend(RunnerBackend):
         self.config = config or JenkinsConfig()
         self.client = client
         self.base_url = self.config.base_url.rstrip("/")
+        self._log_offsets: dict[str, int] = {}
 
     def _get_auth(self) -> tuple[str, str] | None:
         user = self.config.user or os.getenv("JENKINS_USER")
@@ -265,7 +266,7 @@ class JenkinsRunnerBackend(RunnerBackend):
 
         build_number = external_job_id
         auth = self._get_auth()
-        offset = 0
+        offset = self._log_offsets.get(build_number, 0)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(
@@ -273,14 +274,35 @@ class JenkinsRunnerBackend(RunnerBackend):
                 auth=auth,
             )
             if res.status_code == 200:
-                yield res.text
+                try:
+                    next_offset = int(res.headers.get("X-Text-Size", offset + len(res.content)))
+                except ValueError:
+                    next_offset = offset + len(res.content)
+                self._log_offsets[build_number] = max(offset, next_offset)
+                if res.text:
+                    yield res.text
 
     async def stop(self, run_id: str, external_job_id: str | None = None) -> bool:
-        if not external_job_id or external_job_id.startswith("queue:"):
-            return True
-
+        if not external_job_id:
+            return False
         auth = self._get_auth()
         async with httpx.AsyncClient(timeout=5.0) as client:
+            if external_job_id.startswith("queue:"):
+                queue_id = external_job_id.removeprefix("queue:")
+                if not queue_id.isdigit():
+                    return False
+                queue_res = await client.get(f"{self.base_url}/queue/item/{queue_id}/api/json", auth=auth)
+                executable = queue_res.json().get("executable") if queue_res.status_code == 200 else None
+                build_number = executable.get("number") if isinstance(executable, dict) else None
+                if build_number is None:
+                    response = await client.post(
+                        f"{self.base_url}/queue/cancelItem",
+                        params={"id": queue_id},
+                        auth=auth,
+                    )
+                    return response.status_code in (200, 202, 204, 302)
+                external_job_id = str(build_number)
+
             res = await client.post(
                 f"{self.base_url}/job/{self.config.job_name}/{external_job_id}/stop",
                 auth=auth,
@@ -298,6 +320,8 @@ class FakeJenkinsServer:
         self.next_build_number = 42
         self.queue: dict[str, dict[str, Any]] = {}
         self.builds: dict[str, dict[str, Any]] = {}
+        self.cancelled_queue_ids: set[str] = set()
+        self.stopped_build_ids: set[str] = set()
 
     def handle_request(self, req: httpx.Request) -> httpx.Response:
         path = req.url.path
@@ -308,6 +332,14 @@ class FakeJenkinsServer:
             if auth and "invalid" in auth:
                 return httpx.Response(401, json={"error": "Invalid credentials"})
             return httpx.Response(200, json={"_class": "hudson.model.Hudson", "jobs": [{"name": self.job_name}]})
+
+        if path == "/queue/cancelItem":
+            queue_id = req.url.params.get("id", "")
+            if queue_id not in self.queue:
+                return httpx.Response(404)
+            self.cancelled_queue_ids.add(queue_id)
+            self.queue.pop(queue_id, None)
+            return httpx.Response(200, text="Queue item cancelled")
 
         # Trigger build: /job/{job_name}/buildWithParameters or /build
         if f"/job/{self.job_name}/build" in path:
@@ -362,12 +394,15 @@ class FakeJenkinsServer:
 
         # Console logs: /job/{job_name}/{bnum}/logText/progressiveText
         if "/logText/progressiveText" in path:
-            return httpx.Response(
-                200, text="[pytest] Running automated test suite on Jenkins runner...\n[pytest] 5 passed in 4.2s\n"
-            )
+            log_text = b"[pytest] Running automated test suite on Jenkins runner...\n[pytest] 5 passed in 4.2s\n"
+            offset = int(req.url.params.get("start", "0"))
+            return httpx.Response(200, content=log_text[offset:], headers={"X-Text-Size": str(len(log_text))})
 
         # Stop build: /job/{job_name}/{bnum}/stop
         if "/stop" in path:
+            match = re.search(r"/job/[^/]+/(\d+)/stop", path)
+            if match:
+                self.stopped_build_ids.add(match.group(1))
             return httpx.Response(200, text="Build aborted")
 
         return httpx.Response(404)
