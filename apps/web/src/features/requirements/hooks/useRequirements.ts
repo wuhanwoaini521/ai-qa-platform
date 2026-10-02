@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client';
 import { Project, Requirement, RequirementCreate, RequirementStatus } from '../../../types';
+import { recallEntity, rememberEntity } from '../../lifecycle/contextMemory';
 
 interface UseRequirementsOptions {
   selectedProjectId: string | null;
@@ -22,12 +23,8 @@ export function useRequirements({
       setLoading(true);
       const data = await api.getRequirements(selectedProjectId || undefined);
       setRequirements(data);
-      if (data.length > 0 && !selectedReq) {
-        const requested = initialRequirementId
-          ? data.find((r) => r.id === initialRequirementId)
-          : undefined;
-        setSelectedReq(requested ?? data[0]);
-      }
+      const id=initialRequirementId??recallEntity(selectedProjectId,'requirement');
+      setSelectedReq(data.find(r=>r.id===id)??data[0]??null);
     } catch (err) {
       console.error('Failed to load requirements', err);
     } finally {
@@ -37,7 +34,8 @@ export function useRequirements({
 
   useEffect(() => {
     fetchRequirements();
-  }, [selectedProjectId]);
+  }, [selectedProjectId,initialRequirementId]);
+  useEffect(()=>{if(selectedReq)rememberEntity(selectedReq.project_id,'requirement',selectedReq.id);},[selectedReq]);
 
   const createRequirement = async (data: RequirementCreate): Promise<Requirement | null> => {
     try {

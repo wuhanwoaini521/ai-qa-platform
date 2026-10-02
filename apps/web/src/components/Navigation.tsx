@@ -58,7 +58,7 @@ export const Navigation: React.FC = () => {
       icon: FileText,
       to: projectBase ? `${projectBase}/requirements` : '/requirements',
     },
-    { id: 'test_cases', labelKey: 'testCases', icon: CheckSquare, to: '/test-cases' },
+    { id: 'test_cases', labelKey: 'testCases', icon: CheckSquare, to: projectBase ? `${projectBase}/test-cases` : '/test-cases' },
     {
       id: 'automation',
       labelKey: 'automation',

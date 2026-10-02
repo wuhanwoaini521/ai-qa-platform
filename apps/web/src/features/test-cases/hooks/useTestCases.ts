@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client';
 import { AutomationStatus, Project, TestCase, TestCaseCreate } from '../../../types';
+import { recallEntity, rememberEntity } from '../../lifecycle/contextMemory';
 
 interface UseTestCasesOptions {
   selectedProjectId: string | null;
@@ -27,12 +28,8 @@ export function useTestCases({
       const data = await api.getTestCases(selectedProjectId || undefined);
       setTestCases(data);
       if (data.length > 0) {
-        const requested = initialTestCaseId
-          ? data.find((c) => c.id === initialTestCaseId)
-          : undefined;
-        const found = selectedCase
-          ? data.find((c) => c.id === selectedCase.id) || data[0]
-          : requested ?? data[0];
+        const id=initialTestCaseId??recallEntity(selectedProjectId,'case');
+        const found=data.find(c=>c.id===id)??data[0];
         setSelectedCase(found);
         onCaseSelected(found.id);
       } else {
@@ -48,7 +45,8 @@ export function useTestCases({
 
   useEffect(() => {
     fetchTestCases();
-  }, [selectedProjectId]);
+  }, [selectedProjectId,initialTestCaseId]);
+  useEffect(()=>{if(selectedCase)rememberEntity(selectedCase.project_id,'case',selectedCase.id);},[selectedCase]);
 
   const createTestCase = async (data: TestCaseCreate): Promise<TestCase | null> => {
     try {

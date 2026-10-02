@@ -1,4 +1,5 @@
 import { responseError } from './errors';
+import type { ProjectKnowledge } from '../features/lifecycle/types';
 import { parseEventFrame } from './eventStream';
 import {
   ApplyRepairPayload,
@@ -385,6 +386,17 @@ async function streamAITraceRequest(
 }
 
 export const api = {
+  seedGoldenDemo: () => request<{project_id: string; created: boolean}>('/projects/golden-demo/seed', {method: 'POST'}),
+  resetGoldenDemo: (id: string) => request<{project_id: string}>(`/projects/${encodeURIComponent(id)}/demo/reset`, {method: 'POST'}),
+  getProjectKnowledge: (id: string, options: {focus?: string; hops?: number; requirement_id?: string} = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(options).forEach(([key, value]) => { if (value !== undefined) query.set(key, String(value)); });
+    return request<ProjectKnowledge>(`/projects/${encodeURIComponent(id)}/knowledge?${query}`);
+  },
+  streamRequirementLifecycle: (id: string, onEvent: (event: AITraceEvent) => void, signal?: AbortSignal) =>
+    streamAITraceRequest(`/requirements/${encodeURIComponent(id)}/lifecycle/analyze/stream`, undefined, onEvent, signal ?? new AbortController().signal),
+  adoptLifecycleDesigns: (id: string) => request<TestDesign[]>(`/requirements/${encodeURIComponent(id)}/lifecycle/designs`, {method: 'POST'}),
+  adoptLifecycleCase: (id: string) => request<TestCase>(`/test-designs/${encodeURIComponent(id)}/lifecycle/case`, {method: 'POST'}),
   createStreamTicket,
   streamQAAssistant: (data: QAChatRequest, onEvent: (event: AITraceEvent) => void, signal: AbortSignal) =>
     streamAITraceRequest('/qa-assistant/chat/stream', data, onEvent, signal),

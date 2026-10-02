@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../../api/client';
 import { errorText } from '../errorText';
 
@@ -13,6 +13,13 @@ export const useRunExecution = ({ projectId, activeTabPath, onNavigateToRuns }: 
   // Execution from Studio
   const [runningTest, setRunningTest] = useState<boolean>(false);
   const [lastRunResult, setLastRunResult] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  useEffect(()=>{setActiveRunId(null);setRunningTest(false);setLastRunResult(null);},[projectId]);
+  useEffect(()=>{
+    if(!activeRunId)return;let disposed=false;
+    const sync=async()=>{try{const value=await api.getTestRun(activeRunId);if(!disposed){setRunningTest(['RUNNING','QUEUED'].includes(value.status));if(!['RUNNING','QUEUED'].includes(value.status))window.clearInterval(timer);}}catch{if(!disposed)setRunningTest(false);}};
+    const timer=window.setInterval(()=>{void sync();},1500);void sync();return()=>{disposed=true;window.clearInterval(timer);};
+  },[activeRunId]);
 
   // Run a specific test nodeid or the active file
   const runExecution = async (targetNodeid?: string) => {
@@ -34,9 +41,7 @@ export const useRunExecution = ({ projectId, activeTabPath, onNavigateToRuns }: 
       });
 
       setLastRunResult(`Run #${run.id.slice(0, 8)} started with status: ${run.status}`);
-      if (onNavigateToRuns) {
-        onNavigateToRuns(run.id);
-      }
+      setActiveRunId(run.id);
     } catch (err) {
       setLastRunResult(`Execution error: ${errorText(err)}`);
     } finally {
@@ -44,5 +49,5 @@ export const useRunExecution = ({ projectId, activeTabPath, onNavigateToRuns }: 
     }
   };
 
-  return { runningTest, lastRunResult, runExecution };
+  return { runningTest, lastRunResult, runExecution, activeRunId, onNavigateToRuns };
 };

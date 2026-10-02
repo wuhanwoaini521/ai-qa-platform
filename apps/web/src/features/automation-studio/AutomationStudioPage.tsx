@@ -2,7 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bug, CheckCircle2, Play, Save } from 'lucide-react';
 import { api } from '../../api/client';
-import { Breakpoint, Project } from '../../types';
+import { Breakpoint, Project, TestCase } from '../../types';
+import { Link, useSearchParams } from 'react-router-dom';
+import { KnowledgeDrawer } from '../lifecycle/KnowledgeDrawer';
+import { StudioRunPanel } from '../lifecycle/StudioRunPanel';
+import { CommandPalette } from '../lifecycle/CommandPalette';
+import '../lifecycle/lifecycle.css';
 import { FileOpModalState, SidebarTab } from './types';
 import { errorText } from './errorText';
 import { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
@@ -53,7 +58,19 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   initialDebugNodeId,
 }) => {
   const { t } = useTranslation('studioShell');
+  const { t: lc } = useTranslation('lifecycle');
+  const [query,setQuery] = useSearchParams();
+  const [showBrowser,setShowBrowser]=useState(false);
+  const [showAssistant,setShowAssistant]=useState(false);
+  const [showContext,setShowContext]=useState(true);
+  const [showFiles,setShowFiles]=useState(true);
+  const [showCommands,setShowCommands]=useState(false);
+  const [showKnowledge,setShowKnowledge]=useState(false);
+  const [projectCases,setProjectCases]=useState<TestCase[]>([]);
+  const preset=query.get('preset')??'code';
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
+  useEffect(()=>{let disposed=false;setProjectCases([]);if(currentProjectId)api.getTestCases(currentProjectId).then(items=>{if(!disposed)setProjectCases(items);}).catch(()=>{});return()=>{disposed=true;};},[currentProjectId]);
+  useEffect(()=>{setShowBrowser(preset==='record'||currentProjectId==='proj_golden_shop_v1');setShowAssistant(preset==='review');setShowContext(true);setShowFiles(preset!=='debug');},[preset,currentProjectId]);
   const generateTask = useContextTask(currentProjectId, 'studio', currentProjectId);
 
   // Cross-panel UI state (read/written by more than one panel)
@@ -108,8 +125,14 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     activeTab: editor.activeTab,
     editorRef,
     onInsertFallback: editor.updateContent,
+    caseId: query.get('caseId'),
   });
   const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns });
+  useEffect(()=>{if(run.activeRunId)setShowBrowser(true);},[run.activeRunId]);
+  const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
+  const selectedTarget=linkedCase?.binding?.file_path===editor.activeTabPath?linkedCase.binding.nodeid:undefined;
+  const saveAndRun=async(target?:string)=>{if(!editor.activeTabPath&&!target){setDebugPreparationError(lc('noSourceFile'));return;}if(await editor.saveAll())await run.runExecution(target??selectedTarget??editor.activeTabPath??undefined);};
+  const runCurrentRef=useRef(saveAndRun);runCurrentRef.current=saveAndRun;
   const debug = useDebugSession({
     projectId: currentProjectId,
     breakpoints,
@@ -216,7 +239,11 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   // Keyboard Shortcuts (Cmd/Ctrl + S, Cmd/Ctrl + Shift + S, Cmd/Ctrl + P)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();void runCurrentRef.current();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();setShowCommands(v=>!v);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
         e.preventDefault();
         setShowQuickOpen((prev) => !prev);
         setQuickOpenQuery('');
@@ -300,7 +327,15 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   }
 
   return (
-    <div className="studio-container">
+    <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+      <div className="lc-preset-bar"><Link to={`/projects/${currentProjectId}`}>{projects.find(p=>p.id===currentProjectId)?.name}</Link><span>/ Studio</span>{linkedCase&&<Link to={`/projects/${currentProjectId}/test-cases/${linkedCase.id}`}>{linkedCase.test_model?.display_id||linkedCase.title}</Link>}
+        <span className="lc-muted">{lc('preset')}</span>{['code','debug','review'].map(view=><button key={view} className={`btn btn-sm ${preset===view?'btn-primary':'btn-secondary'}`} onClick={()=>setQuery({...Object.fromEntries(query),preset:view})}>{view==='code'?'Code':view==='debug'?'Debug':'Review'}</button>)}
+        <button className="btn btn-secondary btn-sm" onClick={()=>setShowFiles(v=>!v)} aria-pressed={showFiles}>{lc('sourceDocument')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowContext(v=>!v)} aria-pressed={showContext}>{lc('context')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowBrowser(v=>!v)} aria-pressed={showBrowser}>{lc('browser')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowAssistant(v=>!v)} aria-pressed={showAssistant}>{lc('assistant')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowCommands(true)}>{lc('commands')} ⌃K</button>
+      </div>
+      {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void editor.openFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void editor.openFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}</div>}
+      {showCommands&&<CommandPalette onClose={()=>setShowCommands(false)} commands={[{label:lc('runCurrent'),hint:'Ctrl+Enter',run:()=>{void saveAndRun();}},{label:lc('sourceDocument'),hint:'Ctrl+P',run:()=>setShowQuickOpen(true)},{label:lc('showBrowser'),run:()=>setShowBrowser(true)},{label:lc('showAssistant'),run:()=>setShowAssistant(true)},...(linkedCase?[{label:lc('inspectKnowledge'),run:()=>setShowKnowledge(true)}]:[])]}/>}
+      {showKnowledge&&linkedCase&&<KnowledgeDrawer projectId={currentProjectId} entityId={linkedCase.id} onClose={()=>setShowKnowledge(false)}/>}
+    <div className="studio-container" style={{flex:1,height:'auto',minHeight:0}}>
       {/* Quick Open Dialog (Cmd+P) */}
       {showQuickOpen && (
         <QuickOpen
@@ -356,7 +391,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       )}
 
       {/* Left Sidebar: File Explorer & Test Explorer */}
-      <div className="studio-sidebar">
+      <div className="studio-sidebar" style={showFiles?undefined:{display:'none'}}>
         {/* Project Selector inside studio */}
         <ProjectSelector
           projects={projects}
@@ -424,7 +459,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               loading={tests.loadingTests}
               runningTest={run.runningTest}
               onOpenFile={editor.openFile}
-              onRunTest={run.runExecution}
+              onRunTest={(nodeid)=>{void saveAndRun(nodeid);}}
               onDebugTest={(nodeid) => { void startDebug(nodeid); }}
             />
           )}
@@ -506,7 +541,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               <button
                 className="studio-tool is-primary"
                 disabled={run.runningTest}
-                onClick={() => run.runExecution(editor.activeTab?.path)}
+                onClick={() => {void saveAndRun();}}
                 title={t('editor.runTestTooltip')}
               >
                 <Play size={14} />
@@ -609,7 +644,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       </div>
 
       {/* Right Panel: Interactive QA Assistant Sidecar */}
-      <QAAssistantPanel
+      {showBrowser&&<aside className="lc-studio-preview"><StudioRunPanel key={currentProjectId} runId={run.activeRunId} projectId={currentProjectId} onStep={async(path,line)=>{await editor.openFile(path);setSourceFocus({path,line});}}/></aside>}
+      {showAssistant&&<QAAssistantPanel
         messages={assistant.assistantMessages}
         input={assistant.assistantInput}
         loading={assistant.assistantLoading}
@@ -620,12 +656,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         onInsertSnippet={assistant.insertSnippet}
         onStartGenerateTask={(url, goal) => {
           if (!currentProjectId) return;
-          void generateTask.start({ type: 'CREATE_TEST', goal, project_id: currentProjectId, workspace_id: currentProjectId, inputs: { url, requirement: goal } });
+          void generateTask.start({ type: 'CREATE_TEST', goal, project_id: currentProjectId, workspace_id: currentProjectId, inputs: { ...(url?{url}:{}), requirement: goal, ...(linkedCase?{test_case_id:linkedCase.id}:{}) } });
         }}
         generateTask={generateTask.task}
         generateTaskBusy={generateTask.busy}
         generateTaskError={generateTask.error}
-      />
+      />}
+    </div>
     </div>
   );
 };

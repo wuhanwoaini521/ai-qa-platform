@@ -3,6 +3,8 @@ import { Trans, useTranslation } from 'react-i18next';
 import { Project, ProjectCreate, FrameworkType } from '../types';
 import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
+import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../api/client';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -18,9 +20,14 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   loading,
   onCreateProject,
   onSelectProject,
+  onRefresh,
   onNavigate,
 }) => {
   const { t } = useTranslation('projects');
+  const { t: lc } = useTranslation('lifecycle');
+  const navigate = useNavigate();
+  const [demoBusy,setDemoBusy]=useState(false);
+  const [demoError,setDemoError]=useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<ProjectCreate>({
     name: '',
@@ -59,10 +66,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('titles:projects')}</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('subtitle')}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="btn btn-secondary" disabled={demoBusy} onClick={async()=>{setDemoBusy(true);setDemoError('');try{const result=await api.seedGoldenDemo();onSelectProject(result.project_id);onRefresh();navigate(`/projects/${result.project_id}`);}catch(error){setDemoError(String(error));}finally{setDemoBusy(false);}}}>{demoBusy?lc('loading'):lc('openGoldenDemo')}</button><button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
           <Plus size={16} /> {t('createProject')}
-        </button>
+        </button></div>
       </div>
+      {demoError&&<p role="alert" className="lc-notice lc-error">{demoError}</p>}
 
       <div className="card">
         <div className="card-body" style={{ padding: 0 }}>
@@ -99,7 +107,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 {projects.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{p.name}</div>
+                      <Link to={`/projects/${p.id}`} onClick={()=>onSelectProject(p.id)} style={{ fontWeight: 600, color: 'var(--text-main)' }}>{p.name}</Link>
                       {p.description && (
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                           {p.description}

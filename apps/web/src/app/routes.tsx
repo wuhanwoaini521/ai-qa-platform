@@ -24,6 +24,7 @@ const SecurityPage = lazy(() => import('../pages/SecurityPage').then((m) => ({ d
 const WorkersPage = lazy(() => import('../pages/WorkersPage').then((m) => ({ default: m.WorkersPage })));
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const RecorderPage = lazy(() => import('../pages/RecorderPage').then((m) => ({ default: m.RecorderPage })));
+const ProjectOverviewPage = lazy(() => import('../features/lifecycle/ProjectOverviewPage').then((m) => ({default: m.ProjectOverviewPage})));
 
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
@@ -52,6 +53,7 @@ const ProjectsRoute: React.FC = () => {
 };
 
 const RequirementsRoute: React.FC = () => {
+  const navigate=useNavigate();
   const { projectId, requirementId } = useParams();
   const { projects, selectedProjectId } = useProjectScope();
   useRouteProjectScope(projectId);
@@ -61,20 +63,24 @@ const RequirementsRoute: React.FC = () => {
       projects={projects}
       selectedProjectId={projectId ?? selectedProjectId}
       initialRequirementId={requirementId ?? null}
+      onSelectRequirement={(id)=>navigate(`/projects/${projectId??selectedProjectId}/requirements/${id}`)}
     />
   );
 };
 
 const TestCasesRoute: React.FC = () => {
-  const { testCaseId } = useParams();
+  const navigate=useNavigate();
+  const { testCaseId, projectId } = useParams();
+  useRouteProjectScope(projectId);
   const nav = useAppNavigation();
   const { projects, selectedProjectId } = useProjectScope();
 
   return (
     <TestCasesPage
       projects={projects}
-      selectedProjectId={selectedProjectId}
+      selectedProjectId={projectId ?? selectedProjectId}
       initialTestCaseId={testCaseId ?? null}
+      onSelectTestCase={(id)=>navigate(`/projects/${projectId??selectedProjectId}/test-cases/${id}`)}
       onNavigateToStudio={nav.toStudio}
       onNavigateToRuns={nav.toRun}
     />
@@ -93,11 +99,15 @@ const StudioRoute: React.FC = () => {
   const splat = params['*'];
   const { t } = useTranslation('studioShell');
   const recorderMode = new URLSearchParams(location.search).get('mode') === 'recorder';
+  const modeQuery=new URLSearchParams(location.search);modeQuery.delete('mode');
+  const codeUrl=`${location.pathname}?${modeQuery}`;
+  modeQuery.set('mode','recorder');
+  const recordUrl=`${location.pathname}?${modeQuery}`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div className="studio-mode-tabs" aria-label={t('modes.label')}>
-        <Link className={`btn btn-sm ${recorderMode ? 'btn-secondary' : 'btn-primary'}`} to={`/projects/${projectId}/studio`}>{t('modes.code')}</Link>
-        <Link className={`btn btn-sm ${recorderMode ? 'btn-primary' : 'btn-secondary'}`} to={`/projects/${projectId}/studio?mode=recorder`}>{t('modes.recorder')}</Link>
+        <Link className={`btn btn-sm ${recorderMode ? 'btn-secondary' : 'btn-primary'}`} to={codeUrl}>{t('modes.code')}</Link>
+        <Link className={`btn btn-sm ${recorderMode ? 'btn-primary' : 'btn-secondary'}`} to={recordUrl}>{t('modes.recorder')}</Link>
       </div>
       {recorderMode ? <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}><RecorderPage projects={projects} selectedProjectId={projectId ?? selectedProjectId} /></div> : <AutomationStudioPage
       projects={projects}
@@ -195,8 +205,11 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
     <Route element={<AppLayout onSignOut={onSignOut} />}>
       <Route path="/" element={<DashboardRoute />} />
       <Route path="/projects" element={<ProjectsRoute />} />
-      <Route path="/projects/:projectId" element={<ProjectsRoute />} />
+      <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />
       <Route path="/projects/:projectId/requirements" element={<RequirementsRoute />} />
+      <Route path="/projects/:projectId/requirements/:requirementId" element={<RequirementsRoute />} />
+      <Route path="/projects/:projectId/test-cases" element={<TestCasesRoute />} />
+      <Route path="/projects/:projectId/test-cases/:testCaseId" element={<TestCasesRoute />} />
       <Route path="/projects/:projectId/studio" element={<StudioRoute />} />
       <Route path="/projects/:projectId/studio/file/*" element={<StudioRoute />} />
       <Route path="/requirements" element={<RequirementsRoute />} />

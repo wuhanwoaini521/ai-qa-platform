@@ -1,4 +1,4 @@
-import { RefObject, useRef, useState } from 'react';
+import { RefObject, useEffect, useRef, useState } from 'react';
 import { AITraceEvent, QAChatAction } from '../../../types';
 import { api } from '../../../api/client';
 import { MonacoEditorInstance } from '../components/MonacoEditorPane';
@@ -6,6 +6,7 @@ import { errorText } from '../errorText';
 import { AssistantActionType, AssistantMessage, EditorTab } from '../types';
 
 interface UseQAAssistantOptions {
+  caseId?: string | null;
   projectId: string | null;
   /** Currently open file, used as grounding context and as the insertion target. */
   activeTab: EditorTab | undefined;
@@ -20,6 +21,7 @@ export const useQAAssistant = ({
   activeTab,
   editorRef,
   onInsertFallback,
+  caseId,
 }: UseQAAssistantOptions) => {
   const actionMap: Record<AssistantActionType, QAChatAction> = {
     chat: 'chat',
@@ -34,6 +36,7 @@ export const useQAAssistant = ({
   const [assistantLoading, setAssistantLoading] = useState<boolean>(false);
   const [assistantTraceEvents, setAssistantTraceEvents] = useState<AITraceEvent[]>([]);
   const controllerRef = useRef<AbortController | null>(null);
+  useEffect(()=>()=>controllerRef.current?.abort(),[projectId,caseId]);
 
   // QA Assistant message handling
   const sendMessage = async (customPrompt?: string, actionType?: AssistantActionType) => {
@@ -58,6 +61,7 @@ export const useQAAssistant = ({
         message: text,
         context: {
           project_id: projectId || '',
+          test_case_id: caseId,
           current_file: activeTab?.path,
           selected_code: selectedCode,
         },

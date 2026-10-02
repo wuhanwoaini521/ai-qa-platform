@@ -1,3 +1,4 @@
+import type { ModernTestModel, RequirementDocument, Scenario } from '../features/lifecycle/types';
 export type FrameworkType = 'playwright_python' | 'pytest_api' | 'custom';
 
 export type RequirementStatus = 'DRAFT' | 'READY' | 'ARCHIVED';
@@ -39,6 +40,7 @@ export type AutomationStatus = 'MANUAL' | 'DRAFT' | 'AUTOMATED';
 export type WorkspaceStatus = 'ACTIVE' | 'INITIALIZING' | 'ARCHIVED' | 'ERROR';
 
 export interface Project {
+  demo_kind?: string | null;
   id: string;
   name: string;
   description: string;
@@ -59,6 +61,8 @@ export interface ProjectCreate {
 }
 
 export interface Requirement {
+  analysis_stale?: boolean;
+  qa_model?: RequirementDocument | null;
   id: string;
   project_id: string;
   title: string;
@@ -73,6 +77,7 @@ export interface Requirement {
 }
 
 export interface RequirementCreate {
+  qa_model?: RequirementDocument | null;
   project_id: string;
   title: string;
   description?: string;
@@ -84,6 +89,7 @@ export interface RequirementCreate {
 }
 
 export interface TestDesign {
+  scenario_model?: Scenario | null;
   id: string;
   requirement_id: string;
   title: string;
@@ -105,6 +111,7 @@ export interface TestDesignCreate {
 }
 
 export interface TestCase {
+  test_model?: ModernTestModel | null;
   id: string;
   project_id: string;
   requirement_id?: string | null;
@@ -437,6 +444,8 @@ export type QAChatAction = 'explain' | 'generate_draft' | 'suggest_refactor' | '
 
 export interface QAChatContext {
   project_id: string;
+  test_case_id?: string | null;
+  requirement_id?: string | null;
   project_name?: string;
   requirement_title?: string | null;
   test_case_title?: string | null;

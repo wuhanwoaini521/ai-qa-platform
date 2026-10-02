@@ -7,7 +7,7 @@ import { useRequirementAI } from './hooks/useRequirementAI';
 import { useJiraImport } from './hooks/useJiraImport';
 import { RequirementToolbar } from './components/RequirementToolbar';
 import { RequirementList } from './components/RequirementList';
-import { RequirementDetail } from './components/RequirementDetail';
+import { RequirementLifecyclePanel } from '../lifecycle/RequirementLifecyclePanel';
 import { TestDesignPanel } from './components/TestDesignPanel';
 import { RequirementAnalysisModal } from './components/RequirementAnalysisModal';
 import { TestDesignGenerationModal } from './components/TestDesignGenerationModal';
@@ -85,7 +85,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '20px' }}>
+        <div className="lc-requirements-layout">
           <RequirementList
             requirements={reqs.requirements}
             loading={reqs.loading}
@@ -95,17 +95,13 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
 
           {selectedReq ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <RequirementDetail
-                selectedReq={selectedReq}
-                onAnalyze={ai.handleAnalyzeRequirementAI}
-                onUpdateStatus={reqs.updateStatus}
-              />
-              <TestDesignPanel
+              <RequirementLifecyclePanel key={selectedReq.id} requirement={selectedReq} onChanged={reqs.setSelectedReq}/>
+              {!selectedReq.qa_model && <TestDesignPanel
                 testDesigns={designs.testDesigns}
                 onGenerateDesigns={ai.handleGenerateDesignsAI}
                 onAddManualDesign={() => designForm.open(selectedReq.id)}
                 onGenerateCases={ai.handleGenerateCasesAI}
-              />
+              />}
             </div>
           ) : (
             <div className="card">

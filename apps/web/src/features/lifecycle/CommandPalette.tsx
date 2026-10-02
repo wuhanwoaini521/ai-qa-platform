@@ -1,0 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+export function CommandPalette({commands,onClose}: {commands:{label:string;hint?:string;run:()=>void}[];onClose:()=>void}) {
+  const {t}=useTranslation('lifecycle');const [query,setQuery]=useState('');const input=useRef<HTMLInputElement>(null);const dialog=useRef<HTMLDivElement>(null);
+  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;input.current?.focus();return()=>previous?.focus();},[]);
+  const matched=commands.filter(c=>c.label.toLowerCase().includes(query.toLowerCase()));
+  return <div className="lc-drawer-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose();}}><div className="lc-card" ref={dialog} role="dialog" aria-modal="true" aria-label={t('commands')} style={{position:'absolute',top:'15%',left:'50%',transform:'translateX(-50%)',width:'min(600px,90vw)'}} onKeyDown={e=>{if(e.key==='Escape')onClose();if(e.key==='Tab'){const items=dialog.current?.querySelectorAll<HTMLElement>('input,button');if(!items?.length)return;const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}}><div className="lc-toolbar"><h3>{t('commands')}</h3><button className="btn btn-secondary btn-sm" onClick={onClose}>{t('close')}</button></div><input className="form-control" ref={input} aria-label={t('commandSearch')} placeholder={t('commandSearch')} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&matched[0]){onClose();matched[0].run();}}}/><div className="lc-command-list" style={{marginTop:16}}>{matched.map(c=><button className="btn btn-secondary" key={c.label} onClick={()=>{onClose();c.run();}}><span>{c.label}</span><small>{c.hint}</small></button>)}</div></div></div>;
+}
