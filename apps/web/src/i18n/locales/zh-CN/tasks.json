@@ -17,7 +17,7 @@
   "filter_completed": "已完成",
   "filter_all": "全部",
   "backToSource": "返回业务页面",
-  "studioUrl": "目标网页地址",
+  "studioUrl": "页面 URL（Python / API 测试可留空）",
   "studioGoal": "测试目标 / Requirement",
   "studioCreate": "生成自动化测试",
   "studioCancel": "取消",
@@ -104,5 +104,6 @@
   "type_OPTIMIZE_TEST": "优化测试",
   "type_EXPLORE_PAGE": "探索网页",
   "type_RUN_REGRESSION": "运行回归",
-  "type_REVIEW_TEST": "审查测试代码"
+  "type_REVIEW_TEST": "审查测试代码",
+  "caseCopilot": "AI Copilot · 生成、审阅并验证此用例"
 }

@@ -144,6 +144,7 @@
     "history": "分析记录",
     "current": "本次分析进行中",
     "noHistory": "暂无已保存的分析",
+    "selectHistory": "选择已保存的分析",
     "runStatus": {
       "RUNNING": "进行中",
       "COMPLETED": "分析完成",
@@ -156,5 +157,6 @@
     "verifying": "正在复测 · 等待真实结果",
     "verificationFailed": "实际复测未通过 · 修复尚未验证"
   },
-  "patchAwaitingVerification": "补丁已应用 · 待复测"
+  "patchAwaitingVerification": "补丁已应用 · 待复测",
+  "evidenceBundle": "失败证据包（来源与缺失项）"
 }

@@ -40,7 +40,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
-  const [runDetailTab, setRunDetailTab] = useState<'live' | 'results' | 'logs' | 'artifacts'>('live');
+  const [runDetailTab, setRunDetailTab] = useState<'live' | 'results' | 'logs' | 'artifacts' | 'network' | 'console' | 'steps' | 'ai'>('live');
   const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'>('idle');
   const [streamError, setStreamError] = useState<string | null>(null);
   const [browserSessions, setBrowserSessions] = useState<TestBrowserSession[]>([]);
@@ -195,6 +195,11 @@ export const RunsPage: React.FC<RunsPageProps> = ({
           // Event names and payloads are the ones the API publishes (see test_run_service):
           // RUN_STARTED / TEST_FINISHED / LOG_STREAM / RUN_FINISHED / RUN_ERROR / RUN_CANCELLED.
           switch (event.type) {
+            case 'BROWSER_TELEMETRY': {
+              const key = ({ console: 'console_logs', network: 'network_logs', step: 'recent_steps' } as Record<string, string>)[event.channel];
+              if (key) setBrowserSessions((previous) => previous.map((session) => session.browser_session_id === event.session_id ? { ...session, page_evidence: { ...session.page_evidence, [key]: [...((session.page_evidence?.[key] as unknown[]) ?? []), event.entry].slice(-50) } } : session));
+              break;
+            }
             case 'RUN_STARTED':
               setSelectedRun((prev) => (prev ? { ...prev, status: 'RUNNING' } : prev));
               break;
@@ -489,7 +494,6 @@ export const RunsPage: React.FC<RunsPageProps> = ({
         </div>
       </div>
 
-      <ContextTaskProgress task={regressionTask.task} error={regressionTask.error} />
 
       {projects.length === 0 ? (
         <div className="card">
@@ -653,7 +657,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               </div>
 
               <div role="tablist" aria-label={t('runDetailSections')} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {(['live', 'results', 'logs', 'artifacts'] as const).map((tab) => (
+                {(['live', 'results', 'logs', 'artifacts', 'steps', 'network', 'console', 'ai'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -668,6 +672,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   </button>
                 ))}
               </div>
+
+              {(['steps', 'network', 'console'] as string[]).includes(runDetailTab) && <div className="card" role="tabpanel"><div className="card-body">{browserSessions.map((session) => <details open key={session.id}><summary>{session.case_name} · {session.worker_id}</summary><pre style={{ maxHeight: 360, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify(session.page_evidence?.[({ steps: 'recent_steps', network: 'network_logs', console: 'console_logs' } as Record<string, string>)[runDetailTab]] ?? [], null, 2)}</pre></details>)}{browserSessions.length === 0 && <p>{t('noBrowserEvidence')}</p>}</div></div>}
+              {runDetailTab === 'ai' && <div className="card" role="tabpanel"><div className="card-body"><p>{t('aiRunExplanation')}</p><ContextTaskProgress task={regressionTask.task} error={regressionTask.error} /></div></div>}
 
               {runDetailTab === 'live' && (
                 <div role="tabpanel">

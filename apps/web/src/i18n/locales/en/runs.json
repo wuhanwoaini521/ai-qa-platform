@@ -95,5 +95,11 @@
   "browserWorkerCaseId": "Worker / Case ID",
   "browserUrl": "URL",
   "browserStatusElapsed": "Status / Elapsed",
-  "chromiumFrameNote": "Live frames currently support Chromium; other browsers still report their session and URL."
+  "chromiumFrameNote": "Live frames currently support Chromium; other browsers still report their session and URL.",
+  "tabSteps": "Steps",
+  "tabNetwork": "Network",
+  "tabConsole": "Browser console",
+  "tabAi": "AI analysis",
+  "noBrowserEvidence": "This run has no browser evidence. See results and logs for Python or API tests.",
+  "aiRunExplanation": "AI is invoked only for an explicit analysis. Review completed analyses in the failure workbench or associated task."
 }

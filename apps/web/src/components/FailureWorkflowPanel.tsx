@@ -67,7 +67,7 @@ export const FailureWorkflowPanel: React.FC<{
         <History size={14} aria-hidden="true" />
         <label htmlFor="failure-analysis-history">{t('workflow.history')}</label>
         <select id="failure-analysis-history" value={history.some((item) => item.id === selectedId) ? selectedId : ''} disabled={running || !history.length} onChange={(event) => onSelect(event.target.value)}>
-          <option value="">{running ? t('workflow.current') : t('workflow.noHistory')}</option>
+          <option value="">{running ? t('workflow.current') : history.length ? t('workflow.selectHistory') : t('workflow.noHistory')}</option>
           {history.map((item) => <option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString()} · {t(`workflow.runStatus.${item.status}`)}</option>)}
         </select>
       </div>

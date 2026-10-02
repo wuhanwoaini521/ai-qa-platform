@@ -73,5 +73,52 @@
     "running": "正在执行…",
     "invalidState": "状态必须是有效的 JSON。",
     "playgroundFailed": "决策请求失败，请检查 Jev 设置和管理员权限。"
+  },
+  "budget": {
+    "max_request_tokens": "每次请求 token 上限",
+    "max_daily_requests": "每日真实调用次数上限（UTC）",
+    "max_task_calls": "单个 Task AI 调用上限",
+    "description": "仅达到这些明确的硬限制才阻止调用；请求大小按保守估算预检，Usage 仅记录提供方返回的真实 token。"
+  },
+  "health": {
+    "title": "运行健康与 AI 使用记录",
+    "refresh": "重新检查",
+    "loadFailed": "检查未完成，请重试并查看服务日志。",
+    "loading": "正在检查…",
+    "healthy": "全部服务可用",
+    "degraded": "部分能力受限",
+    "ok": "可用",
+    "warning": "受限",
+    "error": "不可用",
+    "streamingVerified": "流式响应已实测",
+    "streamingUnverified": "尚未验证流式响应",
+    "components": {
+      "database": "数据库",
+      "ai": "常规 AI",
+      "jev": "Jev 决策",
+      "browser": "浏览器 / Playwright",
+      "worker": "执行 Worker",
+      "test_runtime": "Python 测试环境",
+      "filesystem": "工作区读写",
+      "python_lsp": "Python 语言服务"
+    },
+    "dismiss": "隐藏本次提示"
+  },
+  "usage": {
+    "title": "今日 AI 使用记录",
+    "summary": "调用 {{total}} · 成功 {{success}} · 失败 {{failed}} · 回退 {{fallback}}",
+    "tokens": "Token（输入 / 输出）",
+    "feature": "功能",
+    "allFeatures": "留空查看全部功能；输入完整功能名称筛选",
+    "provider": "提供方 / 模型",
+    "status": "结果",
+    "duration": "耗时",
+    "prompt": "Prompt 版本",
+    "fallback": "回退",
+    "failed": "失败",
+    "unknown": "未报告",
+    "empty": "今日暂无调用记录",
+    "byFeature": "按功能汇总",
+    "tokenNote": "提供方报告：输入 {{input}} / 输出 {{output}} tokens；{{unknown}} 次未报告用量。"
   }
 }

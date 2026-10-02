@@ -95,5 +95,11 @@
   "browserWorkerCaseId": "Worker / 用例 ID",
   "browserUrl": "网址",
   "browserStatusElapsed": "状态 / 耗时",
-  "chromiumFrameNote": "实时画面目前支持 Chromium；其他浏览器仍会显示会话与网址。"
+  "chromiumFrameNote": "实时画面目前支持 Chromium；其他浏览器仍会显示会话与网址。",
+  "tabSteps": "执行步骤",
+  "tabNetwork": "网络",
+  "tabConsole": "浏览器 Console",
+  "tabAi": "AI 分析",
+  "noBrowserEvidence": "本次运行没有浏览器证据。Python 和 API 测试请查看结果与日志。",
+  "aiRunExplanation": "AI 不会随每次运行自动调用。已发起的分析可在失败工作台或关联 Task 中回顾。"
 }

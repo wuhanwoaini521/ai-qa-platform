@@ -37,6 +37,9 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const [socketState, setSocketState] = useState('未连接');
   const [frame, setFrame] = useState<Frame | null>(null);
   const [steps, setSteps] = useState<RecorderStep[]>([]);
+  const [optimization, setOptimization] = useState<Awaited<ReturnType<typeof api.optimizeRecorder>> | null>(null);
+  const [previewMode, setPreviewMode] = useState<'raw' | 'optimized'>('raw');
+  const previewDrafts = useRef({ raw: '', optimized: '' });
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -259,9 +262,29 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
     try {
       const result = await api.generateRecorderCode(sessionId, { case_name: caseName, file_path: filePath, test_name: testName, steps });
       setCode(result.code);
+      setOptimization(null); setPreviewMode('raw');
       setScriptGeneration((current) => current + 1);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
+  };
+
+  const optimize = async () => {
+    if (!sessionId || busy || !steps.length) return;
+    setBusy(true); setError('');
+    try {
+      const result = await api.optimizeRecorder(sessionId, { case_name: caseName, file_path: filePath, test_name: testName, steps });
+      setOptimization(result); setPreviewMode('optimized'); setCode(result.optimized_code);
+      previewDrafts.current = { raw: result.raw_code, optimized: result.optimized_code };
+      setScriptGeneration((current) => current + 1);
+    } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const switchPreview = (mode: 'raw' | 'optimized') => {
+    if (mode === previewMode) return;
+    previewDrafts.current[previewMode] = code;
+    setPreviewMode(mode);
+    setCode(previewDrafts.current[mode]);
   };
 
   const startAiTask = (type: 'CREATE_TEST' | 'EXPLORE_PAGE') => {
@@ -550,6 +573,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
               <strong>生成的 Python 脚本</strong>
               <div className="recorder-editor-actions">
                 <span>Playwright</span>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || !steps.length || busy} onClick={() => void optimize()}>AI 优化录制</button>
                 {code && (
                   <button type="button" className="btn btn-secondary btn-sm" aria-label="重新生成 Python 脚本" title="按当前执行步骤重新生成，替换当前脚本内容" disabled={!sessionId || busy} onClick={generate}>
                     <RotateCw size={13} aria-hidden="true" /> 重新生成
@@ -557,6 +581,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
                 )}
               </div>
             </div>
+            {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label="录制优化对照"><button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>Raw · {optimization.raw_steps.length} 步</button> <button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>Optimized · {optimization.optimized_steps.length} 步</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · 待运行验证</p><details><summary>查看优化依据</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
             <div className="recorder-editor-surface">
               <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
               {showCodeFallback && !editorReady && (

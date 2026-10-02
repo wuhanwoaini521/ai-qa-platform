@@ -6,6 +6,7 @@ import { START_PAGE_OPTIONS, usePreferences } from '../app/Preferences';
 import { useProjectScope } from '../app/ProjectScope';
 import { api } from '../api/client';
 import type { AIProviderConnectionResult, AIProviderSettings, AIProviderSettingsUpdate, AIStatusResponse, DecisionResult, JevSettings, JevSettingsUpdate } from '../types';
+import { AIHealthPanel } from '../components/AIHealthPanel';
 
 const defaultAISettings: AIProviderSettings = {
   provider: 'fake',
@@ -15,6 +16,9 @@ const defaultAISettings: AIProviderSettings = {
   base_url: 'https://api.openai.com/v1',
   timeout: 30,
   max_retries: 3,
+  max_request_tokens: 16000,
+  max_daily_requests: 1000,
+  max_task_calls: 8,
 };
 
 const defaultJevSettings: JevSettings = {
@@ -92,6 +96,9 @@ export const SettingsPage: React.FC = () => {
     base_url: aiSettings.base_url,
     timeout: Number(aiSettings.timeout),
     max_retries: Number(aiSettings.max_retries),
+    max_request_tokens: Number(aiSettings.max_request_tokens),
+    max_daily_requests: Number(aiSettings.max_daily_requests),
+    max_task_calls: Number(aiSettings.max_task_calls),
   });
 
   const saveAI = async (clearKey = false) => {
@@ -195,7 +202,8 @@ export const SettingsPage: React.FC = () => {
             <strong>{t(`aiConfig.status_${aiStatus.status}`)}</strong>
             <span>{aiStatus.provider} · {aiStatus.model}</span>
             {aiStatus.failure_reason && <code>{aiStatus.failure_reason}</code>}
-            <small>{aiStatus.fallback_active ? t('aiConfig.fallbackActive') : t('aiConfig.realProviderStatus')}</small>
+            <small>{aiStatus.operational_state} · {aiStatus.real_model_available ? t('aiConfig.realProviderStatus') : t('aiConfig.fallbackActive')}</small>
+            <small>{Math.round(aiStatus.latency_ms ?? 0)} ms · {new Date(aiStatus.checked_at).toLocaleString()}</small>
           </div>}
           {loadingAI ? <p>{t('aiConfig.loading')}</p> : <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
@@ -227,17 +235,24 @@ export const SettingsPage: React.FC = () => {
                 <label className="form-label" htmlFor="ai-retries">{t('aiConfig.maxRetries')}</label>
                 <input id="ai-retries" className="form-control" type="number" min="0" max="10" value={aiSettings.max_retries} onChange={(event) => setAiSettings({ ...aiSettings, max_retries: Number(event.target.value) })} />
               </div>
+              {(['max_request_tokens', 'max_daily_requests', 'max_task_calls'] as const).map((field) => <div key={field}>
+                <label className="form-label" htmlFor={`ai-${field}`}>{t(`budget.${field}`)}</label>
+                <input id={`ai-${field}`} className="form-control" type="number" min={field === 'max_request_tokens' ? 512 : 1} max={field === 'max_request_tokens' ? 128000 : field === 'max_task_calls' ? 100 : 100000} value={aiSettings[field]} onChange={(event) => setAiSettings({ ...aiSettings, [field]: Number(event.target.value) })} />
+              </div>)}
             </div>
+            <p className="text-muted" style={{ fontSize: 12 }}>{t('budget.description')}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
               <button type="button" className="btn btn-primary btn-sm" disabled={savingAI} onClick={() => void saveAI()}><Save size={13} /> {savingAI ? t('aiConfig.saving') : t('aiConfig.save')}</button>
               <button type="button" className="btn btn-secondary btn-sm" disabled={testingAI} onClick={() => void testAI()}><Wifi size={13} /> {testingAI ? t('aiConfig.testing') : t('aiConfig.testConnection')}</button>
               {aiSettings.api_key_configured && <button type="button" className="btn btn-secondary btn-sm" disabled={savingAI} onClick={() => void saveAI(true)}>{t('aiConfig.clearKey')}</button>}
             </div>
             {aiMessage && <p role="status" style={{ fontSize: '12px', marginTop: '12px' }}>{aiMessage}</p>}
-            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--success-color, #16a34a)' : 'var(--danger-color, #dc2626)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status}</p>}
+            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--success-color, #16a34a)' : 'var(--danger-color, #dc2626)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status} · {t(aiConnection.streaming ? 'health.streamingVerified' : 'health.streamingUnverified')} · {Math.round(aiConnection.latency_ms ?? 0)} ms</p>}
           </>}
         </div>
       </div>
+
+      <AIHealthPanel />
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <div className="card-header">

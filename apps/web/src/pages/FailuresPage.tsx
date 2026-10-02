@@ -501,7 +501,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px' }}>
+        <div className="failure-workbench-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 2fr)', gap: '20px' }}>
           {/* Left: Failures List */}
           <div className="card">
             <div className="card-header">
@@ -587,8 +587,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 </div>
                 <div className="card-body">
                   <p style={{ margin: '0 0 12px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {t('ruleClassifier')}: {selectedFailure.classification}
+                    {t('ruleClassifier')}: {selectedFailure.failure_kind ?? selectedFailure.classification}
                   </p>
+                  {selectedFailure.evidence_bundle && Object.keys(selectedFailure.evidence_bundle).length > 0 && <details style={{ marginBottom: 12 }}><summary>{t('evidenceBundle')}</summary><pre style={{ maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 11 }}>{JSON.stringify(selectedFailure.evidence_bundle, null, 2)}</pre></details>}
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
                       {t('errorMessage')}

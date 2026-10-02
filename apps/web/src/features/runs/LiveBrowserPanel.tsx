@@ -117,7 +117,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
               </div>
               <dl style={{ margin: 0, display: 'grid', alignContent: 'start', gap: 9, fontSize: 12, minWidth: 0 }}>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserCase')}</dt><dd style={{ margin: '2px 0', overflowWrap: 'anywhere' }}>{selected.case_name || selected.nodeid}</dd></div>
-                <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserWorkerCaseId')}</dt><dd style={{ margin: '2px 0', fontFamily: 'var(--font-mono)' }}>{selected.worker_id} / {selected.case_execution_id?.slice(0, 8) ?? selected.nodeid}</dd></div>
+                <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserWorkerCaseId')}</dt><dd style={{ margin: '2px 0', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>{selected.worker_id} / {selected.case_execution_id?.slice(0, 8) ?? selected.nodeid}</dd></div>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserUrl')}</dt><dd style={{ margin: '2px 0', overflowWrap: 'anywhere' }}>{selected.current_url || 'about:blank'}</dd></div>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserStatusElapsed')}</dt><dd style={{ margin: '2px 0', color: statusColor(selected.status) }}>{selected.status} · {((selected.status === 'running' ? Math.max(0, Date.now() - new Date(selected.started_at).getTime()) : selected.elapsed_ms) / 1000).toFixed(1)}s</dd></div>
                 {!frame && selected.status === 'running' && <div style={{ color: 'var(--text-muted)' }}>{t('chromiumFrameNote')}</div>}

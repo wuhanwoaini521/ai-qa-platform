@@ -17,7 +17,7 @@
   "filter_completed": "Completed",
   "filter_all": "All",
   "backToSource": "Back to source",
-  "studioUrl": "Target page URL",
+  "studioUrl": "Page URL (optional for Python / API tests)",
   "studioGoal": "Test goal / Requirement",
   "studioCreate": "Generate automated test",
   "studioCancel": "Cancel",
@@ -104,5 +104,6 @@
   "type_OPTIMIZE_TEST": "Optimize test",
   "type_EXPLORE_PAGE": "Explore page",
   "type_RUN_REGRESSION": "Run regression",
-  "type_REVIEW_TEST": "Review test code"
+  "type_REVIEW_TEST": "Review test code",
+  "caseCopilot": "AI Copilot · generate, review and validate this case"
 }

@@ -144,6 +144,7 @@
     "history": "Analysis history",
     "current": "Current analysis in progress",
     "noHistory": "No saved analyses",
+    "selectHistory": "Select a saved analysis",
     "runStatus": {
       "RUNNING": "Running",
       "COMPLETED": "Analysis complete",
@@ -156,5 +157,6 @@
     "verifying": "Verifying · Waiting for actual results",
     "verificationFailed": "Retest did not pass · repair remains unverified"
   },
-  "patchAwaitingVerification": "Patch applied · Rerun pending"
+  "patchAwaitingVerification": "Patch applied · Rerun pending",
+  "evidenceBundle": "Failure evidence bundle (sources and missing evidence)"
 }

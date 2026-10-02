@@ -73,5 +73,52 @@
     "running": "Running…",
     "invalidState": "State must be valid JSON.",
     "playgroundFailed": "Decision request failed. Check Jev settings and administrator access."
+  },
+  "budget": {
+    "max_request_tokens": "Token limit per request",
+    "max_daily_requests": "Real requests per day (UTC)",
+    "max_task_calls": "AI calls per task",
+    "description": "Only these explicit hard limits block calls. Request size is conservatively estimated; Usage contains only provider-reported tokens."
+  },
+  "health": {
+    "title": "Runtime health and AI usage",
+    "refresh": "Check again",
+    "loadFailed": "Some checks failed. Retry and inspect service logs.",
+    "loading": "Checking…",
+    "healthy": "All services available",
+    "degraded": "Some capabilities limited",
+    "ok": "Available",
+    "warning": "Limited",
+    "error": "Unavailable",
+    "streamingVerified": "Streaming response verified",
+    "streamingUnverified": "Streaming not verified",
+    "components": {
+      "database": "Database",
+      "ai": "AI provider",
+      "jev": "Jev decisions",
+      "browser": "Browser / Playwright",
+      "worker": "Execution worker",
+      "test_runtime": "Python test runtime",
+      "filesystem": "Workspace storage",
+      "python_lsp": "Python language server"
+    },
+    "dismiss": "Dismiss"
+  },
+  "usage": {
+    "title": "AI usage today",
+    "summary": "Requests {{total}} · Successful {{success}} · Failed {{failed}} · Fallback {{fallback}}",
+    "tokens": "Tokens (input / output)",
+    "feature": "Feature",
+    "allFeatures": "Leave empty for all features; enter exact name to filter",
+    "provider": "Provider / model",
+    "status": "Result",
+    "duration": "Duration",
+    "prompt": "Prompt version",
+    "fallback": "Fallback",
+    "failed": "Failed",
+    "unknown": "Not reported",
+    "empty": "No invocations today",
+    "byFeature": "Group by feature",
+    "tokenNote": "Provider-reported: input {{input}} / output {{output}} tokens; {{unknown}} calls did not report usage."
   }
 }
