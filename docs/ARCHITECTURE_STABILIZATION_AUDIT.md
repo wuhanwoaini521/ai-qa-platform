@@ -1,5 +1,7 @@
 # AI QA Platform — Architecture Stabilization Audit (Phase 13.5.0)
 
+> 本文是 16ac4da 的历史基线，不代表当前代码。 当前现状与实测以 [2026-10-02 验收](ARCHITECTURE_CLEANUP_ACCEPTANCE.md) 为准。
+
 Read-only audit of `apps/`, `packages/`, tests, CI and docs at commit `16ac4da` (baseline before Phase 13.5 changes).
 Every finding below is reproducible from the referenced `path:line`. This document is the input to Gates
 13.5.1 – 13.5.12 and defines what Phase 13.5 must change and why.

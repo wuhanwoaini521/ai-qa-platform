@@ -1,5 +1,7 @@
 # Production AI Architecture Audit
 
+> 历史 Phase 5 规划，不代表当前实现。现已有真实 Registry、OpenAI-compatible、共享执行治理与 LSP。 当前现状与实测以 [2026-10-02 验收](ARCHITECTURE_CLEANUP_ACCEPTANCE.md) 为准。
+
 ## 1. Executive Summary
 This document audits the current AI-related capabilities in the `ai-qa-platform` codebase, evaluating provider neutrality, current reliance on fake/mock implementations, secret handling, structured output compliance, and required architectural enhancements for Phase 5.
 

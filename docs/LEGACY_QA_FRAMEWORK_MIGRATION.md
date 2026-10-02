@@ -1,5 +1,7 @@
 # Legacy QA Framework Migration Map
 
+> 早期迁移计划，仅用于追溯。旧 qa_core/contracts.py 与 fake_adapters.py 已删除；当前合约由 execution/onboarding/failure/healing/ai 领域模块提供，不要依照旧路径新增依赖。 当前现状与实测以 [2026-10-02 验收](ARCHITECTURE_CLEANUP_ACCEPTANCE.md) 为准。
+
 This document defines how mature concepts, abstractions, and tools from existing Playwright frameworks will be migrated into `qa-core` and platform services across upcoming phases.
 
 ## Capability Mapping Matrix
