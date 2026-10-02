@@ -22,6 +22,7 @@ dependencies = [
     "project-model",
     "qa-core",
     "integrations",
+    "basedpyright>=1.31,<2",
 ]
 
 [tool.uv.sources]

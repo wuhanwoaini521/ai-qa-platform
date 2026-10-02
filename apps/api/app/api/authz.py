@@ -107,6 +107,8 @@ def is_stream_route(path: str) -> bool:
         or path.startswith("/api/recorder/")
         or path.startswith("/api/tasks/")
         or path.startswith("/api/debug/")
+        or path.startswith("/api/workspaces/")
+        and "/lsp/" in path
     ) and path.endswith(STREAM_ROUTE_SUFFIXES)
 
 
@@ -120,6 +122,8 @@ def stream_ticket_scope(path: str) -> str | None:
     elif len(parts) == 5 and parts[1] in {"recorder", "debug"} and parts[2] == "sessions":
         family, resource_id, suffix = parts[1], parts[3], parts[4]
         kind = {("recorder", "stream"): "recorder", ("debug", "stream"): "debug"}.get((family, suffix))
+    elif len(parts) == 5 and parts[1] == "workspaces" and parts[3:] == ["lsp", "stream"]:
+        resource_id, kind = parts[2], "lsp"
     else:
         return None
     return f"{kind}:{resource_id}" if kind and resource_id else None

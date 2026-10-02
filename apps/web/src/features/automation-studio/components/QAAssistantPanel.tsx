@@ -183,7 +183,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
         onStartGenerateTask(targetUrl.trim(), testGoal.trim());
         setShowGenerate(false);
       }} style={{ display: 'grid', gap: 8, padding: 12 }}>
-        <label>{t('tasks:studioUrl')}<input type="url" required value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" style={{ width: '100%' }} /></label>
+        <label>{t('tasks:studioUrl')}<input type="url" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" style={{ width: '100%' }} /></label>
         <label>{t('tasks:studioGoal')}<textarea required minLength={3} value={testGoal} onChange={(event) => setTestGoal(event.target.value)} rows={3} style={{ width: '100%' }} /></label>
         <div style={{ display: 'flex', gap: 8 }}><button type="submit" className="btn btn-primary btn-sm" disabled={generateTaskBusy}>{t('tasks:studioCreate')}</button><button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>{t('tasks:studioCancel')}</button></div>
       </form>}

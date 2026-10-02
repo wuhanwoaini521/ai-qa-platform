@@ -65,6 +65,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [quickOpenSelectedIndex, setQuickOpenSelectedIndex] = useState<number>(0);
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
   const [debugPreparationError, setDebugPreparationError] = useState('');
+  const [sourceFocus, setSourceFocus] = useState<{ path: string; line: number } | null>(null);
+  const [languageIssues, setLanguageIssues] = useState<Record<string, import('../../types').ValidationIssue[]>>({});
+  useEffect(() => { setLanguageIssues({}); }, [currentProjectId]);
   const [executionLocation, setExecutionLocation] = useState<{ path: string; line: number } | null>(null);
 
   // Monaco Editor Ref
@@ -493,10 +496,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               disabled={problems.validating}
               title={t('editor.validateTooltip')}
             >
-              <CheckCircle2 size={14} color={problems.validationIssues.length === 0 ? 'var(--ui-mint-strong)' : 'var(--ui-rose)'} />
+              <CheckCircle2 size={14} color={problems.validationIssues.length + Object.values(languageIssues).flat().length === 0 ? 'var(--ui-mint-strong)' : 'var(--ui-rose)'} />
               {t('editor.problemsShort')}
               <span className={`studio-tool-count ${problems.validationIssues.length > 0 ? 'has-issues' : ''}`}>
-                {problems.validationIssues.length}
+                {problems.validationIssues.length + Object.values(languageIssues).flat().length}
               </span>
             </button>
             {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
@@ -543,6 +546,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         {/* Editor or Diff View Area */}
         <div className="studio-editor-surface">
         <MonacoEditorPane
+          projectId={currentProjectId}
+          onNavigateToSource={async (path, line) => { await editor.openFile(path); setSourceFocus({ path, line }); }}
+          onAIAction={(action) => { void assistant.sendMessage(t(`lsp.requests.${action}`)); }}
+          onLanguageDiagnostics={(uri, diagnostics) => {
+            const path = decodeURIComponent(new URL(uri).pathname).replace(/^\//, '');
+            setLanguageIssues((items) => ({ ...items, [path]: diagnostics.map((item) => ({
+              file: path, line: item.range.start.line + 1, column: item.range.start.character + 1,
+              message: item.message, severity: item.severity === 1 ? 'error' : item.severity === 2 ? 'warning' : 'info', rule_id: 'basedpyright',
+            })) }));
+          }}
           activeTab={editor.activeTab}
           loadingFile={workspace.loadingFile}
           showDiffView={git.showDiffView}
@@ -551,7 +564,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           onChange={editor.updateContent}
           breakpoints={breakpoints}
           onToggleBreakpoint={toggleBreakpoint}
-          initialFocusLineNumber={initialOpenLineNumber ?? undefined}
+          initialFocusLineNumber={sourceFocus && sourceFocus.path === editor.activeTab?.path ? sourceFocus.line : initialOpenLineNumber ?? undefined}
           executionLocation={executionLocation}
         />
 
@@ -574,7 +587,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         {/* Collapsible Bottom Problems Panel */}
         <div style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>
           <ProblemsPanel
-            issues={problems.validationIssues}
+            issues={[...problems.validationIssues, ...Object.values(languageIssues).flat()]}
             expanded={problems.showProblemsPanel}
             onToggle={() => problems.setShowProblemsPanel(!problems.showProblemsPanel)}
             onJumpToIssue={problems.jumpToIssue}
@@ -586,7 +599,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
         <WorkbenchStatusBar
           branch={git.currentBranch}
-          problemCount={problems.validationIssues.length}
+          problemCount={problems.validationIssues.length + Object.values(languageIssues).flat().length}
           validating={problems.validating}
           runningTest={run.runningTest}
           saving={editor.saving}

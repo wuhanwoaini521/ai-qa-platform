@@ -5,11 +5,16 @@ import Editor, { OnMount } from '@monaco-editor/react';
 import { FileCode } from 'lucide-react';
 import { Breakpoint, GitDiffResult } from '../../../types';
 import { EditorTab } from '../types';
+import { PythonLanguageClient } from '../pythonLanguageClient';
 
 /** Monaco instance handed to `onMount`; `monaco-editor` is not a direct dependency, so the type is derived. */
 export type MonacoEditorInstance = Parameters<OnMount>[0];
 
 interface MonacoEditorPaneProps {
+  projectId?: string | null;
+  onNavigateToSource?: (path: string, line: number) => Promise<void>;
+  onAIAction?: (action: string) => void;
+  onLanguageDiagnostics?: (uri: string, diagnostics: Array<{ range: { start: { line: number; character: number }; end: { line: number; character: number } }; message: string; severity?: number }>) => void;
   activeTab: EditorTab | undefined;
   loadingFile: boolean;
   showDiffView: boolean;
@@ -37,6 +42,10 @@ const getLanguage = (path: string | null): string => {
 };
 
 export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
+  projectId,
+  onNavigateToSource,
+  onAIAction,
+  onLanguageDiagnostics,
   activeTab,
   loadingFile,
   showDiffView,
@@ -53,6 +62,13 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   const { t } = useTranslation('studioShell');
   const [editorReady, setEditorReady] = useState(false);
   const [editorMountVersion, setEditorMountVersion] = useState(0);
+  const [languageStatus, setLanguageStatus] = useState('connecting');
+  const navigateRef = useRef(onNavigateToSource);
+  const diagnosticsRef = useRef(onLanguageDiagnostics);
+  const aiActionRef = useRef(onAIAction);
+  navigateRef.current = onNavigateToSource;
+  diagnosticsRef.current = onLanguageDiagnostics;
+  aiActionRef.current = onAIAction;
   const decorationIds = useRef<string[]>([]);
   const focusDecorationIds = useRef<string[]>([]);
   const executionDecorationIds = useRef<string[]>([]);
@@ -75,8 +91,21 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
         toggleRef.current?.(activePathRef.current, event.target.position.lineNumber);
       }
     });
+    if (aiActionRef.current) for (const [index, action] of ['explain', 'fix', 'refactor', 'generate_test', 'add_assertion', 'improve_locator', 'analyze_failure', 'optimize'].entries()) {
+      editor.addAction({ id: `qa-ai-${action}`, label: t(`lsp.actions.${action}`), contextMenuGroupId: 'qa-ai', contextMenuOrder: index,
+        run: () => { aiActionRef.current?.(action); } });
+    }
     onEditorReady?.();
   };
+
+  useEffect(() => {
+    if (!projectId || !editorReady) return;
+    const client = new PythonLanguageClient(projectId, setLanguageStatus,
+      (path, line) => navigateRef.current?.(path, line) ?? Promise.resolve(),
+      (uri, diagnostics) => diagnosticsRef.current?.(uri, diagnostics));
+    void client.start();
+    return () => client.dispose();
+  }, [projectId, editorReady, editorMountVersion]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -169,6 +198,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
         </div>
       ) : activeTab ? (
         <Editor
+          path={projectId ? `qa-workspace://${projectId}/${activeTab.path.split('/').map(encodeURIComponent).join('/')}` : undefined}
           height="100%"
           language={getLanguage(activeTab.path)}
           value={activeTab.content}
@@ -205,6 +235,11 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
             {t('editor.emptyHint')}
           </div>
         </div>
+      )}
+      {projectId && activeTab?.path.endsWith('.py') && (
+        <span role="status" style={{ position: 'absolute', right: 14, bottom: 4, padding: '3px 7px', borderRadius: 6, background: 'var(--ui-surface-raised)', color: languageStatus === 'error' ? 'var(--ui-rose)' : 'var(--text-muted)', fontSize: 11 }}>
+          {t(`lsp.status.${languageStatus}`)}
+        </span>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectScope } from './ProjectScope';
 import { usePreferences } from './Preferences';
 import { withProjectId } from './navigation';
+import { ReadinessNotice } from '../components/ReadinessNotice';
 
 /** Title keys per route, resolved through i18n (`titles` namespace). */
 const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
@@ -58,6 +59,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
       <Navigation />
 
       <div className="app-main">
+        <ReadinessNotice />
         {!fullBleed && (
           <Header
             title={title}

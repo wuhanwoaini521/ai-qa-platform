@@ -1,3 +1,5 @@
+import { responseError } from './errors';
+import { parseEventFrame } from './eventStream';
 import {
   ApplyRepairPayload,
   AIFailureDiagnosisResponse,
@@ -7,6 +9,7 @@ import {
   AIProviderConnectionResult,
   AITraceEvent,
   AIUsageSummary,
+  SystemHealth,
   Breakpoint,
   DebugSessionBootstrap,
   AutomationBinding,
@@ -130,7 +133,7 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
-type StreamKind = 'run' | 'task' | 'recorder' | 'debug';
+type StreamKind = 'run' | 'task' | 'recorder' | 'debug' | 'lsp';
 
 export class EventStreamError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -205,33 +208,11 @@ function openEventStream(
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let pending = '';
-      let dataLines: string[] = [];
-      let eventName = '';
-      let eventId = '';
-      const dispatch = () => {
-        if (!dataLines.length) {
-          eventName = '';
-          return;
-        }
-        if (eventId && !eventId.includes('\0')) lastEventId = eventId;
-        onEvent(new MessageEvent<string>(eventName || 'message', {
-          data: dataLines.join('\n'),
-          lastEventId,
-        }));
-        dataLines = [];
-        eventName = '';
-      };
       const consumeFrame = (frame: string) => {
-        for (const line of frame.split(/\r?\n/)) {
-          if (!line || line.startsWith(':')) continue;
-          const separator = line.indexOf(':');
-          const field = separator < 0 ? line : line.slice(0, separator);
-          const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '');
-          if (field === 'data') dataLines.push(value);
-          else if (field === 'event') eventName = value;
-          else if (field === 'id') eventId = value;
-        }
-        dispatch();
+        const parsed = parseEventFrame(frame);
+        if (!parsed) return;
+        if (parsed.id !== undefined) lastEventId = parsed.id;
+        onEvent(new MessageEvent<string>(parsed.type, {data: parsed.data, lastEventId}));
       };
 
       try {
@@ -304,6 +285,13 @@ export async function getDebugSocketUrl(sessionId: string): Promise<string> {
   return url.toString();
 }
 
+export async function getLanguageSocketUrl(workspaceId: string): Promise<string> {
+  const base = BASE_URL || window.location.origin;
+  const url = new URL(`/api/workspaces/${encodeURIComponent(workspaceId)}/lsp/stream`, base);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.toString();
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}/api${endpoint}`;
   const headers: Record<string, string> = {
@@ -327,8 +315,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`API Error [${response.status}]: ${errorBody || response.statusText}`);
+    throw await responseError(response);
   }
 
   if (response.status === 204 || response.headers.get('content-length') === '0') {
@@ -357,7 +344,7 @@ async function streamAITraceRequest(
     unauthorizedHandler?.();
   }
   if (!response.ok) {
-    throw new Error(`API Error [${response.status}]: ${(await response.text()) || response.statusText}`);
+    throw await responseError(response);
   }
   if (!response.body) throw new Error('Streaming response body is unavailable.');
 
@@ -365,16 +352,12 @@ async function streamAITraceRequest(
   const decoder = new TextDecoder();
   let pending = '';
   const dispatch = (frame: string) => {
-    let eventName = '';
-    const dataLines: string[] = [];
-    for (const line of frame.split(/\r?\n/)) {
-      if (line.startsWith('event:')) eventName = line.slice(6).trim();
-      if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-    }
-    if (!dataLines.length) return;
+    const parsed = parseEventFrame(frame);
+    if (!parsed) return;
+    const eventName = parsed.type;
     let event: AITraceEvent;
     try {
-      event = JSON.parse(dataLines.join('\n')) as AITraceEvent;
+      event = JSON.parse(parsed.data) as AITraceEvent;
     } catch {
       throw new Error(`Invalid AI stream event: ${eventName || 'unknown'}`);
     }
@@ -454,6 +437,8 @@ export const api = {
     request<{ code: string; project_id: string }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/generate`, {
       method: 'POST', body: JSON.stringify(payload),
     }),
+  optimizeRecorder: (sessionId: string, payload: { case_name: string; file_path: string; test_name: string; steps: RecorderStep[] }) =>
+    request<{ raw_steps: RecorderStep[]; optimized_steps: RecorderStep[]; raw_code: string; optimized_code: string; reasons: string[]; provider: string; model: string; prompt_version: string; validated: boolean }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/optimize`, { method: 'POST', body: JSON.stringify(payload) }),
   closeRecorderSession: (sessionId: string) =>
     request<{ closed: boolean }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   // Dashboard
@@ -743,7 +728,8 @@ export const api = {
 
   // Production AI Services (Phase 5)
   getAIStatus: () => request<AIStatusResponse>('/ai/status'),
-  getAIUsage: (limit = 50) => request<AIUsageSummary>(`/ai/usage?limit=${limit}`),
+  getAIUsage: (limit = 50, since?: string, feature?: string) => request<AIUsageSummary>(`/ai/usage?${new URLSearchParams({ limit: String(limit), ...(since ? { since } : {}), ...(feature ? { feature } : {}) })}`),
+  getSystemHealth: (refresh = false) => request<SystemHealth>(`/ai/system-health?refresh=${refresh}`),
   getAIProviderSettings: () => request<AIProviderSettings>('/ai/settings'),
   saveAIProviderSettings: (data: AIProviderSettingsUpdate) =>
     request<AIProviderSettings>('/ai/settings', { method: 'PUT', body: JSON.stringify(data) }),

@@ -49,6 +49,8 @@ export const useQAAssistant = ({
     controllerRef.current = controller;
     let terminalEventSeen = false;
     let partialText = '';
+    const selection = editorRef.current?.getSelection();
+    const selectedCode = selection && !selection.isEmpty() ? editorRef.current?.getModel()?.getValueInRange(selection) : activeTab?.content;
 
     try {
       await api.streamQAAssistant({
@@ -57,7 +59,7 @@ export const useQAAssistant = ({
         context: {
           project_id: projectId || '',
           current_file: activeTab?.path,
-          selected_code: activeTab?.content,
+          selected_code: selectedCode,
         },
       }, (event) => {
         setAssistantTraceEvents((prev) => [...prev, event]);

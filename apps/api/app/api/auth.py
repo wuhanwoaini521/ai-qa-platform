@@ -30,7 +30,7 @@ api_key_repo = ApiKeyRepository()
 
 
 class StreamTicketRequest(BaseModel):
-    kind: Literal["run", "task", "recorder", "debug"]
+    kind: Literal["run", "task", "recorder", "debug", "lsp"]
     resource_id: str = Field(min_length=1, max_length=128)
 
 
@@ -45,6 +45,7 @@ async def create_stream_ticket(
         "task": Permission.PROJECT_READ,
         "recorder": Permission.AUTOMATION_EDIT,
         "debug": Permission.RUN_EXECUTE,
+        "lsp": Permission.PROJECT_READ,
     }[payload.kind]
     if not has_permission(user, permission):
         raise HTTPException(status_code=403, detail="Insufficient permission for this stream")
@@ -58,6 +59,10 @@ async def create_stream_ticket(
         exists = await recorder_service.get(payload.resource_id, str(user.id)) is not None
     elif payload.kind == "debug":
         exists = await debug_session_service.get(payload.resource_id, str(user.id)) is not None
+    elif payload.kind == "lsp":
+        from app.repositories.project_repo import ProjectRepository
+
+        exists = await ProjectRepository(session).get_by_id(payload.resource_id) is not None
     if not exists:
         raise HTTPException(status_code=404, detail="Stream resource not found")
 

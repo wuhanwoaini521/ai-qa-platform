@@ -299,6 +299,7 @@ export interface TestRun {
 }
 
 export interface TestBrowserSession {
+  page_evidence?: Record<string, unknown>;
   id: string;
   run_id: string;
   case_execution_id?: string | null;
@@ -374,6 +375,8 @@ export type FailureCategory =
   | 'UNKNOWN';
 
 export interface FailureRecord {
+  failure_kind?: string;
+  evidence_bundle?: Record<string, unknown>;
   id: string;
   run_id: string;
   execution_id: string;
@@ -553,6 +556,10 @@ export interface QAChatResponse {
 export type AIProviderHealth = 'AVAILABLE' | 'FALLBACK_ONLY' | 'DISABLED' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'UNAVAILABLE';
 
 export interface AIStatusResponse {
+  operational_state: 'REAL_AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
+  streaming: boolean;
+  latency_ms?: number | null;
+  checked_at: string;
   provider: string;
   status: 'REAL_CONNECTED' | 'FALLBACK' | 'SIMULATION' | 'UNAVAILABLE';
   message: string;
@@ -583,6 +590,9 @@ export interface AITraceEvent {
 export type AIProviderType = 'fake' | 'openai-compatible';
 
 export interface AIProviderSettings {
+  max_request_tokens: number;
+  max_daily_requests: number;
+  max_task_calls: number;
   provider: AIProviderType;
   api_key_configured: boolean;
   api_key_masked?: string | null;
@@ -593,6 +603,9 @@ export interface AIProviderSettings {
 }
 
 export interface AIProviderSettingsUpdate {
+  max_request_tokens: number;
+  max_daily_requests: number;
+  max_task_calls: number;
   provider: AIProviderType;
   api_key?: string | null;
   clear_api_key?: boolean;
@@ -603,6 +616,9 @@ export interface AIProviderSettingsUpdate {
 }
 
 export interface AIProviderConnectionResult {
+  streaming: boolean;
+  latency_ms?: number | null;
+  checked_at: string;
   connected: boolean;
   provider: string;
   status: AIProviderHealth;
@@ -611,6 +627,7 @@ export interface AIProviderConnectionResult {
 }
 
 export interface AIInvocationDTO {
+  token_source: 'provider' | 'unknown';
   id: string;
   task: string;
   provider: string;
@@ -678,10 +695,21 @@ export interface DecisionConnectionResult {
 }
 
 export interface AIUsageSummary {
+  successful_requests: number;
+  failed_requests: number;
+  fallback_requests: number;
+  unknown_token_requests: number;
+  features: { feature: string; requests: number; failed: number; fallback: number; duration_ms: number }[];
   total_requests: number;
   total_input_tokens: number;
   total_output_tokens: number;
   invocations: AIInvocationDTO[];
+}
+
+export interface SystemHealth {
+  status: 'healthy' | 'degraded';
+  checked_at: string;
+  components: { component: string; status: 'ok' | 'warning' | 'error'; message: string; duration_ms: number; operational_state?: string }[];
 }
 
 export interface RequirementAnalysisDTO {

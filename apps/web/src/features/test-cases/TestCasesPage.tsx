@@ -50,15 +50,15 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   const { selectedCase } = cases;
   const caseTask = useContextTask(selectedCase?.project_id ?? null, 'test_case', selectedCase?.id ?? null);
 
-  const startCaseTask = (type: 'OPTIMIZE_TEST' | 'REVIEW_TEST') => {
+  const startCaseTask = (type: 'CREATE_TEST' | 'OPTIMIZE_TEST' | 'REVIEW_TEST') => {
     const target = binding.selectedBinding;
-    if (!selectedCase || !target) return;
+    if (!selectedCase || !target && type !== 'CREATE_TEST') return;
     void caseTask.start({
       type,
-      goal: t(type === 'OPTIMIZE_TEST' ? 'tasks:optimizeGoal' : 'tasks:reviewGoal', { title: selectedCase.title }),
+      goal: type === 'CREATE_TEST' ? `${selectedCase.title}: ${selectedCase.expected_result}` : t(type === 'OPTIMIZE_TEST' ? 'tasks:optimizeGoal' : 'tasks:reviewGoal', { title: selectedCase.title }),
       project_id: selectedCase.project_id,
-      workspace_id: target.workspace_id || selectedCase.project_id,
-      inputs: { test_case_id: selectedCase.id, file_path: target.file_path, test_nodeid: target.nodeid },
+      workspace_id: target?.workspace_id || selectedCase.project_id,
+      inputs: { test_case_id: selectedCase.id, ...(type === 'CREATE_TEST' ? { case_name: selectedCase.title, requirement: selectedCase.expected_result } : { file_path: target?.file_path, test_nodeid: target?.nodeid }) },
     });
   };
 
@@ -130,6 +130,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
             <div className="test-case-workspace">
               <TestCaseDetail selectedCase={selectedCase} onUpdateStatus={cases.updateStatus} aiDisabled={!binding.selectedBinding || caseTask.busy} onOptimize={() => startCaseTask('OPTIMIZE_TEST')} onReview={() => startCaseTask('REVIEW_TEST')} />
               <ContextTaskProgress task={caseTask.task} error={caseTask.error} />
+              <button type="button" className="btn btn-primary btn-sm" disabled={caseTask.busy} onClick={() => startCaseTask('CREATE_TEST')}>{t('tasks:caseCopilot')}</button>
 
               <AutomationBindingPanel
                 selectedBinding={binding.selectedBinding}

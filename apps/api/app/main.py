@@ -1,9 +1,14 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from qa_core.ai.correlation import request_id_context
+from starlette.exceptions import HTTPException
 
 from app.api import (
     ai_router,
@@ -38,6 +43,8 @@ from app.api import (
     workspaces_router,
 )
 from app.api.authz import StreamTicketQuerySanitizer, authorize_request
+from app.api.errors import http_error, validation_error
+from app.api.language_service import router as language_service_router
 from app.persistence.database import engine, init_db
 from app.services.ai_settings_service import AISettingsService
 from app.services.metrics_service import metrics_service
@@ -78,9 +85,16 @@ async def lifespan(app: FastAPI):
     task_runtime = task_runtime_service
     app.state.task_runtime = task_runtime
     await task_runtime.start()
+    from app.services.platform_health_service import platform_health_service
+
+    readiness_task = asyncio.create_task(platform_health_service.check(refresh=True))
+    app.state.readiness_task = readiness_task
     try:
         yield
     finally:
+        if not readiness_task.done():
+            readiness_task.cancel()
+        await asyncio.gather(readiness_task, return_exceptions=True)
         await task_runtime.stop()
         from app.services.debug_session_service import debug_session_service
         from app.services.recorder_service import recorder_service
@@ -100,6 +114,8 @@ app = FastAPI(
     dependencies=[Depends(authorize_request)],
 )
 app.add_middleware(StreamTicketQuerySanitizer)
+app.add_exception_handler(HTTPException, http_error)
+app.add_exception_handler(RequestValidationError, validation_error)
 
 # CORS middleware
 app.add_middleware(
@@ -114,7 +130,13 @@ app.add_middleware(
 @app.middleware("http")
 async def track_metrics_middleware(request: Request, call_next):
     start = time.time()
-    response = await call_next(request)
+    request.state.request_id = uuid4().hex
+    token = request_id_context.set(request.state.request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_context.reset(token)
+    response.headers["X-Request-ID"] = request.state.request_id
     duration = time.time() - start
     metrics_service.record_request(
         method=request.method,
@@ -156,6 +178,7 @@ app.include_router(flaky_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 app.include_router(qa_assistant_router, prefix="/api")
+app.include_router(language_service_router, prefix="/api")
 
 
 @app.get("/")
