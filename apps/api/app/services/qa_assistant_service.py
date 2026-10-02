@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from collections.abc import AsyncGenerator
 from uuid import uuid4
 
 from project_model.models import QAChatRequest, QAChatResponse
+from qa_core.ai.budget import AIBudgetGuard
 from qa_core.ai.models import AICompletionRequest
 from qa_core.ai.provider import stream_provider_completion
 from qa_core.ai.trace import AITraceEvent, make_trace_event
@@ -27,6 +27,7 @@ class QAAssistantService:
     ) -> None:
         self.orchestrator = orchestrator or ProductionQAOrchestrator()
         self.ai_repo = ai_repo or AIRepository()
+        self.budget_guard = getattr(self.orchestrator, "budget_guard", None) or AIBudgetGuard()
 
     async def handle_request(self, req: QAChatRequest) -> QAChatResponse:
         action = req.action
@@ -38,10 +39,17 @@ class QAAssistantService:
 
         start = time.perf_counter()
         started_at = utc_now()
+        from qa_core.ai.context import ContextSelector
+
+        from app.services.workspace_service import WorkspaceService
+
+        bundle = ContextSelector().select(
+            WorkspaceService().get_workspace_dir(ctx.project_id), test_nodeid=ctx.current_file, query=req.message
+        )
 
         res = await self.orchestrator.assist_code_chat(
             action=action,
-            message=req.message,
+            message=req.message + "\nRelated repository context:\n" + bundle.render(),
             current_file=ctx.current_file,
             selected_code=ctx.selected_code,
             project_name=ctx.project_name,
@@ -55,39 +63,21 @@ class QAAssistantService:
 
         # Record AI Invocation
         invocation = self.orchestrator.last_invocation_metadata()
-        await self.ai_repo.record_invocation(
-            task=f"assistant_{action}",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=150,
-            output_tokens=180,
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task=f"assistant_{action}",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=invocation.get("input_tokens"),
+                output_tokens=invocation.get("output_tokens"),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
-        # Fallback formatting for specific quick actions if LLM returned basic reply
         suggested_code = res.suggested_code
         target_file = res.target_file
-
-        if action == "generate_draft" and not suggested_code:
-            title = ctx.test_case_title or ctx.requirement_title or "sample_flow"
-            slug = title.lower().replace(" ", "_").replace("-", "_")[:35].strip("_")
-            suggested_code = f'''import pytest
-from playwright.sync_api import Page, expect
-
-@pytest.mark.ui
-def test_{slug}(page: Page):
-    """
-    Generated from QA Assistant
-    Target: {title}
-    """
-    page.goto("/")
-    # Automated interaction steps
-    expect(page).to_have_title(r".*")
-'''
-            target_file = f"tests/test_{slug}.py"
 
         return QAChatResponse(
             response=res.reply,
@@ -145,32 +135,49 @@ def test_{slug}(page: Page):
             )
 
             validation_issues = "\n".join(f"- Line {item.line}: {item.message}" for item in issues)
-            prompt = "\n".join(
-                [
-                    f"Action: {req.action}",
-                    f"User request: {req.message or f'Please help with {req.action}.'}",
-                    f"Project: {ctx.project_name or ctx.project_id}",
-                    f"Requirement: {ctx.requirement_title or 'None'}",
-                    f"Test case: {ctx.test_case_title or 'None'}",
-                    f"Current file: {ctx.current_file or 'None'}",
-                    "Selected code:",
-                    ctx.selected_code or "None",
-                    "Validation issues:",
-                    validation_issues or "None",
-                    "Relevant diff:",
-                    ctx.git_diff or "None",
-                    "Respond with a concise, user-facing Markdown answer. For generated code, use a fenced code block. "
-                    "Do not reveal private chain-of-thought or hidden reasoning; provide conclusions and verifiable evidence only.",
-                ]
+            from qa_core.ai.context import ContextSelector
+            from qa_core.failure.redactor import SensitiveRedactor
+            from qa_core.prompts import ASSISTANT_STREAM_PROMPT
+
+            from app.services.workspace_service import WorkspaceService
+
+            bundle = ContextSelector().select(
+                WorkspaceService().get_workspace_dir(ctx.project_id),
+                test_nodeid=ctx.current_file,
+            )
+            prompt = ASSISTANT_STREAM_PROMPT.format(
+                action=req.action,
+                message=req.message or f"Please help with {req.action}.",
+                project=ctx.project_name or ctx.project_id,
+                requirement=ctx.requirement_title or "None",
+                case=ctx.test_case_title or "None",
+                current_file=ctx.current_file or "None",
+                selected_code=(ctx.selected_code or "None")[:12000],
+                repository_context=bundle.render(),
+                validation=validation_issues or "None",
+                diff=(ctx.git_diff or "None")[:4000],
             )
             completion = AICompletionRequest(
-                prompt=prompt,
-                system_instruction=(
-                    "You are a QA automation assistant. Explain what the evidence supports and give practical, "
-                    "verifiable guidance. Never expose private chain-of-thought."
-                ),
+                run_id=run_id,
+                prompt=SensitiveRedactor.redact_text(prompt),
+                system_instruction=ASSISTANT_STREAM_PROMPT.system_instruction,
+                prompt_id=ASSISTANT_STREAM_PROMPT.prompt_id,
+                prompt_version=ASSISTANT_STREAM_PROMPT.version,
                 temperature=0.2,
                 max_tokens=2000,
+            )
+            self.budget_guard.check_and_record_request()
+            yield make_trace_event(
+                run_id,
+                "context.loaded",
+                stage="context",
+                title="检索相关代码与 fixture",
+                message=f"{len(bundle.fragments)} files · {bundle.total_chars} characters",
+                metadata={
+                    "paths": bundle.paths,
+                    "omitted": bundle.omitted,
+                    "prompt_version": completion.prompt_version,
+                },
             )
             yield make_trace_event(
                 run_id,
@@ -197,26 +204,9 @@ def test_{slug}(page: Page):
                         content=chunk.content_delta,
                     )
 
-            if req.action == "generate_draft" and not re.search(r"```", answer):
-                title = ctx.test_case_title or ctx.requirement_title or "sample_flow"
-                slug = re.sub(r"[^a-zA-Z0-9_]+", "_", title.lower()).strip("_")[:35] or "sample_flow"
-                sample = (
-                    "\n\n```python\n"
-                    "import pytest\nfrom playwright.sync_api import Page, expect\n\n"
-                    f"@pytest.mark.ui\ndef test_{slug}(page: Page):\n"
-                    f'    """Generated from QA Assistant: {title}."""\n'
-                    '    page.goto("/")\n    expect(page).to_have_title(r".*")\n'
-                    "```"
-                )
-                answer += sample
-                yield make_trace_event(
-                    run_id,
-                    "model.delta",
-                    stage="model",
-                    title="生成测试草稿",
-                    content=sample,
-                )
-
+            self.budget_guard.record_tokens(
+                _usage_count(usage, "prompt_tokens", None), _usage_count(usage, "completion_tokens", None)
+            )
             if not answer.strip():
                 raise RuntimeError("empty_model_response")
 
@@ -250,18 +240,19 @@ def test_{slug}(page: Page):
             )
             run_status = "SUCCESS"
             try:
-                await self.ai_repo.record_invocation(
-                    task=f"assistant_{req.action}",
-                    provider=final_provider,
-                    model=final_model,
-                    fallback_used=fallback_used,
-                    started_at=started_at,
-                    duration_ms=duration_ms,
-                    input_tokens=_usage_count(usage, "prompt_tokens", 150),
-                    output_tokens=_usage_count(usage, "completion_tokens", 180),
-                    prompt_version="v1.0",
-                    status="SUCCESS",
-                )
+                if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+                    await self.ai_repo.record_invocation(
+                        task=f"assistant_{req.action}",
+                        provider=final_provider,
+                        model=final_model,
+                        fallback_used=fallback_used,
+                        started_at=started_at,
+                        duration_ms=duration_ms,
+                        input_tokens=_usage_count(usage, "prompt_tokens", None),
+                        output_tokens=_usage_count(usage, "completion_tokens", None),
+                        prompt_version="v2.0",
+                        status="SUCCESS",
+                    )
             except Exception as error:
                 logger.warning("AI invocation recording failed error_type=%s", type(error).__name__)
             yield make_trace_event(
@@ -299,19 +290,20 @@ def test_{slug}(page: Page):
                 type(error).__name__,
             )
             try:
-                await self.ai_repo.record_invocation(
-                    task=f"assistant_{req.action}",
-                    provider=final_provider,
-                    model=final_model,
-                    fallback_used=fallback_used,
-                    started_at=started_at,
-                    duration_ms=(time.perf_counter() - started) * 1000,
-                    input_tokens=_usage_count(usage, "prompt_tokens", 150),
-                    output_tokens=_usage_count(usage, "completion_tokens", None),
-                    prompt_version="v1.0",
-                    status="FAILED",
-                    error_type=safe_error,
-                )
+                if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+                    await self.ai_repo.record_invocation(
+                        task=f"assistant_{req.action}",
+                        provider=final_provider,
+                        model=final_model,
+                        fallback_used=fallback_used,
+                        started_at=started_at,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=_usage_count(usage, "prompt_tokens", None),
+                        output_tokens=_usage_count(usage, "completion_tokens", None),
+                        prompt_version="v2.0",
+                        status="FAILED",
+                        error_type=safe_error,
+                    )
             except Exception as telemetry_error:
                 logger.warning("AI invocation recording failed error_type=%s", type(telemetry_error).__name__)
             yield make_trace_event(

@@ -250,6 +250,62 @@ def test_generated_code_policy_rejects_python_internal_access():
         )
 
 
+@pytest.mark.asyncio
+async def test_ai_repair_cannot_change_existing_assertions(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+
+    service = TaskRuntimeService()
+    task = SimpleNamespace(inputs={}, goal="Repair the missing argument")
+    proposal = SimpleNamespace(
+        suggested_code="def test_total():\n    result = calculate_total(20, 2)\n    assert result == 99\n"
+    )
+
+    async def code_ai(*_args):
+        return proposal
+
+    monkeypatch.setattr(service, "_call_code_ai", code_ai)
+    with pytest.raises(TaskBlocked, match="changed an existing assertion"):
+        await service._prepare_repair(
+            task,
+            {
+                "collect": {
+                    "test_nodeid": "tests/test_total.py::test_total",
+                    "error_message": "TypeError: missing quantity",
+                },
+                "inspect": {
+                    "file_path": "tests/test_total.py",
+                    "source": "def test_total():\n    result = calculate_total(20)\n    assert result == 40\n",
+                },
+                "diagnose": {"classification": "PYTHON_EXCEPTION"},
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_literal_false_assertion_blocks_before_ai_call(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+
+    service = TaskRuntimeService()
+    task = SimpleNamespace(inputs={}, goal="Repair the failure")
+
+    async def code_ai(*_args):
+        pytest.fail("A contradictory literal assertion requires an explicit intended expectation")
+
+    monkeypatch.setattr(service, "_call_code_ai", code_ai)
+    with pytest.raises(TaskBlocked, match="deterministically false literal assertion"):
+        await service._prepare_repair(
+            task,
+            {
+                "collect": {"test_nodeid": "tests/test_total.py::test_total"},
+                "inspect": {"file_path": "tests/test_total.py", "source": "def test_total():\n    assert 1 == 2\n"},
+            },
+        )
+
+
 def test_generated_code_policy_allows_url_parsing_but_blocks_network_imports():
     from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
 

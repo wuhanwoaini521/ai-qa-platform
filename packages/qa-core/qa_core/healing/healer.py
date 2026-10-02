@@ -142,7 +142,7 @@ class LocatorHealer:
                 selector=item["value"],
                 strategy=item["kind"],
                 confidence=round(min(0.95, item["confidence"] * 0.72 + 0.23), 2),
-                reason=item["evidence"],
+                reason=item["evidence"].get("description") or "Candidate observed in the DOM.",
             )
             for item in ranked
         ]

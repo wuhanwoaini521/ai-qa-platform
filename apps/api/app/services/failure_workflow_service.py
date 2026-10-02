@@ -6,6 +6,7 @@ import json
 import re
 import time
 from collections.abc import AsyncGenerator
+from datetime import datetime
 
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.failure.classifier import FailureClassifier
@@ -15,6 +16,7 @@ from qa_core.failure.redactor import SensitiveRedactor
 from app.repositories.failure_analysis_repo import FailureAnalysisRepository
 from app.services.failure_service import FailureService
 from app.services.locator_decision_service import LocatorDecisionService
+from app.services.locator_history_service import LocatorHistoryService
 from app.services.workspace_service import SecurityException
 
 
@@ -78,6 +80,25 @@ class FailureWorkflowService:
                 duration_ms=run.duration_ms if completed else None,
             )
             await self.history.append(row["id"], event, result=result)
+        rows = await self.history.list(failure_id)
+        proposal = failure.repair_proposal or {}
+        if proposal.get("applied") and proposal.get("proposed_locator") and proposal.get("applied_at"):
+            browser, page = await self.failures._browser_evidence(failure.execution_id)
+            url = browser.current_url if browser else (page or {}).get("url")
+            if url:
+                for row in rows:
+                    if row["result"].get("verified") and not row["result"].get("locator_heal_recorded"):
+                        verified_run = await self.failures.run_repo.get_by_id(row["result"]["verification_run_id"])
+                        if not verified_run or verified_run.created_at < datetime.fromisoformat(proposal["applied_at"]):
+                            continue
+                        await LocatorHistoryService().record(
+                            url,
+                            proposal["proposed_locator"],
+                            True,
+                            verification=True,
+                            healed=True,
+                            healed_analysis_id=row["id"],
+                        )
         return await self.history.list(failure_id)
 
     async def stream(self, failure_id: str) -> AsyncGenerator[AITraceEvent, None]:

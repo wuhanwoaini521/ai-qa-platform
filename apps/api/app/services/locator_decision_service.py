@@ -22,28 +22,6 @@ _METHODS = {
     "placeholder": "get_by_placeholder",
     "text": "get_by_text",
 }
-_SEMANTIC_QUALITY = {
-    "role": 1.0,
-    "label": 0.98,
-    "test_id": 0.92,
-    "placeholder": 0.9,
-    "text": 0.78,
-    "id": 0.72,
-    "name": 0.68,
-    "css": 0.4,
-    "xpath": 0.3,
-}
-_STABILITY = {
-    "role": 0.98,
-    "label": 0.97,
-    "test_id": 0.99,
-    "placeholder": 0.88,
-    "text": 0.72,
-    "id": 0.8,
-    "name": 0.78,
-    "css": 0.5,
-    "xpath": 0.42,
-}
 
 
 class LocatorDecisionService:
@@ -66,9 +44,7 @@ class LocatorDecisionService:
             kind = item["kind"]
             value = str(item["value"])
             evidence = dict(item.get("evidence") or {})
-            evidence.setdefault("uniqueness", item.get("nth") is None)
-            evidence.setdefault("semantic_quality", _SEMANTIC_QUALITY.get(kind, 0.3))
-            evidence.setdefault("stability", _STABILITY.get(kind, 0.3))
+            evidence.setdefault("uniqueness", None)
             evidence.setdefault("dom_depth", event.get("dom_depth"))
             evidence.setdefault("dynamic_attribute_risk", bool(re.search(r"(?:\d{5,}|[0-9a-f]{8,})", value, re.I)))
             evidence.setdefault(
@@ -115,6 +91,15 @@ class LocatorDecisionService:
         started = time.perf_counter()
         trace: list[AITraceEvent] = []
         safe_url = SensitiveRedactor.redact_url(str(event.get("url") or ""))
+        from app.services.locator_history_service import LocatorHistoryService
+
+        history = LocatorHistoryService()
+        await history.enrich(safe_url, candidates)
+        ranked = rank_locator_candidates(candidates)
+        scores = {item["candidate_id"]: item["confidence"] for item in ranked}
+        for item in candidates:
+            item["static_score"] = scores[item["candidate_id"]]
+        candidates.sort(key=lambda item: item["static_score"], reverse=True)
 
         async def emit(
             event_type: str,
@@ -274,6 +259,7 @@ class LocatorDecisionService:
                     metadata={"candidate_id": candidate["candidate_id"]},
                 )
                 verification = await self.verify_candidate(page, candidate, event)
+                await history.record(safe_url, candidate["locator"], bool(verification["verified"]), verification=True)
                 await emit(
                     "verification_completed",
                     "Playwright verification passed" if verification["verified"] else "Playwright verification failed",

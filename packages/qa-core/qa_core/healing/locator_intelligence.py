@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -34,7 +35,38 @@ def rank_locator_candidates(candidates: Iterable[Mapping[str, Any]]) -> list[dic
             score -= 0.18
         if candidate.get("exact") is False and kind in {"role", "label", "placeholder", "text"}:
             score -= 0.08
-        item = {**candidate, "kind": kind, "value": value, "confidence": round(max(0.05, min(score, 0.99)), 2)}
+        raw_evidence = candidate.get("evidence")
+        evidence = (
+            dict(raw_evidence)
+            if isinstance(raw_evidence, Mapping)
+            else {"description": raw_evidence}
+            if raw_evidence
+            else {}
+        )
+        count = evidence.get("match_count")
+        if isinstance(count, int):
+            evidence["uniqueness"] = count == 1
+        # Absence of nth is not proof of uniqueness; only observed counts establish it.
+        evidence.setdefault("uniqueness", False if nth is not None else None)
+        dynamic = bool(re.search(r"(?:\d{5,}|[0-9a-f]{8,})", value, re.I))
+        evidence.setdefault("dynamic_attribute_risk", dynamic)
+        if evidence["uniqueness"] is False:
+            score -= 0.15
+        if evidence["dynamic_attribute_risk"]:
+            score -= 0.2
+        history = evidence.get("history") or {}
+        successes, failures = history.get("success_count", 0), history.get("failure_count", 0)
+        if successes + failures:
+            score += 0.1 * ((successes + 1) / (successes + failures + 2) - 0.5)
+        evidence.setdefault("stability", _STRATEGY_SCORE.get(kind, 0.4))
+        evidence.setdefault("semantic_quality", _STRATEGY_SCORE.get(kind, 0.4))
+        item = {
+            **candidate,
+            "kind": kind,
+            "value": value,
+            "evidence": evidence,
+            "confidence": round(max(0.05, min(score, 0.99)), 2),
+        }
         ranked.append((item["confidence"], -index, item))
     ranked.sort(reverse=True, key=lambda item: (item[0], item[1]))
     return [item[2] for item in ranked]

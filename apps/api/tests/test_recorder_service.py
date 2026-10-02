@@ -225,3 +225,8 @@ async def test_failed_initial_navigation_keeps_session_open(monkeypatch: pytest.
     context.close.assert_not_awaited()
     browser.close.assert_not_awaited()
     await service.close(session.id, "owner")
+
+
+@pytest.fixture(autouse=True)
+def isolated_ai_persistence(test_db_session):
+    """All provider governance and locator history use the isolated test database."""

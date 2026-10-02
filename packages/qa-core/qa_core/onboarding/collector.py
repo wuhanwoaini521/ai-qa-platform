@@ -100,6 +100,7 @@ class LogicalTestOutcome(BaseModel):
     attempts: int = 0
     reruns: int = 0
     failure_message: str | None = None
+    duration_ms: float | None = None
 
     @property
     def is_flaky_rerun(self) -> bool:
@@ -355,7 +356,8 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
         physical += sum(1 for entry in tries if entry[0].endswith(":call") or not entry[0].startswith("passed"))
         reruns = max(len(decisive) - 1, 0) if decisive else 0
         reruns_total += reruns
-        outcome, _duration, message, expected_failure = (decisive or tries)[-1]
+        failed_lifecycle = [entry for entry in tries if entry[0] in {"failed:setup", "failed:teardown"}]
+        outcome, _duration, message, expected_failure = (failed_lifecycle or decisive or tries)[-1]
         phase = outcome.split(":", 1)[1] if ":" in outcome else "call"
         base = outcome.split(":", 1)[0]
         if phase != "call":
@@ -379,6 +381,7 @@ def parse_report_log(report_log: Path) -> tuple[list[LogicalTestOutcome], int, i
                 attempts=len(tries),
                 reruns=reruns,
                 failure_message=message if status in (RunStatus.FAILED, RunStatus.ERROR) else None,
+                duration_ms=sum(entry[1] for entry in tries if isinstance(entry[1], (int, float))) * 1000,
             )
         )
     return outcomes, physical, reruns_total
@@ -410,6 +413,7 @@ class QAProjectCollector:
 
     async def collect(self, project_root: Path, markers: list[str] | None = None) -> CollectionOutcome:
         command = [*self.contract.collect_command]
+        command.extend([f"--rootdir={project_root.resolve()}", f"--confcutdir={project_root.resolve()}"])
         if markers:
             command.extend(["-m", " or ".join(markers)])
         command.extend(PARSER_STABILITY_ARGS)
@@ -476,6 +480,7 @@ class QAProjectRunner:
         plugin_name = write_plugin(artifacts_dir)
 
         command = self.contract.command_for_tests(nodeids=nodeids, markers=markers)
+        command.extend([f"--rootdir={project_root.resolve()}", f"--confcutdir={project_root.resolve()}"])
         command.extend(["-p", plugin_name])
         command.extend(PARSER_STABILITY_ARGS)
         command.extend(extra_args or [])

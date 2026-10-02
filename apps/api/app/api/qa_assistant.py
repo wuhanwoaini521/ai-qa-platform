@@ -1,10 +1,10 @@
-import json
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from project_model.models import QAChatRequest, QAChatResponse
 
+from app.api.event_stream import event_frame
 from app.services.qa_assistant_service import QAAssistantService
 
 router = APIRouter(prefix="/qa-assistant", tags=["QA Assistant Sidecar"])
@@ -34,8 +34,7 @@ async def stream_chat_assistant(
             async for event in stream:
                 if await http_request.is_disconnected():
                     break
-                payload = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
-                yield f"event: {event.type}\ndata: {payload}\n\n"
+                yield event_frame(event.type, event)
         finally:
             await stream.aclose()
 

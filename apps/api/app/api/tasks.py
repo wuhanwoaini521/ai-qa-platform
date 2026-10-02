@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -16,6 +15,7 @@ from project_model.task_models import (
 )
 
 from app.api.authz import get_current_user
+from app.api.event_stream import event_frame
 from app.persistence.database import async_session_factory
 from app.repositories.task_repo import TaskRepository
 from app.services.task_runtime_service import TaskRuntimeService
@@ -124,18 +124,15 @@ async def _task_event_stream(
             events = await repo.events_after(task_id, cursor)
             current_status = task.status
             for event in events:
-                payload = json.dumps(
-                    {
-                        "id": event.id,
-                        "task_id": event.task_id,
-                        "type": event.type,
-                        "payload": event.payload,
-                        "created_at": event.created_at.isoformat(),
-                    },
-                    ensure_ascii=False,
-                )
+                payload = {
+                    "id": event.id,
+                    "task_id": event.task_id,
+                    "type": event.type,
+                    "payload": event.payload,
+                    "created_at": event.created_at.isoformat(),
+                }
                 cursor = event.id
-                yield f"id: {event.id}\ndata: {payload}\n\n"
+                yield event_frame("message", payload, event_id=event.id)
         if current_status in terminal and not events:
             return
         if not events:

@@ -75,9 +75,18 @@ async def test_progress_reaches_client_before_model_finishes(failure_service):
     stream = service.stream_diagnosis(failure_id)
     try:
         first = await asyncio.wait_for(anext(stream), timeout=2)
+        context = await asyncio.wait_for(anext(stream), timeout=2)
+        rules = await asyncio.wait_for(anext(stream), timeout=2)
         evidence = await asyncio.wait_for(anext(stream), timeout=2)
         model = await asyncio.wait_for(anext(stream), timeout=2)
-        assert [first.type, evidence.type, model.type] == ["analysis_started", "evidence_collected", "model.started"]
+        assert [first.type, context.type, rules.type, evidence.type, model.type] == [
+            "analysis_started",
+            "context.loaded",
+            "rule.classified",
+            "evidence_collected",
+            "model.started",
+        ]
+        assert rules.metadata["failure_kind"] == "ASSERTION_FAILURE"
         assert "assert 1 == 2" in evidence.message
         await asyncio.wait_for(provider.entered.wait(), timeout=2)
         assert not provider.release.is_set()

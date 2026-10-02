@@ -5,7 +5,28 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_automation_binding_and_generation(client: AsyncClient):
+async def test_automation_binding_and_generation(client: AsyncClient, monkeypatch):
+    from qa_core.ai.models import AICompletionResponse
+    from qa_core.ai.registry import AIProviderRegistry
+
+    class ContractProvider:
+        async def complete(self, request):
+            assert "Total is discounted" in request.prompt
+            assert "conftest.py" in request.prompt
+            return AICompletionResponse(
+                content="",
+                provider="contract-test",
+                model="test-model",
+                structured_data={
+                    "reply": "Draft coupon calculation case",
+                    "suggested_code": "def test_verify_checkout_flow():\n    total = 100 * (1 - 0.2)\n    assert total == 80\n",
+                    "target_file": "tests/test_coupon.py",
+                    "action_type": "generate_test",
+                    "suggestions": [],
+                },
+            )
+
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: ContractProvider())
     # 1. Create project
     proj_res = await client.post(
         "/api/projects",
@@ -27,13 +48,18 @@ async def test_automation_binding_and_generation(client: AsyncClient):
         },
     )
     tc_id = tc_res.json()["id"]
+    from app.services.workspace_service import WorkspaceService
+
+    await WorkspaceService().write_file(
+        proj_id, "conftest.py", "import pytest\n@pytest.fixture\ndef cart_total():\n    return 100\n"
+    )
 
     # 3. Generate automation draft
     gen_res = await client.post(f"/api/test-cases/{tc_id}/generate-automation")
     assert gen_res.status_code == 200
     gen_data = gen_res.json()
     assert gen_data["status"] == "generated"
-    assert "test_verify_checkout_flow" in gen_data["binding"]["nodeid"]
+    assert "::test_verify_checkout_flow" in gen_data["binding"]["nodeid"]
 
     # 4. Check binding
     bind_res = await client.get(f"/api/test-cases/{tc_id}/binding")

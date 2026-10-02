@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from project_model.models import TestRun, TestRunCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.event_stream import event_frame
 from app.persistence.database import async_session_factory, get_db
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
@@ -94,8 +95,16 @@ async def stream_run_events(
     if not run:
         raise HTTPException(status_code=404, detail="Test Run not found")
 
+    async def events():
+        stream = service.event_generator(run_id)
+        try:
+            async for event in stream:
+                yield event_frame("message", event)
+        finally:
+            await stream.aclose()
+
     return StreamingResponse(
-        service.event_generator(run_id),
+        events(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

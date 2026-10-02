@@ -180,6 +180,42 @@ class RecorderGenerateRequest(BaseModel):
     steps: list[RecorderStep]
 
 
+class RecorderOptimization(BaseModel):
+    steps: list[RecorderStep] = Field(max_length=500)
+    reasons: list[str] = Field(max_length=30)
+
+
+def validate_recording_optimization(raw: list[RecorderStep], optimized: list[RecorderStep]) -> None:
+    """Permit only the advertised safe operations, independent of the model's claims."""
+    normalized = []
+    for step in raw:
+        if step.action == "hover":
+            continue
+        if (
+            normalized
+            and step.action == "fill"
+            and normalized[-1].action == "fill"
+            and step.locator == normalized[-1].locator
+            and step.frame_path == normalized[-1].frame_path
+        ):
+            normalized[-1] = step
+        else:
+            normalized.append(step)
+
+    def meaning(steps):
+        return [
+            {
+                key: value
+                for key, value in step.model_dump().items()
+                if key not in {"id", "description", "locator_decision"}
+            }
+            for step in steps
+        ]
+
+    if meaning([step for step in optimized if step.action != "hover"]) != meaning(normalized):
+        raise ValueError("Optimization changed a business action, target, value or assertion; proposal was rejected.")
+
+
 @dataclass
 class RecorderSession:
     id: str

@@ -41,6 +41,9 @@ class QAReportPlugin:
         if longrepr is not None:
             text = str(longrepr).strip()
             record["longrepr"] = text.splitlines()[-1][:2000] if text else None
+            record["stack_trace"] = text[-16000:]
+            crash = getattr(longrepr, "reprcrash", None)
+            record["error_message"] = str(crash.message)[:3000] if crash else record["longrepr"]
         self._handle.write(json.dumps(record, ensure_ascii=False) + "\\n")
         self._handle.flush()
 

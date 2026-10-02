@@ -5,6 +5,11 @@ from app.services.locator_decision_service import LocatorDecisionService
 from project_model.models import DecisionResult
 
 
+@pytest.fixture(autouse=True)
+def isolated_locator_history(test_db_session):
+    """Candidate history must use the test database, never the developer database."""
+
+
 def test_candidate_generation_preserves_only_observed_locator_strategies():
     event = {
         "dom_depth": 4,

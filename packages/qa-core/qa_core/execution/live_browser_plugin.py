@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 import uuid
 
 import pytest
@@ -31,6 +32,7 @@ class LiveBrowserPlugin:
         self.handle = open(f"{path}.{self.worker_id}", "a", encoding="utf-8")
         self.lock = threading.Lock()
         self.active = {}
+        self.locator_originals = {}
 
     def emit(self, event):
         event.update({"worker_id": self.worker_id})
@@ -82,18 +84,112 @@ class LiveBrowserPlugin:
         except Exception:
             return None
 
+    def _install_telemetry(self, page, record):
+        record["console_logs"] = []
+        record["network_logs"] = []
+        record["recent_steps"] = []
+        def publish(kind, entry):
+            key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[kind]
+            record[key].append(entry)
+            del record[key][:-50]
+            self.emit({"type": kind, "session_id": record["session_id"], "page_id": record["page_id"],
+                "nodeid": record["nodeid"], "url": getattr(page, "url", ""), "entry": entry})
+        listeners = [("console", lambda message: publish("console", {"level": message.type, "text": message.text[:2000]})),
+            ("response", lambda response: publish("network", {"url": response.url[:2048], "status": response.status, "method": response.request.method})),
+            ("requestfailed", lambda request: publish("network", {"url": request.url[:2048], "failure": str(request.failure)[:500], "method": request.method}))]
+        record["listeners"] = listeners
+        for name, callback in listeners:
+            page.on(name, callback)
+        try:
+            from playwright.sync_api import Locator
+            for method in ("click", "dblclick", "fill", "select_option", "check", "uncheck", "hover", "press"):
+                original = getattr(Locator, method)
+                self.locator_originals[method] = original
+                def instrument(original, method):
+                    def wrapped(locator, *args, **kwargs):
+                        if getattr(locator, "page", page) is not page:
+                            return original(locator, *args, **kwargs)
+                        if kwargs.get("trial"):
+                            return original(locator, *args, **kwargs)
+                        started = time.perf_counter()
+                        passed = False
+                        try:
+                            result = original(locator, *args, **kwargs)
+                            passed = True
+                            return result
+                        finally:
+                            publish("step", {"action": method, "locator": str(getattr(getattr(locator, "_impl_obj", None), "_selector", ""))[:1000],
+                                "status": "PASSED" if passed else "FAILED", "duration_ms": round((time.perf_counter()-started)*1000, 1)})
+                            evidence = self._page_evidence(page)
+                            if evidence:
+                                record["last_page_evidence"] = evidence
+                    return wrapped
+                setattr(Locator, method, instrument(original, method))
+        except ImportError:
+            pass
+
+    def _remove_telemetry(self, page, record):
+        try:
+            from playwright.sync_api import Locator
+            for method, original in self.locator_originals.items():
+                setattr(Locator, method, original)
+            self.locator_originals.clear()
+            for name, callback in record.get("listeners", []):
+                page.remove_listener(name, callback)
+        except Exception:
+            pass
+
     @pytest.hookimpl(hookwrapper=True, tryfirst=True)
     def pytest_runtest_call(self, item):
-        page = self._find_page(item)
-        if page is None:
+        try:
+            from playwright.sync_api import Browser, BrowserContext, Page
+        except ImportError:
             yield
             return
+
+        originals = []
+        def observe(page):
+            if not isinstance(page, Page) or item.nodeid in self.active:
+                return
+            try:
+                self._start_observation(item, page)
+            except Exception:
+                pass  # Optional telemetry must not change test execution.
+        def watch(original):
+            def wrapped(instance, *args, **kwargs):
+                page = original(instance, *args, **kwargs)
+                observe(page)
+                return page
+            return wrapped
+        try:
+            for kind in (BrowserContext, Browser):
+                original = kind.new_page
+                originals.append((kind, original))
+                kind.new_page = watch(original)
+            observe(self._find_page(item))
+            yield
+        finally:
+            for kind, original in originals:
+                kind.new_page = original
+            record = self.active.get(item.nodeid)
+            if record:
+                page = record["page"]
+                self._remove_telemetry(page, record)
+                if record["cdp"] is not None:
+                    try:
+                        record["cdp"].send("Page.stopScreencast")
+                        record["cdp"].detach()
+                    except Exception:
+                        pass
+
+    def _start_observation(self, item, page):
 
         session_id = uuid.uuid4().hex
         page_id = uuid.uuid4().hex
         nodeid = self._nodeid(item)
         record = {"session_id": session_id, "page_id": page_id, "nodeid": nodeid, "page": page, "cdp": None}
         self.active[item.nodeid] = record
+        self._install_telemetry(page, record)
         self.emit({
             "type": "session.started", "session_id": session_id, "page_id": page_id,
             "nodeid": nodeid, "case_name": item.name, "url": getattr(page, "url", ""),
@@ -138,16 +234,6 @@ class LiveBrowserPlugin:
         except Exception:
             pass
 
-        try:
-            yield
-        finally:
-            if record["cdp"] is not None:
-                try:
-                    record["cdp"].send("Page.stopScreencast")
-                    record["cdp"].detach()
-                except Exception:
-                    pass
-
     @pytest.hookimpl(hookwrapper=True)
     def pytest_runtest_makereport(self, item, call):
         outcome = yield
@@ -162,7 +248,8 @@ class LiveBrowserPlugin:
             "page_id": record["page_id"], "nodeid": record["nodeid"], "case_name": item.name,
             "url": getattr(record["page"], "url", ""),
             "status": "passed" if report.passed else "failed" if report.failed else "closed",
-            "page_evidence": self._page_evidence(record["page"]) if report.failed else None,
+            "page_evidence": {**(self._page_evidence(record["page"]) or record.get("last_page_evidence") or {}), "console_logs": record.get("console_logs", []),
+                "network_logs": record.get("network_logs", []), "recent_steps": record.get("recent_steps", [])},
         })
 
     def close(self):

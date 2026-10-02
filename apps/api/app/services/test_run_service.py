@@ -207,6 +207,7 @@ class TestRunService:
         elapsed_end = orm.finished_at or utc_now()
         elapsed_ms = max(0.0, (elapsed_end - orm.started_at).total_seconds() * 1000)
         return TestBrowserSession(
+            page_evidence=SensitiveRedactor.redact_value(json.loads(orm.page_evidence_json or "{}")),
             id=orm.id,
             run_id=orm.run_id,
             case_execution_id=orm.case_execution_id,
@@ -860,7 +861,7 @@ class TestRunService:
         )
         return await self.get_run(run_id)
 
-    async def event_generator(self, run_id: str) -> AsyncGenerator[str, None]:
+    async def event_generator(self, run_id: str) -> AsyncGenerator[dict, None]:
         # Poll persisted state so reconnects and events from another process are visible.
         # In-memory Pub/Sub alone loses events during refresh and cannot cross worker processes.
         from app.persistence.database import get_session
@@ -871,12 +872,12 @@ class TestRunService:
         seen_browser_sessions: dict[str, dict] = {}
         last_status: RunStatus | None = None
         try:
-            yield f"data: {json.dumps({'type': 'CONNECTED', 'run_id': run_id})}\n\n"
+            yield {"type": "CONNECTED", "run_id": run_id}
             while True:
                 while not queue.empty():
                     event = queue.get_nowait()
                     if event.get("type") in {"BROWSER_SESSION", "BROWSER_FRAME"}:
-                        yield f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
+                        yield event
 
                 async with get_session() as session:
                     orm = await TestRunRepository(session).get_by_id(run_id)
@@ -891,28 +892,45 @@ class TestRunService:
                     session_id = browser_session.browser_session_id
                     if seen_browser_sessions.get(session_id) != snapshot:
                         seen_browser_sessions[session_id] = snapshot
-                        yield f"data: {json.dumps({'type': 'BROWSER_SESSION', 'run_id': run_id, 'session': browser_session.model_dump(mode='json')})}\n\n"
+                        yield {
+                            "type": "BROWSER_SESSION",
+                            "run_id": run_id,
+                            "session": browser_session.model_dump(mode="json"),
+                        }
 
                 if run.status == RunStatus.RUNNING and last_status != RunStatus.RUNNING:
-                    yield f"data: {json.dumps({'type': 'RUN_STARTED', 'run_id': run_id, 'status': 'RUNNING', 'total': run.total})}\n\n"
+                    yield {"type": "RUN_STARTED", "run_id": run_id, "status": "RUNNING", "total": run.total}
                 log = run.log_output or ""
                 if len(log) < sent_log:
                     sent_log = 0
                 if len(log) > sent_log:
                     chunk = log[sent_log:]
                     sent_log = len(log)
-                    yield f"data: {json.dumps({'type': 'LOG_STREAM', 'run_id': run_id, 'log': chunk})}\n\n"
+                    yield {"type": "LOG_STREAM", "run_id": run_id, "log": chunk}
                 for execution in run.executions:
                     if execution.id not in seen_executions:
                         seen_executions.add(execution.id)
-                        yield f"data: {json.dumps({'type': 'TEST_FINISHED', 'run_id': run_id, 'nodeid': execution.nodeid, 'status': execution.status.value, 'duration_ms': execution.duration_ms})}\n\n"
+                        yield {
+                            "type": "TEST_FINISHED",
+                            "run_id": run_id,
+                            "nodeid": execution.nodeid,
+                            "status": execution.status.value,
+                            "duration_ms": execution.duration_ms,
+                        }
                 if run.status not in (RunStatus.QUEUED, RunStatus.RUNNING):
                     event_type = (
                         "RUN_CANCELLED"
                         if run.status == RunStatus.CANCELLED
                         else ("RUN_ERROR" if run.status == RunStatus.ERROR else "RUN_FINISHED")
                     )
-                    yield f"data: {json.dumps({'type': event_type, 'run_id': run_id, 'status': run.status.value, 'passed': run.passed, 'failed': run.failed, 'duration_ms': run.duration_ms})}\n\n"
+                    yield {
+                        "type": event_type,
+                        "run_id": run_id,
+                        "status": run.status.value,
+                        "passed": run.passed,
+                        "failed": run.failed,
+                        "duration_ms": run.duration_ms,
+                    }
                     return
                 last_status = run.status
                 await asyncio.sleep(0.2)
@@ -958,7 +976,7 @@ class TestRunService:
                         page_evidence = event.get("page_evidence")
                         if isinstance(page_evidence, dict):
                             safe_evidence = SensitiveRedactor.redact_value(page_evidence)
-                            row.page_evidence_json = json.dumps(safe_evidence, ensure_ascii=False)[:120_000]
+                            row.page_evidence_json = json.dumps(safe_evidence, ensure_ascii=False)
                 if row is not None:
                     await session.commit()
                     session_dto = self._to_browser_session_dto(row).model_dump(mode="json")
@@ -966,6 +984,32 @@ class TestRunService:
                         run_id,
                         {"type": "BROWSER_SESSION", "run_id": run_id, "session": session_dto},
                     )
+        elif event_type in {"console", "network", "step"}:
+            entry = SensitiveRedactor.redact_value(event.get("entry") or {})
+            if event_type == "network" and entry.get("url"):
+                entry["url"] = SensitiveRedactor.redact_url(entry["url"])
+            async with get_session() as session:
+                row = await session.get(BrowserSessionORM, session_id)
+                if row:
+                    evidence = json.loads(row.page_evidence_json or "{}")
+                    key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[event_type]
+                    evidence[key] = [*(evidence.get(key) or []), entry][-50:]
+                    row.page_evidence_json = json.dumps(evidence, ensure_ascii=False)
+                    await session.commit()
+            if event_type == "step" and entry.get("locator"):
+                from app.services.locator_history_service import LocatorHistoryService
+
+                await LocatorHistoryService().record(url, entry["locator"], entry.get("status") == "PASSED")
+            await event_bus.publish(
+                run_id,
+                {
+                    "type": "BROWSER_TELEMETRY",
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "channel": event_type,
+                    "entry": entry,
+                },
+            )
         elif event_type == "frame" and isinstance(event.get("frame"), str):
             await event_bus.publish(
                 run_id,

@@ -10,9 +10,47 @@ from app.persistence.models import BrowserSessionORM
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.locator_decision_service import LocatorDecisionService
+from app.services.locator_history_service import LocatorHistoryService
 from project_model.models import DecisionResult, RunStatus, TestRunCreate
 from qa_core.ai.provider import FakeAIProvider
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
+
+
+@pytest.mark.asyncio
+async def test_verified_locator_heal_is_counted_once_and_unverified_is_not(client, test_db_session):
+    from app.persistence.models import FailureAnalysisORM, LocatorHistoryORM
+    from sqlalchemy import select
+
+    _project, failure_id, _source = await seed(client, test_db_session, error="AssertionError: mismatch")
+    async with test_db_session() as session:
+        session.add(FailureAnalysisORM(id="analysis-heal", failure_id=failure_id, result={"verified": False}))
+        await session.commit()
+    service = LocatorHistoryService()
+    await service.record(
+        "https://example.test/cart",
+        'get_by_role("button", name="Help")',
+        True,
+        verification=True,
+        healed=True,
+        healed_analysis_id="analysis-heal",
+    )
+    async with test_db_session() as session:
+        assert (await session.execute(select(LocatorHistoryORM))).scalars().all() == []
+        analysis = await session.get(FailureAnalysisORM, "analysis-heal")
+        analysis.result = {"verified": True}
+        await session.commit()
+    for _ in range(3):
+        await service.record(
+            "https://example.test/cart",
+            'get_by_role("button", name="Help")',
+            True,
+            verification=True,
+            healed=True,
+            healed_analysis_id="analysis-heal",
+        )
+    async with test_db_session() as session:
+        history = (await session.execute(select(LocatorHistoryORM))).scalar_one()
+        assert history.heal_count == history.verification_count == 1
 
 
 async def seed(client, test_db_session, *, error, kind="PYTHON", candidates=None):

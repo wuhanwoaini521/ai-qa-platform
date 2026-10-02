@@ -79,38 +79,55 @@ class AutomationBindingService:
         if not workspace:
             raise ValueError(f"No workspace initialized for project: {test_case.project_id}")
 
-        # Construct clean function & file names
-        slug = test_case.title.lower().replace(" ", "_").replace("-", "_")
-        slug = "".join(c for c in slug if c.isalnum() or c == "_")[:40].strip("_")
-        func_name = f"test_{slug}"
-        file_rel_path = f"tests/test_{slug}.py"
+        # Use the existing governed provider and project context instead of a demo template.
+        import ast
+        from uuid import uuid4
 
-        steps_comment = "\n    ".join(f"# {i + 1}. {step}" for i, step in enumerate(test_case.steps))
-        code_content = f'''import pytest
-from playwright.sync_api import Page, expect
+        from qa_core.ai.context import ContextSelector
+        from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
-@pytest.mark.ui
-def {func_name}(page: Page):
-    """
-    Test Case: {test_case.title}
-    Preconditions: {test_case.preconditions or "None"}
-    """
-    # Steps:
-    {steps_comment or "# No explicit steps recorded."}
-
-    page.goto("/")
-    # Expected Result: {test_case.expected_result or "Verify expected business condition"}
-    expect(page).to_have_title(r".*")
-'''
-        # Write to workspace
-        await self.workspace_service.write_file(workspace.id, file_rel_path, code_content)
-
-        # Create binding
-        nodeid = f"{file_rel_path}::{func_name}"
+        # Filesystem workspaces use the project key, not WorkspaceORM's separate row ID.
+        workspace_key = test_case.project_id
+        root = self.workspace_service.get_workspace_dir(workspace_key)
+        bundle = ContextSelector().select(root, query=test_case.title)
+        default_path = f"tests/test_case_{test_case.id.replace('-', '')[:12]}_{uuid4().hex[:6]}.py"
+        result = await ProductionQAOrchestrator().assist_code_chat(
+            action="generate_test",
+            message=(
+                "Generate a complete executable pytest test for the supplied case, using project fixtures "
+                "and reusable page objects. Support Python, API or UI according to the case. Do not invent "
+                "a URL, selector, import or business assertion. If required evidence is missing, explain "
+                "it without suggested_code. Return the complete file in suggested_code. "
+                f"Preferred target: {default_path}\n"
+                f"Preconditions: {test_case.preconditions}\nSteps: {test_case.steps}\n"
+                f"Expected: {test_case.expected_result}\nProject context:\n{bundle.render()}"
+            ),
+            test_case_title=test_case.title,
+        )
+        if result.provider == "fake" or result.fallback_used or not result.suggested_code:
+            raise ValueError("No grounded real-AI draft is available. Inspect evidence and provider status in Studio.")
+        code_content = result.suggested_code
+        tree = ast.parse(code_content)
+        functions = [
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
+        ]
+        if not functions or not any(
+            isinstance(node, ast.Assert)
+            or isinstance(node, ast.Call)
+            and (isinstance(node.func, ast.Attribute) and node.func.attr.startswith(("assert", "to_have", "to_be")))
+            for node in ast.walk(tree)
+        ):
+            raise ValueError("AI draft contains no test function or meaningful assertion.")
+        # New drafts never overwrite a current file. DRAFT remains distinct from validated automation.
+        file_rel_path = default_path
+        await self.workspace_service.write_file(workspace_key, file_rel_path, code_content)
+        nodeid = f"{file_rel_path}::{functions[0]}"
         binding = await self.bind_test_case(
             AutomationBindingCreate(
                 test_case_id=test_case_id,
-                workspace_id=workspace.id,
+                workspace_id=workspace_key,
                 nodeid=nodeid,
                 file_path=file_rel_path,
                 framework=FrameworkType.PLAYWRIGHT_PYTHON,

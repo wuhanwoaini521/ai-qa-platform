@@ -7,7 +7,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from project_model.models import (
@@ -30,11 +30,14 @@ from project_model.task_models import (
     TaskStepStatus,
     TaskType,
 )
+from qa_core.ai.browser_safety import classify_browser_action
+from qa_core.ai.context import ContextSelector
 from qa_core.ai.models import AICompletionRequest, CodeAssistantResponse
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.ai.trace import make_trace_event
 from qa_core.failure.classifier import FailureClassifier
 from qa_core.failure.redactor import SensitiveRedactor
+from qa_core.prompts import TASK_CODE_PROMPT
 from sqlalchemy import select, update
 
 from app.persistence.database import async_session_factory
@@ -153,7 +156,7 @@ class TaskRuntimeService:
             raise ValueError(f"{data.type.value} requires workspace_id")
         if data.type in project_required and not data.project_id:
             raise ValueError(f"{data.type.value} requires project_id")
-        if data.type in {TaskType.CREATE_TEST, TaskType.EXPLORE_PAGE}:
+        if data.type == TaskType.EXPLORE_PAGE or data.type == TaskType.CREATE_TEST and data.inputs.get("url"):
             page_url = str(data.inputs.get("url", "")).strip()
             parsed_url = urlparse(page_url)
             if (
@@ -189,6 +192,20 @@ class TaskRuntimeService:
             async with async_session_factory() as session:
                 if await session.get(ProjectORM, data.project_id) is None:
                     raise ValueError("Project not found")
+        if data.inputs.get("test_case_id"):
+            async with async_session_factory() as session:
+                case = await session.get(TestCaseORM, str(data.inputs["test_case_id"]))
+                if not case or case.project_id != data.project_id:
+                    raise ValueError("Test case does not belong to the selected project")
+                data.inputs = {
+                    **data.inputs,
+                    "case_context": {
+                        "title": case.title,
+                        "preconditions": case.preconditions,
+                        "steps": case.steps,
+                        "expected_result": case.expected_result,
+                    },
+                }
         plan = build_plan(data.type)
         if len(plan) > data.max_steps:
             raise ValueError(f"Task plan has {len(plan)} steps, exceeding max_steps={data.max_steps}")
@@ -224,7 +241,9 @@ class TaskRuntimeService:
             "max_steps": data.max_steps,
             "max_retries": data.max_retries,
             "max_replans": data.max_replans,
-            "max_ai_calls": data.max_ai_calls,
+            "max_ai_calls": min(
+                data.max_ai_calls, int((AIProviderRegistry._runtime_config or {}).get("max_task_calls", "8"))
+            ),
             "max_duration_seconds": data.max_duration_seconds,
             "current_step_id": None,
             "failure_reason": None,
@@ -550,10 +569,16 @@ class TaskRuntimeService:
                     current = await session.get(TaskStepORM, step.id)
                     if current and current.status == TaskStepStatus.RUNNING.value:
                         current.status = TaskStepStatus.FAILED.value
-                        current.error = str(error)[:4000]
+                        current.error = SensitiveRedactor.redact_text(str(error))[:4000]
                         current.finished_at = utc_now()
                         await repo.add_event(
-                            task.id, "step.failed", {"step_id": step.id, "error": str(error)[:1000], "blocked": True}
+                            task.id,
+                            "step.failed",
+                            {
+                                "step_id": step.id,
+                                "error": SensitiveRedactor.redact_text(str(error))[:1000],
+                                "blocked": True,
+                            },
                         )
                         await session.commit()
                 return error
@@ -566,15 +591,27 @@ class TaskRuntimeService:
                     if current is None or fresh is None:
                         return error
                     current.retry_count += 1
-                    current.error = str(error)[:4000]
+                    current.error = SensitiveRedactor.redact_text(str(error))[:4000]
                     current.duration_ms = elapsed
                     await repo.add_event(
                         task.id,
                         "step.failed",
-                        {"step_id": step.id, "error": str(error)[:1000], "retry": current.retry_count},
+                        {
+                            "step_id": step.id,
+                            "error": SensitiveRedactor.redact_text(str(error))[:1000],
+                            "retry": current.retry_count,
+                        },
                     )
                     if (
-                        current.retry_count <= min(current.max_retries, fresh.max_retries)
+                        step.tool
+                        in {
+                            "browser.inspect",
+                            "source.inspect",
+                            "source.validate_generated",
+                            "source.validate_workspace",
+                            "browser.verify",
+                        }
+                        and current.retry_count <= min(current.max_retries, fresh.max_retries)
                         and fresh.retry_count < fresh.max_retries
                     ):
                         fresh.retry_count += 1
@@ -810,6 +847,15 @@ class TaskRuntimeService:
                   return {index,tag,role:el.getAttribute('role') || (tag==='a'?'link':tag==='button'?'button':tag==='input'?'textbox':tag),name:text,href,type,safe:!risky};
                 })""")
                 screenshot = await page.screenshot(full_page=True, type="png")
+                for candidate in candidates:
+                    candidate["risk"] = classify_browser_action(
+                        "click",
+                        name=candidate.get("name", ""),
+                        tag=candidate.get("tag", ""),
+                        href=candidate.get("href") or "",
+                        input_type=candidate.get("type", ""),
+                    )
+                    candidate["safe"] = candidate["risk"] in {"READ_ONLY", "SAFE_INTERACTION"}
                 artifact = await self._artifact(task, "inspect", "page.png", "SCREENSHOT", screenshot, "image/png")
                 body_text = (await page.locator("body").inner_text())[:12000]
                 return {
@@ -1027,6 +1073,14 @@ class TaskRuntimeService:
         }
 
     async def _run_locator_decision(self, task, observed, event, candidates, pipeline, trace_run_id):
+        if observed.get("_page") is not None:
+            return await pipeline.decide(
+                run_id=trace_run_id,
+                event=event,
+                candidates=candidates,
+                page=observed["_page"],
+                step_id=f"task:{task.id}",
+            )
         from playwright.async_api import async_playwright
 
         url = str(observed.get("url") or "")
@@ -1062,6 +1116,15 @@ class TaskRuntimeService:
             return {"action": "skipped", "reason": "No safe candidate was available."}
         if not selected.get("safe"):
             raise TaskBlocked("The selected browser action is not classified as safe.")
+        risk = classify_browser_action(
+            "click",
+            name=selected.get("name", ""),
+            tag=selected.get("tag", ""),
+            href=selected.get("href") or "",
+            input_type=selected.get("type", ""),
+        )
+        if risk not in {"READ_ONLY", "SAFE_INTERACTION"}:
+            raise TaskBlocked(f"Browser action requires explicit approval: {risk}.")
         from playwright.async_api import async_playwright
 
         recorder_state = await self._recorder_storage_state(task)
@@ -1073,45 +1136,125 @@ class TaskRuntimeService:
                 context = await browser.new_context(storage_state=recorder_state)
                 page = await context.new_page()
                 await page.goto(inspected["url"], wait_until="domcontentloaded", timeout=20000)
-                role, name = selected.get("role"), selected.get("name")
-                if role in {"button", "link"} and name:
-                    from app.services.locator_decision_service import LocatorDecisionService
+                from app.services.locator_decision_service import LocatorDecisionService
 
+                observed_steps, evidence, artifacts = [], [], []
+                visited = set()
+                criteria = self._input(task, "observable_text_criteria", [])
+                criteria = [str(value)[:200] for value in criteria[:10]] if isinstance(criteria, list) else []
+                max_actions = max(1, min(3, int(self._input(task, "max_browser_actions", 3))))
+                stop_reason = "action_limit_reached"
+                goal_validated = False
+                for index in range(max_actions):
+                    role, name = selected.get("role"), selected.get("name")
+                    risk = classify_browser_action(
+                        "click",
+                        name=name or "",
+                        tag=selected.get("tag", ""),
+                        href=selected.get("href") or "",
+                        input_type=selected.get("type", ""),
+                    )
+                    if risk not in {"READ_ONLY", "SAFE_INTERACTION"}:
+                        stop_reason = "approval_required"
+                        break
+                    key = (page.url, role, name)
+                    if key in visited:
+                        stop_reason = "repeated_action"
+                        break
+                    visited.add(key)
+                    started = time.perf_counter()
                     candidate = {"kind": "role", "value": role, "name": name, "exact": True}
                     verification = await LocatorDecisionService.verify_candidate(page, candidate, {"action": "click"})
                     if not verification["verified"]:
-                        raise TaskBlocked(
-                            "The selected browser action did not pass unique, visible, enabled and clickable verification."
-                        )
+                        stop_reason = "candidate_verification_failed"
+                        break
+                    before_url = page.url
                     await page.get_by_role(role, name=name, exact=True).click(timeout=5000)
-                elif selected.get("tag") == "a" and selected.get("href"):
-                    await page.goto(
-                        urljoin(inspected["url"], selected["href"]), wait_until="domcontentloaded", timeout=15000
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                    title = await page.title()
+                    text = (await page.locator("body").inner_text())[:6000]
+                    screenshot = await self._artifact(
+                        task,
+                        "act",
+                        f"observe-{index + 1}.png",
+                        "SCREENSHOT",
+                        await page.screenshot(type="png"),
+                        "image/png",
                     )
-                else:
-                    return {
-                        "action": "skipped",
-                        "reason": "Candidate could not be replayed with an accessible locator.",
+                    artifacts.append(screenshot)
+                    goal_validated = bool(criteria) and all(value in text for value in criteria)
+                    observation = {
+                        "step": index + 1,
+                        "action": "click",
+                        "risk": risk,
+                        "locator": LocatorDecisionService.format_locator(candidate),
+                        "from_url": before_url,
+                        "url": page.url,
+                        "title": title,
+                        "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                        "status": "PASSED",
+                        "goal_validated": goal_validated,
+                        "screenshot_artifact_id": screenshot["artifact_id"],
                     }
-                await page.wait_for_load_state("domcontentloaded", timeout=5000)
-                title = await page.title()
-                text = (await page.locator("body").inner_text())[:6000]
-                return {
-                    "action": "clicked",
-                    "candidate": selected,
-                    "url": page.url,
-                    "title": title,
-                    "_evidence": [
+                    observed_steps.append(observation)
+                    evidence.append(
                         await self._evidence(
                             task,
                             "act",
                             EvidenceType.RUNTIME_METADATA,
                             "playwright.safe_click",
-                            f"Clicked {selected.get('role')} {selected.get('name')!r}; observed {page.url}.",
+                            f"Observed safe action {index + 1}: {role} {name!r}.",
                             text,
-                            {"from_url": inspected["url"], "to_url": page.url, "title": title},
+                            observation,
+                            screenshot["artifact_id"],
                         )
-                    ],
+                    )
+                    await self._record_ai_trace(
+                        task.id,
+                        {
+                            "type": "browser.observation",
+                            "stage": "observe",
+                            "title": f"Observed browser action {index + 1}",
+                            "metadata": observation,
+                        },
+                    )
+                    if goal_validated:
+                        stop_reason = "explicit_observation_criteria_matched"
+                        break
+                    if index + 1 == max_actions:
+                        break
+                    candidates = await page.locator("a[href],button,[role=button],[role=link]").evaluate_all(
+                        r"""els => els.slice(0,60).map((el,index) => ({index,tag:el.tagName.toLowerCase(),role:el.getAttribute('role') || (el.tagName==='A'?'link':'button'),name:(el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\s+/g,' ').slice(0,120),href:el.getAttribute('href'),type:el.getAttribute('type') || ''}))"""
+                    )
+                    for item in candidates:
+                        item["risk"] = classify_browser_action(
+                            "click",
+                            name=item["name"],
+                            tag=item["tag"],
+                            href=item["href"] or "",
+                            input_type=item["type"],
+                        )
+                        item["safe"] = (
+                            item["risk"] in {"READ_ONLY", "SAFE_INTERACTION"}
+                            and (page.url, item["role"], item["name"]) not in visited
+                        )
+                    decision = await self._decision_select(
+                        task, {"inspect": {"url": page.url, "title": title, "candidates": candidates, "_page": page}}
+                    )
+                    selected = decision.get("candidate")
+                    if not selected:
+                        stop_reason = "no_verified_safe_candidate"
+                        break
+                return {
+                    "action": "clicked" if observed_steps else "skipped",
+                    "goal_validated": goal_validated,
+                    "validation_scope": "explicit_observed_text" if criteria else "observations_only",
+                    "stop_reason": stop_reason,
+                    "url": page.url,
+                    "title": await page.title(),
+                    "steps": observed_steps,
+                    "_evidence": evidence,
+                    "_artifacts": artifacts,
                 }
             finally:
                 await browser.close()
@@ -1119,14 +1262,16 @@ class TaskRuntimeService:
     async def _browser_verify(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         before = outputs.get("inspect", {})
         after = outputs.get("act", {})
-        verified = bool(before.get("title") and after.get("action") in {"clicked", "skipped"})
+        verified = bool(before.get("title") and after.get("steps"))
         return {
             "verified": verified,
             "kind": "browser_exploration",
             "initial_url": before.get("url"),
             "initial_title": before.get("title"),
             "action_result": after,
-            "observations": 2,
+            "observations": 1 + len(after.get("steps", [])),
+            "goal_validated": after.get("goal_validated", False),
+            "validation_scope": after.get("validation_scope", "observations_only"),
             "result": "COMPLETED" if verified else "INCOMPLETE",
         }
 
@@ -1275,10 +1420,12 @@ class TaskRuntimeService:
         provider = AIProviderRegistry.get_provider()
         response = await provider.complete(
             AICompletionRequest(
+                task_id=task.id,
                 prompt=(f"Replan instructions: {replan_instructions}\n\n{prompt}" if replan_instructions else prompt),
-                system_instruction="You are a QA code agent. Use only supplied source and browser evidence. Return structured code and never claim to have executed it.",
+                system_instruction=TASK_CODE_PROMPT.system_instruction,
                 response_schema=CodeAssistantResponse,
-                prompt_id="code_assistant",
+                prompt_id=TASK_CODE_PROMPT.prompt_id,
+                prompt_version=TASK_CODE_PROMPT.version,
             )
         )
         async with async_session_factory() as session:
@@ -1290,6 +1437,7 @@ class TaskRuntimeService:
                     "step.progress",
                     {
                         "type": "ai.call",
+                        "ai_run_id": response.invocation_id,
                         "provider": response.provider,
                         "model": response.model,
                         "fallback_used": response.fallback_used,
@@ -1308,7 +1456,9 @@ class TaskRuntimeService:
         result = CodeAssistantResponse.model_validate(response.structured_data)
         if not result.suggested_code:
             raise TaskBlocked("AI did not return executable source code.")
-        return result
+        return result.model_copy(
+            update={"provider": response.provider, "model": response.model, "fallback_used": response.fallback_used}
+        )
 
     async def _generate_test(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         recorded_steps = self._input(task, "recorded_steps")
@@ -1327,13 +1477,16 @@ class TaskRuntimeService:
             source = {"suggested_code": code, "target_file": file_path, "action_type": "generated_from_recording"}
         else:
             page = outputs.get("inspect", {})
+            bundle = ContextSelector().select(WorkspaceService().get_workspace_dir(task.workspace_id), query=task.goal)
             prompt = (
-                "Create one complete pytest Playwright test for this QA goal. Use only the observed page details, "
+                "Create one complete pytest test for this QA goal, choosing Python, API or Playwright based on the goal and project fixtures. Use only the observed page details, "
                 "goal, requirement and supplied acceptance criteria. Do not invent selectors or APIs. "
                 "Return the complete Python test file in suggested_code and a workspace-relative tests/*.py target_file.\n"
                 f"Goal: {task.goal}\nRequirement: {self._input(task, 'requirement', '')}\n"
+                f"Existing case: {json.dumps(self._input(task, 'case_context', {}), ensure_ascii=False)}\n"
                 f"Acceptance criteria: {json.dumps(self._input(task, 'acceptance_criteria', []), ensure_ascii=False)}\n"
                 f"Observed page: {json.dumps({k: page.get(k) for k in ('url', 'title', 'accessibility_tree', 'candidates')}, ensure_ascii=False)[:18000]}"
+                f"\nRepository conventions, fixtures and reusable page objects:\n{bundle.render()}"
             )
             source = (await self._call_code_ai(task, prompt)).model_dump()
             file_path = source.get("target_file") or file_path
@@ -1356,7 +1509,10 @@ class TaskRuntimeService:
                     "recorder.generate" if recorded_steps else "ai.code_assistant",
                     f"Generated test source for {task.goal!r}.",
                     code,
-                    {"target_file": file_path, "provider": "recorder" if recorded_steps else "openai-compatible"},
+                    {
+                        "target_file": file_path,
+                        "provider": "recorder" if recorded_steps else source.get("provider", "unknown"),
+                    },
                     artifact["artifact_id"],
                 )
             ],
@@ -1617,6 +1773,29 @@ class TaskRuntimeService:
             failure = (await session.execute(query)).scalar_one_or_none()
             if failure is None:
                 raise TaskBlocked("Failure record was not found.")
+            from app.persistence.models import BrowserSessionORM
+            from app.services.failure_evidence_service import FailureEvidenceService
+
+            browser = (
+                (
+                    await session.execute(
+                        select(BrowserSessionORM)
+                        .where(BrowserSessionORM.case_execution_id == failure.execution_id)
+                        .order_by(BrowserSessionORM.started_at.desc())
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            page = browser.page_evidence_json if browser else None
+            if isinstance(page, str):
+                try:
+                    page = json.loads(page)
+                except ValueError:
+                    page = {}
+            evidence_bundle = await FailureEvidenceService.collect(
+                failure, session, WorkspaceService(), browser=browser, page=page
+            )
             result = {
                 "id": failure.id,
                 "test_nodeid": failure.test_nodeid,
@@ -1631,6 +1810,8 @@ class TaskRuntimeService:
                 "repair_proposal": SensitiveRedactor.redact_value(failure.repair_proposal)
                 if failure.repair_proposal
                 else None,
+                "evidence_bundle": evidence_bundle.model_dump(mode="json"),
+                "rendered_evidence": evidence_bundle.render(),
             }
         evidence = [
             await self._evidence(
@@ -1736,6 +1917,8 @@ class TaskRuntimeService:
             stack_trace=failure.get("stack_trace", ""),
             test_nodeid=failure.get("test_nodeid", ""),
             failing_locator=failure.get("failing_locator"),
+            historical_context="Current bounded evidence (not historical proof):\n"
+            + failure.get("rendered_evidence", "No additional evidence captured."),
         )
         completion = orchestrator.last_completion
         ai_fallback = (not completion) or completion.fallback_used or completion.provider.lower() == "fake"
@@ -1785,6 +1968,31 @@ class TaskRuntimeService:
         proposed = proposed or str(stored_proposal.get("proposed_locator", "")).strip()
         old_locator = old_locator or str(stored_proposal.get("old_locator", "")).strip()
 
+        if not proposed:
+            test_name = str(failure.get("test_nodeid") or "").split("::")[-1]
+            tree = ast.parse(source)
+            functions = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == test_name
+            ]
+            for function in functions:
+                for assertion in (node for node in ast.walk(function) if isinstance(node, ast.Assert)):
+                    expression = assertion.test
+                    if (
+                        isinstance(expression, ast.Compare)
+                        and len(expression.ops) == 1
+                        and isinstance(expression.ops[0], ast.Eq)
+                    ):
+                        try:
+                            left, right = ast.literal_eval(expression.left), ast.literal_eval(expression.comparators[0])
+                        except (ValueError, TypeError):
+                            continue
+                        if left != right:
+                            raise TaskBlocked(
+                                "The failed test contains a deterministically false literal assertion. Confirm the intended expectation before proposing a code change; the assertion is retained."
+                            )
+
         if proposed and old_locator and old_locator in source:
             updated = source.replace(old_locator, proposed, 1)
         else:
@@ -1799,14 +2007,29 @@ class TaskRuntimeService:
             result = await self._call_code_ai(
                 task,
                 "Repair the failing test based on the exact failure evidence and inspected source. "
-                "Keep the change minimal. Return the complete replacement test module in suggested_code; "
+                "Keep the change minimal. Preserve business expectations and assertions; never change an expected value merely to make a test pass. Return the complete replacement test module in suggested_code; "
                 "do not claim a repair if the evidence is insufficient.\n"
                 f"Goal: {task.goal}\nClassification: {diagnosis.get('classification')}\n"
                 f"Failure: {failure.get('error_message')}\nTraceback:\n{failure.get('stack_trace')}\n"
                 f"Source path: {path}\nSource:\n{source}\n"
+                f"Bounded source, fixtures and execution evidence:\n{failure.get('rendered_evidence', '')}\n"
                 f"Browser evidence: {outputs.get('browser', {}).get('accessibility_tree', '')[:8000]}",
             )
             updated = result.suggested_code or ""
+            original_assertions = [
+                ast.dump(node, include_attributes=False)
+                for node in ast.walk(ast.parse(source))
+                if isinstance(node, ast.Assert)
+            ]
+            proposed_assertions = [
+                ast.dump(node, include_attributes=False)
+                for node in ast.walk(ast.parse(updated))
+                if isinstance(node, ast.Assert)
+            ]
+            if original_assertions != proposed_assertions:
+                raise TaskBlocked(
+                    "AI repair changed an existing assertion. The proposal was not applied; review intended expectations explicitly."
+                )
         self._validate_python_test(updated, path)
         if updated == source:
             raise TaskBlocked("The proposed repair does not change the inspected source.")
@@ -1940,14 +2163,22 @@ class TaskRuntimeService:
         title = str(self._input(task, "case_name", task.goal))[:250]
         async with async_session_factory() as session:
             existing = (
-                await session.execute(
-                    select(TestCaseORM).where(
-                        TestCaseORM.project_id == task.project_id,
-                        TestCaseORM.external_system == "AGENT_TASK",
-                        TestCaseORM.external_case_id == task.id,
+                await session.get(TestCaseORM, str(self._input(task, "test_case_id")))
+                if self._input(task, "test_case_id")
+                else None
+            )
+            existing = (
+                existing
+                or (
+                    await session.execute(
+                        select(TestCaseORM).where(
+                            TestCaseORM.project_id == task.project_id,
+                            TestCaseORM.external_system == "AGENT_TASK",
+                            TestCaseORM.external_case_id == task.id,
+                        )
                     )
-                )
-            ).scalar_one_or_none()
+                ).scalar_one_or_none()
+            )
             if existing is None:
                 existing = await TestCaseRepository(session).create(
                     TestCaseCreate(
@@ -1975,6 +2206,7 @@ class TaskRuntimeService:
                     status=AutomationBindingStatus.ACTIVE,
                 )
             )
+            existing.automation_status = AutomationStatus.AUTOMATED.value
             await session.commit()
         return {"test_case_id": existing.id, "file_path": generated["target_file"], "nodeid": nodeids[0]}
 

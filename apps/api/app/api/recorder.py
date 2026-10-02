@@ -11,9 +11,11 @@ from app.persistence.database import get_db
 from app.repositories.project_repo import ProjectRepository
 from app.services.recorder_service import (
     RecorderGenerateRequest,
+    RecorderOptimization,
     RecorderSessionCreate,
     generate_python_case,
     recorder_service,
+    validate_recording_optimization,
 )
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
@@ -70,6 +72,60 @@ async def generate_case(
     if not session:
         raise HTTPException(status_code=404, detail="Recorder session not found")
     return {"code": generate_python_case(request), "project_id": session.project_id}
+
+
+@router.post("/sessions/{session_id}/optimize")
+async def optimize_recording(
+    session_id: str,
+    request: RecorderGenerateRequest,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+):
+    session = await recorder_service.get(session_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    if not request.steps or len(request.steps) > 500:
+        raise HTTPException(status_code=400, detail="Optimize between 1 and 500 recorded steps.")
+    import json
+
+    from qa_core.ai.models import AICompletionRequest
+    from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
+    from qa_core.prompts import RECORDER_OPTIMIZATION_PROMPT
+
+    template = RECORDER_OPTIMIZATION_PROMPT
+    try:
+        result = await ProductionQAOrchestrator().complete(
+            AICompletionRequest(
+                prompt=template.format(
+                    steps=json.dumps([step.model_dump() for step in request.steps], ensure_ascii=False)
+                ),
+                system_instruction=template.system_instruction,
+                prompt_id=template.prompt_id,
+                prompt_version=template.version,
+                response_schema=RecorderOptimization,
+                max_tokens=4000,
+            )
+        )
+        if result.provider == "fake" or result.fallback_used:
+            raise ValueError("A real AI provider is required for recording optimization.")
+        proposal = RecorderOptimization.model_validate(result.structured_data)
+        validate_recording_optimization(request.steps, proposal.steps)
+        optimized = request.model_copy(update={"steps": proposal.steps})
+        return {
+            "raw_steps": request.steps,
+            "optimized_steps": proposal.steps,
+            "raw_code": generate_python_case(request),
+            "optimized_code": generate_python_case(optimized),
+            "reasons": proposal.reasons,
+            "provider": result.provider,
+            "model": result.model,
+            "prompt_version": template.version,
+            "validated": False,
+        }
+    except Exception as error:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Recording optimization failed ({type(error).__name__}); raw recording was retained.",
+        ) from error
 
 
 @router.delete("/sessions/{session_id}")

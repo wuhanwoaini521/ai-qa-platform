@@ -1,5 +1,4 @@
 import asyncio
-import json
 import warnings
 from datetime import timedelta
 from types import SimpleNamespace
@@ -16,7 +15,7 @@ from app.persistence.models import (
 )
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
-from app.services.failure_service import _validated_trace_events
+from app.services.failure_service import FailureService, _validated_trace_events
 from app.services.test_run_service import TestRunService, event_bus
 from app.services.workspace_service import WorkspaceService
 from httpx import AsyncClient
@@ -594,9 +593,9 @@ async def test_run_stream_replays_browser_sessions_created_before_connection(cli
         )
         stream = service.event_generator(run.id)
         try:
-            connected = json.loads((await anext(stream)).removeprefix("data: "))
+            connected = await anext(stream)
             assert connected["type"] == "CONNECTED"
-            restored = json.loads((await anext(stream)).removeprefix("data: "))
+            restored = await anext(stream)
             assert restored["type"] == "BROWSER_SESSION"
             assert restored["session"]["browser_session_id"] == "reconnected-browser"
             assert restored["session"]["current_url"] == "https://example.test/start"
@@ -606,7 +605,7 @@ async def test_run_stream_replays_browser_sessions_created_before_connection(cli
                 browser = await worker_session.get(BrowserSessionORM, "reconnected-browser")
                 browser.current_url = "https://example.test/next"
                 await worker_session.commit()
-            updated = json.loads((await asyncio.wait_for(anext(stream), timeout=3)).removeprefix("data: "))
+            updated = await asyncio.wait_for(anext(stream), timeout=3)
             assert updated["type"] == "BROWSER_SESSION"
             assert updated["session"]["current_url"] == "https://example.test/next"
         finally:
@@ -828,6 +827,37 @@ async def test_apply_repair_refuses_a_patch_that_would_break_the_file(client: As
     assert "nothing was written" in refused.json()["detail"]
     unchanged = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_repair_broken.py")).json()
     assert unchanged["content"] == original
+
+
+def test_public_locator_proposal_replaces_call_only_in_failed_test():
+    service = object.__new__(FailureService)
+    source = (
+        'def test_other(page):\n    page.locator("#old").click()\n\n'
+        'def test_failed(page):\n    label = "中文"; page.locator("#old").click(timeout=500)\n'
+    )
+    patched = service._patched_content(
+        source, "tests/test_cart.py", "#old", 'get_by_role("button", name="Help")', test_name="test_failed"
+    )
+    assert 'page.get_by_role("button", name="Help").click(timeout=500)' in patched
+    assert patched.count('page.locator("#old")') == 1
+    compile(patched, "test_cart.py", "exec")
+
+
+def test_public_locator_proposal_refuses_dynamic_code_and_ambiguous_target():
+    service = object.__new__(FailureService)
+    source = 'def test_failed(page):\n    page.locator("#old").click()\n    page.locator("#old").click()\n'
+    assert (
+        service._patched_content(
+            source, "test_cart.py", "#old", 'get_by_role("button", name="Help")', test_name="test_failed"
+        )
+        is None
+    )
+    assert (
+        service._patched_content(
+            source, "test_cart.py", "#old", 'get_by_role(__import__("os").getenv("SECRET"))', test_name="test_failed"
+        )
+        is None
+    )
 
 
 @pytest.mark.integration

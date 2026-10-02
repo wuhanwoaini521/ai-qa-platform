@@ -1,12 +1,66 @@
 from pathlib import Path
 
 import pytest
-from qa_core.execution.live_browser_plugin import LIVE_BROWSER_PLUGIN_SOURCE
+from qa_core.execution.live_browser_plugin import LIVE_BROWSER_PLUGIN_NAME, LIVE_BROWSER_PLUGIN_SOURCE
 from qa_core.execution.pytest_runner import PytestRunner
 
 
 def test_generated_live_browser_plugin_source_compiles():
     compile(LIVE_BROWSER_PLUGIN_SOURCE, "qa_platform_live_browser_plugin.py", "exec")
+
+
+@pytest.mark.asyncio
+async def test_real_browser_created_inside_test_and_fixture_both_emit_frames_and_evidence(tmp_path):
+    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "import pytest\nfrom playwright.sync_api import sync_playwright\n"
+        "@pytest.fixture\ndef page():\n    with sync_playwright() as p:\n        browser = p.chromium.launch()\n        yield browser.new_page()\n        browser.close()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_browser.py").write_text(
+        """from playwright.sync_api import sync_playwright
+HTML = '<button>Help</button><p id="result"></p>'
+def exercise(page):
+    page.set_content(HTML)
+    page.evaluate("document.querySelector('button').onclick=()=>{console.info(123);document.querySelector('#result').textContent='ready'}")
+    page.get_by_role("button", name="Help").click()
+    page.wait_for_timeout(250)
+    assert page.locator("#result").inner_text() == "ready"
+def test_inline_browser():
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        exercise(browser.new_page())
+        browser.close()
+def test_fixture_browser(page):
+    exercise(page)
+""",
+        encoding="utf-8",
+    )
+    events = []
+
+    async def observe(event):
+        events.append(event)
+
+    telemetry = tmp_path / "live"
+    result = await PytestRunner().run_suite(
+        tmp_path,
+        nodeids=["test_browser.py"],
+        environment={"PYTHONPATH": str(tmp_path), "QA_PLATFORM_LIVE_BROWSER_LOG": str(telemetry)},
+        browser_event_path=telemetry,
+        on_browser_event=observe,
+        extra_pytest_args=["-p", LIVE_BROWSER_PLUGIN_NAME],
+    )
+    assert result.exit_code == 0, "\n".join(result.raw_logs)
+    finished = [event for event in events if event["type"] == "session.finished"]
+    assert len(finished) == 2
+    for event in finished:
+        evidence = event["page_evidence"]
+        assert evidence["recent_steps"][0]["status"] == "PASSED"
+        assert evidence["console_logs"][0]["text"] == "123"
+        assert evidence["controls"][0]["name"] == "Help"
+        assert any(
+            frame["type"] == "frame" and frame.get("frame") and frame["nodeid"] == event["nodeid"] for frame in events
+        )
 
 
 @pytest.mark.asyncio

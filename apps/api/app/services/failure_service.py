@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import difflib
 import json
 import logging
 import re
@@ -21,7 +22,8 @@ from qa_core.failure.redactor import SensitiveRedactor
 from qa_core.healing.healer import NoLocatorCandidateError
 from qa_core.healing.models import LocatorRepairProposal
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.persistence.models import BrowserSessionORM, FailureRecordORM, utc_now
 from app.repositories.ai_repo import AIRepository
@@ -29,6 +31,7 @@ from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.ai_observability import log_ai_execution
+from app.services.failure_evidence_service import FailureEvidenceService
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.workspace_service import WorkspaceService
 
@@ -84,6 +87,8 @@ class FailureService:
             test_nodeid=orm.test_nodeid,
             test_name=orm.test_name,
             classification=classification,
+            failure_kind=FailureClassifier.failure_kind(orm.error_message or "", orm.stack_trace or ""),
+            evidence_bundle=orm.evidence_bundle or {},
             exception_type=orm.exception_type,
             error_message=SensitiveRedactor.redact_text(orm.error_message or ""),
             stack_trace=SensitiveRedactor.redact_text(orm.stack_trace or ""),
@@ -158,6 +163,27 @@ class FailureService:
             metadata={"failure_id": failure_id, "failure_type": orm.exception_type},
         )
         browser_session, page_evidence = await self._browser_evidence(orm.execution_id)
+        evidence = await FailureEvidenceService.collect(
+            orm, self.run_repo.session, self.workspace_service, browser_session, page_evidence
+        )
+        await emit(
+            "context.loaded",
+            stage="context",
+            title="读取测试与 fixture 上下文",
+            message=orm.test_nodeid,
+            metadata={
+                "paths": evidence.context_paths,
+                "missing_evidence": evidence.missing,
+                "evidence_version": evidence.version,
+            },
+        )
+        await emit(
+            "rule.classified",
+            stage="classification",
+            title="规则分类完成",
+            message=evidence.failure_kind,
+            metadata={"failure_kind": evidence.failure_kind, "source": "deterministic_rules"},
+        )
 
         # Fetch historical context
         history_execs = await self.history_repo.get_test_executions(nodeid=orm.test_nodeid, limit=5)
@@ -218,7 +244,9 @@ class FailureService:
             stack_trace=safe_stack,
             test_nodeid=orm.test_nodeid,
             failing_locator=safe_locator,
-            historical_context=SensitiveRedactor.redact_text(history_summary),
+            historical_context=SensitiveRedactor.redact_text(history_summary)[:3000]
+            + "\nFailure evidence bundle:\n"
+            + evidence.render(),
         )
         observed, _, _ = FailureClassifier.classify(safe_error, safe_stack)
         if observed != FailureCategory.UNKNOWN:
@@ -247,17 +275,18 @@ class FailureService:
             status="SUCCESS",
             fallback_used=invocation["fallback_used"],
         )
-        await self.ai_repo.record_invocation(
-            task="failure_diagnosis",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=getattr(getattr(self.orchestrator, "last_completion", None), "input_tokens", None),
-            output_tokens=getattr(getattr(self.orchestrator, "last_completion", None), "output_tokens", None),
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task="failure_diagnosis",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=getattr(getattr(self.orchestrator, "last_completion", None), "input_tokens", None),
+                output_tokens=getattr(getattr(self.orchestrator, "last_completion", None), "output_tokens", None),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
         diag_ai.duration_ms = round(duration_ms, 1)
         await emit(
@@ -275,6 +304,17 @@ class FailureService:
             },
         )
         diag_ai.execution_trace = trace
+        # Use an independent committed write. A caller can reuse this service/session
+        # for another analysis without autoflushing a pending evidence update first.
+        from app.persistence import database
+
+        payload = evidence.model_dump(mode="json")
+        async with database.get_session() as session:
+            await session.execute(
+                update(FailureRecordORM).where(FailureRecordORM.id == orm.id).values(evidence_bundle=payload)
+            )
+            await session.commit()
+        set_committed_value(orm, "evidence_bundle", payload)
         return diag_ai
 
     async def stream_diagnosis(self, failure_id: str) -> AsyncGenerator[AITraceEvent, None]:
@@ -339,12 +379,46 @@ class FailureService:
             candidates = []
             seen: set[tuple[str, str, str | None]] = set()
             for control in controls:
+                ignored = {
+                    "button",
+                    "input",
+                    "div",
+                    "span",
+                    "locator",
+                    "get",
+                    "by",
+                    "role",
+                    "name",
+                    "test",
+                    "data",
+                    "id",
+                    "css",
+                    "xpath",
+                }
+                target_tokens = {word.lower() for word in re.findall(r"[\w]+", failing_loc) if len(word) > 2} - ignored
+                control_text = " ".join(
+                    [
+                        str(control.get("name") or ""),
+                        *[str(item.get("value") or "") for item in control.get("candidates") or []],
+                    ]
+                )
+                control_tokens = {
+                    word.lower() for word in re.findall(r"[\w]+", control_text) if len(word) > 2
+                } - ignored
+                if not target_tokens.intersection(control_tokens):
+                    continue
                 for candidate in control.get("candidates") or []:
                     key = (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
                     if key not in seen:
                         seen.add(key)
                         candidates.append(
-                            {**candidate, "evidence": {"uniqueness": True, "dom_depth": control.get("dom_depth")}}
+                            {
+                                **candidate,
+                                "evidence": {
+                                    **(candidate.get("evidence") or {}),
+                                    "dom_depth": control.get("dom_depth"),
+                                },
+                            }
                         )
             target_match = re.search(r"name\s*=\s*(['\"])(.*?)\1", failing_loc)
             failed_name = target_match.group(2)[:180] if target_match else ""
@@ -459,6 +533,28 @@ class FailureService:
             )
         if not proposal.proposed_locator.strip() or proposal.proposed_locator.strip() == failing_loc.strip():
             raise LocatorRepairNotApplicableError("候选定位器与原定位器相同，不生成无变化的修复提案。")
+        run = await self.run_repo.get_by_id(orm.run_id)
+        if run and run.workspace_id:
+            try:
+                source = await self.workspace_service.read_file(run.workspace_id, proposal.file_path)
+                preview = self._patched_content(
+                    source,
+                    proposal.file_path,
+                    failing_loc,
+                    proposal.proposed_locator,
+                    test_name=orm.test_nodeid.split("::")[-1].split("[")[0],
+                )
+                if preview is not None:
+                    proposal.code_diff = "".join(
+                        difflib.unified_diff(
+                            source.splitlines(keepends=True),
+                            preview.splitlines(keepends=True),
+                            fromfile=proposal.file_path,
+                            tofile=proposal.file_path,
+                        )
+                    )[:16000]
+            except (FileNotFoundError, ValueError):
+                pass  # Missing source is shown as an unavailable diff; never invent one.
         orm.repair_proposal = proposal.model_dump(mode="json")
         await self.run_repo.session.flush()
         return proposal
@@ -525,17 +621,18 @@ class FailureService:
             status="SUCCESS",
             fallback_used=invocation["fallback_used"],
         )
-        await self.ai_repo.record_invocation(
-            task="locator_review",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=140,
-            output_tokens=160,
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task="locator_review",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=invocation.get("input_tokens"),
+                output_tokens=invocation.get("output_tokens"),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
         return review
 
@@ -571,11 +668,20 @@ class FailureService:
             or payload.old_code.strip() == payload.new_code.strip()
         ):
             raise ValueError("修复补丁为空或与原代码相同，不写入工作区。")
+        original_run = await self.run_repo.get_by_id(orm.run_id)
+        if not original_run or original_run.workspace_id != workspace_id:
+            raise ValueError("修复工作区与原失败运行不一致，不写入代码。")
         current_content = await self.workspace_service.read_file(workspace_id, payload.file_path)
         if payload.old_code not in current_content:
             raise ValueError(f"Original target code block not found in {payload.file_path}")
 
-        updated_content = self._patched_content(current_content, payload.file_path, payload.old_code, payload.new_code)
+        updated_content = self._patched_content(
+            current_content,
+            payload.file_path,
+            payload.old_code,
+            payload.new_code,
+            test_name=orm.test_nodeid.split("::")[-1].split("[")[0],
+        )
         if updated_content is None:
             raise ValueError(
                 f"The proposed patch would make {payload.file_path} invalid; nothing was written. "
@@ -583,15 +689,89 @@ class FailureService:
             )
 
         await self.workspace_service.write_file(workspace_id, payload.file_path, updated_content)
+        orm.repair_proposal = {
+            **(orm.repair_proposal or {}),
+            "applied": True,
+            "applied_at": utc_now().isoformat(),
+            "proposed_locator": payload.new_code,
+        }
+        await self.run_repo.session.flush()
         return {"status": "applied", "file_path": payload.file_path}
 
-    def _patched_content(self, content: str, file_path: str, old_code: str, new_code: str) -> str | None:
+    def _patched_content(
+        self, content: str, file_path: str, old_code: str, new_code: str, *, test_name: str | None = None
+    ) -> str | None:
         """Replace `old_code` once, preferring a form that keeps the file parseable."""
         index = content.find(old_code)
         if index == -1:
             return None
         if not file_path.endswith(".py"):
             return content[:index] + new_code + content[index + len(old_code) :]
+
+        if test_name:
+            functions = [
+                node
+                for node in ast.walk(ast.parse(content))
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == test_name
+            ]
+            if len(functions) != 1:
+                return None
+            segment = ast.get_source_segment(content, functions[0])
+            if not segment or segment.count(old_code) != 1:
+                return None
+            index = content.index(segment) + segment.index(old_code)
+
+        # Proposals contain public Playwright calls, not selector strings. Replace the
+        # locator call itself so page.locator("#old") becomes page.get_by_role(...).
+        methods = {"locator", "get_by_role", "get_by_text", "get_by_label", "get_by_placeholder", "get_by_test_id"}
+        if any(new_code.startswith(method + "(") for method in methods):
+            try:
+                proposed = ast.parse(new_code, mode="eval").body
+                if (
+                    not isinstance(proposed, ast.Call)
+                    or not isinstance(proposed.func, ast.Name)
+                    or proposed.func.id not in methods
+                    or not all(isinstance(arg, ast.Constant) for arg in proposed.args)
+                    or not all(
+                        keyword.arg is not None and isinstance(keyword.value, ast.Constant)
+                        for keyword in proposed.keywords
+                    )
+                ):
+                    return None
+                tree = ast.parse(content)
+                scopes = (
+                    [
+                        node
+                        for node in ast.walk(tree)
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == test_name
+                    ]
+                    if test_name
+                    else [tree]
+                )
+                matches = [
+                    node
+                    for scope in scopes
+                    for node in ast.walk(scope)
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in methods
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == old_code
+                ]
+                if len(matches) != 1:
+                    return None
+                target = matches[0]
+                receiver = ast.get_source_segment(content, target.func.value)
+                encoded = content.encode("utf-8")
+                lines = encoded.splitlines(keepends=True)
+                start = sum(map(len, lines[: target.lineno - 1])) + target.col_offset
+                end = sum(map(len, lines[: target.end_lineno - 1])) + target.end_col_offset
+                updated = (encoded[:start] + f"{receiver}.{new_code}".encode("utf-8") + encoded[end:]).decode("utf-8")
+                ast.parse(updated)
+                return updated
+            except (SyntaxError, ValueError):
+                return None
 
         opening_quote = content[index - 1] if index > 0 else ""
         candidates = [new_code]

@@ -4,10 +4,10 @@ import asyncio
 import json
 import logging
 import os
-import re
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -18,6 +18,8 @@ from qa_core.execution.models import (
     SuiteExecutionResult,
     TestExecutionStatus,
 )
+from qa_core.onboarding.collector import parse_execution, parse_report_log
+from qa_core.onboarding.pytest_plugin import write_plugin
 
 logger = logging.getLogger("qa_core.execution.pytest_runner")
 
@@ -144,7 +146,17 @@ class PytestRunner:
 
         # Run pytest through an explicit interpreter: an imported project must use its own virtualenv
         # (its dependencies, its Python version), not whichever pytest happens to be on PATH.
-        cmd = [interpreter or sys.executable, "-u", "-m", "pytest", "-v", "-s", "--tb=short"]
+        cmd = [
+            interpreter or sys.executable,
+            "-u",
+            "-m",
+            "pytest",
+            "-v",
+            "-s",
+            "--tb=short",
+            f"--rootdir={ws_path}",
+            f"--confcutdir={ws_path}",
+        ]
         if parallel_workers > 1:
             cmd.extend(["-n", str(min(parallel_workers, 16))])
         if extra_pytest_args:
@@ -163,6 +175,15 @@ class PytestRunner:
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"
+
+        report_runtime = tempfile.TemporaryDirectory(prefix="qa-pytest-report-")
+        report_directory = Path(report_runtime.name)
+        report_path = report_directory / "results.jsonl"
+        cmd.extend(["-p", write_plugin(report_directory)])
+        env["QA_PLATFORM_REPORT_LOG"] = str(report_path)
+        env["PYTHONPATH"] = str(report_directory) + os.pathsep + env.get("PYTHONPATH", "")
+        structured_results = None
+        failure_details = {}
 
         start_time = time.perf_counter()
         raw_logs: list[str] = []
@@ -224,9 +245,21 @@ class PytestRunner:
                     timed_out = False
                 exit_code = proc.returncode if not timed_out else None
         finally:
-            if watch_task is not None:
-                watch_stop.set()
-                await watch_task
+            try:
+                if watch_task is not None:
+                    watch_stop.set()
+                    await watch_task
+                structured_results = parse_report_log(report_path)
+                for report_file in report_directory.glob("results.jsonl.*"):
+                    for line in report_file.read_text(encoding="utf-8").splitlines():
+                        try:
+                            record = json.loads(line)
+                            if record.get("outcome") == "failed":
+                                failure_details[record["nodeid"]] = record
+                        except (ValueError, KeyError, TypeError):
+                            logger.warning("Ignoring malformed per-test report record")
+            finally:
+                report_runtime.cleanup()
 
         if timed_out:
             message = f"Execution timed out after {self.default_timeout_sec:g}s."
@@ -245,69 +278,41 @@ class PytestRunner:
         duration_ms = (time.perf_counter() - start_time) * 1000
         stdout_str = "\n".join(raw_logs)
 
-        # Parse test outcomes line by line
-        results: list[SingleTestResult] = []
-
-        passed_count = 0
-        failed_count = 0
-        skipped_count = 0
-        pending_nodeid: str | None = None
-
-        for line in raw_logs:
-            # Pattern: tests/test_login.py::test_login_flow PASSED [100%]
-            match = re.search(r"^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)", line)
-            if match:
-                test_nodeid, verdict = match.group(1), match.group(2)
-            else:
-                # pytest-xdist prefixes each result with its worker ID and moves the verdict
-                # before the node ID, for example: [gw0] PASSED tests/test_login.py::test_login.
-                worker_match = re.search(r"^\[[^\]]+\]\s+(PASSED|FAILED|SKIPPED|ERROR)\s+(\S+::\S+)", line)
-                if worker_match:
-                    verdict, test_nodeid = worker_match.group(1), worker_match.group(2)
-                    pending_nodeid = None
-                else:
-                    # With -s, a test's print() can appear after its nodeid and pytest may
-                    # write the verdict alone on a later line (including across stream chunks).
-                    node_line = re.match(r"^(\S+::\S+)(?:\s|$)", line)
-                    if node_line and not line.startswith(("FAILED ", "ERROR ")):
-                        pending_nodeid = node_line.group(1)
-                    verdict_line = re.match(r"^(PASSED|FAILED|SKIPPED|ERROR)(?:\s|$)", line)
-                    if verdict_line and pending_nodeid:
-                        test_nodeid, verdict = pending_nodeid, verdict_line.group(1)
-                    else:
-                        continue
-            pending_nodeid = None
-            if test_nodeid:
-                status = (
-                    TestExecutionStatus.PASSED
-                    if verdict == "PASSED"
-                    else (TestExecutionStatus.SKIPPED if verdict == "SKIPPED" else TestExecutionStatus.FAILED)
-                )
-
-                if status == TestExecutionStatus.PASSED:
-                    passed_count += 1
-                elif status == TestExecutionStatus.FAILED:
-                    failed_count += 1
-                else:
-                    skipped_count += 1
-
-                error_line = next(
-                    (entry.strip() for entry in raw_logs if entry.startswith("E   ")),
-                    f"Test failed with {verdict}",
-                )
-                results.append(
-                    SingleTestResult(
-                        nodeid=test_nodeid.replace("\\", "/"),
-                        status=status,
-                        duration_ms=0,
-                        error_message=error_line if status == TestExecutionStatus.FAILED else None,
-                        stack_trace=stdout_str if status == TestExecutionStatus.FAILED else None,
+        logical, _, _, _ = parse_execution(stdout_str, "")
+        if structured_results:
+            structured, _, _ = structured_results
+            if sum(item.status.value in {"FAILED", "ERROR"} for item in structured) >= sum(
+                item.status.value in {"FAILED", "ERROR"} for item in logical
+            ):
+                logical = structured
+        results = []
+        for outcome in logical:
+            status = (
+                TestExecutionStatus.PASSED
+                if outcome.status.value in {"PASSED", "XPASS"}
+                else TestExecutionStatus.SKIPPED
+                if outcome.status.value in {"SKIPPED", "XFAIL", "NOT_RUN"}
+                else TestExecutionStatus.FAILED
+            )
+            detail = failure_details.get(outcome.nodeid, {})
+            results.append(
+                SingleTestResult(
+                    nodeid=outcome.nodeid.replace("\\", "/"),
+                    status=status,
+                    duration_ms=(outcome.duration_ms or 0.0),
+                    error_message=(
+                        detail.get("error_message")
+                        or outcome.failure_message
+                        or "Failure details were not captured for this test."
                     )
+                    if status == TestExecutionStatus.FAILED
+                    else None,
+                    stack_trace=detail.get("stack_trace") if status == TestExecutionStatus.FAILED else None,
                 )
-
-        estimated_case_duration_ms = duration_ms / max(1, len(results))
-        for result in results:
-            result.duration_ms = estimated_case_duration_ms
+            )
+        passed_count = sum(item.status == TestExecutionStatus.PASSED for item in results)
+        failed_count = sum(item.status == TestExecutionStatus.FAILED for item in results)
+        skipped_count = sum(item.status == TestExecutionStatus.SKIPPED for item in results)
 
         return SuiteExecutionResult(
             exit_code=exit_code,

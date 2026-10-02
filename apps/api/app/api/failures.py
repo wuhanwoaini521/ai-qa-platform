@@ -11,6 +11,7 @@ from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.event_stream import event_frame
 from app.persistence.database import get_db
 from app.repositories.ai_repo import AIRepository
 from app.repositories.run_history_repo import RunHistoryRepository
@@ -103,7 +104,7 @@ async def stream_failure_workflow(
             async for event in stream:
                 if await request.is_disconnected():
                     break
-                yield f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+                yield event_frame(event.type, event)
         finally:
             await stream.aclose()
 
@@ -141,7 +142,7 @@ async def stream_failure_diagnosis(
             async for event in stream:
                 if await request.is_disconnected():
                     break
-                yield f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+                yield event_frame(event.type, event)
         finally:
             await stream.aclose()
 
