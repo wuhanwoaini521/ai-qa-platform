@@ -14,7 +14,6 @@ import {
   Shield,
   Server,
   Settings,
-  MousePointerClick,
   Workflow,
 } from 'lucide-react';
 import i18n from '../i18n';
@@ -68,7 +67,6 @@ export const Navigation: React.FC = () => {
     },
     { id: 'runs', labelKey: 'runs', icon: PlayCircle, to: '/runs' },
     { id: 'tasks', labelKey: 'tasks', icon: Workflow, to: '/tasks' },
-    { id: 'recorder', labelKey: 'recorder', icon: MousePointerClick, to: '/recorder' },
     { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
     { id: 'failures', labelKey: 'failures', icon: AlertTriangle, to: '/failures' },

@@ -97,5 +97,37 @@
     "newFolder": "New Folder",
     "newBranch": "New Branch",
     "refreshChecks": "Refresh Checks"
+  },
+  "lsp": {
+    "status": {
+      "connecting": "Connecting Python language service…",
+      "connected": "Python · basedpyright connected",
+      "error": "Python language service unavailable"
+    },
+    "actions": {
+      "explain": "Explain code",
+      "fix": "Suggest a fix",
+      "refactor": "Refactor code",
+      "generate_test": "Generate test",
+      "add_assertion": "Add assertions",
+      "improve_locator": "Improve locator",
+      "analyze_failure": "Analyze failure",
+      "optimize": "Optimize code"
+    },
+    "requests": {
+      "explain": "Explain code using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "fix": "Suggest a fix using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "refactor": "Refactor code using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "generate_test": "Generate test using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "add_assertion": "Add assertions using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "improve_locator": "Improve locator using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "analyze_failure": "Analyze failure using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps.",
+      "optimize": "Optimize code using the current selection, file, fixtures and project conventions. Provide a reviewable proposal and validation steps."
+    }
+  },
+  "modes": {
+    "label": "Studio modes",
+    "code": "Code and debug",
+    "recorder": "Browser and recorder"
   }
 }

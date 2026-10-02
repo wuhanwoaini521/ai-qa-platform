@@ -20,7 +20,7 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
     case 'tasks':
       return '/tasks';
     case 'recorder':
-      return '/recorder';
+      return projectId ? `/projects/${projectId}/studio?mode=recorder` : '/projects';
     case 'flaky':
       return '/flaky';
     case 'failures':

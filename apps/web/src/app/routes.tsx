@@ -1,6 +1,6 @@
 import React, { lazy } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { AppLayout } from './AppLayout';
@@ -9,11 +9,11 @@ import { useAppNavigation } from './navigation';
 import { EmptyState } from '../components/AsyncState';
 
 const RequirementsPage = lazy(() =>
-  import('../pages/RequirementsPage').then((m) => ({ default: m.RequirementsPage }))
+  import('../features/requirements/RequirementsPage').then((m) => ({ default: m.RequirementsPage }))
 );
-const TestCasesPage = lazy(() => import('../pages/TestCasesPage').then((m) => ({ default: m.TestCasesPage })));
+const TestCasesPage = lazy(() => import('../features/test-cases/TestCasesPage').then((m) => ({ default: m.TestCasesPage })));
 const AutomationStudioPage = lazy(() =>
-  import('../pages/AutomationStudioPage').then((m) => ({ default: m.AutomationStudioPage }))
+  import('../features/automation-studio/AutomationStudioPage').then((m) => ({ default: m.AutomationStudioPage }))
 );
 const RunsPage = lazy(() => import('../pages/RunsPage').then((m) => ({ default: m.RunsPage })));
 const TasksPage = lazy(() => import('../pages/TasksPage').then((m) => ({ default: m.TasksPage })));
@@ -91,8 +91,15 @@ const StudioRoute: React.FC = () => {
   useRouteProjectScope(projectId);
 
   const splat = params['*'];
+  const { t } = useTranslation('studioShell');
+  const recorderMode = new URLSearchParams(location.search).get('mode') === 'recorder';
   return (
-    <AutomationStudioPage
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div className="studio-mode-tabs" aria-label={t('modes.label')}>
+        <Link className={`btn btn-sm ${recorderMode ? 'btn-secondary' : 'btn-primary'}`} to={`/projects/${projectId}/studio`}>{t('modes.code')}</Link>
+        <Link className={`btn btn-sm ${recorderMode ? 'btn-primary' : 'btn-secondary'}`} to={`/projects/${projectId}/studio?mode=recorder`}>{t('modes.recorder')}</Link>
+      </div>
+      {recorderMode ? <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}><RecorderPage projects={projects} selectedProjectId={projectId ?? selectedProjectId} /></div> : <AutomationStudioPage
       projects={projects}
       selectedProjectId={projectId ?? selectedProjectId}
       onSelectProject={(nextProjectId) => {
@@ -103,7 +110,8 @@ const StudioRoute: React.FC = () => {
       initialOpenFilePath={splat ?? null}
       initialOpenLineNumber={Number(new URLSearchParams(location.search).get('line')) || null}
       initialDebugNodeId={new URLSearchParams(location.search).get('nodeid')}
-    />
+    />}
+    </div>
   );
 };
 
@@ -123,8 +131,9 @@ const RunsRoute: React.FC = () => {
 };
 
 const RecorderRoute: React.FC = () => {
-  const { projects, selectedProjectId } = useProjectScope();
-  return <RecorderPage projects={projects} selectedProjectId={selectedProjectId} />;
+  const { selectedProjectId } = useProjectScope();
+  // Keep existing task origins and bookmarks as a compatibility redirect.
+  return <Navigate replace to={selectedProjectId ? `/projects/${selectedProjectId}/studio?mode=recorder` : '/projects'} />;
 };
 
 const TasksRoute: React.FC = () => {

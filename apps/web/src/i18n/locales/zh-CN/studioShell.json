@@ -97,5 +97,37 @@
     "newFolder": "新建文件夹",
     "newBranch": "新建分支",
     "refreshChecks": "刷新检查"
+  },
+  "lsp": {
+    "status": {
+      "connecting": "Python 语言服务连接中…",
+      "connected": "Python · basedpyright 已连接",
+      "error": "Python 语言服务不可用"
+    },
+    "actions": {
+      "explain": "解释代码",
+      "fix": "修复问题",
+      "refactor": "重构代码",
+      "generate_test": "生成测试",
+      "add_assertion": "补充断言",
+      "improve_locator": "优化定位器",
+      "analyze_failure": "分析失败",
+      "optimize": "优化代码"
+    },
+    "requests": {
+      "explain": "请解释代码，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "fix": "请修复问题，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "refactor": "请重构代码，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "generate_test": "请生成测试，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "add_assertion": "请补充断言，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "improve_locator": "请优化定位器，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "analyze_failure": "请分析失败，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。",
+      "optimize": "请优化代码，结合当前选区、文件、fixture 和项目约定，提供可审查的修改建议与验证方法。"
+    }
+  },
+  "modes": {
+    "label": "工作室模式",
+    "code": "代码与调试",
+    "recorder": "浏览器与录制"
   }
 }

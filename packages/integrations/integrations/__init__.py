@@ -1,13 +1,5 @@
 from __future__ import annotations
 
-from integrations.contracts import (
-    FakeGitHubIntegration,
-    FakeTestRailIntegration,
-    GitHubIntegration,
-    IssueReport,
-    PRContext,
-    TestRailIntegration,
-)
 from integrations.git_repository import (
     GitRepository,
     GitRepositoryProtocol,
@@ -35,12 +27,6 @@ from integrations.testrail_adapter import (
 )
 
 __all__ = [
-    "GitHubIntegration",
-    "FakeGitHubIntegration",
-    "TestRailIntegration",
-    "FakeTestRailIntegration",
-    "IssueReport",
-    "PRContext",
     "JenkinsConfig",
     "JenkinsRunnerBackend",
     "FakeJenkinsServer",
