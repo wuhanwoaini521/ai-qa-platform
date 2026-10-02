@@ -204,6 +204,8 @@ class TaskRuntimeService:
                         "preconditions": case.preconditions,
                         "steps": case.steps,
                         "expected_result": case.expected_result,
+                        "test_model": case.test_model or {},
+                        "requirement_id": case.requirement_id,
                     },
                 }
         plan = build_plan(data.type)

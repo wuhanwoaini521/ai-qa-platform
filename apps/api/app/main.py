@@ -45,6 +45,7 @@ from app.api import (
 from app.api.authz import StreamTicketQuerySanitizer, authorize_request
 from app.api.errors import http_error, validation_error
 from app.api.language_service import router as language_service_router
+from app.api.lifecycle import router as lifecycle_router
 from app.persistence.database import engine, init_db
 from app.services.ai_settings_service import AISettingsService
 from app.services.metrics_service import metrics_service
@@ -68,6 +69,9 @@ async def lifespan(app: FastAPI):
     from app.repositories.failure_analysis_repo import FailureAnalysisRepository
 
     await FailureAnalysisRepository().recover_interrupted()
+    from app.services.requirement_lifecycle_service import RequirementLifecycleService
+
+    await RequirementLifecycleService.recover_interrupted()
     try:
         await AISettingsService().load_runtime_config()
     except Exception as error:  # AI config must not prevent core API startup
@@ -158,6 +162,7 @@ app.include_router(artifacts_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(debugger_router, prefix="/api")
 app.include_router(decision_router, prefix="/api")
+app.include_router(lifecycle_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(recorder_router, prefix="/api")
 app.include_router(requirements_router, prefix="/api")

@@ -35,6 +35,7 @@ class TestDesignRepository:
             category=data.category.value,
             description=data.description,
             risk=data.risk,
+            scenario_model=data.scenario_model.model_dump(mode="json") if data.scenario_model else None,
             status=data.status,
             created_at=now,
             updated_at=now,

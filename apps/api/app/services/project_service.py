@@ -28,6 +28,7 @@ class ProjectService:
     def _to_dto(self, orm: ProjectORM) -> Project:
         return Project(
             id=orm.id,
+            demo_kind=orm.demo_kind,
             name=orm.name,
             description=orm.description or "",
             repository_url=orm.repository_url,

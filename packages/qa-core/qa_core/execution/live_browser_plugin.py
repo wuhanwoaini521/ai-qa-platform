@@ -13,8 +13,10 @@ LIVE_BROWSER_PLUGIN_SOURCE = '''"""Generated for one AI QA Platform TestRun."""
 from __future__ import annotations
 
 import base64
+import inspect
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -89,15 +91,49 @@ class LiveBrowserPlugin:
         record["console_logs"] = []
         record["network_logs"] = []
         record["recent_steps"] = []
+        requests = {}
         def publish(kind, entry):
             key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[kind]
             record[key].append(entry)
             del record[key][:-50]
             self.emit({"type": kind, "session_id": record["session_id"], "page_id": record["page_id"],
                 "nodeid": record["nodeid"], "url": getattr(page, "url", ""), "entry": entry})
+        def safe_payload(value, depth=0):
+            if depth > 4:
+                return "[depth limit]"
+            if isinstance(value, dict):
+                return {str(key): "[REDACTED]" if re.search("password|passwd|secret|token|authorization|cookie|api.?key|email|phone|address|card", str(key), re.I) else safe_payload(item, depth+1) for key, item in list(value.items())[:30]}
+            if isinstance(value, list):
+                return [safe_payload(item, depth+1) for item in value[:20]]
+            return value[:500] if isinstance(value, str) else value
+        def started(request):
+            if len(requests) >= 100:
+                requests.pop(next(iter(requests)))
+            requests[id(request)] = time.perf_counter()
+        def network(request, failed=False):
+            began = requests.pop(id(request), None)
+            entry = {"url": request.url[:2048], "method": request.method,
+                "duration_ms": round((time.perf_counter()-began)*1000, 1) if began is not None else None}
+            try:
+                content_type = request.headers.get("content-type", "")
+                entry["request"] = {"content_type": content_type,
+                    "body": safe_payload(request.post_data_json) if "application/json" in content_type and len(request.post_data or "") <= 8192 else "[not captured: absent, non-JSON or oversized]"}
+                response = request.response() if not failed else None
+                if response:
+                    entry["status"] = response.status
+                    content_type = response.headers.get("content-type", "")
+                    size = int(response.headers.get("content-length", "0"))
+                    # Bodies with unknown/large lengths or non-JSON content remain uncaptured.
+                    entry["response"] = {"content_type": content_type,
+                        "body": safe_payload(response.json()) if "application/json" in content_type and 0 < size <= 8192 else "[not captured: non-JSON, unknown or oversized length]"}
+                else:
+                    entry["failure"] = str(request.failure)[:500]
+            except Exception:
+                entry["body_notice"] = "Body unavailable; request metadata retained"
+            publish("network", entry)
         listeners = [("console", lambda message: publish("console", {"level": message.type, "text": message.text[:2000]})),
-            ("response", lambda response: publish("network", {"url": response.url[:2048], "status": response.status, "method": response.request.method})),
-            ("requestfailed", lambda request: publish("network", {"url": request.url[:2048], "failure": str(request.failure)[:500], "method": request.method}))]
+            ("request", started), ("requestfinished", network),
+            ("requestfailed", lambda request: network(request, True))]
         record["listeners"] = listeners
         for name, callback in listeners:
             page.on(name, callback)
@@ -113,6 +149,12 @@ class LiveBrowserPlugin:
                         if kwargs.get("trial"):
                             return original(locator, *args, **kwargs)
                         started = time.perf_counter()
+                        location = {}
+                        for frame in inspect.stack(context=0)[1:12]:
+                            relative = os.path.relpath(frame.filename, os.getcwd()).replace(os.sep, "/")
+                            if not relative.startswith("..") and not relative.startswith((".venv/", "venv/")) and "site-packages" not in relative and "qa_platform_live_browser_plugin" not in relative:
+                                location = {"file": relative, "line": frame.lineno}
+                                break
                         passed = False
                         try:
                             result = original(locator, *args, **kwargs)
@@ -120,7 +162,7 @@ class LiveBrowserPlugin:
                             return result
                         finally:
                             publish("step", {"action": method, "locator": str(getattr(getattr(locator, "_impl_obj", None), "_selector", ""))[:1000],
-                                "status": "PASSED" if passed else "FAILED", "duration_ms": round((time.perf_counter()-started)*1000, 1)})
+                                "status": "PASSED" if passed else "FAILED", "duration_ms": round((time.perf_counter()-started)*1000, 1), **location})
                             evidence = self._page_evidence(page)
                             if evidence:
                                 record["last_page_evidence"] = evidence

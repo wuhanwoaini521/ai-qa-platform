@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
+from pydantic import BaseModel
 from qa_core.ai.budget import AIBudgetGuard, BudgetExceededError
 from qa_core.ai.models import (
     AICompletionRequest,
@@ -149,6 +152,33 @@ async def test_openai_provider_mock_transport(monkeypatch):
     assert res.structured_data is not None
     assert res.input_tokens == 50
     assert res.output_tokens == 30
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_requests_json_mode_and_retries_invalid_schema(monkeypatch):
+    class Summary(BaseModel):
+        summary: str
+
+    bodies = []
+
+    def mock_transport_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        content = "QA Assistant analysis completed" if len(bodies) == 1 else '{"summary":"Grounded finding"}'
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    transport = httpx.MockTransport(mock_transport_handler)
+    orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: orig_client(transport=transport))
+
+    provider = OpenAICompatibleProvider(api_key="sk-test-mock-key-12345", base_url="https://mock-ai.local/v1")
+    response = await provider.complete(AICompletionRequest(prompt="Analyze requirement", response_schema=Summary))
+
+    assert response.structured_data == {"summary": "Grounded finding"}
+    assert response.retry_count == 1
+    assert len(bodies) == 2
+    assert all(body["response_format"] == {"type": "json_object"} for body in bodies)
+    assert "previous response did not match" in bodies[1]["messages"][-1]["content"]
 
 
 @pytest.mark.asyncio

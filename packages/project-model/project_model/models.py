@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from project_model.lifecycle import ModernTestModel, RequirementDocument, TestScenario
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -92,6 +94,7 @@ class ProjectUpdate(EntityBase):
 
 class Project(ProjectBase):
     id: str
+    demo_kind: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -106,6 +109,7 @@ class RequirementBase(EntityBase):
     external_system: str | None = Field(default=None, max_length=50)  # e.g. "JIRA"
     external_id: str | None = Field(default=None, max_length=100)  # e.g. "EC-12345"
     external_url: str | None = Field(default=None, max_length=500)
+    qa_model: RequirementDocument | None = None
 
 
 class RequirementCreate(RequirementBase):
@@ -120,9 +124,11 @@ class RequirementUpdate(EntityBase):
     external_system: str | None = None
     external_id: str | None = None
     external_url: str | None = None
+    qa_model: RequirementDocument | None = None
 
 
 class Requirement(RequirementBase):
+    analysis_stale: bool = False
     id: str
     created_at: datetime
     updated_at: datetime
@@ -136,6 +142,7 @@ class TestDesignBase(EntityBase):
     description: str = Field(default="", max_length=3000)
     risk: str = Field(default="Medium", max_length=100)
     status: str = Field(default="DRAFT", max_length=50)
+    scenario_model: TestScenario | None = None
 
 
 class TestDesignCreate(TestDesignBase):
@@ -148,6 +155,7 @@ class TestDesignUpdate(EntityBase):
     description: str | None = None
     risk: str | None = None
     status: str | None = None
+    scenario_model: TestScenario | None = None
 
 
 class TestDesign(TestDesignBase):
@@ -171,6 +179,7 @@ class TestCaseBase(EntityBase):
     external_system: str | None = Field(default=None, max_length=50)  # e.g. "TESTRAIL"
     external_case_id: str | None = Field(default=None, max_length=100)  # e.g. "C12345"
     external_url: str | None = Field(default=None, max_length=500)
+    test_model: ModernTestModel | None = None
 
 
 class TestCaseCreate(TestCaseBase):
@@ -190,10 +199,12 @@ class TestCaseUpdate(EntityBase):
     external_system: str | None = None
     external_case_id: str | None = None
     external_url: str | None = None
+    test_model: ModernTestModel | None = None
 
 
 class TestCase(TestCaseBase):
     id: str
+    binding: AutomationBinding | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -329,6 +340,8 @@ class RenameFilePayload(BaseModel):
 # --- QA Assistant Models ---
 class QAContext(BaseModel):
     project_id: str
+    test_case_id: str | None = None
+    requirement_id: str | None = None
     project_name: str = ""
     requirement_title: str | None = None
     test_case_title: str | None = None

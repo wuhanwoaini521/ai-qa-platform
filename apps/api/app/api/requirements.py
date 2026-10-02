@@ -27,7 +27,10 @@ async def create_requirement(
     data: RequirementCreate,
     service: RequirementService = Depends(get_requirement_service),
 ):
-    return await service.create_requirement(data)
+    try:
+        return await service.create_requirement(data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
 
 @router.get("/{req_id}", response_model=Requirement)
@@ -44,7 +47,10 @@ async def update_requirement(
     data: RequirementUpdate,
     service: RequirementService = Depends(get_requirement_service),
 ):
-    req = await service.update_requirement(req_id, data)
+    try:
+        req = await service.update_requirement(req_id, data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
     if not req:
         raise HTTPException(status_code=404, detail="Requirement not found")
     return req

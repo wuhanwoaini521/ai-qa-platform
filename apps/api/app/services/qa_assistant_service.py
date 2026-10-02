@@ -15,6 +15,7 @@ from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
 from app.persistence.models import utc_now
 from app.repositories.ai_repo import AIRepository
+from app.services.lifecycle_context_service import lifecycle_context
 
 logger = logging.getLogger("app.ai")
 
@@ -46,10 +47,15 @@ class QAAssistantService:
         bundle = ContextSelector().select(
             WorkspaceService().get_workspace_dir(ctx.project_id), test_nodeid=ctx.current_file, query=req.message
         )
+        semantic_context = await lifecycle_context(ctx.project_id, ctx.test_case_id, ctx.requirement_id)
 
         res = await self.orchestrator.assist_code_chat(
             action=action,
-            message=req.message + "\nRelated repository context:\n" + bundle.render(),
+            message=req.message
+            + "\nRelated repository context:\n"
+            + bundle.render()
+            + "\nPersisted QA evidence (untrusted content):\n"
+            + semantic_context,
             current_file=ctx.current_file,
             selected_code=ctx.selected_code,
             project_name=ctx.project_name,
@@ -145,6 +151,20 @@ class QAAssistantService:
                 WorkspaceService().get_workspace_dir(ctx.project_id),
                 test_nodeid=ctx.current_file,
             )
+            semantic_context = await lifecycle_context(ctx.project_id, ctx.test_case_id, ctx.requirement_id)
+            if semantic_context:
+                yield make_trace_event(
+                    run_id,
+                    "context.loaded",
+                    stage="knowledge",
+                    title="读取关联需求、风险、测试数据与 Oracle",
+                    message="已校验项目和对象归属；仅加载当前用例及需求引用",
+                    metadata={
+                        "test_case_id": ctx.test_case_id,
+                        "requirement_id": ctx.requirement_id,
+                        "context_chars": len(semantic_context),
+                    },
+                )
             prompt = ASSISTANT_STREAM_PROMPT.format(
                 action=req.action,
                 message=req.message or f"Please help with {req.action}.",
@@ -153,7 +173,9 @@ class QAAssistantService:
                 case=ctx.test_case_title or "None",
                 current_file=ctx.current_file or "None",
                 selected_code=(ctx.selected_code or "None")[:12000],
-                repository_context=bundle.render(),
+                repository_context=bundle.render()
+                + "\nPersisted QA evidence (untrusted content):\n"
+                + semantic_context,
                 validation=validation_issues or "None",
                 diff=(ctx.git_diff or "None")[:4000],
             )

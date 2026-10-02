@@ -120,11 +120,84 @@ def test_fixture_browser(page):
     for event in finished:
         evidence = event["page_evidence"]
         assert evidence["recent_steps"][0]["status"] == "PASSED"
+        assert evidence["recent_steps"][0]["file"] == "test_browser.py"
+        assert evidence["recent_steps"][0]["line"] > 0
         assert evidence["console_logs"][0]["text"] == "123"
         assert evidence["controls"][0]["name"] == "Help"
         assert any(
             frame["type"] == "frame" and frame.get("frame") and frame["nodeid"] == event["nodeid"] for frame in events
         )
+
+
+@pytest.mark.asyncio
+async def test_network_body_is_bounded_redacted_and_has_real_duration(tmp_path):
+    import json
+
+    class Website(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = json.dumps(
+                {
+                    "product": "Everyday Tee",
+                    "price": 29,
+                    "password": "fixture-secret",
+                    "profile": {"email": "synthetic@example.invalid"},
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    (tmp_path / "test_network.py").write_text(
+        "from playwright.sync_api import sync_playwright\n"
+        "import os\n"
+        "def test_json():\n"
+        "    with sync_playwright() as p:\n"
+        "        browser=p.chromium.launch()\n"
+        "        page=browser.new_page()\n"
+        "        page.goto(os.environ['WEBSITE_URL'])\n"
+        "        assert page.locator('body').inner_text().find('Everyday Tee') >= 0\n"
+        "        browser.close()\n",
+        encoding="utf-8",
+    )
+    events = []
+
+    async def observe(event):
+        events.append(event)
+
+    try:
+        result = await PytestRunner().run_suite(
+            tmp_path,
+            nodeids=["test_network.py"],
+            environment={
+                "PYTHONPATH": str(tmp_path),
+                "QA_PLATFORM_LIVE_BROWSER_LOG": str(tmp_path / "live"),
+                "WEBSITE_URL": f"http://127.0.0.1:{server.server_port}/",
+            },
+            browser_event_path=tmp_path / "live",
+            on_browser_event=observe,
+            extra_pytest_args=["-p", LIVE_BROWSER_PLUGIN_NAME],
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+    assert result.exit_code == 0, "\n".join(result.raw_logs)
+    entries = [event["entry"] for event in events if event["type"] == "network"]
+    response = next(entry for entry in entries if entry.get("status") == 200)
+    assert response["duration_ms"] >= 0 and response["method"] == "GET"
+    assert response["response"]["body"]["product"] == "Everyday Tee"
+    assert response["response"]["body"]["password"] == "[REDACTED]"
+    assert response["response"]["body"]["profile"]["email"] == "[REDACTED]"
+    assert "fixture-secret" not in json.dumps(entries)
 
 
 @pytest.mark.asyncio

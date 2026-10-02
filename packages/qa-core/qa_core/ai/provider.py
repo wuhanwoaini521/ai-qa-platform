@@ -382,6 +382,10 @@ class OpenAICompatibleProvider:
             "max_tokens": request.max_tokens,
         }
         if request.response_schema:
+            # OpenAI-compatible gateways may ignore JSON-only prompt instructions. Ask the
+            # endpoint to constrain the response format as well; schema validation below is
+            # still authoritative because JSON mode guarantees syntax, not schema semantics.
+            payload["response_format"] = {"type": "json_object"}
             payload["messages"][0]["content"] += "\nReturn JSON matching this schema:\n" + json.dumps(
                 request.response_schema.model_json_schema(), ensure_ascii=False
             )
@@ -510,6 +514,11 @@ class OpenAICompatibleProvider:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if request.response_schema:
+            payload["response_format"] = {"type": "json_object"}
+            payload["messages"][0]["content"] += "\nReturn JSON matching this schema:\n" + json.dumps(
+                request.response_schema.model_json_schema(), ensure_ascii=False
+            )
         emitted_content = False
         last_error: Exception | None = None
 

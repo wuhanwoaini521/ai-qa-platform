@@ -250,6 +250,18 @@ class TestRunService:
         return self._to_run_dto(orm)
 
     async def create_and_execute_run(self, data: TestRunCreate) -> TestRun:
+        from app.services.golden_demo_service import DEMO_ID, demo_lock
+
+        if data.project_id == DEMO_ID:
+            async with demo_lock:
+                from app.persistence.models import ProjectORM
+
+                if not await self.run_repo.session.get(ProjectORM, DEMO_ID, with_for_update=True):
+                    raise ValueError("Demo is being reset or no longer exists")
+                return await self._create_and_execute_run(data)
+        return await self._create_and_execute_run(data)
+
+    async def _create_and_execute_run(self, data: TestRunCreate) -> TestRun:
         # 1. Create Run in DB
         orm = await self.run_repo.create_run(data)
         run_id = orm.id

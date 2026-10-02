@@ -82,6 +82,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 #: existing one, so an already-deployed database needs these added explicitly. This is a stopgap
 #: until the platform adopts a migration framework; the names are code constants, never user input.
 ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("projects", "demo_kind", "VARCHAR(50)"),
+    ("requirements", "qa_model", "TEXT"),
+    ("test_designs", "scenario_model", "TEXT"),
+    ("test_cases", "test_model", "TEXT"),
     ("failure_records", "evidence_bundle", "TEXT"),
     ("test_runs", "log_output", "TEXT"),
     ("test_runs", "parallel_workers", "INTEGER NOT NULL DEFAULT 1"),

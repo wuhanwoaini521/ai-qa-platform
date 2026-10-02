@@ -45,7 +45,10 @@ async def create_test_case(
     data: TestCaseCreate,
     service: TestCaseService = Depends(get_test_case_service),
 ):
-    return await service.create_test_case(data)
+    try:
+        return await service.create_test_case(data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
 
 @router.get("/{case_id}", response_model=TestCase)
@@ -62,7 +65,10 @@ async def update_test_case(
     data: TestCaseUpdate,
     service: TestCaseService = Depends(get_test_case_service),
 ):
-    tc = await service.update_test_case(case_id, data)
+    try:
+        tc = await service.update_test_case(case_id, data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
     if not tc:
         raise HTTPException(status_code=404, detail="Test Case not found")
     return tc

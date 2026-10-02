@@ -23,6 +23,7 @@ class TestDesignService:
             category=TestDesignCategory(orm.category),
             description=orm.description or "",
             risk=orm.risk or "Medium",
+            scenario_model=orm.scenario_model or None,
             status=orm.status or "DRAFT",
             created_at=orm.created_at,
             updated_at=orm.updated_at,
@@ -39,10 +40,22 @@ class TestDesignService:
         return self._to_dto(orm)
 
     async def create_test_design(self, data: TestDesignCreate) -> TestDesign:
+        from app.services.lifecycle_validation import validate_design_model
+
+        await validate_design_model(self.test_design_repo.session, data)
         orm = await self.test_design_repo.create(data)
         return self._to_dto(orm)
 
     async def update_test_design(self, design_id: str, data: TestDesignUpdate) -> TestDesign | None:
+        from app.services.lifecycle_validation import validate_design_model
+
+        original = await self.test_design_repo.get_by_id(design_id)
+        if not original:
+            return None
+        merged = TestDesignCreate.model_validate(
+            {**self._to_dto(original).model_dump(), **data.model_dump(exclude_unset=True)}
+        )
+        await validate_design_model(self.test_design_repo.session, merged)
         orm = await self.test_design_repo.update(design_id, data)
         if not orm:
             return None

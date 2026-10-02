@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from project_model.models import (
+    AutomationBinding,
     AutomationStatus,
     TestCase,
     TestCaseCreate,
@@ -17,7 +18,9 @@ class TestCaseService:
         self.test_case_repo = test_case_repo
 
     def _to_dto(self, orm: TestCaseORM) -> TestCase:
+        binding = orm.__dict__.get("binding")
         return TestCase(
+            binding=AutomationBinding.model_validate(binding) if binding else None,
             id=orm.id,
             project_id=orm.project_id,
             requirement_id=orm.requirement_id,
@@ -26,6 +29,7 @@ class TestCaseService:
             preconditions=orm.preconditions or "",
             steps=orm.steps or [],
             expected_result=orm.expected_result or "",
+            test_model=orm.test_model or None,
             priority=TestCasePriority(orm.priority),
             automation_status=AutomationStatus(orm.automation_status),
             tags=orm.tags or [],
@@ -53,10 +57,23 @@ class TestCaseService:
         return self._to_dto(orm)
 
     async def create_test_case(self, data: TestCaseCreate) -> TestCase:
+        from app.services.lifecycle_validation import validate_case_model
+
+        data = await validate_case_model(self.test_case_repo.session, data)
         orm = await self.test_case_repo.create(data)
         return self._to_dto(orm)
 
     async def update_test_case(self, case_id: str, data: TestCaseUpdate) -> TestCase | None:
+        from app.services.lifecycle_validation import validate_case_model
+
+        original = await self.test_case_repo.get_by_id(case_id)
+        if not original:
+            return None
+        merged = TestCaseCreate.model_validate(
+            {**self._to_dto(original).model_dump(), **data.model_dump(exclude_unset=True)}
+        )
+        checked = await validate_case_model(self.test_case_repo.session, merged)
+        data = data.model_copy(update={"requirement_id": checked.requirement_id})
         orm = await self.test_case_repo.update(case_id, data)
         if not orm:
             return None

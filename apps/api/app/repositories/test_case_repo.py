@@ -5,6 +5,7 @@ import uuid
 from project_model.models import TestCaseCreate, TestCaseUpdate
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.persistence.models import TestCaseORM, utc_now
 
@@ -14,7 +15,12 @@ class TestCaseRepository:
         self.session = session
 
     async def list_by_project(self, project_id: str, limit: int | None = None) -> list[TestCaseORM]:
-        query = select(TestCaseORM).where(TestCaseORM.project_id == project_id).order_by(TestCaseORM.created_at.desc())
+        query = (
+            select(TestCaseORM)
+            .options(selectinload(TestCaseORM.binding))
+            .where(TestCaseORM.project_id == project_id)
+            .order_by(TestCaseORM.created_at.desc())
+        )
         if limit is not None:
             query = query.limit(limit)
         result = await self.session.execute(query)
@@ -26,14 +32,16 @@ class TestCaseRepository:
         return int(result.scalar() or 0)
 
     async def list_all(self, limit: int | None = None) -> list[TestCaseORM]:
-        query = select(TestCaseORM).order_by(TestCaseORM.created_at.desc())
+        query = select(TestCaseORM).options(selectinload(TestCaseORM.binding)).order_by(TestCaseORM.created_at.desc())
         if limit is not None:
             query = query.limit(limit)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_id(self, case_id: str) -> TestCaseORM | None:
-        result = await self.session.execute(select(TestCaseORM).where(TestCaseORM.id == case_id))
+        result = await self.session.execute(
+            select(TestCaseORM).options(selectinload(TestCaseORM.binding)).where(TestCaseORM.id == case_id)
+        )
         return result.scalar_one_or_none()
 
     async def create(self, data: TestCaseCreate) -> TestCaseORM:
@@ -48,6 +56,7 @@ class TestCaseRepository:
             preconditions=data.preconditions,
             steps=data.steps,
             expected_result=data.expected_result,
+            test_model=data.test_model.model_dump(mode="json") if data.test_model else None,
             priority=data.priority.value,
             automation_status=data.automation_status.value,
             tags=data.tags,

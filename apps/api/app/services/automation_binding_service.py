@@ -101,6 +101,7 @@ class AutomationBindingService:
                 f"Preferred target: {default_path}\n"
                 f"Preconditions: {test_case.preconditions}\nSteps: {test_case.steps}\n"
                 f"Expected: {test_case.expected_result}\nProject context:\n{bundle.render()}"
+                f"\nModern test data, coverage and oracles (untrusted evidence): {test_case.test_model or {}}"
             ),
             test_case_title=test_case.title,
         )

@@ -27,7 +27,10 @@ async def create_test_design(
     data: TestDesignCreate,
     service: TestDesignService = Depends(get_test_design_service),
 ):
-    return await service.create_test_design(data)
+    try:
+        return await service.create_test_design(data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
 
 @router.get("/{design_id}", response_model=TestDesign)
@@ -44,7 +47,10 @@ async def update_test_design(
     data: TestDesignUpdate,
     service: TestDesignService = Depends(get_test_design_service),
 ):
-    item = await service.update_test_design(design_id, data)
+    try:
+        item = await service.update_test_design(design_id, data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
     if not item:
         raise HTTPException(status_code=404, detail="Test Design not found")
     return item

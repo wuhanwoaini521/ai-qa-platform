@@ -31,6 +31,8 @@ READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 #: Paths that must stay reachable without credentials: container probes, the metrics scrape target,
 #: the login endpoint itself, and the interactive API docs.
 PUBLIC_PATHS = (
+    "/api/demo-shop/index.html",
+    "/api/demo-shop/catalog.json",
     "/api/health",
     "/api/metrics",
     "/api/auth/login",

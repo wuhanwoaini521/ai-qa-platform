@@ -49,6 +49,7 @@ class RequirementRepository:
             title=data.title,
             description=data.description,
             acceptance_criteria=data.acceptance_criteria,
+            qa_model=data.qa_model.model_dump(mode="json") if data.qa_model else None,
             status=data.status.value,
             external_system=data.external_system,
             external_id=data.external_id,
