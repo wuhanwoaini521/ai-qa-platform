@@ -33,10 +33,13 @@ class AIProviderType(str, Enum):
 
 
 class AICompletionRequest(BaseModel):
-    prompt: str
+    request_id: str | None = Field(default=None, max_length=128)
+    task_id: str | None = Field(default=None, max_length=128)
+    run_id: str | None = Field(default=None, max_length=128)
+    prompt: str = Field(max_length=128000)
     system_instruction: str = "You are a QA automation assistant."
     temperature: float = 0.2
-    max_tokens: int = 2000
+    max_tokens: int = Field(default=2000, ge=1, le=32000)
     response_schema: type[BaseModel] | None = None
     prompt_id: str | None = None
     prompt_version: str | None = None
@@ -46,6 +49,7 @@ class AICompletionRequest(BaseModel):
 
 
 class AICompletionResponse(BaseModel):
+    invocation_id: str | None = None
     content: str
     structured_data: dict[str, Any] | None = None
     input_tokens: int | None = None
@@ -62,6 +66,7 @@ class AIStreamChunk(BaseModel):
     """One provider-neutral piece of a streamed completion."""
 
     content_delta: str = ""
+    invocation_id: str | None = None
     usage: dict[str, int | float | None] | None = None
     finish_reason: str | None = None
     provider: str = "unknown"
@@ -124,7 +129,7 @@ class FailureAnalysisResponse(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     hypotheses: list[str] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
-    confidence: float = 0.8
+    confidence: float = Field(default=0.8, ge=0, le=1)
     provider: str = ""
     fallback_used: bool = False
     duration_ms: float | None = None
@@ -133,7 +138,7 @@ class FailureAnalysisResponse(BaseModel):
 
 class LocatorSemanticReview(BaseModel):
     is_semantically_equivalent: bool
-    confidence: float = 0.85
+    confidence: float = Field(default=0.85, ge=0, le=1)
     explanation: str = ""
     risk_warning: str | None = None
 
@@ -144,6 +149,9 @@ class CodeAssistantResponse(BaseModel):
     target_file: str | None = None
     action_type: str = "reply"
     suggestions: list[str] = Field(default_factory=list)
+    provider: str = ""
+    model: str = ""
+    fallback_used: bool = False
 
 
 class AIInvocationRecord(BaseModel):

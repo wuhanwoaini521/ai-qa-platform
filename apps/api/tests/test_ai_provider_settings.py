@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from app.persistence.models import AIProviderConfigORM
 from app.services.ai_settings_service import AISettingsService
-from qa_core.ai.models import ProviderHealth, ProviderHealthStatus
+from qa_core.ai.models import AIStreamChunk, ProviderHealth, ProviderHealthStatus
 from qa_core.ai.provider import FallbackAIProvider, OpenAICompatibleProvider
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
@@ -35,7 +35,7 @@ async def test_ai_provider_settings_are_encrypted_and_activated(client, test_db_
         assert "normal-ai-secret" not in saved.text
 
         provider = AIProviderRegistry.get_provider()
-        assert isinstance(provider, FallbackAIProvider)
+        assert isinstance(provider.inner, FallbackAIProvider)
         assert provider.primary.api_key == "normal-ai-secret"
         assert provider.primary.model == "test-model"
 
@@ -47,7 +47,7 @@ async def test_ai_provider_settings_are_encrypted_and_activated(client, test_db_
         AIProviderRegistry.reset()
         await AISettingsService().load_runtime_config()
         restored = AIProviderRegistry.get_provider()
-        assert isinstance(restored, FallbackAIProvider)
+        assert isinstance(restored.inner, FallbackAIProvider)
         assert restored.primary.api_key == "normal-ai-secret"
     finally:
         AIProviderRegistry.reset()
@@ -65,9 +65,16 @@ async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(clien
         )
 
     monkeypatch.setattr(OpenAICompatibleProvider, "check_health", healthy)
+
+    async def streaming(self, request):
+        assert request.prompt_id == "provider_connection"
+        yield AIStreamChunk(content_delta="OK", provider=self.provider_name, model=self.model)
+
+    monkeypatch.setattr(OpenAICompatibleProvider, "stream_complete", streaming)
     tested = await client.post("/api/ai/test-connection", json=payload())
     assert tested.status_code == 200, tested.text
     assert tested.json()["connected"] is True
+    assert tested.json()["streaming"] is True
 
     saved = await client.get("/api/ai/settings")
     assert saved.status_code == 200

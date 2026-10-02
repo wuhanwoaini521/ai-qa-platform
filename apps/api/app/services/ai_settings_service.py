@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import time
 from dataclasses import dataclass
 
 from project_model.models import (
     AIProviderConnectionResult,
+    AIProviderRuntimeState,
     AIProviderSettingsResponse,
     AIProviderSettingsUpdate,
+    AIProviderStatus,
+    AIStatusResponse,
 )
-from qa_core.ai.models import ProviderHealth
+from qa_core.ai.models import AICompletionRequest, ProviderHealth
 from qa_core.ai.provider import FakeAIProvider, OpenAICompatibleProvider
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
@@ -16,6 +22,9 @@ from app.persistence.database import async_session_factory
 from app.persistence.models import AIProviderConfigORM
 from app.services.secret_store import SecretStore
 from app.settings import settings
+
+_health_lock = asyncio.Lock()
+_health_cache: tuple[str, float, AIStatusResponse] | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +35,9 @@ class AIRuntimeConfig:
     base_url: str
     timeout: float
     max_retries: int
+    max_request_tokens: int = 16000
+    max_daily_requests: int = 1000
+    max_task_calls: int = 8
 
 
 class AISettingsService:
@@ -58,6 +70,9 @@ class AISettingsService:
             base_url=row.base_url,
             timeout=row.timeout,
             max_retries=row.max_retries,
+            max_request_tokens=row.max_request_tokens,
+            max_daily_requests=row.max_daily_requests,
+            max_task_calls=row.max_task_calls,
         )
 
     async def _effective_config(self) -> AIRuntimeConfig:
@@ -75,10 +90,15 @@ class AISettingsService:
             base_url=config.base_url,
             timeout=config.timeout,
             max_retries=config.max_retries,
+            max_request_tokens=config.max_request_tokens,
+            max_daily_requests=config.max_daily_requests,
+            max_task_calls=config.max_task_calls,
         )
 
     @staticmethod
     def _activate(config: AIRuntimeConfig) -> None:
+        from app.services.ai_execution_service import AIExecutionService
+
         AIProviderRegistry.configure_runtime(
             {
                 "provider": config.provider,
@@ -87,7 +107,15 @@ class AISettingsService:
                 "base_url": config.base_url,
                 "timeout": str(config.timeout),
                 "max_retries": str(config.max_retries),
+                "max_task_calls": str(config.max_task_calls),
             }
+        )
+        AIProviderRegistry.set_middleware(
+            lambda provider: AIExecutionService(
+                provider,
+                max_request_tokens=config.max_request_tokens,
+                max_daily_requests=config.max_daily_requests,
+            )
         )
 
     async def get_settings(self) -> AIProviderSettingsResponse:
@@ -123,6 +151,9 @@ class AISettingsService:
             row.base_url = update.base_url.strip().rstrip("/")
             row.timeout = update.timeout
             row.max_retries = update.max_retries
+            row.max_request_tokens = update.max_request_tokens
+            row.max_daily_requests = update.max_daily_requests
+            row.max_task_calls = update.max_task_calls
             await session.commit()
             await session.refresh(row)
             config = self._config_from_row(row, self.secret_store)
@@ -144,24 +175,92 @@ class AISettingsService:
             base_url=update.base_url.strip().rstrip("/"),
             timeout=update.timeout,
             max_retries=update.max_retries,
+            max_request_tokens=update.max_request_tokens,
+            max_daily_requests=update.max_daily_requests,
+            max_task_calls=update.max_task_calls,
         )
 
     async def test_connection(self, update: AIProviderSettingsUpdate | None = None) -> AIProviderConnectionResult:
         config = await self._config_for_update(update) if update else await self._effective_config()
+        started = time.perf_counter()
+        streaming = False
         if config.provider == "fake":
             health = await FakeAIProvider(model=config.model).check_health()
         else:
-            health = await OpenAICompatibleProvider(
+            provider = OpenAICompatibleProvider(
                 api_key=config.api_key,
                 model=config.model,
                 base_url=config.base_url,
                 timeout=config.timeout,
                 max_retries=config.max_retries,
-            ).check_health()
+            )
+            health = await provider.check_health()
+            if health.status == ProviderHealth.AVAILABLE:
+                # Probe only synthetic text; never send user files or logs to test connectivity.
+                from app.services.ai_execution_service import AIExecutionService
+
+                guarded = AIExecutionService(
+                    provider, max_request_tokens=config.max_request_tokens, max_daily_requests=config.max_daily_requests
+                )
+                try:
+                    text = ""
+                    async for chunk in guarded.stream_complete(
+                        AICompletionRequest(
+                            prompt="Reply with OK. This is a synthetic connectivity probe.",
+                            prompt_id="provider_connection",
+                            prompt_version="v1.0",
+                            max_tokens=16,
+                        )
+                    ):
+                        text += chunk.content_delta
+                    streaming = bool(text.strip())
+                    health.message = "Model returned a real streaming response to a synthetic probe."
+                except Exception as error:
+                    health.status = ProviderHealth.UNAVAILABLE
+                    health.message = f"Model streaming probe failed ({type(error).__name__})."
         return AIProviderConnectionResult(
             connected=health.status in (ProviderHealth.AVAILABLE, ProviderHealth.FALLBACK_ONLY),
             provider=health.provider,
             status=health.status.value,
             message=health.message,
             model=health.model,
+            streaming=streaming,
+            latency_ms=(time.perf_counter() - started) * 1000,
         )
+
+    async def get_status(self, refresh: bool = False) -> AIStatusResponse:
+        """Shared health for Header, Settings and readiness; discovery alone is insufficient."""
+        global _health_cache
+        config = await self._effective_config()
+        key = hashlib.sha256(repr(config).encode()).hexdigest()
+        async with _health_lock:
+            if not refresh and _health_cache and _health_cache[0] == key and time.monotonic() < _health_cache[1]:
+                return _health_cache[2].model_copy()
+            connection = await self.test_connection()
+            real = connection.connected and connection.streaming and config.provider != "fake"
+            simulated = config.provider == "fake"
+            status = AIStatusResponse(
+                provider=config.provider,
+                model=config.model,
+                base_url=config.base_url,
+                status=AIProviderRuntimeState.REAL_CONNECTED
+                if real
+                else AIProviderRuntimeState.SIMULATION
+                if simulated
+                else AIProviderRuntimeState.FALLBACK,
+                message=connection.message,
+                real_model_available=real,
+                fallback_active=not real and not simulated,
+                failure_reason=None if real else "fake_provider_selected" if simulated else "provider_probe_failed",
+                health_status=AIProviderStatus.AVAILABLE
+                if real
+                else AIProviderStatus.DISABLED
+                if simulated
+                else AIProviderStatus.UNAVAILABLE,
+                operational_state="REAL_AVAILABLE" if real else "FALLBACK_ONLY",
+                streaming=connection.streaming,
+                latency_ms=connection.latency_ms,
+                checked_at=connection.checked_at,
+            )
+            _health_cache = (key, time.monotonic() + 30, status)
+            return status.model_copy()

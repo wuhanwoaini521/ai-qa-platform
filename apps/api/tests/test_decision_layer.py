@@ -346,3 +346,8 @@ async def test_jev_settings_are_admin_only(client, role_client):
                 },
             )
         ).status_code == 403
+
+
+@pytest.fixture(autouse=True)
+def isolated_ai_persistence(test_db_session):
+    """All provider governance and locator history use the isolated test database."""

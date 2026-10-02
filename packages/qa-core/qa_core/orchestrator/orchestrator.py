@@ -18,7 +18,8 @@ from qa_core.ai.registry import AIProviderRegistry
 from qa_core.author.grounder import KnowledgeGrounder, PytestCodeGenerator
 from qa_core.author.models import AuthoringRequest, AuthoringResult
 from qa_core.failure.classifier import FailureClassifier
-from qa_core.failure.models import FailureArtifact, FailureCategory
+from qa_core.failure.models import FailureArtifact
+from qa_core.failure.redactor import SensitiveRedactor
 from qa_core.healing.healer import LocatorHealer
 from qa_core.healing.models import LocatorRepairProposal
 from qa_core.knowledge.loader import KnowledgeLoader
@@ -42,6 +43,23 @@ class ProductionQAOrchestrator:
         self.last_completion: AICompletionResponse | None = None
         self.budget_guard = budget_guard or AIBudgetGuard()
 
+    async def complete(self, request: AICompletionRequest) -> AICompletionResponse:
+        """One bounded, redacted, schema-validated path for orchestration calls."""
+        self.last_completion = None
+        self.budget_guard.check_and_record_request()
+        request = request.model_copy(update={"prompt": SensitiveRedactor.redact_text(request.prompt)})
+        response = await self.ai_provider.complete(request)
+        if request.response_schema:
+            data = (
+                response.structured_data or request.response_schema.model_validate_json(response.content).model_dump()
+            )
+            response = response.model_copy(
+                update={"structured_data": request.response_schema.model_validate(data).model_dump()}
+            )
+        self.last_completion = response
+        self.budget_guard.record_tokens(response.input_tokens, response.output_tokens)
+        return response
+
     async def analyze_requirement(
         self,
         title: str,
@@ -60,19 +78,11 @@ class ProductionQAOrchestrator:
             system_instruction=REQUIREMENT_ANALYSIS_PROMPT.system_instruction,
             prompt_id=REQUIREMENT_ANALYSIS_PROMPT.prompt_id,
             prompt_version=REQUIREMENT_ANALYSIS_PROMPT.version,
+            response_schema=RequirementAnalysisResponse,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            return RequirementAnalysisResponse.model_validate(res.structured_data)
-
-        # Fallback analysis
-        return RequirementAnalysisResponse(
-            summary=f"Requirement analysis for '{title}'.",
-            risks=["Potential edge cases in boundary conditions", "Asynchronous state transitions"],
-            ambiguities=["Validation rules need explicit definition"],
-            suggested_test_dimensions=["FUNCTIONAL", "BOUNDARY", "NEGATIVE", "API", "UI"],
-        )
+        return RequirementAnalysisResponse.model_validate(res.structured_data)
 
     async def generate_test_designs(
         self,
@@ -92,34 +102,11 @@ class ProductionQAOrchestrator:
             system_instruction=TEST_DESIGN_PROMPT.system_instruction,
             prompt_id=TEST_DESIGN_PROMPT.prompt_id,
             prompt_version=TEST_DESIGN_PROMPT.version,
+            response_schema=TestDesignGenerationResponse,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            return TestDesignGenerationResponse.model_validate(res.structured_data)
-
-        return TestDesignGenerationResponse(
-            suggestions=[
-                {
-                    "title": f"Verify Functional Flow: {title}",
-                    "category": "FUNCTIONAL",
-                    "description": description,
-                    "risk": "Low",
-                },
-                {
-                    "title": f"Boundary Limits: {title}",
-                    "category": "BOUNDARY",
-                    "description": "Test input limits",
-                    "risk": "Medium",
-                },
-                {
-                    "title": f"Negative Error Handling: {title}",
-                    "category": "NEGATIVE",
-                    "description": "Test invalid payload",
-                    "risk": "High",
-                },
-            ]
-        )
+        return TestDesignGenerationResponse.model_validate(res.structured_data)
 
     async def generate_test_cases(
         self,
@@ -141,24 +128,11 @@ class ProductionQAOrchestrator:
             system_instruction=TEST_CASE_GENERATION_PROMPT.system_instruction,
             prompt_id=TEST_CASE_GENERATION_PROMPT.prompt_id,
             prompt_version=TEST_CASE_GENERATION_PROMPT.version,
+            response_schema=TestCaseGenerationResponse,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            return TestCaseGenerationResponse.model_validate(res.structured_data)
-
-        return TestCaseGenerationResponse(
-            test_cases=[
-                {
-                    "title": f"Verify {design_title} primary flow",
-                    "preconditions": "Application is loaded",
-                    "steps": ["Navigate to target", "Execute interaction", "Verify assertion"],
-                    "expected_result": "Action succeeds and UI state matches expected result.",
-                    "priority": "P1",
-                    "tags": ["smoke", category.lower()],
-                }
-            ]
-        )
+        return TestCaseGenerationResponse.model_validate(res.structured_data)
 
     def author_test(self, request: AuthoringRequest, workspace_dir: Path | str | None = None) -> AuthoringResult:
         knowledge = KnowledgeLoader.load_from_workspace(workspace_dir) if workspace_dir else None
@@ -223,24 +197,13 @@ class ProductionQAOrchestrator:
             system_instruction=FAILURE_DIAGNOSIS_PROMPT.system_instruction,
             prompt_id=FAILURE_DIAGNOSIS_PROMPT.prompt_id,
             prompt_version=FAILURE_DIAGNOSIS_PROMPT.version,
+            response_schema=FailureAnalysisResponse,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            analysis = FailureAnalysisResponse.model_validate(res.structured_data)
-            return analysis.model_copy(update={"provider": res.provider, "fallback_used": res.fallback_used})
-
-        # Deterministic fallback
-        classification, suggested_action, _ = FailureClassifier.classify(error_message, stack_trace)
-        return FailureAnalysisResponse(
-            classification=classification.value if isinstance(classification, FailureCategory) else str(classification),
-            root_cause=suggested_action,
-            evidence=[error_message],
-            hypotheses=["Element state or locator mismatch"],
-            recommended_actions=[suggested_action],
-            confidence=0.85,
-            provider=res.provider,
-            fallback_used=res.fallback_used,
+        analysis = FailureAnalysisResponse.model_validate(res.structured_data)
+        return analysis.model_copy(
+            update={"provider": res.provider, "fallback_used": res.fallback_used or res.provider == "fake"}
         )
 
     def propose_locator_repair(
@@ -277,17 +240,11 @@ class ProductionQAOrchestrator:
             system_instruction=LOCATOR_REVIEW_PROMPT.system_instruction,
             prompt_id=LOCATOR_REVIEW_PROMPT.prompt_id,
             prompt_version=LOCATOR_REVIEW_PROMPT.version,
+            response_schema=LocatorSemanticReview,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            return LocatorSemanticReview.model_validate(res.structured_data)
-
-        return LocatorSemanticReview(
-            is_semantically_equivalent=True,
-            confidence=0.85,
-            explanation=f"Candidate selector '{proposed_locator}' preserves target element intent.",
-        )
+        return LocatorSemanticReview.model_validate(res.structured_data)
 
     def last_invocation_metadata(self) -> dict:
         """Provider, model and fallback status of the most recent provider response."""
@@ -297,11 +254,19 @@ class ProductionQAOrchestrator:
                 "provider": getattr(self.ai_provider, "provider_name", "unknown"),
                 "model": "unresolved",
                 "fallback_used": False,
+                "input_tokens": None,
+                "output_tokens": None,
+                "prompt_version": None,
+                "retry_count": 0,
             }
         return {
             "provider": completion.provider,
             "model": completion.model,
-            "fallback_used": completion.fallback_used,
+            "fallback_used": completion.fallback_used or completion.provider == "fake",
+            "input_tokens": completion.input_tokens,
+            "output_tokens": completion.output_tokens,
+            "prompt_version": completion.prompt_version,
+            "retry_count": completion.retry_count,
         }
 
     async def assist_code_chat(
@@ -332,21 +297,28 @@ class ProductionQAOrchestrator:
             system_instruction=CODE_ASSISTANT_PROMPT.system_instruction,
             prompt_id=CODE_ASSISTANT_PROMPT.prompt_id,
             prompt_version=CODE_ASSISTANT_PROMPT.version,
+            response_schema=CodeAssistantResponse,
         )
-        res = await self.ai_provider.complete(req)
+        res = await self.complete(req)
         self.last_completion = res
-        if res.structured_data:
-            return CodeAssistantResponse.model_validate(res.structured_data)
-
-        return CodeAssistantResponse(
-            reply=res.content,
-            suggested_code=None,
-            target_file=None,
-            action_type=action,
-            suggestions=[],
+        return CodeAssistantResponse.model_validate(res.structured_data).model_copy(
+            update={
+                "provider": res.provider,
+                "model": res.model,
+                "fallback_used": res.fallback_used or res.provider == "fake",
+            }
         )
 
     async def assist_chat(self, prompt: str) -> str:
-        res = await self.ai_provider.complete(AICompletionRequest(prompt=prompt))
+        from qa_core.prompts import CHAT_PROMPT
+
+        res = await self.complete(
+            AICompletionRequest(
+                prompt=CHAT_PROMPT.format(message=prompt),
+                system_instruction=CHAT_PROMPT.system_instruction,
+                prompt_id=CHAT_PROMPT.prompt_id,
+                prompt_version=CHAT_PROMPT.version,
+            )
+        )
         self.last_completion = res
         return res.content

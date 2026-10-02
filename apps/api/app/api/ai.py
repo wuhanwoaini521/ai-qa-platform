@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from project_model.models import (
     AIProviderConnectionResult,
     AIProviderSettingsResponse,
@@ -77,9 +79,29 @@ async def get_ai_status(service: AIService = Depends(get_ai_service)):
 
 
 @router.get("/usage", response_model=AIUsageSummary)
-async def get_ai_usage(limit: int = 50, service: AIService = Depends(get_ai_service)):
+async def get_ai_usage(
+    limit: int = Query(default=50, ge=1, le=200),
+    since: datetime | None = None,
+    feature: str | None = Query(default=None, max_length=100),
+    service: AIService = Depends(get_ai_service),
+):
     """Retrieve historical AI invocation telemetry and token usage."""
-    return await service.get_usage(limit=limit)
+    return await service.get_usage(limit=limit, since=since, feature=feature)
+
+
+@router.get("/system-health")
+async def system_health(refresh: bool = False):
+    """Detailed checks require authentication; public probes retain their small response."""
+    from app.services.platform_health_service import platform_health_service
+
+    return await platform_health_service.check(refresh=refresh)
+
+
+@router.get("/prompts")
+async def prompt_versions():
+    from qa_core.prompts import PROMPT_REGISTRY
+
+    return [{"feature": item.prompt_id, "version": item.version} for item in PROMPT_REGISTRY.values()]
 
 
 @router.post("/requirements/{requirement_id}/analyze", response_model=RequirementAnalysisDTO)
@@ -93,7 +115,10 @@ async def analyze_requirement(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Requirement Analysis failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Requirement Analysis failed ({type(e).__name__}). See AI Usage for invocation status.",
+        )
 
 
 @router.post("/requirements/{requirement_id}/generate-designs", response_model=list[TestDesignSuggestion])
@@ -107,7 +132,10 @@ async def generate_test_designs(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Test Design Generation failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Test Design Generation failed ({type(e).__name__}). See AI Usage for invocation status.",
+        )
 
 
 @router.post("/test-designs/{test_design_id}/generate-cases", response_model=list[TestCaseGenerationItem])
@@ -121,4 +149,7 @@ async def generate_test_cases(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Test Case Generation failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Test Case Generation failed ({type(e).__name__}). See AI Usage for invocation status.",
+        )

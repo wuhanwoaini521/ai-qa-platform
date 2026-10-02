@@ -82,12 +82,20 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 #: existing one, so an already-deployed database needs these added explicitly. This is a stopgap
 #: until the platform adopts a migration framework; the names are code constants, never user input.
 ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("failure_records", "evidence_bundle", "TEXT"),
     ("test_runs", "log_output", "TEXT"),
     ("test_runs", "parallel_workers", "INTEGER NOT NULL DEFAULT 1"),
     ("browser_sessions", "page_evidence_json", "TEXT"),
     ("ai_invocations", "decision_name", "VARCHAR(128)"),
+    ("ai_invocations", "request_id", "VARCHAR(128)"),
+    ("ai_invocations", "task_id", "VARCHAR(128)"),
+    ("ai_invocations", "run_id", "VARCHAR(128)"),
     ("ai_invocations", "decision_choice", "VARCHAR(128)"),
     ("ai_invocations", "decision_confidence", "FLOAT"),
+    ("ai_invocations", "token_source", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
+    ("ai_provider_configs", "max_request_tokens", "INTEGER NOT NULL DEFAULT 16000"),
+    ("ai_provider_configs", "max_daily_requests", "INTEGER NOT NULL DEFAULT 1000"),
+    ("ai_provider_configs", "max_task_calls", "INTEGER NOT NULL DEFAULT 8"),
     ("agent_tasks", "max_ai_calls", "INTEGER NOT NULL DEFAULT 8"),
 )
 

@@ -63,7 +63,8 @@ async def test_fake_ai_provider_tasks():
         AICompletionRequest(prompt="semantic equivalence review", prompt_id="locator_review")
     )
     assert review_res.structured_data is not None
-    assert review_res.structured_data["is_semantically_equivalent"] is True
+    assert review_res.structured_data["is_semantically_equivalent"] is False
+    assert review_res.structured_data["confidence"] == 0
 
 
 @pytest.mark.asyncio
@@ -220,4 +221,5 @@ async def test_orchestrator_production_capabilities():
         proposed_locator='[data-testid="pay-now-btn"]',
         strategy="data-testid",
     )
-    assert review.is_semantically_equivalent is True
+    assert review.is_semantically_equivalent is False
+    assert review.confidence == 0

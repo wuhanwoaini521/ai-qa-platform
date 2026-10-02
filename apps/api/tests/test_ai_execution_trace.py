@@ -10,8 +10,7 @@ from project_model.models import (
     QAChatRequest,
     QAContext,
 )
-from qa_core.ai.models import ProviderHealth, ProviderHealthStatus
-from qa_core.ai.provider import FakeAIProvider, FallbackAIProvider
+from qa_core.ai.provider import FakeAIProvider
 
 
 class NoopAIRepository:
@@ -28,65 +27,64 @@ def assistant_request(action: str = "chat") -> QAChatRequest:
 
 
 @pytest.mark.asyncio
-async def test_fake_provider_status_is_simulation_not_real_or_fallback():
-    service = object.__new__(AIService)
-    service.orchestrator = SimpleNamespace(ai_provider=FakeAIProvider())
-    status = await service.get_status()
+async def test_fake_provider_status_is_simulation_not_real_or_fallback(test_db_session):
+    from app.services.ai_settings_service import AISettingsService
+
+    status = await AISettingsService().get_status(refresh=True)
     assert status.status == "SIMULATION"
     assert status.provider == "fake"
-    assert status.model == "fake-qa-model"
     assert status.real_model_available is False
+    assert status.streaming is False
     assert status.fallback_active is False
     assert status.failure_reason == "fake_provider_selected"
 
 
-class HealthyRealProvider:
-    provider_name = "openai-compatible"
-    model = "test-model"
+@pytest.mark.asyncio
+async def test_status_is_shared_and_requires_streamed_model_response(test_db_session, monkeypatch):
+    from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
+    from project_model.models import AIProviderConnectionResult
 
-    async def check_health(self):
-        return ProviderHealthStatus(
-            provider=self.provider_name,
-            status=ProviderHealth.AVAILABLE,
-            message="healthy",
-            model=self.model,
-            base_url="https://provider.invalid/v1",
+    service = AISettingsService()
+    calls = []
+
+    async def config(_self):
+        return AIRuntimeConfig(
+            "openai-compatible", "synthetic-key", "synthetic-model", "https://provider.invalid/v1", 3, 0
         )
 
+    async def probe(_self, update=None):
+        calls.append(True)
+        return AIProviderConnectionResult(
+            connected=True,
+            provider="openai-compatible",
+            status="AVAILABLE",
+            model="synthetic-model",
+            streaming=True,
+            message="synthetic streamed contract",
+        )
 
-@pytest.mark.asyncio
-async def test_real_provider_status_is_explicitly_connected():
-    service = object.__new__(AIService)
-    service.orchestrator = SimpleNamespace(ai_provider=HealthyRealProvider())
-    status = await service.get_status()
-    assert status.status == "REAL_CONNECTED"
-    assert status.provider == "openai-compatible"
-    assert status.model == "test-model"
-    assert status.real_model_available is True
-    assert status.fallback_active is False
+    monkeypatch.setattr(AISettingsService, "_effective_config", config)
+    monkeypatch.setattr(AISettingsService, "test_connection", probe)
+    status = await service.get_status(refresh=True)
+    assert status.operational_state == "REAL_AVAILABLE"
+    assert (await AIService().get_status()) == status
+    assert len(calls) == 1
 
+    async def discovery_only(_self, update=None):
+        return AIProviderConnectionResult(
+            connected=True,
+            provider="openai-compatible",
+            status="AVAILABLE",
+            model="synthetic-model",
+            streaming=False,
+            message="discovery only",
+        )
 
-@pytest.mark.asyncio
-async def test_openai_health_failure_with_fake_backup_is_fallback_not_real():
-    class UnhealthyProvider(HealthyRealProvider):
-        async def check_health(self):
-            return ProviderHealthStatus(
-                provider=self.provider_name,
-                status=ProviderHealth.UNAVAILABLE,
-                message="Connection error: connection_error",
-                model=self.model,
-                base_url="https://provider.invalid/v1",
-            )
-
-    service = object.__new__(AIService)
-    service.orchestrator = SimpleNamespace(ai_provider=FallbackAIProvider(UnhealthyProvider(), [FakeAIProvider()]))
-    status = await service.get_status()
-    assert status.status == "FALLBACK"
-    assert status.provider == "openai-compatible"
-    assert status.model == "fake-qa-model"
-    assert status.real_model_available is False
-    assert status.fallback_active is True
-    assert status.failure_reason == "connection_error"
+    monkeypatch.setattr(AISettingsService, "test_connection", discovery_only)
+    unavailable = await service.get_status(refresh=True)
+    assert unavailable.real_model_available is False
+    assert unavailable.operational_state == "FALLBACK_ONLY"
+    assert unavailable.fallback_active is True
 
 
 @pytest.mark.asyncio

@@ -16,8 +16,13 @@ class AIProviderRegistry:
     """Central registry and factory for pluggable AI providers."""
 
     _factories: dict[str, Callable[[], AIProvider]] = {}
-    _instance: AIProvider | None = None
     _runtime_config: dict[str, str] | None = None
+    _middleware: Callable[[AIProvider], AIProvider] | None = None
+
+    @classmethod
+    def set_middleware(cls, middleware: Callable[[AIProvider], AIProvider] | None) -> None:
+        """Install application governance without coupling qa-core to persistence."""
+        cls._middleware = middleware
 
     @classmethod
     def register(cls, name: str, factory: Callable[[], AIProvider]) -> None:
@@ -30,6 +35,11 @@ class AIProviderRegistry:
 
     @classmethod
     def get_provider(cls, name: str | None = None, api_key: str | None = None) -> AIProvider:
+        provider = cls._build_provider(name, api_key)
+        return cls._middleware(provider) if cls._middleware else provider
+
+    @classmethod
+    def _build_provider(cls, name: str | None = None, api_key: str | None = None) -> AIProvider:
         config = cls._runtime_config or {
             "provider": os.getenv("QA_AI_PROVIDER", "fake"),
             "api_key": os.getenv("QA_AI_API_KEY", ""),
@@ -63,11 +73,10 @@ class AIProviderRegistry:
         if provider_name in cls._factories:
             return cls._factories[provider_name]()
 
-        # Default fallback
-        return FakeAIProvider()
+        raise ValueError(f"Unsupported AI provider: {provider_name}")
 
     @classmethod
     def reset(cls) -> None:
         cls._factories.clear()
-        cls._instance = None
         cls._runtime_config = None
+        cls._middleware = None

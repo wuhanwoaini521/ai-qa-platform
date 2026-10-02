@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from uuid import uuid4
@@ -12,6 +13,8 @@ from project_model.models import (
     DecisionResult,
     JevSettingsUpdate,
 )
+from qa_core.ai.budget import BudgetExceededError
+from qa_core.failure.redactor import SensitiveRedactor
 
 from app.repositories.ai_repo import AIRepository
 from app.services.ai_observability import log_ai_execution
@@ -141,6 +144,17 @@ class DecisionService:
         error_code: str | None = None
         remote_result: DecisionResult | None = None
         try:
+            from app.services.ai_execution_service import AIExecutionService
+            from app.services.ai_settings_service import AISettingsService
+
+            policy = await AISettingsService()._effective_config()
+            request = request.model_copy(update={"state": SensitiveRedactor.redact_value(request.state)})
+            if (
+                len(json.dumps(request.model_dump(), ensure_ascii=False).encode("utf-8")) // 3 + 100
+                > policy.max_request_tokens
+            ):
+                raise BudgetExceededError("Decision request exceeds configured token budget.")
+            await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
             provider = self.provider_registry.create(config.provider, config)
             remote_result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
             if remote_result.confidence is None and not allow_missing_confidence:
@@ -182,6 +196,8 @@ class DecisionService:
             error_code = "timeout"
         except DecisionProviderError as error:
             error_code = error.code
+        except BudgetExceededError:
+            error_code = "budget_exceeded"
         except Exception as error:
             error_code = "unknown_error"
             logger.warning("Decision provider failed name=%s error_type=%s", request.name, type(error).__name__)
@@ -231,6 +247,11 @@ class DecisionService:
         )
         started = time.perf_counter()
         try:
+            from app.services.ai_execution_service import AIExecutionService
+            from app.services.ai_settings_service import AISettingsService
+
+            policy = await AISettingsService()._effective_config()
+            await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
             provider = self.provider_registry.create(config.provider, config)
             result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
             latency = (time.perf_counter() - started) * 1000
@@ -281,4 +302,4 @@ class DecisionService:
 
 def _token_count(usage: dict[str, int | float | None] | None, field: str) -> int | None:
     value = usage.get(field) if usage else None
-    return int(value) if isinstance(value, (int, float)) and value >= 0 else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None

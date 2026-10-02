@@ -369,6 +369,7 @@ class TestExecution(EntityBase):
 
 
 class TestBrowserSession(EntityBase):
+    page_evidence: dict[str, Any] = Field(default_factory=dict)
     id: str
     run_id: str
     case_execution_id: str | None = None
@@ -473,6 +474,8 @@ class TestRunCreate(BaseModel):
 
 # --- Failure Diagnosis & Repair Models ---
 class FailureRecord(EntityBase):
+    failure_kind: str = "UNKNOWN"
+    evidence_bundle: dict[str, Any] = Field(default_factory=dict)
     id: str
     run_id: str
     execution_id: str
@@ -525,6 +528,10 @@ class AIStatusResponse(BaseModel):
     fallback_active: bool = False
     failure_reason: str | None = None
     health_status: AIProviderStatus = AIProviderStatus.UNAVAILABLE
+    operational_state: str = "UNAVAILABLE"
+    streaming: bool = False
+    latency_ms: float | None = None
+    checked_at: datetime | None = None
 
 
 class AIProviderSettingsResponse(BaseModel):
@@ -535,6 +542,9 @@ class AIProviderSettingsResponse(BaseModel):
     base_url: str
     timeout: float
     max_retries: int
+    max_request_tokens: int = 16000
+    max_daily_requests: int = 1000
+    max_task_calls: int = 8
 
 
 class AIProviderSettingsUpdate(BaseModel):
@@ -545,6 +555,9 @@ class AIProviderSettingsUpdate(BaseModel):
     base_url: str = Field(min_length=1, max_length=2048)
     timeout: float = Field(ge=1, le=300)
     max_retries: int = Field(ge=0, le=10)
+    max_request_tokens: int = Field(default=16000, ge=512, le=128000)
+    max_daily_requests: int = Field(default=1000, ge=1, le=100000)
+    max_task_calls: int = Field(default=8, ge=1, le=100)
 
 
 class AIProviderConnectionResult(BaseModel):
@@ -553,9 +566,15 @@ class AIProviderConnectionResult(BaseModel):
     status: str
     message: str
     model: str
+    streaming: bool = False
+    latency_ms: float | None = None
+    checked_at: datetime = Field(default_factory=utc_now)
 
 
 class AIInvocationDTO(EntityBase):
+    request_id: str | None = None
+    task_id: str | None = None
+    run_id: str | None = None
     id: str
     task: str
     provider: str
@@ -569,6 +588,7 @@ class AIInvocationDTO(EntityBase):
     status: str = "SUCCESS"
     error_type: str | None = None
     prompt_version: str | None = None
+    token_source: str = "unknown"
     decision_name: str | None = None
     decision_choice: str | None = None
     decision_confidence: float | None = None
@@ -579,6 +599,11 @@ class AIUsageSummary(BaseModel):
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     invocations: list[AIInvocationDTO] = Field(default_factory=list)
+    successful_requests: int = 0
+    failed_requests: int = 0
+    fallback_requests: int = 0
+    unknown_token_requests: int = 0
+    features: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class DecisionOption(BaseModel):

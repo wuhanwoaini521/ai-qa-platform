@@ -336,9 +336,24 @@ class FailureRecordORM(Base):
     console_logs: Mapped[list[str]] = mapped_column(JsonList, default=list)
     suggested_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     repair_proposal: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    evidence_bundle: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
     execution: Mapped[TestExecutionORM] = relationship("TestExecutionORM", back_populates="failure_record")
+
+
+class LocatorHistoryORM(Base):
+    __tablename__ = "locator_history"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    page_url: Mapped[str] = mapped_column(String(2048), default="")
+    locator: Mapped[str] = mapped_column(String(1000), default="")
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    verification_count: Mapped[int] = mapped_column(Integer, default=0)
+    heal_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class FailureAnalysisORM(Base):
@@ -359,6 +374,9 @@ class AIInvocationORM(Base):
     __tablename__ = "ai_invocations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     task: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -371,6 +389,7 @@ class AIInvocationORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
     error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    token_source: Mapped[str] = mapped_column(String(20), default="unknown")
     decision_name: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     decision_choice: Mapped[str | None] = mapped_column(String(128), nullable=True)
     decision_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -400,7 +419,17 @@ class AIProviderConfigORM(Base):
     base_url: Mapped[str] = mapped_column(String(2048), default="https://api.openai.com/v1")
     timeout: Mapped[float] = mapped_column(Float, default=30.0)
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
+    max_request_tokens: Mapped[int] = mapped_column(Integer, default=16000)
+    max_daily_requests: Mapped[int] = mapped_column(Integer, default=1000)
+    max_task_calls: Mapped[int] = mapped_column(Integer, default=8)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
+class AIDailyBudgetORM(Base):
+    __tablename__ = "ai_daily_budgets"
+
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    reserved_requests: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class RunnerProfileORM(Base):

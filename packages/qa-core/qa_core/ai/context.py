@@ -8,10 +8,15 @@ knowledge, the failure being diagnosed and the current git change set — never 
 
 from __future__ import annotations
 
+import ast
+import os
+import re
 from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+from qa_core.failure.redactor import SensitiveRedactor
 
 #: Hard limits so a prompt can never grow with the repository.
 MAX_FILES = 12
@@ -29,6 +34,9 @@ class ContextSource(str, Enum):
     KNOWLEDGE = "knowledge"
     FAILURE = "failure"
     GIT_DIFF = "git_diff"
+    FIXTURE = "fixture"
+    CONFIG = "config"
+    RELATED_MODULE = "related_module"
 
 
 class ContextFragment(BaseModel):
@@ -74,24 +82,70 @@ class ContextSelector:
         changed_files: list[str] | None = None,
         knowledge_dir_names: tuple[str, ...] = ("knowledge",),
         asset_dir_names: tuple[str, ...] = ("flows", "pages", "components"),
+        query: str = "",
     ) -> ContextBundle:
         root = Path(workspace_root).resolve()
         bundle = ContextBundle()
 
         if test_nodeid:
             self._add_file(bundle, root, test_nodeid.split("::")[0], ContextSource.CURRENT_TEST)
+            self._expand_imports(bundle, root, test_nodeid.split("::")[0])
+            parent = (root / test_nodeid.split("::")[0]).resolve().parent
+            while parent.is_relative_to(root):
+                self._add_file(
+                    bundle, root, (parent / "conftest.py").relative_to(root).as_posix(), ContextSource.FIXTURE
+                )
+                if parent == root:
+                    break
+                parent = parent.parent
             for path in self._related_assets(root, test_nodeid, asset_dir_names):
                 self._add_file(bundle, root, path, self._source_for(path))
             for path in self._knowledge_files(root, test_nodeid, knowledge_dir_names):
                 self._add_file(bundle, root, path, ContextSource.KNOWLEDGE)
 
-        if failure_message or stack_trace:
+        for fixture in ("conftest.py", "tests/conftest.py"):
+            self._add_file(bundle, root, fixture, ContextSource.FIXTURE)
+        for config in ("pyproject.toml", "pytest.ini", "requirements.txt", "setup.cfg"):
+            self._add_file(bundle, root, config, ContextSource.CONFIG)
+        if query:
+            terms = set(re.findall(r"[A-Za-z][A-Za-z_0-9]{2,}", query.lower()))
+            candidates = []
+            for candidate in self._files(root, {".py"}):
+                if any(part in SKIPPED_DIRS for part in candidate.parts) or not candidate.resolve().is_relative_to(
+                    root
+                ):
+                    continue
+                relative = candidate.relative_to(root).as_posix()
+                try:
+                    with candidate.open(encoding="utf-8", errors="replace") as handle:
+                        tree = ast.parse(handle.read(32000))
+                    names = {
+                        node.name.lower()
+                        for node in ast.walk(tree)
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                    }
+                except (OSError, SyntaxError):
+                    continue
+                score = sum(1 for term in terms if any(term in name for name in names) or term in relative.lower())
+                if score or relative.startswith(("pages/", "flows/", "components/")) or candidate.name == "conftest.py":
+                    candidates.append((-score, relative))
+            for _, relative in sorted(candidates)[:6]:
+                self._add_file(
+                    bundle,
+                    root,
+                    relative,
+                    ContextSource.FIXTURE if relative.endswith("conftest.py") else self._source_for(relative),
+                )
+
+        if (failure_message or stack_trace) and len(bundle.fragments) < self.max_files:
             bundle.fragments.append(
                 ContextFragment(
                     source=ContextSource.FAILURE,
                     path="<execution output>",
                     # Redaction happens upstream; only the tail is relevant for diagnosis.
-                    content=((stack_trace or failure_message or "").strip())[-4000:],
+                    content=SensitiveRedactor.redact_text(((stack_trace or failure_message or "").strip())[-4000:])[
+                        : max(0, MAX_TOTAL_CHARS - sum(len(item.content) for item in bundle.fragments))
+                    ],
                     truncated=bool(stack_trace and len(stack_trace) > 4000),
                 )
             )
@@ -121,22 +175,72 @@ class ContextSelector:
         if any(part in SKIPPED_DIRS for part in resolved.parts):
             return
 
-        text = resolved.read_text(encoding="utf-8", errors="replace")
+        remaining = MAX_TOTAL_CHARS - sum(len(item.content) for item in bundle.fragments)
+        if remaining <= 0:
+            bundle.omitted.append(f"{relative} (context budget)")
+            return
+        try:
+            with resolved.open(encoding="utf-8", errors="replace") as handle:
+                text = handle.read(self.max_file_chars + 1)
+        except OSError:
+            bundle.omitted.append(f"{relative} (unreadable)")
+            return
+        text = SensitiveRedactor.redact_text(text)
         truncated = len(text) > self.max_file_chars
         bundle.fragments.append(
             ContextFragment(
                 source=source,
                 path=relative,
-                content=text[: self.max_file_chars],
-                truncated=truncated,
+                content=text[: min(self.max_file_chars, remaining)],
+                truncated=truncated or len(text) > remaining,
             )
         )
+
+    def _expand_imports(self, bundle: ContextBundle, root: Path, relative: str, depth: int = 0) -> None:
+        if depth >= 2 or len(bundle.fragments) >= self.max_files:
+            return
+        resolved = (root / relative).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            return
+        try:
+            with resolved.open(encoding="utf-8", errors="replace") as handle:
+                tree = ast.parse(handle.read(64000))
+        except (OSError, SyntaxError):
+            return
+        for node in ast.walk(tree):
+            modules = (
+                [name.name for name in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+                if isinstance(node, ast.ImportFrom)
+                else []
+            )
+            for module in modules:
+                base = resolved.parent if isinstance(node, ast.ImportFrom) and node.level else root
+                if isinstance(node, ast.ImportFrom):
+                    for _ in range(max(0, node.level - 1)):
+                        base = base.parent
+                candidate = base.joinpath(*module.split("."))
+                choices = [candidate.with_suffix(".py"), candidate / "__init__.py"]
+                if candidate.is_relative_to(root):
+                    source_candidate = root / "src" / candidate.relative_to(root)
+                    choices.extend([source_candidate.with_suffix(".py"), source_candidate / "__init__.py"])
+                for imported in choices:
+                    if imported.is_relative_to(root) and imported.is_file():
+                        path = imported.relative_to(root).as_posix()
+                        if path not in bundle.paths:
+                            self._add_file(bundle, root, path, self._source_for(path))
+                            self._expand_imports(bundle, root, path, depth + 1)
 
     def _related_assets(self, root: Path, test_nodeid: str, asset_dir_names: tuple[str, ...]) -> list[str]:
         """Flip through the project's own library and pick the assets the test mentions."""
         file_part = test_nodeid.split("::")[0]
+        resolved = (root / file_part).resolve()
+        if not resolved.is_relative_to(root):
+            return []
         try:
-            source = (root / file_part).read_text(encoding="utf-8", errors="replace")
+            with resolved.open(encoding="utf-8", errors="replace") as handle:
+                source = handle.read(64000)
         except OSError:
             return []
 
@@ -145,7 +249,7 @@ class ContextSelector:
             base = root / directory
             if not base.is_dir():
                 continue
-            for candidate in sorted(base.rglob("*.py")):
+            for candidate in self._files(base, {".py"}):
                 stem = candidate.stem
                 if stem in {"__init__", "base_page", "base_component", "base_flow"}:
                     continue
@@ -161,16 +265,35 @@ class ContextSelector:
             base = root / directory
             if not base.is_dir():
                 continue
-            for candidate in sorted(base.rglob("*")):
+            for candidate in self._files(base, {".md", ".yaml", ".yml", ".json"}):
                 if candidate.is_file() and candidate.suffix in {".md", ".yaml", ".yml", ".json"}:
                     selected.append(candidate.relative_to(root).as_posix())
                     if len(selected) >= 3:
                         return selected
         return selected
 
+    @staticmethod
+    def _files(root: Path, suffixes: set[str]):
+        """Prune dependency trees before traversal and bound all symbol/asset scans."""
+        count = 0
+        for directory, directories, files in os.walk(root, followlinks=False):
+            directories[:] = sorted(
+                name for name in directories if name not in SKIPPED_DIRS and not name.startswith(".")
+            )
+            for name in sorted(files):
+                candidate = Path(directory) / name
+                if candidate.suffix not in suffixes or not candidate.resolve().is_relative_to(root.resolve()):
+                    continue
+                yield candidate
+                count += 1
+                if count >= 500:
+                    return
+
     def _source_for(self, path: str) -> ContextSource:
         if path.startswith("pages/") or "/pages/" in path:
             return ContextSource.RELATED_PAGE
         if path.startswith("flows/") or "/flows/" in path:
             return ContextSource.RELATED_FLOW
-        return ContextSource.RELATED_COMPONENT
+        if path.startswith("components/") or "/components/" in path:
+            return ContextSource.RELATED_COMPONENT
+        return ContextSource.RELATED_MODULE

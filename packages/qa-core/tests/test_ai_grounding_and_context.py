@@ -74,7 +74,8 @@ def test_context_refuses_to_read_outside_the_workspace(tmp_path: Path):
 
     bundle = ContextSelector().select(workspace, changed_files=["../outside.py"])
 
-    assert bundle.fragments == []
+    assert all(fragment.path != "../outside.py" for fragment in bundle.fragments)
+    assert "super-secret" not in bundle.render()
     assert any("outside the workspace" in entry for entry in bundle.omitted)
 
 

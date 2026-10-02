@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
+from pydantic import ValidationError
 
 from qa_core.ai.models import (
     AICompletionRequest,
@@ -233,10 +234,10 @@ class FakeAIProvider:
 
         elif prompt_id == "locator_review" or "semantic equivalence review" in p_lower:
             data = LocatorSemanticReview(
-                is_semantically_equivalent=True,
-                confidence=0.88,
-                explanation="Proposed selector targets the exact same interactive button within the component subtree.",
-                risk_warning=None,
+                is_semantically_equivalent=False,
+                confidence=0,
+                explanation="Offline provider cannot verify semantic equivalence.",
+                risk_warning="A real model review and browser validation are required before applying a locator change.",
             )
             structured = data.model_dump()
             content = json.dumps(structured, indent=2)
@@ -259,8 +260,8 @@ class FakeAIProvider:
         return AICompletionResponse(
             content=content,
             structured_data=structured,
-            input_tokens=150,
-            output_tokens=220,
+            input_tokens=None,
+            output_tokens=None,
             model=self.model,
             provider=self.provider_name,
             duration_ms=duration,
@@ -380,6 +381,10 @@ class OpenAICompatibleProvider:
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
+        if request.response_schema:
+            payload["messages"][0]["content"] += "\nReturn JSON matching this schema:\n" + json.dumps(
+                request.response_schema.model_json_schema(), ensure_ascii=False
+            )
 
         retry_count = 0
         last_exception: Exception | None = None
@@ -431,6 +436,10 @@ class OpenAICompatibleProvider:
                     except Exception:
                         structured = None
 
+                    if request.response_schema:
+                        # Invalid output is a failed model call, never a successful empty scaffold.
+                        structured = request.response_schema.model_validate(structured).model_dump()
+
                     duration = (time.perf_counter() - start) * 1000.0
                     return AICompletionResponse(
                         content=raw_content,
@@ -445,6 +454,18 @@ class OpenAICompatibleProvider:
                         prompt_version=request.prompt_version,
                     )
 
+            except ValidationError as error:
+                last_exception = error
+                if attempt < min(self.max_retries, 1):
+                    retry_count += 1
+                    payload["messages"].append(
+                        {
+                            "role": "user",
+                            "content": "The previous response did not match the required schema. Return only a valid JSON object matching the schema.",
+                        }
+                    )
+                    continue
+                break
             except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_exception = e
                 if attempt < self.max_retries:

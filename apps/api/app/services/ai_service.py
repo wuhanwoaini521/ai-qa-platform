@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 
 from project_model.models import (
-    AIProviderRuntimeState,
-    AIProviderStatus,
     AIStatusResponse,
     AIUsageSummary,
     RequirementAnalysisDTO,
@@ -39,88 +38,23 @@ class AIService:
         orchestrator: ProductionQAOrchestrator | None = None,
     ) -> None:
         self.ai_repo = ai_repo or AIRepository()
-        self.requirement_repo = requirement_repo or RequirementRepository()
-        self.test_design_repo = test_design_repo or TestDesignRepository()
-        self.test_case_repo = test_case_repo or TestCaseRepository()
-        self.test_run_repo = test_run_repo or TestRunRepository()
-        self.project_repo = project_repo or ProjectRepository()
+        self.requirement_repo = requirement_repo
+        self.test_design_repo = test_design_repo
+        self.test_case_repo = test_case_repo
+        self.test_run_repo = test_run_repo
+        self.project_repo = project_repo
         self.orchestrator = orchestrator or ProductionQAOrchestrator()
         self.budget_guard = AIBudgetGuard()
 
     async def get_status(self) -> AIStatusResponse:
-        configured = self.orchestrator.ai_provider
-        primary = getattr(configured, "primary", configured)
-        primary_health = await primary.check_health()
-        primary_name = getattr(primary, "provider_name", primary_health.provider)
-        health_status = self._health_status(primary_health.status.value)
-        real_available = primary_name != "fake" and primary_health.status.value == "AVAILABLE"
-        if primary_name == "fake":
-            health_status = AIProviderStatus.DISABLED
-        fallback_active = False
-        fallback_health = None
+        from app.services.ai_settings_service import AISettingsService
 
-        if real_available:
-            state = AIProviderRuntimeState.REAL_CONNECTED
-            model = primary_health.model
-            message = primary_health.message
-            failure_reason = None
-        else:
-            for fallback in getattr(configured, "fallbacks", []):
-                candidate = await fallback.check_health()
-                if candidate.status.value in ("AVAILABLE", "FALLBACK_ONLY"):
-                    fallback_health = candidate
-                    break
-            fallback_active = fallback_health is not None
-            if primary_name == "fake":
-                state = AIProviderRuntimeState.SIMULATION
-                model = primary_health.model
-                message = "Simulation provider is selected; no real model is active."
-            elif fallback_health is not None:
-                state = AIProviderRuntimeState.FALLBACK
-                model = fallback_health.model if fallback_health else primary_health.model
-                message = f"Real provider is unavailable; fallback to {fallback_health.provider} is active."
-            else:
-                state = AIProviderRuntimeState.UNAVAILABLE
-                model = primary_health.model
-                message = primary_health.message or "No AI provider is available."
-            failure_reason = (
-                "fake_provider_selected"
-                if primary_name == "fake"
-                else self._failure_reason(primary_health.status.value)
-            )
+        return await AISettingsService().get_status()
 
-        return AIStatusResponse(
-            provider=primary_name,
-            status=state,
-            message=message,
-            model=model,
-            base_url=primary_health.base_url,
-            real_model_available=real_available,
-            fallback_active=fallback_active,
-            failure_reason=failure_reason,
-            health_status=health_status,
-        )
-
-    @staticmethod
-    def _health_status(value: str) -> AIProviderStatus:
-        try:
-            return AIProviderStatus(value)
-        except ValueError:
-            return AIProviderStatus.UNAVAILABLE
-
-    @staticmethod
-    def _failure_reason(value: str) -> str | None:
-        reasons = {
-            "DISABLED": "missing_api_key",
-            "AUTH_ERROR": "authentication_error",
-            "RATE_LIMITED": "rate_limited",
-            "TIMEOUT": "timeout",
-            "UNAVAILABLE": "connection_error",
-        }
-        return reasons.get(value)
-
-    async def get_usage(self, limit: int = 50) -> AIUsageSummary:
-        return await self.ai_repo.get_usage_summary(limit=limit)
+    async def get_usage(
+        self, limit: int = 50, since: datetime | None = None, feature: str | None = None
+    ) -> AIUsageSummary:
+        return await self.ai_repo.get_usage_summary(limit=limit, since=since, feature=feature)
 
     async def analyze_requirement(self, requirement_id: str) -> RequirementAnalysisDTO:
         req = await self.requirement_repo.get_by_id(requirement_id)
@@ -147,17 +81,18 @@ class AIService:
             status="SUCCESS",
             fallback_used=invocation["fallback_used"],
         )
-        await self.ai_repo.record_invocation(
-            task="requirement_analysis",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=180,
-            output_tokens=210,
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task="requirement_analysis",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=invocation.get("input_tokens"),
+                output_tokens=invocation.get("output_tokens"),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
         return RequirementAnalysisDTO(
             summary=analysis.summary,
@@ -194,17 +129,18 @@ class AIService:
             status="SUCCESS",
             fallback_used=invocation["fallback_used"],
         )
-        await self.ai_repo.record_invocation(
-            task="test_design",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=200,
-            output_tokens=250,
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task="test_design",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=invocation.get("input_tokens"),
+                output_tokens=invocation.get("output_tokens"),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
         return [
             TestDesignSuggestion(
@@ -246,17 +182,18 @@ class AIService:
             status="SUCCESS",
             fallback_used=invocation["fallback_used"],
         )
-        await self.ai_repo.record_invocation(
-            task="test_case_generation",
-            provider=invocation["provider"],
-            model=invocation["model"],
-            fallback_used=invocation["fallback_used"],
-            started_at=started_at,
-            duration_ms=duration_ms,
-            input_tokens=250,
-            output_tokens=320,
-            prompt_version="v1.0",
-        )
+        if not getattr(getattr(self.orchestrator, "ai_provider", None), "records_usage", False):
+            await self.ai_repo.record_invocation(
+                task="test_case_generation",
+                provider=invocation["provider"],
+                model=invocation["model"],
+                fallback_used=invocation["fallback_used"],
+                started_at=started_at,
+                duration_ms=duration_ms,
+                input_tokens=invocation.get("input_tokens"),
+                output_tokens=invocation.get("output_tokens"),
+                prompt_version=invocation.get("prompt_version"),
+            )
 
         return [
             TestCaseGenerationItem(
