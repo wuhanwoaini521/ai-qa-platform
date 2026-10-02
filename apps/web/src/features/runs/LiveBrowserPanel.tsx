@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Maximize2, Minimize2, PanelTopClose, PanelTopOpen, MonitorPlay } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TestBrowserSession } from '../../types';
+import { api } from '../../api/client';
 
 interface LiveBrowserPanelProps {
   sessions: TestBrowserSession[];
@@ -27,16 +28,37 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [storedFrame, setStoredFrame] = useState<{ artifactId: string; url: string } | null>(null);
+  const [snapshotFailed, setSnapshotFailed] = useState(false);
   const [, refreshElapsed] = useState(0);
   const latest = ordered[ordered.length - 1];
-  const selected = ordered.find((session) => session.browser_session_id === selectedId) ?? latest;
+  const selected = ordered.find((session) => session.browser_session_id === selectedId)
+    ?? [...ordered].reverse().find((session) => session.status === 'running') ?? latest;
+  const snapshotId = typeof selected?.page_evidence?.last_frame_artifact_id === 'string'
+    ? selected.page_evidence.last_frame_artifact_id : null;
 
   useEffect(() => {
-    if (!selectedId && ordered.length) setSelectedId(latest?.browser_session_id ?? null);
     if (selectedId && !ordered.some((session) => session.browser_session_id === selectedId)) {
-      setSelectedId(latest?.browser_session_id ?? null);
+      setSelectedId(null);
     }
   }, [ordered, selectedId]);
+
+  useEffect(() => {
+    setStoredFrame(null);
+    setSnapshotFailed(false);
+    if (!snapshotId) return;
+    let disposed = false;
+    let objectUrl: string | null = null;
+    api.downloadArtifact(snapshotId).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      if (disposed) URL.revokeObjectURL(objectUrl);
+      else setStoredFrame({ artifactId: snapshotId, url: objectUrl });
+    }).catch(() => { if (!disposed) setSnapshotFailed(true); });
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [snapshotId]);
 
   useEffect(() => {
     if (selected?.status !== 'running') return;
@@ -58,7 +80,8 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
       </section>
     );
   }
-  const frame = selected ? frames[selected.browser_session_id] : undefined;
+  const liveFrame = selected ? frames[selected.browser_session_id] : undefined;
+  const frame = liveFrame || (storedFrame?.artifactId === snapshotId ? storedFrame?.url : undefined);
 
   return (
     <section className="card" aria-label={t('liveBrowsers')} style={{ overflow: 'hidden' }}>
@@ -67,6 +90,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
           <MonitorPlay size={16} color="#2563eb" />
           <span className="card-title">{t('liveBrowsers')}</span>
           <span className="badge badge-draft">{ordered.length}</span>
+          {selected?.status !== 'running' && frame && <span className="badge badge-draft">{t('lastCapturedFrame')}</span>}
           {streamStatus === 'reconnecting' && <span role="status" className="badge badge-draft">{t('streamReconnecting')}</span>}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -108,10 +132,10 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(180px, 1fr)', gap: 12 }}>
               <div style={{ minWidth: 0, background: '#0f172a', borderRadius: 8, minHeight: expanded ? 540 : 260, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 {frame ? (
-                  <img src={frame} alt={`${selected.case_name} live browser`} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />
+                  <img src={frame} alt={`${selected.case_name} ${selected.status === 'running' ? 'live browser' : 'last captured browser frame'}`} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />
                 ) : (
                   <div style={{ color: '#cbd5e1', textAlign: 'center', padding: 20, fontSize: 13 }}>
-                    {selected.status === 'running' ? t('waitingBrowserFrame') : t('browserFrameUnavailable')}
+                    {snapshotFailed ? t('browserSnapshotLoadFailed') : snapshotId ? t('loadingBrowserSnapshot') : selected.status === 'running' ? t('waitingBrowserFrame') : t('browserFrameUnavailable')}
                   </div>
                 )}
               </div>

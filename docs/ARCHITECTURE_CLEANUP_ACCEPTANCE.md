@@ -91,6 +91,17 @@
 
 截图在 Git 忽略的 `output/playwright/`：ai-upgrade-task-review、task-completed、studio-lsp、failure-analysis、locator-proposal、locator-verified、debug-breakpoint、recorder-regenerate、recorder-optimized、settings、run-evidence、live-browser。这些都是实际运行页面。
 
+## 实时画面补充验收（2026-10-02）
+
+此前 `test_live_browser_connection` 的 `about:blank` 画面来自测试自身的 `page.set_content()`，只能证明传输，不能证明用户业务页面已显示。已补充正常网址导航验收，并修复快速关闭浏览器可能漏帧、运行中晚连接无当前帧、刷新后无历史画面的问题。
+
+- 对测试正在操作的实际 Page，在导航、Locator 操作与关闭前捕获画面；不创建替代页面。连续帧日志仍临时保存，每个会话只留一张最后画面，使用已有制品鉴权下载。
+- 活跃运行保留有界的最新帧供晚连接/重连回放；完成后释放内存。前端自动跟随运行中的会话，结束后标注“运行已结束 · 最后一帧”。
+- `run_09d82781687e` 实际导航到用户录制的起始网址 `https://www.google.com.hk/`，PASSED；SSE 收到 7 个真实浏览器帧。只预览起始页面，没有执行用户脚本中的账号注册步骤，也没有修改用户原脚本。
+- 应用运行记录中的 Google 页面图片为 1280×720；刷新后仍通过鉴权下载显示。截图：`output/playwright/browser-picture-after-refresh.png`。
+- 回归涵盖真实 HTTP 导航后立即关闭浏览器、Fixture/脚本自建浏览器、晚连接回放、跨运行关联保护、历史加载与匿名下载拒绝。此前已结束且未保存画面的运行不能补造历史图片。
+- 本轮相关回归 33 passed、1 skipped；Ruff、TypeScript、ESLint、i18n（1223 keys）与生产 build 通过。
+
 ## 未验证范围与剩余债务
 
 - 本机 Docker Linux engine 管道不存在，没有运行的 PostgreSQL。不能把 SQLite 通过算作 PostgreSQL 验收；相关测试仍保留并跳过。
