@@ -5,7 +5,9 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import tempfile
+from collections import OrderedDict
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
@@ -57,11 +59,15 @@ class TestRunEventBus:
 
     def __init__(self) -> None:
         self._subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._last_frames: OrderedDict[tuple[str, str], dict] = OrderedDict()
 
     def subscribe(self, run_id: str) -> asyncio.Queue:
         if run_id not in self._subscribers:
             self._subscribers[run_id] = []
         q: asyncio.Queue = asyncio.Queue(maxsize=32)
+        for (frame_run_id, _), frame in self._last_frames.items():
+            if frame_run_id == run_id:
+                q.put_nowait(frame)
         self._subscribers[run_id].append(q)
         return q
 
@@ -72,6 +78,16 @@ class TestRunEventBus:
                 del self._subscribers[run_id]
 
     async def publish(self, run_id: str, event: dict) -> None:
+        if event.get("type") == "BROWSER_FRAME" and event.get("session_id"):
+            key = (run_id, event["session_id"])
+            if isinstance(event.get("frame"), str) and len(event["frame"]) <= 2 * 1024 * 1024:
+                self._last_frames[key] = event
+                self._last_frames.move_to_end(key)
+                while len(self._last_frames) > 32:
+                    self._last_frames.popitem(last=False)
+        elif event.get("type") in {"RUN_FINISHED", "RUN_ERROR", "RUN_CANCELLED"}:
+            for key in [key for key in self._last_frames if key[0] == run_id]:
+                del self._last_frames[key]
         if run_id in self._subscribers:
             for q in self._subscribers[run_id]:
                 if q.full():
@@ -323,9 +339,8 @@ class TestRunService:
                 async def on_browser_event(event: dict) -> None:
                     await self._record_browser_event(run_id, event)
 
-                # Browser frames are sensitive, transient telemetry. Keep plugin source and frame
-                # logs in a temporary subdirectory so they are neither uploaded as artifacts nor
-                # retained after the run finishes.
+                # Continuous frame logs stay transient. The plugin retains only one actual last
+                # screenshot per session as an authenticated artifact for refresh/history.
                 with tempfile.TemporaryDirectory(prefix=".qa-live-", dir=artifact_dir) as live_dir_value:
                     live_dir = Path(live_dir_value)
                     live_browser_log = live_dir / "browser-live"
@@ -418,12 +433,22 @@ class TestRunService:
             if artifact_records and not await run_repo.reserve_active_run_for_result(run_id):
                 return
             for name, kind, url, artifact_id, content_type in artifact_records:
+                metadata = {"artifact_id": artifact_id, "content_type": content_type}
+                snapshot = re.fullmatch(r"browser-([0-9a-f]{32})-last\.jpg", name)
+                if snapshot and content_type == "image/jpeg":
+                    browser_session = await session.get(BrowserSessionORM, snapshot.group(1))
+                    if browser_session and browser_session.run_id == run_id:
+                        evidence = json.loads(browser_session.page_evidence_json or "{}")
+                        evidence["last_frame_artifact_id"] = artifact_id
+                        browser_session.page_evidence_json = json.dumps(evidence, ensure_ascii=False)
+                        metadata["browser_session_id"] = browser_session.browser_session_id
+                        metadata["frame_kind"] = "last"
                 await run_repo.add_external_artifact(
                     run_id,
                     name,
                     kind,
                     url,
-                    metadata_json={"artifact_id": artifact_id, "content_type": content_type},
+                    metadata_json=metadata,
                 )
             await session.commit()
             passed_count = 0
@@ -555,7 +580,7 @@ class TestRunService:
                 if execution and browser_session.case_execution_id is None:
                     browser_session.case_execution_id = execution.id
                 if browser_session.status == "running":
-                    browser_session.status = execution.status.value.lower() if execution else "closed"
+                    browser_session.status = execution.status.lower() if execution else "closed"
                     browser_session.finished_at = finish_time
 
             transitioned = await run_repo.transition_run_status(

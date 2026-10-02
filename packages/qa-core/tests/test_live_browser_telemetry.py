@@ -1,4 +1,6 @@
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 
 import pytest
 from qa_core.execution.live_browser_plugin import LIVE_BROWSER_PLUGIN_NAME, LIVE_BROWSER_PLUGIN_SOURCE
@@ -7,6 +9,68 @@ from qa_core.execution.pytest_runner import PytestRunner
 
 def test_generated_live_browser_plugin_source_compiles():
     compile(LIVE_BROWSER_PLUGIN_SOURCE, "qa_platform_live_browser_plugin.py", "exec")
+
+
+@pytest.mark.asyncio
+async def test_short_navigation_captures_actual_page_before_browser_close(tmp_path):
+    class Website(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"<h1>Product catalog</h1><button>View product</button>")
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/"
+    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    (tmp_path / "test_short.py").write_text(
+        "import os\nfrom playwright.sync_api import sync_playwright\n"
+        "def test_navigate_and_close():\n"
+        "    with sync_playwright() as p:\n"
+        "        browser = p.chromium.launch()\n"
+        "        page = browser.new_page()\n"
+        "        page.goto(os.environ['WEBSITE_URL'])\n"
+        "        assert page.get_by_role('heading').inner_text() == 'Product catalog'\n"
+        "        browser.close()\n",
+        encoding="utf-8",
+    )
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    telemetry = tmp_path / "live"
+    events = []
+
+    async def observe(event):
+        events.append(event)
+
+    try:
+        result = await PytestRunner().run_suite(
+            tmp_path,
+            nodeids=["test_short.py"],
+            environment={
+                "PYTHONPATH": str(tmp_path),
+                "QA_PLATFORM_LIVE_BROWSER_LOG": str(telemetry),
+                "QA_ARTIFACT_DIR": str(artifacts),
+                "WEBSITE_URL": url,
+            },
+            browser_event_path=telemetry,
+            on_browser_event=observe,
+            extra_pytest_args=["-p", LIVE_BROWSER_PLUGIN_NAME],
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+    assert result.exit_code == 0, "\n".join(result.raw_logs)
+    finished = next(event for event in events if event["type"] == "session.finished")
+    assert finished["page_evidence"]["url"] == url
+    assert any(event["type"] == "frame" and event.get("url") == url and event.get("frame") for event in events)
+    snapshot = artifacts / f"browser-{finished['session_id']}-last.jpg"
+    assert snapshot.read_bytes().startswith(b"\xff\xd8\xff")
 
 
 @pytest.mark.asyncio

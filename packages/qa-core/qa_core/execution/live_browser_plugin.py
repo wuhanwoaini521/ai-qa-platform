@@ -12,6 +12,7 @@ LIVE_BROWSER_PLUGIN_SOURCE = '''"""Generated for one AI QA Platform TestRun."""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import threading
@@ -123,6 +124,7 @@ class LiveBrowserPlugin:
                             evidence = self._page_evidence(page)
                             if evidence:
                                 record["last_page_evidence"] = evidence
+                            self._capture_frame(page, record)
                     return wrapped
                 setattr(Locator, method, instrument(original, method))
         except ImportError:
@@ -136,6 +138,25 @@ class LiveBrowserPlugin:
             self.locator_originals.clear()
             for name, callback in record.get("listeners", []):
                 page.remove_listener(name, callback)
+        except Exception:
+            pass
+
+    def _publish_frame(self, page, record, data):
+        if not data:
+            return
+        record["last_frame"] = data
+        self.emit({
+            "type": "frame", "session_id": record["session_id"], "page_id": record["page_id"],
+            "nodeid": record["nodeid"], "case_name": record["case_name"],
+            "url": getattr(page, "url", ""), "status": "running", "mime_type": "image/jpeg", "frame": data,
+        })
+
+    def _capture_frame(self, page, record):
+        # Short tests may close before CDP emits a painted frame. Capture their actual page
+        # after navigation/actions and before close; never create a substitute browser/page.
+        try:
+            data = page.screenshot(type="jpeg", quality=55, timeout=1000)
+            self._publish_frame(page, record, base64.b64encode(data).decode("ascii"))
         except Exception:
             pass
 
@@ -161,19 +182,44 @@ class LiveBrowserPlugin:
                 observe(page)
                 return page
             return wrapped
+        def capture(original, before=False):
+            def wrapped(instance, *args, **kwargs):
+                record = self.active.get(item.nodeid)
+                def snapshot():
+                    if not record:
+                        return
+                    page = record["page"]
+                    if instance is not page and instance is not page.context and instance is not page.context.browser:
+                        return
+                    self._capture_frame(page, record)
+                    evidence = self._page_evidence(page)
+                    if evidence:
+                        record["last_page_evidence"] = evidence
+                if before:
+                    snapshot()
+                try:
+                    return original(instance, *args, **kwargs)
+                finally:
+                    if not before:
+                        snapshot()
+            return wrapped
         try:
             for kind in (BrowserContext, Browser):
                 original = kind.new_page
-                originals.append((kind, original))
+                originals.append((kind, "new_page", original))
                 kind.new_page = watch(original)
+            for kind, method, before in ((Page, "goto", False), (Page, "set_content", False),
+                                         (Page, "close", True), (BrowserContext, "close", True), (Browser, "close", True)):
+                original = getattr(kind, method)
+                originals.append((kind, method, original))
+                setattr(kind, method, capture(original, before))
             observe(self._find_page(item))
             yield
         finally:
-            for kind, original in originals:
-                kind.new_page = original
             record = self.active.get(item.nodeid)
             if record:
                 page = record["page"]
+                self._capture_frame(page, record)
                 self._remove_telemetry(page, record)
                 if record["cdp"] is not None:
                     try:
@@ -181,13 +227,15 @@ class LiveBrowserPlugin:
                         record["cdp"].detach()
                     except Exception:
                         pass
+            for kind, method, original in originals:
+                setattr(kind, method, original)
 
     def _start_observation(self, item, page):
 
         session_id = uuid.uuid4().hex
         page_id = uuid.uuid4().hex
         nodeid = self._nodeid(item)
-        record = {"session_id": session_id, "page_id": page_id, "nodeid": nodeid, "page": page, "cdp": None}
+        record = {"session_id": session_id, "page_id": page_id, "nodeid": nodeid, "case_name": item.name, "page": page, "cdp": None}
         self.active[item.nodeid] = record
         self._install_telemetry(page, record)
         self.emit({
@@ -205,12 +253,7 @@ class LiveBrowserPlugin:
             def on_frame(params):
                 data = params.get("data")
                 if data:
-                    self.emit({
-                        "type": "frame", "session_id": session_id, "page_id": page_id,
-                        "nodeid": nodeid, "case_name": item.name,
-                        "url": getattr(page, "url", ""), "status": "running", "mime_type": "image/jpeg",
-                        "frame": data,
-                    })
+                    self._publish_frame(page, record, data)
                 try:
                     cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
                 except Exception:
@@ -221,8 +264,8 @@ class LiveBrowserPlugin:
                 "format": "jpeg", "quality": 55, "maxWidth": 1280, "maxHeight": 720, "everyNthFrame": 2,
             })
         except Exception:
-            # Unsupported browser engines still report session and navigation metadata. No fake
-            # image is generated and the UI can state that frame streaming is unavailable.
+            # Other engines still provide actual snapshots at navigation/action boundaries.
+            # Continuous CDP frame streaming remains Chromium-only.
             record["cdp"] = None
 
         try:
@@ -243,6 +286,13 @@ class LiveBrowserPlugin:
         record = self.active.pop(item.nodeid, None)
         if record is None:
             return
+        artifact_dir = os.environ.get("QA_ARTIFACT_DIR")
+        if artifact_dir and record.get("last_frame"):
+            try:
+                with open(os.path.join(artifact_dir, "browser-" + record["session_id"] + "-last.jpg"), "wb") as handle:
+                    handle.write(base64.b64decode(record["last_frame"], validate=True))
+            except Exception:
+                pass
         self.emit({
             "type": "session.finished", "session_id": record["session_id"],
             "page_id": record["page_id"], "nodeid": record["nodeid"], "case_name": item.name,

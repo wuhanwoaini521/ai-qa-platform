@@ -30,6 +30,79 @@ from sqlalchemy import select
 pytestmark = pytest.mark.integration
 
 
+async def test_late_browser_subscriber_gets_the_last_actual_frame_and_terminal_run_releases_it():
+    from app.services.test_run_service import TestRunEventBus
+
+    bus = TestRunEventBus()
+    for number in range(34):
+        await bus.publish("run", {"type": "BROWSER_FRAME", "session_id": str(number), "frame": f"jpeg-{number}"})
+    queue = bus.subscribe("run")
+    frames = [queue.get_nowait() for _ in range(queue.qsize())]
+    assert len(frames) == 32
+    assert frames[0]["frame"] == "jpeg-2"
+    assert frames[-1]["frame"] == "jpeg-33"
+    await bus.publish("run", {"type": "RUN_FINISHED"})
+    assert bus.subscribe("run").empty()
+
+
+@pytest.mark.parametrize("wrong_run", [False, True])
+async def test_last_browser_frame_survives_detail_reload_and_requires_auth(
+    client: AsyncClient, test_db_session, tmp_path, monkeypatch, wrong_run
+):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path / "artifacts")
+    project_id = (await client.post("/api/projects", json={"name": "Browser frame history"})).json()["id"]
+    async with test_db_session() as session:
+        repo = TestRunRepository(session)
+        run = await repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        run_id = run.id
+        other = (
+            await repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id)) if wrong_run else run
+        )
+        owner_id = other.id
+        await session.commit()
+    service = TestRunService(
+        TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
+    )
+    session_id = "1234567890abcdef1234567890abcdef"
+    await service._record_browser_event(
+        owner_id,
+        {
+            "type": "session.started",
+            "session_id": session_id,
+            "nodeid": "tests/test_page.py::test_page",
+            "url": "https://example.test/catalog",
+        },
+    )
+    artifact = settings.artifact_storage_dir / run_id / f"browser-{session_id}-last.jpg"
+    artifact.parent.mkdir(parents=True)
+    image = b"\xff\xd8\xff screenshot fixture"
+    artifact.write_bytes(image)
+    await service.persist_suite_result(
+        run_id,
+        SuiteExecutionResult(
+            exit_code=0,
+            total=1,
+            passed=1,
+            artifact_paths=[str(artifact)],
+            results=[SingleTestResult(nodeid="tests/test_page.py::test_page", status=TestExecutionStatus.PASSED)],
+        ),
+    )
+    for _ in range(2):
+        body = (await client.get(f"/api/runs/{owner_id}")).json()
+        snapshot_id = body["browser_sessions"][0]["page_evidence"].get("last_frame_artifact_id")
+        if wrong_run:
+            assert snapshot_id is None
+        else:
+            assert snapshot_id
+            download = await client.get(f"/api/artifacts/{snapshot_id}/download")
+            assert download.content == image
+            assert download.headers["content-type"].startswith("image/jpeg")
+            anonymous = await client.get(f"/api/artifacts/{snapshot_id}/download", headers={"Authorization": ""})
+            assert anonymous.status_code == 401
+
+
 def test_repair_trace_revalidates_serialized_events_before_response_dump():
     event = make_trace_event("run_1", "repair_suggested", stage="repair", title="Repair suggested")
     validated = _validated_trace_events([event.model_dump(mode="json")])
