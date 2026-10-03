@@ -23,7 +23,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({
       <div className="modal-dialog" style={{ maxWidth: '440px' }}>
         <div className="modal-header">
           <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <GitBranch size={16} color="#3b82f6" /> {t('branchModal.title')}
+            <GitBranch size={16} color="var(--accent-blue)" /> {t('branchModal.title')}
           </h3>
           <button
             type="button"
@@ -51,7 +51,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({
               }}
             />
           </div>
-          <div style={{ fontSize: '11px', color: '#64748b' }}>
+          <div style={{ fontSize: '11px', color: 'var(--ink-muted)' }}>
             {t('branchModal.basedOnPrefix')} <code>{currentBranch}</code>
           </div>
         </div>

@@ -196,7 +196,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
             <Target size={20} />
           </div>
           <div className="stat-details">
@@ -216,7 +216,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)' }}>
             <Zap size={20} />
           </div>
           <div className="stat-details">
@@ -236,7 +236,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)' }}>
             <AlertTriangle size={20} />
           </div>
           <div className="stat-details">
@@ -321,7 +321,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                               width: '80px',
                               height: '8px',
                               backgroundColor: 'var(--border-color)',
-                              borderRadius: '4px',
+                              borderRadius: 'var(--r-xs)',
                               overflow: 'hidden',
                             }}
                           >
@@ -331,10 +331,10 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                                 height: '100%',
                                 backgroundColor:
                                   item.coverage_percentage >= 70
-                                    ? '#10b981'
+                                    ? 'var(--accent-green)'
                                     : item.coverage_percentage >= 40
-                                    ? '#f59e0b'
-                                    : '#ef4444',
+                                    ? 'var(--accent-amber)'
+                                    : 'var(--accent-red)',
                               }}
                             />
                           </div>
@@ -377,7 +377,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   key={risk.id}
                   style={{
                     border: '1px solid var(--border-color)',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--r-sm)',
                     padding: '1rem',
                     backgroundColor: 'var(--bg-subtle)',
                   }}
@@ -402,7 +402,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   </div>
 
                   {risk.recommended_actions.length > 0 && (
-                    <div style={{ marginTop: '8px', backgroundColor: 'var(--bg-base)', padding: '8px 12px', borderRadius: '6px' }}>
+                    <div style={{ marginTop: '8px', backgroundColor: 'var(--bg-base)', padding: '8px 12px', borderRadius: 'var(--r-xs)' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '4px' }}>
                         {t('riskRecommendedActions')}
                       </div>
@@ -458,7 +458,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <div
               style={{
                 border: '1px solid var(--border-color)',
-                borderRadius: '8px',
+                borderRadius: 'var(--r-sm)',
                 padding: '1.25rem',
                 backgroundColor: 'var(--bg-subtle)',
               }}
@@ -480,7 +480,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: '6px' }}>
+                <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: 'var(--r-xs)' }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
                     {t('impactRequirements', { value: impactResult.impacted_requirements.length })}
                   </div>
@@ -489,7 +489,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   </div>
                 </div>
 
-                <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: '6px' }}>
+                <div style={{ background: 'var(--bg-base)', padding: '10px', borderRadius: 'var(--r-xs)' }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
                     {t('impactTestCases', { value: impactResult.impacted_test_cases.length })}
                   </div>
@@ -520,7 +520,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   style={{
                     backgroundColor: 'var(--bg-base)',
                     padding: '10px',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--r-xs)',
                     fontFamily: 'monospace',
                     fontSize: '0.85rem',
                     maxHeight: '180px',
@@ -691,7 +691,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           <div className="modal-content" style={{ maxWidth: '600px' }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldCheck size={20} color={selectedGateReport.can_release ? '#10b981' : '#ef4444'} />
+                <ShieldCheck size={20} color={selectedGateReport.can_release ? 'var(--accent-green)' : 'var(--accent-red)'} />
                 <h3>{t('gateReportTitle', { version: selectedGateReport.version })}</h3>
               </div>
               <button className="btn-icon" onClick={() => setSelectedGateReport(null)}>
@@ -705,11 +705,11 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '12px 16px',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--r-sm)',
                   backgroundColor: selectedGateReport.can_release
                     ? 'rgba(16, 185, 129, 0.1)'
                     : 'rgba(239, 68, 68, 0.1)',
-                  border: `1px solid ${selectedGateReport.can_release ? '#10b981' : '#ef4444'}`,
+                  border: `1px solid ${selectedGateReport.can_release ? 'var(--accent-green)' : 'var(--accent-red)'}`,
                 }}
               >
                 <div>
@@ -742,17 +742,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     padding: '8px 12px',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--r-xs)',
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
                   <span>{t('gatePassRate', { value: selectedGateReport.pass_rate })}</span>
                   {selectedGateReport.pass_rate_met ? (
-                    <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
-                    <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-red)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
@@ -763,17 +763,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     padding: '8px 12px',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--r-xs)',
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
                   <span>{t('gateFlakyConstraint', { value: selectedGateReport.flaky_count })}</span>
                   {selectedGateReport.flaky_met ? (
-                    <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
-                    <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-red)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
@@ -784,17 +784,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     padding: '8px 12px',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--r-xs)',
                     backgroundColor: 'var(--bg-subtle)',
                   }}
                 >
                   <span>{t('gateP0Constraint', { value: selectedGateReport.unautomated_p0_count })}</span>
                   {selectedGateReport.unautomated_p0_met ? (
-                    <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <CheckCircle2 size={14} /> {t('gateCheckPassed')}
                     </span>
                   ) : (
-                    <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ color: 'var(--accent-red)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <XCircle size={14} /> {t('gateCheckFailed')}
                     </span>
                   )}
@@ -804,7 +804,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               {/* Blockers list */}
               {selectedGateReport.blockers.length > 0 && (
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#ef4444', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--accent-red)', marginBottom: '6px' }}>
                     {t('gateBlockingIssues', { value: selectedGateReport.blockers.length })}
                   </div>
                   <ul style={{ margin: '0 0 0 1.2rem', fontSize: '0.85rem' }}>

@@ -38,9 +38,9 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
             key={test.nodeid}
             style={{
               padding: '6px 8px',
-              borderRadius: '4px',
+              borderRadius: 'var(--r-xs)',
               marginBottom: '4px',
-              background: '#f8fafc',
+              background: 'var(--surface-inset)',
               border: '1px solid var(--border-color)',
               fontSize: '12px',
             }}
@@ -49,7 +49,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
               <div
                 style={{
                   fontWeight: 600,
-                  color: '#0f172a',
+                  color: 'var(--ink)',
                   cursor: 'pointer',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

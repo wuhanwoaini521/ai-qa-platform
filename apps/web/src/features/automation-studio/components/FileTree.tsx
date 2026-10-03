@@ -145,7 +145,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                     <Edit2 size={11} />
                   </button>
                   <button className="icon-btn" title={t('common:delete')} onClick={() => onDelete(node.path)}>
-                    <Trash2 size={11} color="#ef4444" />
+                    <Trash2 size={11} color="var(--accent-red)" />
                   </button>
                 </>
               )}

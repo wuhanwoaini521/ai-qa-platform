@@ -12,8 +12,14 @@ import { TestDesignPanel } from './components/TestDesignPanel';
 import { RequirementAnalysisModal } from './components/RequirementAnalysisModal';
 import { TestDesignGenerationModal } from './components/TestDesignGenerationModal';
 import { TestCaseGenerationModal } from './components/TestCaseGenerationModal';
-import { RequirementFormModal, useRequirementFormModal } from './components/RequirementFormModal';
-import { TestDesignFormModal, useTestDesignFormModal } from './components/TestDesignFormModal';
+import {
+  RequirementFormModal,
+  useRequirementFormModal,
+} from './components/RequirementFormModal';
+import {
+  TestDesignFormModal,
+  useTestDesignFormModal,
+} from './components/TestDesignFormModal';
 import { JiraImportModal } from './components/JiraImportModal';
 
 interface RequirementsPageProps {
@@ -31,16 +37,26 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   onSelectRequirement,
 }) => {
   const { t } = useTranslation('requirements');
-  const reqForm = useRequirementFormModal(selectedProjectId || (projects[0]?.id ?? ''));
+  const reqForm = useRequirementFormModal(
+    selectedProjectId || (projects[0]?.id ?? ''),
+  );
   const designForm = useTestDesignFormModal();
 
-  const reqs = useRequirements({ selectedProjectId, projects, initialRequirementId });
+  const reqs = useRequirements({
+    selectedProjectId,
+    projects,
+    initialRequirementId,
+  });
   const designs = useTestDesigns(reqs.selectedReq);
   const ai = useRequirementAI({
     selectedReq: reqs.selectedReq,
     onDesignCreated: designs.appendDesign,
   });
-  const jira = useJiraImport({ selectedProjectId, projects, onImported: reqs.addImported });
+  const jira = useJiraImport({
+    selectedProjectId,
+    projects,
+    onImported: reqs.addImported,
+  });
 
   const { selectedReq } = reqs;
 
@@ -75,12 +91,21 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
       <RequirementToolbar
         projects={projects}
         onOpenJira={jira.handleOpenJiraModal}
-        onNewRequirement={() => reqForm.open(selectedProjectId || projects[0]?.id || '')}
+        onNewRequirement={() =>
+          reqForm.open(selectedProjectId || projects[0]?.id || '')
+        }
       />
 
       {projects.length === 0 ? (
         <div className="card">
-          <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div
+            className="card-body"
+            style={{
+              padding: '40px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+            }}
+          >
             {t('pageNoProject')}
           </div>
         </div>
@@ -94,18 +119,41 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           />
 
           {selectedReq ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <RequirementLifecyclePanel key={selectedReq.id} requirement={selectedReq} onChanged={reqs.setSelectedReq}/>
-              {!selectedReq.qa_model && <TestDesignPanel
-                testDesigns={designs.testDesigns}
-                onGenerateDesigns={ai.handleGenerateDesignsAI}
-                onAddManualDesign={() => designForm.open(selectedReq.id)}
-                onGenerateCases={ai.handleGenerateCasesAI}
-              />}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+            >
+              <RequirementLifecyclePanel
+                key={selectedReq.id}
+                requirement={selectedReq}
+                onChanged={reqs.setSelectedReq}
+              />
+              {!selectedReq.qa_model && (
+                <>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void ai.handleAnalyzeRequirementAI()}
+                  >
+                    {t('analysisTitle')}
+                  </button>
+                  <TestDesignPanel
+                    testDesigns={designs.testDesigns}
+                    onGenerateDesigns={ai.handleGenerateDesignsAI}
+                    onAddManualDesign={() => designForm.open(selectedReq.id)}
+                    onGenerateCases={ai.handleGenerateCasesAI}
+                  />
+                </>
+              )}
             </div>
           ) : (
             <div className="card">
-              <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div
+                className="card-body"
+                style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
                 {t('pageSelectRequirement')}
               </div>
             </div>
@@ -114,27 +162,42 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
       )}
 
       <RequirementAnalysisModal
+        progressEvents={ai.analysisProgress.events}
+        progressError={ai.analysisProgress.error}
         isOpen={ai.isAiAnalysisOpen}
         analyzing={ai.analyzingReq}
         analysis={ai.aiAnalysis}
-        onClose={() => ai.setIsAiAnalysisOpen(false)}
+        onClose={() => {
+          ai.analysisProgress.cancel();
+          ai.setIsAiAnalysisOpen(false);
+        }}
       />
 
       <TestDesignGenerationModal
+        progressEvents={ai.designProgress.events}
+        progressError={ai.designProgress.error}
         isOpen={ai.isAiDesignModalOpen}
         generating={ai.generatingDesigns}
         suggestions={ai.suggestedDesigns}
         onAdopt={ai.handleAdoptDesign}
-        onClose={() => ai.setIsAiDesignModalOpen(false)}
+        onClose={() => {
+          ai.designProgress.cancel();
+          ai.setIsAiDesignModalOpen(false);
+        }}
       />
 
       <TestCaseGenerationModal
+        progressEvents={ai.caseProgress.events}
+        progressError={ai.caseProgress.error}
         isOpen={ai.isAiCaseModalOpen}
         generating={ai.generatingCases}
         activeDesign={ai.activeDesignForCases}
         cases={ai.suggestedCases}
         onAdopt={ai.handleAdoptCase}
-        onClose={() => ai.setIsAiCaseModalOpen(false)}
+        onClose={() => {
+          ai.caseProgress.cancel();
+          ai.setIsAiCaseModalOpen(false);
+        }}
       />
 
       <RequirementFormModal

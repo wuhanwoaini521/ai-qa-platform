@@ -38,7 +38,7 @@ export const FileOpModal: React.FC<FileOpModalProps> = ({
         </div>
         <div className="modal-body" style={{ padding: '16px' }}>
           {state.type === 'delete' ? (
-            <p style={{ fontSize: '13px', color: '#dc2626' }}>
+            <p style={{ fontSize: '13px', color: 'var(--accent-red)' }}>
               {t('fileOpModal.deleteConfirmPrefix')} <code>{state.targetPath}</code>
               {t('fileOpModal.deleteConfirmSuffix')}
             </p>
@@ -69,7 +69,7 @@ export const FileOpModal: React.FC<FileOpModalProps> = ({
           </button>
           <button
             className={`btn btn-sm ${state.type === 'delete' ? 'btn-danger' : 'btn-primary'}`}
-            style={state.type === 'delete' ? { background: '#dc2626', color: '#fff' } : {}}
+            style={state.type === 'delete' ? { background: 'var(--accent-red)', color: 'var(--surface-raised)' } : {}}
             onClick={onConfirm}
           >
             {state.type === 'delete' ? t('common:delete') : t('common:confirm')}

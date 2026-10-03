@@ -35,26 +35,26 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
         ) : caseHistory && caseHistory.executions.length > 0 ? (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px', textAlign: 'center' }}>
-              <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '4px' }}>
+              <div style={{ background: 'var(--surface-inset)', padding: '8px', borderRadius: 'var(--r-xs)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('historyPassFail')}</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '2px' }}>
-                  <span style={{ color: '#16a34a' }}>{caseHistory.trend.pass_count}</span> /{' '}
-                  <span style={{ color: '#dc2626' }}>{caseHistory.trend.fail_count}</span>
+                  <span style={{ color: 'var(--accent-green)' }}>{caseHistory.trend.pass_count}</span> /{' '}
+                  <span style={{ color: 'var(--accent-red)' }}>{caseHistory.trend.fail_count}</span>
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '4px' }}>
+              <div style={{ background: 'var(--surface-inset)', padding: '8px', borderRadius: 'var(--r-xs)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('historyAvgDuration')}</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '2px' }}>
                   {(caseHistory.trend.average_duration_ms / 1000).toFixed(2)}s
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '4px' }}>
+              <div style={{ background: 'var(--surface-inset)', padding: '8px', borderRadius: 'var(--r-xs)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('historyP95Duration')}</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '2px' }}>
                   {(caseHistory.trend.p95_duration_ms / 1000).toFixed(2)}s
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '4px' }}>
+              <div style={{ background: 'var(--surface-inset)', padding: '8px', borderRadius: 'var(--r-xs)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('historyConfidence')}</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '2px' }}>
                   {(caseHistory.flaky_score.confidence * 100).toFixed(0)}%
@@ -91,7 +91,7 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
                     <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>
                       {e.failure_category || '—'}
                     </td>
-                    <td style={{ padding: '6px 8px', color: e.error_message ? '#dc2626' : 'var(--text-muted)' }}>
+                    <td style={{ padding: '6px 8px', color: e.error_message ? 'var(--accent-red)' : 'var(--text-muted)' }}>
                       {e.error_message ? e.error_message.slice(0, 60) + '...' : '—'}
                     </td>
                   </tr>

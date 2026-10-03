@@ -56,30 +56,26 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
 
   return (
     <div className="app-container">
-      <Navigation />
+      <div className="app-frame">
+        <Navigation />
 
-      <div className="app-main">
-        <ReadinessNotice />
-        {!fullBleed && (
+        <div className="app-main">
           <Header
             title={title}
             projects={projects}
             selectedProjectId={selectedProjectId}
             onSelectProject={handleSelectProject}
-            actions={
-              <button type="button" className="btn btn-secondary" onClick={onSignOut}>
-                Sign out
-              </button>
-            }
+            onSignOut={onSignOut}
           />
-        )}
 
-        <div className={`content-viewport ${fullBleed ? 'full-bleed' : ''}`}>
-          <ErrorBoundary resetKey={location.pathname}>
-            <Suspense fallback={<LoadingState />}>
-              <Outlet />
-            </Suspense>
-          </ErrorBoundary>
+          <div className={`content-viewport ${fullBleed ? 'full-bleed' : ''}`}>
+            <ReadinessNotice />
+            <ErrorBoundary resetKey={location.pathname}>
+              <Suspense fallback={<LoadingState />}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
     </div>

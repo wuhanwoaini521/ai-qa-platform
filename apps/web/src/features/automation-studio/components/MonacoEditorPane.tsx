@@ -6,6 +6,7 @@ import { FileCode } from 'lucide-react';
 import { Breakpoint, GitDiffResult } from '../../../types';
 import { EditorTab } from '../types';
 import { PythonLanguageClient } from '../pythonLanguageClient';
+import { usePreferences } from '../../../app/Preferences';
 
 /** Monaco instance handed to `onMount`; `monaco-editor` is not a direct dependency, so the type is derived. */
 export type MonacoEditorInstance = Parameters<OnMount>[0];
@@ -60,6 +61,14 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   executionLocation,
 }) => {
   const { t } = useTranslation('studioShell');
+  const { theme } = usePreferences();
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemDark(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [editorReady, setEditorReady] = useState(false);
   const [editorMountVersion, setEditorMountVersion] = useState(0);
   const [languageStatus, setLanguageStatus] = useState('connecting');
@@ -179,13 +188,13 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
             height: '100%',
             overflowY: 'auto',
             padding: '16px',
-            background: '#0f172a',
-            color: '#f8fafc',
+            background: 'var(--surface-inverse, #1b1b1d)',
+            color: 'var(--ink-inverse)',
             fontFamily: 'var(--font-mono)',
             fontSize: '12px',
           }}
         >
-          <div style={{ marginBottom: '10px', color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase' }}>
+          <div style={{ marginBottom: '10px', color: 'var(--ink-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
             {t('editor.gitDiffTitle')}
           </div>
           <pre style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
@@ -202,7 +211,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
           height="100%"
           language={getLanguage(activeTab.path)}
           value={activeTab.content}
-          theme="light"
+          theme={theme === 'dark' || (theme === 'system' && systemDark) ? 'vs-dark' : 'light'}
           onMount={handleEditorDidMount}
           options={{
             fontSize: 13,

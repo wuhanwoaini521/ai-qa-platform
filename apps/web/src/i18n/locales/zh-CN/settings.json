@@ -120,5 +120,9 @@
     "empty": "今日暂无调用记录",
     "byFeature": "按功能汇总",
     "tokenNote": "提供方报告：输入 {{input}} / 输出 {{output}} tokens；{{unknown}} 次未报告用量。"
-  }
+  },
+  "theme": "外观",
+  "themeSystem": "跟随系统",
+  "themeLight": "浅色",
+  "themeDark": "深色"
 }

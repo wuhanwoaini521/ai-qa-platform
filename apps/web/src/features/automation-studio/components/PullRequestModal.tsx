@@ -33,7 +33,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
       <div className="modal-dialog" style={{ maxWidth: '580px' }}>
         <div className="modal-header">
           <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <GitPullRequest size={16} color="#059669" /> {t('prModal.createPullRequest')}
+            <GitPullRequest size={16} color="var(--accent-green)" /> {t('prModal.createPullRequest')}
           </h3>
           <button
             type="button"
@@ -45,7 +45,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
         </div>
         <div className="modal-body" style={{ padding: '16px' }}>
           <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12px', color: '#475569' }}>
+            <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>
               {t('prModal.branchPrefix')} <code>{currentBranch}</code> → <code>main</code>
             </span>
             <button
@@ -54,7 +54,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
               disabled={suggesting}
               onClick={onRegenerate}
             >
-              <Sparkles size={11} color="#7c3aed" /> {suggesting ? t('prModal.generating') : t('prModal.regenerate')}
+              <Sparkles size={11} color="var(--accent-violet)" /> {suggesting ? t('prModal.generating') : t('prModal.regenerate')}
             </button>
           </div>
 
@@ -85,7 +85,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
           </button>
           <button
             className="btn btn-primary btn-sm"
-            style={{ background: '#059669', borderColor: '#059669' }}
+            style={{ background: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
             disabled={!title.trim() || creating}
             onClick={onCreate}
           >

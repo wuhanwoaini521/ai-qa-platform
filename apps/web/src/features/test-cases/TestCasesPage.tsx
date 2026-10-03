@@ -1,7 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
-import { ContextTaskProgress, useContextTask } from '../../components/ContextTaskProgress';
+import {
+  ContextTaskProgress,
+  useContextTask,
+} from '../../components/ContextTaskProgress';
 import { Project, TestCase } from '../../types';
 import { useTestCases } from './hooks/useTestCases';
 import { useAutomationBinding } from './hooks/useAutomationBinding';
@@ -10,7 +13,10 @@ import { TestCaseDetail } from './components/TestCaseDetail';
 import { AutomationBindingPanel } from './components/AutomationBindingPanel';
 import { CaseExecutionHistoryPanel } from './components/CaseExecutionHistoryPanel';
 import { BindingFormModal } from './components/BindingFormModal';
-import { TestCaseFormModal, useTestCaseFormModal } from './components/TestCaseFormModal';
+import {
+  TestCaseFormModal,
+  useTestCaseFormModal,
+} from './components/TestCaseFormModal';
 
 interface TestCasesPageProps {
   projects: Project[];
@@ -30,7 +36,9 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   onSelectTestCase,
 }) => {
   const { t } = useTranslation('testCases');
-  const form = useTestCaseFormModal(selectedProjectId || (projects[0]?.id ?? ''));
+  const form = useTestCaseFormModal(
+    selectedProjectId || (projects[0]?.id ?? ''),
+  );
 
   // `binding` is only dereferenced once the case list loads, after both hooks are initialized.
   const cases = useTestCases({
@@ -48,17 +56,39 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   });
 
   const { selectedCase } = cases;
-  const caseTask = useContextTask(selectedCase?.project_id ?? null, 'test_case', selectedCase?.id ?? null);
+  const caseTask = useContextTask(
+    selectedCase?.project_id ?? null,
+    'test_case',
+    selectedCase?.id ?? null,
+  );
 
-  const startCaseTask = (type: 'CREATE_TEST' | 'OPTIMIZE_TEST' | 'REVIEW_TEST') => {
+  const startCaseTask = (
+    type: 'CREATE_TEST' | 'OPTIMIZE_TEST' | 'REVIEW_TEST',
+  ) => {
     const target = binding.selectedBinding;
-    if (!selectedCase || !target && type !== 'CREATE_TEST') return;
+    if (!selectedCase || (!target && type !== 'CREATE_TEST')) return;
     void caseTask.start({
       type,
-      goal: type === 'CREATE_TEST' ? `${selectedCase.title}: ${selectedCase.expected_result}` : t(type === 'OPTIMIZE_TEST' ? 'tasks:optimizeGoal' : 'tasks:reviewGoal', { title: selectedCase.title }),
+      goal:
+        type === 'CREATE_TEST'
+          ? `${selectedCase.title}: ${selectedCase.expected_result}`
+          : t(
+              type === 'OPTIMIZE_TEST'
+                ? 'tasks:optimizeGoal'
+                : 'tasks:reviewGoal',
+              { title: selectedCase.title },
+            ),
       project_id: selectedCase.project_id,
       workspace_id: target?.workspace_id || selectedCase.project_id,
-      inputs: { test_case_id: selectedCase.id, ...(type === 'CREATE_TEST' ? { case_name: selectedCase.title, requirement: selectedCase.expected_result } : { file_path: target?.file_path, test_nodeid: target?.nodeid }) },
+      inputs: {
+        test_case_id: selectedCase.id,
+        ...(type === 'CREATE_TEST'
+          ? {
+              case_name: selectedCase.title,
+              requirement: selectedCase.expected_result,
+            }
+          : { file_path: target?.file_path, test_nodeid: target?.nodeid }),
+      },
     });
   };
 
@@ -98,9 +128,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
       <div className="page-header">
         <div>
           <h2>{t('pageTitle')}</h2>
-          <p className="subtitle">
-            {t('pageSubtitle')}
-          </p>
+          <p className="subtitle">{t('pageSubtitle')}</p>
         </div>
         <button
           className="btn btn-primary"
@@ -113,7 +141,14 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
 
       {projects.length === 0 ? (
         <div className="card">
-          <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div
+            className="card-body"
+            style={{
+              padding: '40px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+            }}
+          >
             {t('createProjectFirst')}
           </div>
         </div>
@@ -128,11 +163,29 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
 
           {selectedCase ? (
             <div className="test-case-workspace">
-              <TestCaseDetail selectedCase={selectedCase} onUpdateStatus={cases.updateStatus} aiDisabled={!binding.selectedBinding || caseTask.busy} onOptimize={() => startCaseTask('OPTIMIZE_TEST')} onReview={() => startCaseTask('REVIEW_TEST')} />
-              <ContextTaskProgress task={caseTask.task} error={caseTask.error} />
-              <button type="button" className="btn btn-primary btn-sm" disabled={caseTask.busy} onClick={() => startCaseTask('CREATE_TEST')}>{t('tasks:caseCopilot')}</button>
+              <TestCaseDetail
+                selectedCase={selectedCase}
+                onUpdateStatus={cases.updateStatus}
+                aiDisabled={!binding.selectedBinding || caseTask.busy}
+                onOptimize={() => startCaseTask('OPTIMIZE_TEST')}
+                onReview={() => startCaseTask('REVIEW_TEST')}
+              />
+              <ContextTaskProgress
+                task={caseTask.task}
+                error={caseTask.error}
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={caseTask.busy}
+                onClick={() => startCaseTask('CREATE_TEST')}
+              >
+                {t('tasks:caseCopilot')}
+              </button>
 
               <AutomationBindingPanel
+                progressEvents={binding.progress.events}
+                progressError={binding.progress.error}
                 selectedBinding={binding.selectedBinding}
                 generatedDraft={binding.generatedDraft}
                 savingDraft={binding.savingDraft}
@@ -155,7 +208,14 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
             </div>
           ) : (
             <div className="card">
-              <div className="card-body" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div
+                className="card-body"
+                style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
                 {t('selectCase')}
               </div>
             </div>

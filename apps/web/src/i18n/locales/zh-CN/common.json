@@ -49,5 +49,10 @@
   "project": "项目",
   "allProjects": "全部项目",
   "noProjectSelected": "未选择项目",
-  "loadingProjects": "正在加载项目..."
+  "loadingProjects": "正在加载项目...",
+  "noResults": "没有匹配的目标",
+  "systemStatus": "系统",
+  "aiProvider": "AI 提供方",
+  "runners": "执行节点",
+  "local": "本地"
 }

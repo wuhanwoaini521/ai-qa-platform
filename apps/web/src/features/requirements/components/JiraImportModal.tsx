@@ -36,7 +36,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
           <div className="modal" style={{ maxWidth: '700px', width: '90%' }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Download size={18} color="#0284c7" />
+                <Download size={18} color="var(--accent-blue)" />
                 <h3 className="modal-title">{t('jiraTitle')}</h3>
               </div>
               <button
@@ -59,7 +59,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                     onChange={(e) => handleSearchJira(e.target.value)}
                     style={{ paddingLeft: '32px' }}
                   />
-                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--ink-faint)' }} />
                 </div>
                 <button
                   className="btn btn-secondary"
@@ -91,9 +91,9 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                           alignItems: 'flex-start',
                           gap: '12px',
                           padding: '10px 14px',
-                          borderRadius: '6px',
-                          border: isChecked ? '1px solid #38bdf8' : '1px solid var(--border-color)',
-                          backgroundColor: isChecked ? '#f0f9ff' : 'var(--bg-surface)',
+                          borderRadius: 'var(--r-xs)',
+                          border: isChecked ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                          backgroundColor: isChecked ? 'var(--accent-blue-soft)' : 'var(--bg-surface)',
                           cursor: 'pointer',
                         }}
                       >
@@ -105,7 +105,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 700, fontSize: '13px', color: '#0369a1' }}>
+                            <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-blue)' }}>
                               {issue.key}
                             </span>
                             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -118,14 +118,14 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                             </p>
                           )}
                           <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-                            <span style={{ fontSize: '10px', background: '#e2e8f0', color: '#475569', padding: '1px 5px', borderRadius: '3px' }}>
+                            <span style={{ fontSize: '10px', background: 'var(--surface-inset)', color: 'var(--ink-muted)', padding: '1px 5px', borderRadius: 'var(--r-xs)' }}>
                               {issue.status}
                             </span>
-                            <span style={{ fontSize: '10px', background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: '3px' }}>
+                            <span style={{ fontSize: '10px', background: 'var(--accent-red-soft)', color: 'var(--accent-red)', padding: '1px 5px', borderRadius: 'var(--r-xs)' }}>
                               {issue.priority}
                             </span>
                             {issue.labels.map((lbl) => (
-                              <span key={lbl} style={{ fontSize: '10px', background: '#f1f5f9', color: '#64748b', padding: '1px 5px', borderRadius: '3px' }}>
+                              <span key={lbl} style={{ fontSize: '10px', background: 'var(--surface-inset)', color: 'var(--ink-muted)', padding: '1px 5px', borderRadius: 'var(--r-xs)' }}>
                                 #{lbl}
                               </span>
                             ))}

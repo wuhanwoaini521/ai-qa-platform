@@ -39,16 +39,7 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
                 <div
                   key={tc.id}
                   onClick={() => onSelect(tc)}
-                  style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid var(--border-color)',
-                    cursor: 'pointer',
-                    backgroundColor: isSelected ? '#eff6ff' : 'transparent',
-                    borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
+                  className={`select-row ${isSelected ? 'is-selected' : ''}`}
                 >
                   <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -60,7 +51,7 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
                         {tc.automation_status}
                       </span>
                       {tc.external_case_id && (
-                        <span style={{ fontSize: '10px', background: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                        <span style={{ fontSize: '10px', background: 'var(--accent-green-soft)', color: 'var(--accent-green)', padding: '1px 5px', borderRadius: 'var(--r-xs)', fontWeight: 600 }}>
                           TestRail: {tc.external_case_id}
                         </span>
                       )}
@@ -71,7 +62,7 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
                       ))}
                     </div>
                   </div>
-                  <ChevronRight size={16} color={isSelected ? '#2563eb' : '#94a3b8'} />
+                  <ChevronRight size={16} color={isSelected ? 'var(--accent-blue)' : 'var(--ink-faint)'} />
                 </div>
               );
             })}

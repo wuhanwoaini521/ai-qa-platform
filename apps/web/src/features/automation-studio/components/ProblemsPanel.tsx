@@ -23,7 +23,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
       <div
         style={{
           padding: '6px 12px',
-          background: '#f8fafc',
+          background: 'var(--surface-inset)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -34,7 +34,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
         onClick={onToggle}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Terminal size={14} color="#64748b" />
+          <Terminal size={14} color="var(--ink-muted)" />
           <span>{t('problems.title')}</span>
           {issues.length > 0 ? (
             <span className="badge badge-p0" style={{ fontSize: '10px' }}>
@@ -54,7 +54,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
       {expanded && (
         <div style={{ height: '140px', overflowY: 'auto', padding: '8px' }}>
           {issues.length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#16a34a', padding: '16px', fontSize: '12px' }}>
+            <div style={{ textAlign: 'center', color: 'var(--accent-green)', padding: '16px', fontSize: '12px' }}>
               {t('problems.allValid')}
             </div>
           ) : (
@@ -77,11 +77,11 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
                   >
                     <td style={{ padding: '4px 8px' }}>
                       {issue.severity === 'error' ? (
-                        <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: 'var(--accent-red)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <AlertCircle size={12} /> {t('problems.error')}
                         </span>
                       ) : (
-                        <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: 'var(--accent-amber)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <AlertTriangle size={12} /> {t('problems.warning')}
                         </span>
                       )}

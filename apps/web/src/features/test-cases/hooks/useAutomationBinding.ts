@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAIProgress } from '../../runtime/useAIProgress';
 import { api } from '../../../api/client';
 import {
   AutomationBinding,
@@ -20,7 +21,10 @@ interface UseAutomationBindingOptions {
   selectedCase: TestCase | null;
   selectedProjectId: string | null;
   onNavigateToRuns?: (runId?: string) => void;
-  updateCaseStatus: (caseId: string, automationStatus: AutomationStatus) => Promise<void>;
+  updateCaseStatus: (
+    caseId: string,
+    automationStatus: AutomationStatus,
+  ) => Promise<void>;
 }
 
 function errorText(err: unknown): string {
@@ -35,7 +39,9 @@ export function useAutomationBinding({
   updateCaseStatus,
 }: UseAutomationBindingOptions) {
   const { t } = useTranslation('testCases');
-  const [selectedBinding, setSelectedBinding] = useState<AutomationBinding | null>(null);
+  const progress = useAIProgress(selectedCase?.id ?? null);
+  const [selectedBinding, setSelectedBinding] =
+    useState<AutomationBinding | null>(null);
   const bindingRequest = useRef(0);
   const [isBindingModalOpen, setIsBindingModalOpen] = useState(false);
   const [bindingFormData, setBindingFormData] = useState<BindingFormData>({
@@ -44,13 +50,15 @@ export function useAutomationBinding({
     status: 'DRAFT',
   });
 
-  const [generatedDraft, setGeneratedDraft] = useState<GenerateAutomationResponse | null>(null);
+  const [generatedDraft, setGeneratedDraft] =
+    useState<GenerateAutomationResponse | null>(null);
   const [generating, setGenerating] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [runningCase, setRunningCase] = useState(false);
   const [runMessage, setRunMessage] = useState<string | null>(null);
 
-  const { caseHistory, loadingCaseHistory, fetchCaseHistory, setCaseHistory } = useCaseHistory();
+  const { caseHistory, loadingCaseHistory, fetchCaseHistory, setCaseHistory } =
+    useCaseHistory();
 
   const fetchBinding = async (caseId: string) => {
     const requestId = ++bindingRequest.current;
@@ -83,7 +91,10 @@ export function useAutomationBinding({
     }
   };
 
-  const clearBinding = () => { bindingRequest.current += 1; setSelectedBinding(null); };
+  const clearBinding = () => {
+    bindingRequest.current += 1;
+    setSelectedBinding(null);
+  };
 
   const clearDraft = () => {
     setGeneratedDraft(null);
@@ -94,10 +105,16 @@ export function useAutomationBinding({
     if (!selectedCase) return;
     try {
       setGenerating(true);
-      const draft = await api.generateAutomation(selectedCase.id, true);
+      setGeneratedDraft(null);
+      const draft = await progress.execute((onEvent, signal) =>
+        api.streamAutomation(selectedCase.id, onEvent, signal),
+      );
       setGeneratedDraft(draft);
+      const binding = await api.getAutomationBinding(selectedCase.id);
+      setSelectedBinding(binding);
     } catch (err) {
-      alert(t('errorGeneration', { message: errorText(err) }));
+      if (!(err instanceof DOMException && err.name === 'AbortError'))
+        console.error('Automation generation failed', err);
     } finally {
       setGenerating(false);
     }
@@ -111,18 +128,18 @@ export function useAutomationBinding({
       await api.writeWorkspaceFile(
         selectedProjectId,
         generatedDraft.target_file,
-        generatedDraft.suggested_code
+        generatedDraft.suggested_code,
       );
-      // Bind to test case
-      const nodeid = `${generatedDraft.target_file}::test_${selectedCase.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/(^_|_$)/g, '')}`;
+      // The generator persists the actual parsed function; a title cannot identify Python code.
+      const draftBinding = await api.getAutomationBinding(selectedCase.id);
+      if (!draftBinding || draftBinding.file_path !== generatedDraft.target_file)
+        throw new Error('生成草稿的测试绑定不存在，请在 Studio 检查源码后配置绑定。');
 
       const savedBinding = await api.saveAutomationBinding(selectedCase.id, {
         test_case_id: selectedCase.id,
         workspace_id: selectedProjectId,
-        nodeid,
+        nodeid: draftBinding.nodeid,
+        framework: draftBinding.framework,
         file_path: generatedDraft.target_file,
         status: 'ACTIVE',
       });
@@ -149,7 +166,10 @@ export function useAutomationBinding({
         status: bindingFormData.status,
       });
       setSelectedBinding(saved);
-      await updateCaseStatus(selectedCase.id, bindingFormData.status === 'DRAFT' ? 'DRAFT' : 'AUTOMATED');
+      await updateCaseStatus(
+        selectedCase.id,
+        bindingFormData.status === 'DRAFT' ? 'DRAFT' : 'AUTOMATED',
+      );
       setIsBindingModalOpen(false);
     } catch (err) {
       alert(t('errorBindingSaveFailed', { message: errorText(err) }));
@@ -168,7 +188,7 @@ export function useAutomationBinding({
         requested_by: `Test Case: ${selectedCase.title}`,
       });
       setRunMessage(
-        t('runDispatched', { runId: run.id.slice(0, 8), status: run.status })
+        t('runDispatched', { runId: run.id.slice(0, 8), status: run.status }),
       );
       if (onNavigateToRuns) {
         setTimeout(() => onNavigateToRuns(run.id), 1200);
@@ -181,6 +201,7 @@ export function useAutomationBinding({
   };
 
   return {
+    progress,
     selectedBinding,
     bindingFormData,
     setBindingFormData,

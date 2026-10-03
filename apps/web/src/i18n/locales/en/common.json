@@ -49,5 +49,10 @@
   "project": "Project",
   "allProjects": "All projects",
   "noProjectSelected": "No project selected",
-  "loadingProjects": "Loading projects..."
+  "loadingProjects": "Loading projects...",
+  "noResults": "No matching destinations",
+  "systemStatus": "System",
+  "aiProvider": "AI provider",
+  "runners": "Runners",
+  "local": "Local"
 }

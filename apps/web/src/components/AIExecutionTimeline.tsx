@@ -1,24 +1,25 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, Circle, LoaderCircle, ShieldAlert, StopCircle } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  LoaderCircle,
+  ShieldAlert,
+  StopCircle,
+} from 'lucide-react';
 import { AITraceEvent } from '../types';
+import { traceState } from '../features/runtime/traceState';
 
 interface AIExecutionTimelineProps {
   events: AITraceEvent[];
   running: boolean;
   onCancel?: () => void;
   debugMode?: boolean;
+  runtime?: boolean;
+  selectedStepId?: string | null;
+  onSelectStep?: (id: string) => void;
 }
-
-const STARTED_TO_COMPLETED: Record<string, string> = {
-  'run.started': 'run.completed',
-  'model.started': 'model.completed',
-  'decision.started': 'decision.completed',
-  'validation.started': 'validation.completed',
-  analysis_started: 'diagnosis_completed',
-  decision_started: 'decision_completed',
-  verification_started: 'verification_completed',
-};
 
 const EVENT_LABELS: Record<string, string> = {
   'run.started': 'traceStarted',
@@ -54,85 +55,195 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
   running,
   onCancel,
   debugMode = false,
+  runtime = false,
+  selectedStepId,
+  onSelectStep,
 }) => {
   const { t } = useTranslation('studioPanels');
   const [expanded, setExpanded] = useState(true);
-  const visibleEvents = useMemo(() => events.filter((event) => event.type !== 'model.delta'), [events]);
+  const visibleEvents = useMemo(
+    () => events.filter((event) => event.type !== 'model.delta'),
+    [events],
+  );
   if (!visibleEvents.length && !running) return null;
 
-  const latestModelEvent = [...events].reverse().find((event) => typeof event.metadata?.provider === 'string' || typeof event.metadata?.model === 'string');
+  const latestModelEvent = [...events]
+    .reverse()
+    .find(
+      (event) =>
+        typeof event.metadata?.provider === 'string' ||
+        typeof event.metadata?.model === 'string',
+    );
   const modelMetadata = latestModelEvent?.metadata ?? {};
-  const provider = typeof modelMetadata.provider === 'string' ? modelMetadata.provider : '';
-  const model = typeof modelMetadata.model === 'string' ? modelMetadata.model : '';
+  const provider =
+    typeof modelMetadata.provider === 'string' ? modelMetadata.provider : '';
+  const model =
+    typeof modelMetadata.model === 'string' ? modelMetadata.model : '';
   const simulation = provider === 'fake';
-  const fallback = !simulation && (modelMetadata.fallback_used === true || ['local-policy', 'local-strategy', 'fallback'].includes(provider));
-  const failure = [...events].reverse().find((event) => event.type === 'run.failed');
-  const providerUnavailable = Boolean(failure) && !fallback;
-  const cancelled = [...events].reverse().find((event) => event.type === 'run.cancelled');
-
-  const getState = (event: AITraceEvent, index: number): 'done' | 'active' | 'error' | 'pending' => {
-    if (['FAILED', 'BLOCKED'].includes(event.status ?? '') || event.metadata?.status === 'FAILED') return 'error';
-    if (['PENDING', 'SKIPPED', 'CANCELLED', 'UNVERIFIED'].includes(event.status ?? '')) return 'pending';
-    if (event.type === 'verification_completed' && event.metadata?.verified === false) return 'error';
-    if (event.type === 'run.failed') return 'error';
-    if (event.type === 'run.cancelled') return 'pending';
-    const completionType = STARTED_TO_COMPLETED[event.type];
-    if (completionType) {
-      const completeIndex = visibleEvents.findIndex((candidate, candidateIndex) => candidateIndex > index && candidate.type === completionType);
-      if (completeIndex >= 0) return 'done';
-      if (running) return 'active';
-      return 'pending';
-    }
-    if (['_collected', '_generated', '_completed', '_suggested'].some((suffix) => event.type.endsWith(suffix))) return 'done';
-    if (event.type.endsWith('.completed') || event.type.endsWith('.collected') || event.type.endsWith('.loaded')) return 'done';
-    if (event.type.endsWith('.failed')) return 'error';
-    return 'pending';
-  };
+  const fallback =
+    !simulation &&
+    (modelMetadata.fallback_used === true ||
+      ['local-policy', 'local-strategy', 'fallback'].includes(provider));
+  const failure = [...events]
+    .reverse()
+    .find((event) => event.type === 'run.failed');
+  const providerUnavailable = Boolean(failure) && Boolean(provider || model) && !fallback;
+  const runtimeLabels: Record<string, string> = { 'run.started': '运行开始', 'run.completed': '运行完成', 'run.failed': '运行失败', 'run.cancelled': '运行取消' };
+  const heading = runtime ? '执行 Trace' : t('assistant.aiExecution');
+  const cancelled = [...events]
+    .reverse()
+    .find((event) => event.type === 'run.cancelled');
 
   return (
-    <section className="ai-execution" aria-label={t('assistant.aiExecution')}>
+    <section className="ai-execution" aria-label={heading}>
       <div className="ai-execution-heading">
         <div className="ai-execution-heading-main">
-          <span className="ai-execution-title">{running ? t('assistant.aiAnalyzing') : t('assistant.aiExecution')}</span>
+          <span className="ai-execution-title">
+            {runtime ? heading : running ? t('assistant.aiAnalyzing') : heading}
+          </span>
           {(provider || model) && (
-            <span className={`ai-provider-badge${providerUnavailable ? ' is-unavailable' : fallback ? ' is-fallback' : ' is-real'}`}>
-              {providerUnavailable ? t('assistant.providerUnavailable') : simulation ? t('assistant.simulationMode') : fallback ? t('assistant.fallbackMode') : t('assistant.realProvider')}
-              {[provider, model].filter(Boolean).join(' · ') && ` · ${[provider, model].filter(Boolean).join(' · ')}`}
+            <span
+              className={`ai-provider-badge${providerUnavailable ? ' is-unavailable' : fallback ? ' is-fallback' : ' is-real'}`}
+            >
+              {providerUnavailable
+                ? t('assistant.providerUnavailable')
+                : simulation
+                  ? t('assistant.simulationMode')
+                  : fallback
+                    ? t('assistant.fallbackMode')
+                    : t('assistant.realProvider')}
+              {[provider, model].filter(Boolean).join(' · ') &&
+                ` · ${[provider, model].filter(Boolean).join(' · ')}`}
             </span>
           )}
         </div>
         {running && onCancel && (
-          <button type="button" className="btn btn-secondary btn-sm ai-cancel" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm ai-cancel"
+            onClick={onCancel}
+          >
             <StopCircle size={13} aria-hidden="true" /> {t('assistant.cancel')}
           </button>
         )}
       </div>
 
-      <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)} className="ai-execution-details">
+      <details
+        open={expanded}
+        onToggle={(event) => setExpanded(event.currentTarget.open)}
+        className="ai-execution-details"
+      >
         <summary>
-          <ChevronDown size={13} aria-hidden="true" /> {expanded ? t('assistant.hideTimeline') : t('assistant.showTimeline')}
+          <ChevronDown size={13} aria-hidden="true" />{' '}
+          {expanded ? t('assistant.hideTimeline') : t('assistant.showTimeline')}
         </summary>
         <ol className="ai-execution-list">
           {!visibleEvents.length && running && (
             <li className="ai-execution-step is-active">
               <LoaderCircle size={14} aria-hidden="true" />
-              <div><strong>{t('assistant.waitingProgress')}</strong></div>
+              <div>
+                <strong>{t('assistant.waitingProgress')}</strong>
+              </div>
             </li>
           )}
           {visibleEvents.map((event, index) => {
-            const state = getState(event, index);
-            const detail = event.message && !event.message.includes('evidence source') && event.type !== 'run.failed' ? event.message : '';
-            const Icon = state === 'done' ? Check : state === 'active' ? LoaderCircle : state === 'error' ? ShieldAlert : Circle;
+            const state = traceState(visibleEvents, index, running);
+            const detail =
+              event.message &&
+              !event.message.includes('evidence source') &&
+              event.type !== 'run.failed'
+                ? event.message
+                : '';
+            const Icon =
+              state === 'done'
+                ? Check
+                : state === 'active'
+                  ? LoaderCircle
+                  : state === 'error'
+                    ? ShieldAlert
+                    : Circle;
             return (
-              <li key={event.event_id} className={`ai-execution-step is-${state}`}>
+              <li
+                key={event.event_id}
+                className={`ai-execution-step is-${state}${selectedStepId && event.step_id === selectedStepId ? ' is-selected' : ''}`}
+              >
                 <Icon size={14} aria-hidden="true" />
                 <div>
-                  <strong>{EVENT_LABELS[event.type] ? t(`assistant.${EVENT_LABELS[event.type]}`) : event.title}</strong>
-                  {detail && <small>{detail}</small>}
-                  {event.type === 'run.failed' && event.message && <code>{event.message}</code>}
-                  {debugMode && Object.keys(event.metadata ?? {}).length > 0 && (
-                    <details className="ai-trace-debug"><summary>{t('assistant.eventMetadata')}</summary><pre>{JSON.stringify(event.metadata, null, 2)}</pre></details>
+                  {runtime && (
+                    <div className="rt-trace-meta">
+                      <time>
+                        {event.timestamp
+                          ? new Date(event.timestamp).toLocaleTimeString()
+                          : '—'}
+                      </time>
+                      <code>
+                        {String(event.metadata.category ?? event.stage)}
+                      </code>
+                      <code>
+                        {event.duration_ms == null
+                          ? '—'
+                          : `${(event.duration_ms / 1000).toFixed(2)}s`}
+                      </code>
+                    </div>
                   )}
+                  {runtime && event.step_id && onSelectStep ? (
+                    <button
+                      className="rt-trace-select"
+                      onClick={() => onSelectStep(event.step_id!)}
+                    >
+                      {event.title}
+                    </button>
+                  ) : (
+                    <strong>
+                      {runtime && runtimeLabels[event.type] ? runtimeLabels[event.type] : EVENT_LABELS[event.type]
+                        ? t(`assistant.${EVENT_LABELS[event.type]}`)
+                        : event.title}
+                    </strong>
+                  )}
+                  {detail && <small>{detail}</small>}
+                  {runtime && (
+                    <div className="rt-trace-meta">
+                      {[
+                        'provider',
+                        'model',
+                        'candidate_count',
+                        'candidate_id',
+                        'selected_locator',
+                        'selected',
+                        'confidence',
+                        'latency_ms',
+                        'verified',
+                        'engine',
+                        'fallback_used',
+                        'fallback_reason',
+                        'test_run_id',
+                        'nodeid',
+                        'url',
+                        'action',
+                        'locator',
+                        'method',
+                        'status',
+                        'status_code',
+                        'level',
+                      ]
+                        .filter((key) => event.metadata[key] != null)
+                        .map((key) => (
+                          <span key={key}>
+                            {key}: {String(event.metadata[key])}
+                          </span>
+                        ))}
+                    </div>
+                  )}
+                  {event.type === 'run.failed' && event.message && (
+                    <code>{event.message}</code>
+                  )}
+                  {debugMode &&
+                    Object.keys(event.metadata ?? {}).length > 0 && (
+                      <details className="ai-trace-debug">
+                        <summary>{t('assistant.eventMetadata')}</summary>
+                        <pre>{JSON.stringify(event.metadata, null, 2)}</pre>
+                      </details>
+                    )}
                 </div>
               </li>
             );
@@ -142,23 +253,40 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
 
       {simulation && (
         <p className="ai-fallback-notice" role="status">
-          {t('assistant.simulationModeMessage', { model: model || provider || 'fake-qa-model' })}
+          {t('assistant.simulationModeMessage', {
+            model: model || provider || 'fake-qa-model',
+          })}
         </p>
       )}
       {fallback && (
         <p className="ai-fallback-notice" role="status">
-          {t(['local-policy', 'local-strategy', 'fallback'].includes(provider) ? 'assistant.localFallbackMessage' : 'assistant.fakeFallbackMessage', { model: model || provider || 'local-strategy' })}
+          {t(
+            ['local-policy', 'local-strategy', 'fallback'].includes(provider)
+              ? 'assistant.localFallbackMessage'
+              : 'assistant.fakeFallbackMessage',
+            { model: model || provider || 'local-strategy' },
+          )}
         </p>
       )}
       {failure && (
         <p className="ai-execution-error" role="alert">
-          {t('assistant.traceRunFailed')}: {failure.message || t('assistant.providerUnavailable')}
+          {t('assistant.traceRunFailed')}:{' '}
+          {failure.message || t('assistant.providerUnavailable')}
         </p>
       )}
-      {cancelled && <p className="ai-execution-muted" role="status">{t('assistant.cancelled')}</p>}
-      {!running && !failure && events.some((event) => event.type === 'model.delta') && !events.some((event) => event.type === 'run.completed') && (
-        <p className="ai-execution-muted" role="status">{t('assistant.interruptedPartial')}</p>
+      {cancelled && (
+        <p className="ai-execution-muted" role="status">
+          {t('assistant.cancelled')}
+        </p>
       )}
+      {!running &&
+        !failure &&
+        events.some((event) => event.type === 'model.delta') &&
+        !events.some((event) => event.type === 'run.completed') && (
+          <p className="ai-execution-muted" role="status">
+            {t('assistant.interruptedPartial')}
+          </p>
+        )}
     </section>
   );
 };

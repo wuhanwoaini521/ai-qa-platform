@@ -21,7 +21,7 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
     <div className="card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Layers size={16} color="#16a34a" />
+          <Layers size={16} color="var(--accent-green)" />
           <span className="card-title">{t('designsTitle', { total: testDesigns.length })}</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>

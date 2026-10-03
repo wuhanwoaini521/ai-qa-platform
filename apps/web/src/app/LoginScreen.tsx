@@ -30,18 +30,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--bg-app, #0b1120)',
-      }}
-    >
+    <div className="login-screen">
       <form
-        className="card"
-        style={{ width: '360px', padding: '28px' }}
+        className="card login-card"
         onSubmit={handleSubmit}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -75,7 +66,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
         />
 
         {error && (
-          <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '12px' }} role="alert">
+          <div style={{ color: 'var(--accent-red)', fontSize: '12px', marginBottom: '12px' }} role="alert">
             {error}
           </div>
         )}

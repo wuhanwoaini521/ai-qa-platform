@@ -35,7 +35,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Search size={16} color="#64748b" />
+          <Search size={16} color="var(--ink-muted)" />
           <input
             autoFocus
             type="text"
@@ -76,11 +76,11 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                 key={p}
                 style={{
                   padding: '8px 12px',
-                  borderRadius: '4px',
+                  borderRadius: 'var(--r-xs)',
                   fontSize: '12px',
                   fontFamily: 'var(--font-mono)',
-                  background: idx === selectedIndex ? '#eff6ff' : 'transparent',
-                  color: idx === selectedIndex ? '#2563eb' : '#334155',
+                  background: idx === selectedIndex ? 'var(--accent-blue-soft)' : 'transparent',
+                  color: idx === selectedIndex ? 'var(--accent-blue)' : 'var(--ink-soft)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -89,7 +89,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                 onClick={() => onSelect(p)}
               >
                 <span>{p}</span>
-                <span style={{ fontSize: '10px', color: '#94a3b8' }}>{t('quickOpen.fileLabel')}</span>
+                <span style={{ fontSize: '10px', color: 'var(--ink-faint)' }}>{t('quickOpen.fileLabel')}</span>
               </div>
             ))
           )}

@@ -421,7 +421,7 @@ export const SecurityPage: React.FC = () => {
                       <td>
                         <button
                           className="btn btn-secondary btn-sm"
-                          style={{ color: '#ef4444' }}
+                          style={{ color: 'var(--accent-red)' }}
                           onClick={() => handleDeleteApiKey(k.id)}
                         >
                           <Trash2 size={13} />
@@ -663,7 +663,7 @@ export const SecurityPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '540px' }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Key size={18} color="#10b981" />
+                <Key size={18} color="var(--accent-green)" />
                 <h3>{t('keys.generatedTitle')}</h3>
               </div>
               <button className="btn-icon" onClick={() => setGeneratedKeyResult(null)}>
@@ -671,7 +671,7 @@ export const SecurityPage: React.FC = () => {
               </button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <p style={{ fontSize: '0.9rem', color: '#f59e0b' }}>{t('keys.generatedWarning')}</p>
+              <p style={{ fontSize: '0.9rem', color: 'var(--accent-amber)' }}>{t('keys.generatedWarning')}</p>
               <div
                 style={{
                   display: 'flex',
@@ -679,7 +679,7 @@ export const SecurityPage: React.FC = () => {
                   gap: '8px',
                   backgroundColor: 'var(--bg-subtle)',
                   padding: '10px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--r-xs)',
                   border: '1px solid var(--border-color)',
                 }}
               >
@@ -687,7 +687,7 @@ export const SecurityPage: React.FC = () => {
                   {generatedKeyResult.raw_api_key}
                 </code>
                 <button className="btn btn-secondary btn-sm" onClick={handleCopyKey}>
-                  {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                  {copiedKey ? <Check size={14} color="var(--accent-green)" /> : <Copy size={14} />}
                   <span>{copiedKey ? t('common:copied') : t('common:copy')}</span>
                 </button>
               </div>
@@ -733,7 +733,7 @@ export const SecurityPage: React.FC = () => {
                   style={{
                     backgroundColor: 'var(--bg-subtle)',
                     padding: '8px',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--r-xs)',
                     fontSize: '0.85rem',
                     overflowX: 'auto',
                     marginTop: '4px',

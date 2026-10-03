@@ -13,6 +13,7 @@ export const START_PAGE_OPTIONS = [
 ] as const;
 
 export interface UiPreferences {
+  theme: 'light' | 'dark' | 'system';
   language: LanguageCode;
   startPage: string;
   /** `null` means "keep using the last selected project". */
@@ -22,12 +23,14 @@ export interface UiPreferences {
 const PREFERENCES_STORAGE_KEY = 'ai-qa.ui-preferences';
 
 const DEFAULT_PREFERENCES: UiPreferences = {
+  theme: 'system',
   language: DEFAULT_LANGUAGE,
   startPage: '/',
   defaultProjectId: null,
 };
 
 interface PreferencesValue extends UiPreferences {
+  setTheme: (theme: UiPreferences['theme']) => void;
   setLanguage: (language: LanguageCode) => void;
   setStartPage: (path: string) => void;
   setDefaultProjectId: (projectId: string | null) => void;
@@ -47,6 +50,7 @@ function readStoredPreferences(): UiPreferences {
       ? (parsed.language as LanguageCode)
       : DEFAULT_PREFERENCES.language;
     return {
+      theme: parsed.theme === 'dark' || parsed.theme === 'light' ? parsed.theme : 'system',
       language,
       startPage: typeof parsed.startPage === 'string' ? parsed.startPage : DEFAULT_PREFERENCES.startPage,
       defaultProjectId:
@@ -59,6 +63,13 @@ function readStoredPreferences(): UiPreferences {
 
 export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [preferences, setPreferences] = useState<UiPreferences>(() => readStoredPreferences());
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => { document.documentElement.dataset.theme = preferences.theme === 'system' ? media.matches ? 'dark' : 'light' : preferences.theme; };
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [preferences.theme]);
 
   // Keep i18next and the stored preference in step, whichever one changed first.
   useEffect(() => {
@@ -80,6 +91,7 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const value = useMemo<PreferencesValue>(
     () => ({
       ...preferences,
+      setTheme: (theme) => update({ theme }),
       setLanguage: (language) => update({ language }),
       setStartPage: (startPage) => update({ startPage }),
       setDefaultProjectId: (defaultProjectId) => update({ defaultProjectId }),

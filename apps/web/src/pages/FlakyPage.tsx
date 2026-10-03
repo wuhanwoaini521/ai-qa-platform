@@ -251,7 +251,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                             width: '60px',
                             height: '6px',
                             backgroundColor: 'var(--border-color)',
-                            borderRadius: '3px',
+                            borderRadius: 'var(--r-xs)',
                             overflow: 'hidden',
                           }}
                         >
@@ -344,7 +344,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       marginBottom: '1.25rem',
                     }}
                   >
-                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--r-xs)' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricPassFailSkip')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         <span style={{ color: 'var(--color-success)' }}>{testHistory.trend.pass_count}</span> /{' '}
@@ -353,7 +353,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       </div>
                     </div>
 
-                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--r-xs)' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricAverageDuration')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.trend.average_duration_ms > 1000
@@ -362,7 +362,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       </div>
                     </div>
 
-                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--r-xs)' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('metricP95Duration')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.trend.p95_duration_ms > 1000
@@ -371,7 +371,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       </div>
                     </div>
 
-                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--r-xs)' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('flakyScore')}</div>
                       <div style={{ fontWeight: 600, fontSize: '1rem', marginTop: '0.25rem' }}>
                         {testHistory.flaky_score.score.toFixed(2)} ({testHistory.flaky_score.classification})

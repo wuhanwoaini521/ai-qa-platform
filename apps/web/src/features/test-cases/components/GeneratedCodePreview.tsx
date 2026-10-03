@@ -18,7 +18,7 @@ export const GeneratedCodePreview: React.FC<GeneratedCodePreviewProps> = ({
   return (
     <div style={{ marginTop: '18px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink-soft)' }}>
           {t('codeTitle', { file: generatedDraft.target_file })}
         </div>
         <button
@@ -31,10 +31,10 @@ export const GeneratedCodePreview: React.FC<GeneratedCodePreviewProps> = ({
       </div>
       <div
         style={{
-          background: '#0f172a',
-          color: '#f8fafc',
+          background: 'var(--surface-inverse)',
+          color: 'var(--ink-inverse)',
           padding: '12px',
-          borderRadius: '6px',
+          borderRadius: 'var(--r-xs)',
           fontFamily: 'var(--font-mono)',
           fontSize: '12px',
           overflowX: 'auto',

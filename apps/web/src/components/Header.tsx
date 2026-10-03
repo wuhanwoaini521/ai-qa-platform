@@ -1,30 +1,48 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderGit2,
+  Sparkles,
+  Cpu,
+  Globe,
+  LogOut,
+  X,
+} from 'lucide-react';
 import { AIStatusResponse, Project, RunnerProfile } from '../types';
 import { api } from '../api/client';
-import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '../i18n';
 import { usePreferences } from '../app/Preferences';
-import { FolderGit2, Sparkles, Cpu, Languages } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
   projects: Project[];
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
-  actions?: React.ReactNode;
+  onSignOut: () => void;
 }
 
+/**
+ * Toolbar: back / forward / page title on the left, project scope plus one status trigger on the
+ * right. Everything infrequent (AI provider, runners, language, sign out) lives in the status panel
+ * so the bar stays as quiet as the reference.
+ */
 export const Header: React.FC<HeaderProps> = ({
   title,
   projects,
   selectedProjectId,
   onSelectProject,
-  actions,
+  onSignOut,
 }) => {
   const { t } = useTranslation('common');
+  const navigate = useNavigate();
   const { language, setLanguage } = usePreferences();
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -42,16 +60,54 @@ export const Header: React.FC<HeaderProps> = ({
     fetchStatus();
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        setPanelOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPanelOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [panelOpen]);
+
+  const aiState =
+    aiStatus?.status === 'REAL_CONNECTED'
+      ? 'ok'
+      : aiStatus?.status === 'UNAVAILABLE'
+        ? 'bad'
+        : 'warn';
+
   return (
     <header className="app-topbar">
       <div className="topbar-title-section">
+        <div className="topbar-nav">
+          <button type="button" onClick={() => navigate(-1)} aria-label={t('back')} title={t('back')}>
+            <ChevronLeft size={17} strokeWidth={1.6} />
+          </button>
+          <button type="button" onClick={() => navigate(1)} aria-label={t('next')} title={t('next')}>
+            <ChevronRight size={17} strokeWidth={1.6} />
+          </button>
+        </div>
+
+        <span className="topbar-separator" aria-hidden="true" />
+
         <h1 className="topbar-page-title">{title}</h1>
+      </div>
+
+      <div className="topbar-utility-section">
         {projects.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <FolderGit2 size={14} color="#64748b" />
+          <div className="topbar-project">
+            <FolderGit2 size={14} strokeWidth={1.6} />
             <select
-              className="form-control"
-              style={{ width: '200px', padding: '4px 8px', fontSize: '12px' }}
+              className="topbar-project-select"
               value={selectedProjectId || ''}
               aria-label={t('project')}
               onChange={(e) => onSelectProject(e.target.value)}
@@ -65,79 +121,83 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
         )}
-      </div>
 
-      <div className="topbar-utility-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* AI Health Badge */}
-        {aiStatus && (
-          <div
-            title={`AI Provider: ${aiStatus.provider} (${aiStatus.model}) - ${aiStatus.status}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              fontSize: '11px',
-              padding: '3px 8px',
-              borderRadius: '12px',
-              background: aiStatus.status === 'REAL_CONNECTED' ? '#eff6ff' : aiStatus.status === 'UNAVAILABLE' ? '#fef2f2' : '#fff7e3',
-              color: aiStatus.status === 'REAL_CONNECTED' ? '#1d4ed8' : aiStatus.status === 'UNAVAILABLE' ? '#b91c1c' : '#7c5600',
-              border: `1px solid ${aiStatus.status === 'REAL_CONNECTED' ? '#bfdbfe' : aiStatus.status === 'UNAVAILABLE' ? '#fecaca' : '#e9d7a4'}`,
-            }}
+        <div className="topbar-status" ref={panelRef}>
+          <button
+            type="button"
+            className="topbar-status-trigger"
+            aria-haspopup="dialog"
+            aria-expanded={panelOpen}
+            onClick={() => setPanelOpen((open) => !open)}
           >
-            <Sparkles size={12} color={aiStatus.status === 'REAL_CONNECTED' ? '#2563eb' : aiStatus.status === 'UNAVAILABLE' ? '#dc2626' : '#8a5a00'} />
-            <span style={{ fontWeight: 600 }}>AI: {aiStatus.status} · {aiStatus.provider}</span>
-          </div>
-        )}
+            <span className={`status-dot is-${aiState === 'ok' ? 'online' : aiState === 'bad' ? 'failed' : 'queued'}`} />
+            <span className="topbar-status-text">{t('systemStatus')}</span>
+          </button>
 
-        {/* Runner Indicator */}
-        <div
-          title={`Runner Profiles: ${runnerProfiles.length} configured`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '11px',
-            padding: '3px 8px',
-            borderRadius: '12px',
-            background: '#f8fafc',
-            color: '#475569',
-            border: '1px solid #e2e8f0',
-          }}
-        >
-          <Cpu size={12} color="#64748b" />
-          <span>Runners: {runnerProfiles.length > 0 ? `${runnerProfiles.length} Active` : 'Local'}</span>
+          {panelOpen && (
+            <div className="topbar-status-panel" role="dialog" aria-label={t('systemStatus')}>
+              <div className="topbar-status-head">
+                <span>{t('systemStatus')}</span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={t('close')}
+                  onClick={() => setPanelOpen(false)}
+                >
+                  <X size={14} strokeWidth={1.6} />
+                </button>
+              </div>
+
+              <dl className="topbar-status-list">
+                <div className="topbar-status-item">
+                  <dt>
+                    <Sparkles size={14} strokeWidth={1.7} />
+                    {t('aiProvider')}
+                  </dt>
+                  <dd>
+                    {aiStatus ? `${aiStatus.provider} · ${aiStatus.status}` : t('unknown')}
+                  </dd>
+                </div>
+                <div className="topbar-status-item">
+                  <dt>
+                    <Cpu size={14} strokeWidth={1.7} />
+                    {t('runners')}
+                  </dt>
+                  <dd>{runnerProfiles.length > 0 ? runnerProfiles.length : t('local')}</dd>
+                </div>
+                <div className="topbar-status-item">
+                  <dt>
+                    <Globe size={14} strokeWidth={1.7} />
+                    {t('language')}
+                  </dt>
+                  <dd>
+                    <select
+                      className="topbar-status-select"
+                      aria-label={t('language')}
+                      value={language}
+                      onChange={(e) =>
+                        setLanguage(
+                          e.target.value as (typeof SUPPORTED_LANGUAGES)[number]['code'],
+                        )
+                      }
+                    >
+                      {SUPPORTED_LANGUAGES.map((entry) => (
+                        <option key={entry.code} value={entry.code}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </dd>
+                </div>
+              </dl>
+
+              <button type="button" className="topbar-signout" onClick={onSignOut}>
+                <LogOut size={14} strokeWidth={1.7} />
+                {t('signOut')}
+              </button>
+            </div>
+          )}
         </div>
-
-        <div
-          title={t('languageDescription')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '11px',
-            padding: '3px 8px',
-            borderRadius: '12px',
-            background: '#f8fafc',
-            color: '#475569',
-            border: '1px solid #e2e8f0',
-          }}
-        >
-          <Languages size={12} color="#64748b" />
-          <select
-            aria-label={t('language')}
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as (typeof SUPPORTED_LANGUAGES)[number]['code'])}
-            style={{ border: 'none', background: 'transparent', fontSize: '11px', color: '#475569' }}
-          >
-            {SUPPORTED_LANGUAGES.map((entry) => (
-              <option key={entry.code} value={entry.code}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="topbar-actions">{actions}</div>
       </div>
     </header>
   );

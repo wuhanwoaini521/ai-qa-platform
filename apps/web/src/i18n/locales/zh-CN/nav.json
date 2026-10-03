@@ -12,5 +12,6 @@
   "failures": "失败分析与修复",
   "quality": "质量与发布",
   "security": "安全与权限",
-  "settings": "系统设置"
+  "settings": "系统设置",
+  "platform": "平台"
 }

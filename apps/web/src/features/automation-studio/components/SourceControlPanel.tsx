@@ -57,8 +57,8 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
   return (
     <div style={{ padding: '8px' }}>
       {/* Branch Selector & Switcher */}
-      <div style={{ marginBottom: '10px', padding: '8px', background: '#f1f5f9', borderRadius: '6px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: '10px', padding: '8px', background: 'var(--surface-inset)', borderRadius: 'var(--r-xs)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('sourceControl.branch')}</span>
           <button
             className="btn btn-secondary btn-sm"
@@ -81,7 +81,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
           ))}
         </select>
         {currentBranch === 'main' && (
-          <div style={{ fontSize: '10px', color: '#d97706', marginTop: '4px' }}>
+          <div style={{ fontSize: '10px', color: 'var(--accent-amber)', marginTop: '4px' }}>
             {t('sourceControl.mainBranchNotePrefix')} <code>qa/...</code> {t('sourceControl.mainBranchNoteSuffix')}
           </div>
         )}
@@ -89,7 +89,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
 
       {/* Changed Files Section */}
       <div style={{ marginBottom: '10px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
           <span>{t('sourceControl.changes', { count: diffResult.changed_files.length })}</span>
           <button
             style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '10px' }}
@@ -99,11 +99,11 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
           </button>
         </div>
         {diffResult.changed_files.length === 0 ? (
-          <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+          <div style={{ fontSize: '11px', color: 'var(--ink-faint)', fontStyle: 'italic', padding: '4px 0' }}>
             {t('sourceControl.noChanges')}
           </div>
         ) : (
-          <div style={{ maxHeight: '110px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px' }}>
+          <div style={{ maxHeight: '110px', overflowY: 'auto', border: '1px solid var(--line-strong)', borderRadius: 'var(--r-xs)', padding: '4px' }}>
             {diffResult.changed_files.map((cf, idx) => (
               <div
                 key={idx}
@@ -118,7 +118,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
                 }}
                 onClick={() => onOpenFile(cf.path)}
               >
-                <span style={{ color: cf.status === 'M' ? '#d97706' : '#16a34a', fontWeight: 700 }}>
+                <span style={{ color: cf.status === 'M' ? 'var(--accent-amber)' : 'var(--accent-green)', fontWeight: 700 }}>
                   {cf.status}
                 </span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -133,7 +133,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
       {/* Commit Actions */}
       <div style={{ marginBottom: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569' }}>{t('sourceControl.commit')}</span>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-muted)' }}>{t('sourceControl.commit')}</span>
           <button
             className="btn btn-secondary btn-sm"
             style={{ padding: '2px 6px', fontSize: '10px', gap: '3px' }}
@@ -141,7 +141,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
             onClick={onSuggestCommit}
             title={t('sourceControl.aiSuggestTitle')}
           >
-            <Sparkles size={10} color="#7c3aed" /> {suggestingCommit ? '...' : t('sourceControl.aiSuggest')}
+            <Sparkles size={10} color="var(--accent-violet)" /> {suggestingCommit ? '...' : t('sourceControl.aiSuggest')}
           </button>
         </div>
         <textarea
@@ -170,20 +170,20 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
           disabled={isPushing}
           onClick={onPush}
         >
-          <UploadCloud size={13} color="#2563eb" /> {isPushing ? t('sourceControl.pushing') : t('sourceControl.pushBranch', { branch: currentBranch })}
+          <UploadCloud size={13} color="var(--accent-blue)" /> {isPushing ? t('sourceControl.pushing') : t('sourceControl.pushBranch', { branch: currentBranch })}
         </button>
         {pushStatusMessage && (
-          <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', background: '#f8fafc', padding: '4px', borderRadius: '4px' }}>
+          <div style={{ fontSize: '10px', color: 'var(--ink-muted)', marginTop: '4px', background: 'var(--surface-inset)', padding: '4px', borderRadius: 'var(--r-xs)' }}>
             {pushStatusMessage}
           </div>
         )}
       </div>
 
       {/* Create PR Shortcut */}
-      <div style={{ marginBottom: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+      <div style={{ marginBottom: '12px', borderTop: '1px solid var(--line-strong)', paddingTop: '8px' }}>
         <button
           className="btn btn-primary btn-sm"
-          style={{ width: '100%', padding: '5px', fontSize: '11px', background: '#059669', borderColor: '#059669' }}
+          style={{ width: '100%', padding: '5px', fontSize: '11px', background: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
           onClick={onOpenPRModal}
         >
           <GitPullRequest size={13} /> {t('sourceControl.createPR')}
@@ -192,26 +192,26 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
 
       {/* Recent Commits Log */}
       <div>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
           {t('sourceControl.recentCommits')}
         </div>
         <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
           {recentCommits.length === 0 ? (
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t('sourceControl.noCommits')}</div>
+            <div style={{ fontSize: '10px', color: 'var(--ink-faint)' }}>{t('sourceControl.noCommits')}</div>
           ) : (
             recentCommits.map((c) => (
               <div
                 key={c.sha}
                 style={{
                   padding: '4px 6px',
-                  borderBottom: '1px solid #f1f5f9',
+                  borderBottom: '1px solid var(--surface-inset)',
                   fontSize: '11px',
                 }}
               >
-                <div style={{ fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.message}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#64748b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--ink-muted)' }}>
                   <code>{c.sha.slice(0, 7)}</code>
                   <span>{c.date.slice(0, 10)}</span>
                 </div>

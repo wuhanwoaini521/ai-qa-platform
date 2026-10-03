@@ -9,7 +9,7 @@
   "testCases": "Test Cases",
   "totalExecutions": "Total Executions",
   "recentRuns": "Recent Execution Runs",
-  "viewAll": "View All",
+  "viewAll": "View all",
   "runId": "Run ID",
   "runner": "Runner",
   "noRecentRuns": "No recent execution runs. Launch a test from Automation Studio or Test Cases to start tracking.",
@@ -21,5 +21,17 @@
   "flakyStep": "3. Flaky Test Intelligence",
   "flakyStepDescription": "Deterministic scoring & transition analysis",
   "failureStep": "4. Failure AI & Self-Healing",
-  "failureStepDescription": "Root-cause diagnosis & semantic review"
+  "failureStepDescription": "Root-cause diagnosis & semantic review",
+  "runsToday": "Runs Today",
+  "totalFailures": "Total Failures",
+  "testsExecutedToday": "Tests executed today",
+  "executionTrend": "Execution Trend",
+  "executionTrendSubtitle": "Pass rate across the most recent runs",
+  "failureStepShort": "Failure Intelligence",
+  "projectOverview": "Project Overview",
+  "trendInsufficient": "Two or more runs are needed to draw a trend.",
+  "aiAssistance": "AI assists quality work",
+  "lifecycleFlow": "Quality lifecycle",
+  "lifecycleFlowSubtitle": "From requirement to evidence, in order.",
+  "executionRecord": "Execution record"
 }

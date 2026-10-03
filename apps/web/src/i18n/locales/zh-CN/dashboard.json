@@ -21,5 +21,17 @@
   "flakyStep": "3. 不稳定用例智能分析",
   "flakyStepDescription": "确定性评分与状态迁移分析",
   "failureStep": "4. 失败智能分析与自愈",
-  "failureStepDescription": "根因诊断与语义评审"
+  "failureStepDescription": "根因诊断与语义评审",
+  "runsToday": "今日执行",
+  "totalFailures": "累计失败",
+  "testsExecutedToday": "今日执行用例数",
+  "executionTrend": "执行趋势",
+  "executionTrendSubtitle": "最近若干次执行的通过率",
+  "failureStepShort": "失败智能分析",
+  "projectOverview": "项目概览",
+  "trendInsufficient": "至少两次执行记录才能绘制趋势。",
+  "aiAssistance": "AI 正在协助质量工作",
+  "lifecycleFlow": "质量闭环",
+  "lifecycleFlowSubtitle": "从需求到证据，依次流转。",
+  "executionRecord": "执行记录"
 }

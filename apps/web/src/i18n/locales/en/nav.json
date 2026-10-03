@@ -12,5 +12,6 @@
   "failures": "Failures & Healing",
   "quality": "Quality & Release",
   "security": "Security & RBAC",
-  "settings": "Settings"
+  "settings": "Settings",
+  "platform": "Platform"
 }

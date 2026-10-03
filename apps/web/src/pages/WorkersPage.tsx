@@ -195,7 +195,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#047857' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
             <Radio size={20} />
           </div>
           <div className="stat-details">
@@ -208,7 +208,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
             <Cpu size={20} />
           </div>
           <div className="stat-details">
@@ -229,7 +229,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)' }}>
             <Layers size={20} />
           </div>
           <div className="stat-details">
@@ -242,7 +242,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--accent-violet)' }}>
             <Activity size={20} />
           </div>
           <div className="stat-details">
@@ -332,7 +332,7 @@ export const WorkersPage: React.FC = () => {
                       <td>
                         <button
                           className="btn btn-secondary btn-sm"
-                          style={{ color: '#ef4444' }}
+                          style={{ color: 'var(--accent-red)' }}
                           onClick={() => handleDeleteWorker(w.id)}
                         >
                           <Trash2 size={13} />
@@ -403,7 +403,7 @@ export const WorkersPage: React.FC = () => {
                         {job.status === 'QUEUED' || job.status === 'RUNNING' ? (
                           <button
                             className="btn btn-secondary btn-sm"
-                            style={{ color: '#ef4444' }}
+                            style={{ color: 'var(--accent-red)' }}
                             onClick={() => handleCancelJob(job.id)}
                           >
                             <XCircle size={13} />

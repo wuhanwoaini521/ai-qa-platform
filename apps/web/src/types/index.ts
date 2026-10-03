@@ -1,14 +1,28 @@
-import type { ModernTestModel, RequirementDocument, Scenario } from '../features/lifecycle/types';
+import type {
+  ModernTestModel,
+  RequirementDocument,
+  Scenario,
+} from '../features/lifecycle/types';
 export type FrameworkType = 'playwright_python' | 'pytest_api' | 'custom';
 
 export type RequirementStatus = 'DRAFT' | 'READY' | 'ARCHIVED';
 
-export type TestDesignCategory = 'FUNCTIONAL' | 'BOUNDARY' | 'NEGATIVE' | 'ANALYTICS' | 'API' | 'UI';
+export type TestDesignCategory =
+  'FUNCTIONAL' | 'BOUNDARY' | 'NEGATIVE' | 'ANALYTICS' | 'API' | 'UI';
 
 export type TestCasePriority = 'P0' | 'P1' | 'P2' | 'P3';
 
 export interface RecorderLocator {
-  kind: 'role' | 'test_id' | 'label' | 'placeholder' | 'id' | 'name' | 'css' | 'text' | 'xpath';
+  kind:
+    | 'role'
+    | 'test_id'
+    | 'label'
+    | 'placeholder'
+    | 'id'
+    | 'name'
+    | 'css'
+    | 'text'
+    | 'xpath';
   value: string;
   name?: string | null;
   exact?: boolean;
@@ -17,7 +31,22 @@ export interface RecorderLocator {
 
 export interface RecorderStep {
   id: string;
-  action: 'navigate' | 'click' | 'double_click' | 'fill' | 'select' | 'check' | 'uncheck' | 'press' | 'hover' | 'wait' | 'assert_visible' | 'assert_text' | 'assert_url' | 'assert_title' | 'assert_count';
+  action:
+    | 'navigate'
+    | 'click'
+    | 'double_click'
+    | 'fill'
+    | 'select'
+    | 'check'
+    | 'uncheck'
+    | 'press'
+    | 'hover'
+    | 'wait'
+    | 'assert_visible'
+    | 'assert_text'
+    | 'assert_url'
+    | 'assert_title'
+    | 'assert_count';
   locator?: RecorderLocator | null;
   frame_path?: string[];
   url?: string | null;
@@ -147,7 +176,8 @@ export interface TestCaseCreate {
   external_url?: string | null;
 }
 
-export type AutomationBindingStatus = 'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'BROKEN';
+export type AutomationBindingStatus =
+  'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'BROKEN';
 
 export interface AutomationBinding {
   id: string;
@@ -223,7 +253,8 @@ export interface CollectedTest {
   docstring: string;
 }
 
-export type RunnerType = 'LOCAL' | 'WORKER' | 'JENKINS' | 'DOCKER' | 'GITHUB_ACTIONS';
+export type RunnerType =
+  'LOCAL' | 'WORKER' | 'JENKINS' | 'DOCKER' | 'GITHUB_ACTIONS';
 
 export interface RunnerProfile {
   id: string;
@@ -268,7 +299,8 @@ export interface ExternalArtifactReference {
   created_at: string;
 }
 
-export type TestRunStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
+export type TestRunStatus =
+  'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
 
 export interface TestRun {
   id: string;
@@ -316,7 +348,8 @@ export interface TestBrowserSession {
   nodeid: string;
   case_name: string;
   current_url: string;
-  status: 'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'closed' | string;
+  status:
+    'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'closed' | string;
   elapsed_ms: number;
   started_at: string;
   finished_at?: string | null;
@@ -343,6 +376,8 @@ export interface DebugSessionBootstrap {
 }
 
 export interface TestRunCreate {
+  parent_run_id?: string | null;
+  origin_failure_id?: string | null;
   project_id: string;
   /** The API keys a workspace by project id, so this is the project's workspace id. */
   workspace_id: string;
@@ -357,7 +392,8 @@ export interface TestRunCreate {
   parameters?: Record<string, any>;
 }
 
-export type TestExecutionStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
+export type TestExecutionStatus =
+  'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
 export interface TestExecution {
   id: string;
@@ -440,7 +476,8 @@ export interface ApplyRepairRequest {
   new_code: string;
 }
 
-export type QAChatAction = 'explain' | 'generate_draft' | 'suggest_refactor' | 'analyze_error' | 'chat';
+export type QAChatAction =
+  'explain' | 'generate_draft' | 'suggest_refactor' | 'analyze_error' | 'chat';
 
 export interface QAChatContext {
   project_id: string;
@@ -457,9 +494,33 @@ export interface QAChatContext {
   latest_run_summary?: string | null;
 }
 
-export type AgentTaskType = 'CREATE_TEST' | 'FIX_FAILURE' | 'OPTIMIZE_TEST' | 'EXPLORE_PAGE' | 'RUN_REGRESSION' | 'REVIEW_TEST';
-export type AgentTaskStatus = 'PENDING' | 'PLANNING' | 'RUNNING' | 'WAITING' | 'VERIFYING' | 'RETRYING' | 'REPLANNING' | 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'CANCELLED';
-export type AgentTaskStepStatus = 'PENDING' | 'RUNNING' | 'WAITING_FOR_APPROVAL' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'CANCELLED';
+export type AgentTaskType =
+  | 'CREATE_TEST'
+  | 'FIX_FAILURE'
+  | 'OPTIMIZE_TEST'
+  | 'EXPLORE_PAGE'
+  | 'RUN_REGRESSION'
+  | 'REVIEW_TEST';
+export type AgentTaskStatus =
+  | 'PENDING'
+  | 'PLANNING'
+  | 'RUNNING'
+  | 'WAITING'
+  | 'VERIFYING'
+  | 'RETRYING'
+  | 'REPLANNING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'BLOCKED'
+  | 'CANCELLED';
+export type AgentTaskStepStatus =
+  | 'PENDING'
+  | 'RUNNING'
+  | 'WAITING_FOR_APPROVAL'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'SKIPPED'
+  | 'CANCELLED';
 
 export interface Workspace {
   id: string;
@@ -562,7 +623,14 @@ export interface QAChatResponse {
   action_type: string;
 }
 
-export type AIProviderHealth = 'AVAILABLE' | 'FALLBACK_ONLY' | 'DISABLED' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'UNAVAILABLE';
+export type AIProviderHealth =
+  | 'AVAILABLE'
+  | 'FALLBACK_ONLY'
+  | 'DISABLED'
+  | 'AUTH_ERROR'
+  | 'RATE_LIMITED'
+  | 'TIMEOUT'
+  | 'UNAVAILABLE';
 
 export interface AIStatusResponse {
   operational_state: 'REAL_AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
@@ -586,7 +654,7 @@ export interface AITraceEvent {
   step_id?: string | null;
   event_id: string;
   type: string;
-  timestamp: string;
+  timestamp: string | null;
   status?: string;
   duration_ms?: number | null;
   stage: string;
@@ -708,7 +776,13 @@ export interface AIUsageSummary {
   failed_requests: number;
   fallback_requests: number;
   unknown_token_requests: number;
-  features: { feature: string; requests: number; failed: number; fallback: number; duration_ms: number }[];
+  features: {
+    feature: string;
+    requests: number;
+    failed: number;
+    fallback: number;
+    duration_ms: number;
+  }[];
   total_requests: number;
   total_input_tokens: number;
   total_output_tokens: number;
@@ -718,7 +792,13 @@ export interface AIUsageSummary {
 export interface SystemHealth {
   status: 'healthy' | 'degraded';
   checked_at: string;
-  components: { component: string; status: 'ok' | 'warning' | 'error'; message: string; duration_ms: number; operational_state?: string }[];
+  components: {
+    component: string;
+    status: 'ok' | 'warning' | 'error';
+    message: string;
+    duration_ms: number;
+    operational_state?: string;
+  }[];
 }
 
 export interface RequirementAnalysisDTO {
@@ -744,7 +824,8 @@ export interface TestCaseGenerationItem {
   tags: string[];
 }
 
-export type FlakyClassification = 'STABLE' | 'LIKELY_FLAKY' | 'PERSISTENT_FAILURE' | 'INSUFFICIENT_DATA';
+export type FlakyClassification =
+  'STABLE' | 'LIKELY_FLAKY' | 'PERSISTENT_FAILURE' | 'INSUFFICIENT_DATA';
 
 export interface FlakyScore {
   sample_count: number;
@@ -828,7 +909,14 @@ export interface FailureAnalysisRun {
   failure_id: string;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
   events: AITraceEvent[];
-  result: { domain?: string; diagnosis?: AIFailureDiagnosisResponse; selection?: Record<string, unknown> | null; verified?: boolean; verification_run_id?: string; verification_run_status?: string };
+  result: {
+    domain?: string;
+    diagnosis?: AIFailureDiagnosisResponse;
+    selection?: Record<string, unknown> | null;
+    verified?: boolean;
+    verification_run_id?: string;
+    verification_run_status?: string;
+  };
   created_at: string;
   finished_at: string | null;
 }
@@ -891,7 +979,8 @@ export interface GitPushResult {
   message: string;
 }
 
-export type CheckStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED';
+export type CheckStatus =
+  'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED';
 
 export interface CheckRun {
   id: string;
@@ -1128,7 +1217,8 @@ export interface ImpactAnalysisResult {
   rationale: string[];
 }
 
-export type ReleaseStatus = 'PLANNED' | 'IN_QA' | 'PASSED' | 'BLOCKED' | 'RELEASED';
+export type ReleaseStatus =
+  'PLANNED' | 'IN_QA' | 'PASSED' | 'BLOCKED' | 'RELEASED';
 
 export interface Release {
   id: string;
@@ -1312,7 +1402,8 @@ export interface WorkerHeartbeatRequest {
   active_job_ids?: string[];
 }
 
-export type JobStatus = 'QUEUED' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type JobStatus =
+  'QUEUED' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export interface ExecutionJob {
   id: string;
@@ -1372,7 +1463,3 @@ export interface ArtifactDownloadInfo {
   download_url: string;
   expires_in_seconds: number;
 }
-
-
-
-

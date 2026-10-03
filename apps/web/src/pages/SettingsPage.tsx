@@ -34,7 +34,7 @@ const defaultJevSettings: JevSettings = {
 /** Settings page for server-backed AI providers and browser-local interface preferences. */
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation('settings');
-  const { language, setLanguage, startPage, setStartPage, defaultProjectId, setDefaultProjectId, reset } =
+  const { theme, setTheme, language, setLanguage, startPage, setStartPage, defaultProjectId, setDefaultProjectId, reset } =
     usePreferences();
   const { projects } = useProjectScope();
   const [jev, setJev] = useState<JevSettings>(defaultJevSettings);
@@ -247,7 +247,7 @@ export const SettingsPage: React.FC = () => {
               {aiSettings.api_key_configured && <button type="button" className="btn btn-secondary btn-sm" disabled={savingAI} onClick={() => void saveAI(true)}>{t('aiConfig.clearKey')}</button>}
             </div>
             {aiMessage && <p role="status" style={{ fontSize: '12px', marginTop: '12px' }}>{aiMessage}</p>}
-            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--success-color, #16a34a)' : 'var(--danger-color, #dc2626)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status} · {t(aiConnection.streaming ? 'health.streamingVerified' : 'health.streamingUnverified')} · {Math.round(aiConnection.latency_ms ?? 0)} ms</p>}
+            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status} · {t(aiConnection.streaming ? 'health.streamingVerified' : 'health.streamingUnverified')} · {Math.round(aiConnection.latency_ms ?? 0)} ms</p>}
           </>}
         </div>
       </div>
@@ -264,6 +264,14 @@ export const SettingsPage: React.FC = () => {
           </p>
 
           {/* Language */}
+          <div style={{ marginBottom: '20px' }}>
+            <label className="form-label" htmlFor="settings-theme">{t('theme')}</label>
+            <select id="settings-theme" className="form-control" style={{ maxWidth: '280px' }} value={theme} onChange={(event) => setTheme(event.target.value as typeof theme)}>
+              <option value="system">{t('themeSystem')}</option>
+              <option value="light">{t('themeLight')}</option>
+              <option value="dark">{t('themeDark')}</option>
+            </select>
+          </div>
           <div style={{ marginBottom: '20px' }}>
             <label className="form-label" htmlFor="settings-language">
               <Globe size={13} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
@@ -336,7 +344,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '20px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--success-color, #16a34a)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>
               <Check size={13} style={{ verticalAlign: '-2px', marginRight: '4px' }} />
               {t('saved')}
             </span>
@@ -387,7 +395,7 @@ export const SettingsPage: React.FC = () => {
               {jev.api_key_configured && <button type="button" className="btn btn-secondary btn-sm" disabled={savingJev} onClick={() => void saveJev(true)}>{t('jev.clearKey')}</button>}
             </div>
             {jevMessage && <p role="status" style={{ fontSize: '12px', marginTop: '12px' }}>{jevMessage}</p>}
-            {connection && <p role="status" style={{ color: connection.connected ? 'var(--success-color, #16a34a)' : 'var(--danger-color, #dc2626)', fontSize: '12px', marginTop: '12px' }}>{connection.message}{connection.detail ? ` · ${connection.detail}` : ''}</p>}
+            {connection && <p role="status" style={{ color: connection.connected ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '12px', marginTop: '12px' }}>{connection.message}{connection.detail ? ` · ${connection.detail}` : ''}</p>}
           </>}
         </div>
       </div>
@@ -401,8 +409,8 @@ export const SettingsPage: React.FC = () => {
             <div><label className="form-label" htmlFor="jev-play-options">{t('jev.options')}</label><textarea id="jev-play-options" className="form-control" rows={7} value={playOptions} onChange={(event) => setPlayOptions(event.target.value)} /><div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{t('jev.optionsHelp')}</div></div>
           </div>
           <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: '12px' }} disabled={runningDecision || parsedOptions.length < 2} onClick={() => void runPlayground()}>{runningDecision ? t('jev.running') : t('jev.run')}</button>
-          {playError && <p role="alert" style={{ color: 'var(--danger-color, #dc2626)', fontSize: '12px' }}>{playError}</p>}
-          {decision && <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: '12px', padding: '12px', background: 'var(--surface-subtle, #f8fafc)', borderRadius: '6px', fontSize: '12px' }}>{JSON.stringify(decision, null, 2)}</pre>}
+          {playError && <p role="alert" style={{ color: 'var(--accent-red)', fontSize: '12px' }}>{playError}</p>}
+          {decision && <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: '12px', padding: '12px', background: 'var(--surface-inset)', borderRadius: 'var(--r-xs)', fontSize: '12px' }}>{JSON.stringify(decision, null, 2)}</pre>}
         </div>
       </div>
     </div>

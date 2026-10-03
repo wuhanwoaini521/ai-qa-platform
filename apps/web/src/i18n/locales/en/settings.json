@@ -120,5 +120,9 @@
     "empty": "No invocations today",
     "byFeature": "Group by feature",
     "tokenNote": "Provider-reported: input {{input}} / output {{output}} tokens; {{unknown}} calls did not report usage."
-  }
+  },
+  "theme": "Appearance",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark"
 }

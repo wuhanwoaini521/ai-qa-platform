@@ -13,10 +13,10 @@ interface LiveBrowserPanelProps {
 }
 
 const statusColor = (status: string) => {
-  if (status === 'running') return '#2563eb';
-  if (status === 'passed') return '#16a34a';
-  if (status === 'failed') return '#dc2626';
-  return '#64748b';
+  if (status === 'running') return 'var(--accent-blue)';
+  if (status === 'passed') return 'var(--accent-green)';
+  if (status === 'failed') return 'var(--accent-red)';
+  return 'var(--ink-muted)';
 };
 
 export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, frames, runStatus, streamStatus, streamError }) => {
@@ -74,7 +74,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
           <span className="card-title">{t('liveBrowsers')}</span>
           {streamStatus === 'reconnecting' && <span role="status" className="badge badge-draft">{t('streamReconnecting')}</span>}
         </div>
-        <div className="card-body" role={streamError ? 'alert' : 'status'} style={{ padding: 20, color: streamError ? '#dc2626' : 'var(--text-muted)', textAlign: 'center' }}>
+        <div className="card-body" role={streamError ? 'alert' : 'status'} style={{ padding: 20, color: streamError ? 'var(--accent-red)' : 'var(--text-muted)', textAlign: 'center' }}>
           {streamError || (waiting ? t('waitingBrowserSession') : t('noBrowserSessions'))}
         </div>
       </section>
@@ -87,7 +87,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
     <section className="card" aria-label={t('liveBrowsers')} style={{ overflow: 'hidden' }}>
       <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <MonitorPlay size={16} color="#2563eb" />
+          <MonitorPlay size={16} color="var(--accent-blue)" />
           <span className="card-title">{t('liveBrowsers')}</span>
           <span className="badge badge-draft">{ordered.length}</span>
           {selected?.status !== 'running' && frame && <span className="badge badge-draft">{t('lastCapturedFrame')}</span>}
@@ -104,7 +104,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
       </div>
       {!minimized && (
         <div className="card-body" style={{ padding: 12 }}>
-          {streamError && <div role="alert" style={{ color: '#dc2626', marginBottom: 10 }}>{streamError}</div>}
+          {streamError && <div role="alert" style={{ color: 'var(--accent-red)', marginBottom: 10 }}>{streamError}</div>}
           <div role="tablist" aria-label={t('browserWorkers')} style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10 }}>
             {ordered.map((session) => (
               <button
@@ -114,10 +114,10 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
                 aria-selected={selected?.browser_session_id === session.browser_session_id}
                 onClick={() => setSelectedId(session.browser_session_id)}
                 style={{
-                  flex: '0 0 auto', padding: '7px 10px', borderRadius: 6,
-                  border: selected?.browser_session_id === session.browser_session_id ? '1px solid #60a5fa' : '1px solid var(--border-color)',
-                  background: selected?.browser_session_id === session.browser_session_id ? '#eff6ff' : 'var(--surface-color, #fff)',
-                  color: 'var(--text-color, #0f172a)', textAlign: 'left', cursor: 'pointer',
+                  flex: '0 0 auto', padding: '7px 10px', borderRadius: 'var(--r-xs)',
+                  border: selected?.browser_session_id === session.browser_session_id ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                  background: selected?.browser_session_id === session.browser_session_id ? 'var(--accent-blue-soft)' : 'var(--surface-raised)',
+                  color: 'var(--ink)', textAlign: 'left', cursor: 'pointer',
                 }}
                 >
                 <strong>{session.worker_id}</strong> · {session.case_name || session.nodeid.split('::').pop()}
@@ -130,11 +130,11 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
           </div>
           {selected && (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(180px, 1fr)', gap: 12 }}>
-              <div style={{ minWidth: 0, background: '#0f172a', borderRadius: 8, minHeight: expanded ? 540 : 260, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+              <div style={{ minWidth: 0, background: 'var(--surface-inverse)', borderRadius: 'var(--r-sm)', minHeight: expanded ? 540 : 260, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 {frame ? (
                   <img src={frame} alt={`${selected.case_name} ${selected.status === 'running' ? 'live browser' : 'last captured browser frame'}`} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />
                 ) : (
-                  <div style={{ color: '#cbd5e1', textAlign: 'center', padding: 20, fontSize: 13 }}>
+                  <div style={{ color: 'var(--ink-faint)', textAlign: 'center', padding: 20, fontSize: 13 }}>
                     {snapshotFailed ? t('browserSnapshotLoadFailed') : snapshotId ? t('loadingBrowserSnapshot') : selected.status === 'running' ? t('waitingBrowserFrame') : t('browserFrameUnavailable')}
                   </div>
                 )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAIProgress } from '../../runtime/useAIProgress';
 import { api } from '../../../api/client';
 import {
   Requirement,
@@ -15,26 +16,43 @@ interface UseRequirementAIOptions {
   onDesignCreated: (design: TestDesign) => void;
 }
 
-export function useRequirementAI({ selectedReq, onDesignCreated }: UseRequirementAIOptions) {
+export function useRequirementAI({
+  selectedReq,
+  onDesignCreated,
+}: UseRequirementAIOptions) {
   const [isAiAnalysisOpen, setIsAiAnalysisOpen] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState<RequirementAnalysisDTO | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<RequirementAnalysisDTO | null>(
+    null,
+  );
   const [analyzingReq, setAnalyzingReq] = useState(false);
 
   const [isAiDesignModalOpen, setIsAiDesignModalOpen] = useState(false);
-  const [suggestedDesigns, setSuggestedDesigns] = useState<TestDesignSuggestion[]>([]);
+  const [suggestedDesigns, setSuggestedDesigns] = useState<
+    TestDesignSuggestion[]
+  >([]);
   const [generatingDesigns, setGeneratingDesigns] = useState(false);
 
   const [isAiCaseModalOpen, setIsAiCaseModalOpen] = useState(false);
-  const [suggestedCases, setSuggestedCases] = useState<TestCaseGenerationItem[]>([]);
+  const [suggestedCases, setSuggestedCases] = useState<
+    TestCaseGenerationItem[]
+  >([]);
   const [generatingCases, setGeneratingCases] = useState(false);
-  const [activeDesignForCases, setActiveDesignForCases] = useState<TestDesign | null>(null);
+  const [activeDesignForCases, setActiveDesignForCases] =
+    useState<TestDesign | null>(null);
+
+  const analysisProgress = useAIProgress(selectedReq?.id ?? null);
+  const designProgress = useAIProgress(selectedReq?.id ?? null);
+  const caseProgress = useAIProgress(selectedReq?.id ?? null);
 
   const handleAnalyzeRequirementAI = async () => {
     if (!selectedReq) return;
     try {
       setAnalyzingReq(true);
+      setAiAnalysis(null);
       setIsAiAnalysisOpen(true);
-      const res = await api.analyzeRequirement(selectedReq.id);
+      const res = await analysisProgress.execute((onEvent, signal) =>
+        api.streamRequirementAnalysis(selectedReq.id, onEvent, signal),
+      );
       setAiAnalysis(res);
     } catch (err) {
       console.error('AI Requirement analysis failed', err);
@@ -47,8 +65,11 @@ export function useRequirementAI({ selectedReq, onDesignCreated }: UseRequiremen
     if (!selectedReq) return;
     try {
       setGeneratingDesigns(true);
+      setSuggestedDesigns([]);
       setIsAiDesignModalOpen(true);
-      const res = await api.generateTestDesigns(selectedReq.id);
+      const res = await designProgress.execute((onEvent, signal) =>
+        api.streamTestDesigns(selectedReq.id, onEvent, signal),
+      );
       setSuggestedDesigns(res);
     } catch (err) {
       console.error('AI Test Design generation failed', err);
@@ -69,7 +90,9 @@ export function useRequirementAI({ selectedReq, onDesignCreated }: UseRequiremen
         status: 'DRAFT',
       });
       onDesignCreated(created);
-      setSuggestedDesigns(suggestedDesigns.filter((s) => s.title !== suggestion.title));
+      setSuggestedDesigns(
+        suggestedDesigns.filter((s) => s.title !== suggestion.title),
+      );
     } catch (err) {
       console.error('Failed to adopt test design', err);
     }
@@ -79,8 +102,11 @@ export function useRequirementAI({ selectedReq, onDesignCreated }: UseRequiremen
     try {
       setActiveDesignForCases(design);
       setGeneratingCases(true);
+      setSuggestedCases([]);
       setIsAiCaseModalOpen(true);
-      const res = await api.generateTestCases(design.id);
+      const res = await caseProgress.execute((onEvent, signal) =>
+        api.streamTestCases(design.id, onEvent, signal),
+      );
       setSuggestedCases(res);
     } catch (err) {
       console.error('AI Test Case generation failed', err);
@@ -112,6 +138,9 @@ export function useRequirementAI({ selectedReq, onDesignCreated }: UseRequiremen
   };
 
   return {
+    analysisProgress,
+    designProgress,
+    caseProgress,
     isAiAnalysisOpen,
     setIsAiAnalysisOpen,
     aiAnalysis,

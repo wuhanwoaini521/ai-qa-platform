@@ -127,7 +127,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     onInsertFallback: editor.updateContent,
     caseId: query.get('caseId'),
   });
-  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns });
+  const failureId = query.get('failureId');
+  const parentRunId = query.get('parentRunId');
+  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
   useEffect(()=>{if(run.activeRunId)setShowBrowser(true);},[run.activeRunId]);
   const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
   const selectedTarget=linkedCase?.binding?.file_path===editor.activeTabPath?linkedCase.binding.nodeid:undefined;
@@ -328,7 +330,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
-      <div className="lc-preset-bar"><Link to={`/projects/${currentProjectId}`}>{projects.find(p=>p.id===currentProjectId)?.name}</Link><span>/ Studio</span>{linkedCase&&<Link to={`/projects/${currentProjectId}/test-cases/${linkedCase.id}`}>{linkedCase.test_model?.display_id||linkedCase.title}</Link>}
+      <div className="lc-preset-bar"><Link to={`/projects/${currentProjectId}`}>{projects.find(p=>p.id===currentProjectId)?.name}</Link><span>/ Studio</span>{failureId && <Link className="btn btn-secondary btn-sm" to={`/failures/${encodeURIComponent(failureId)}`}>返回失败详情</Link>}{linkedCase&&<Link to={`/projects/${currentProjectId}/test-cases/${linkedCase.id}`}>{linkedCase.test_model?.display_id||linkedCase.title}</Link>}
         <span className="lc-muted">{lc('preset')}</span>{['code','debug','review'].map(view=><button key={view} className={`btn btn-sm ${preset===view?'btn-primary':'btn-secondary'}`} onClick={()=>setQuery({...Object.fromEntries(query),preset:view})}>{view==='code'?'Code':view==='debug'?'Debug':'Review'}</button>)}
         <button className="btn btn-secondary btn-sm" onClick={()=>setShowFiles(v=>!v)} aria-pressed={showFiles}>{lc('sourceDocument')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowContext(v=>!v)} aria-pressed={showContext}>{lc('context')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowBrowser(v=>!v)} aria-pressed={showBrowser}>{lc('browser')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowAssistant(v=>!v)} aria-pressed={showAssistant}>{lc('assistant')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowCommands(true)}>{lc('commands')} ⌃K</button>
       </div>
