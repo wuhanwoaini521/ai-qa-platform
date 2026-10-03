@@ -106,3 +106,8 @@ runtime/pytest-reports/*
 /runtime/uv-cache/
 /output/pytest-*/
 /output/playwright/
+
+# Local V2 acceptance backups, logs and isolated databases
+/runtime/platform-v2-*/
+/runtime/platform-v2-*.log
+/runtime/ui-review/

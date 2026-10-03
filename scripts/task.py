@@ -213,27 +213,39 @@ def task_dev() -> int:
     # Playwright's async driver uses asyncio subprocesses, which SelectorEventLoop does not
     # support on Windows. Run the API without hot reload there so recorder sessions and browser
     # automation use the default ProactorEventLoop. POSIX keeps the usual reload workflow.
-    api_reload_args = (
-        []
-        if IS_WINDOWS
-        else ["--reload", "--reload-dir", "apps/api", "--reload-dir", "packages"]
-    )
+    api_reload_args = [] if IS_WINDOWS else ["--reload", "--reload-dir", "apps/api", "--reload-dir", "packages"]
     if IS_WINDOWS:
         log("Windows: API hot reload is disabled because Playwright requires ProactorEventLoop.")
     services = [
         (
             "api",
             command(
-                "uv", "run", "uvicorn", "app.main:app", "--app-dir", "apps/api", *api_reload_args,
-                "--host", "127.0.0.1", "--port", str(api_port),
+                "uv",
+                "run",
+                "uvicorn",
+                "app.main:app",
+                "--app-dir",
+                "apps/api",
+                *api_reload_args,
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(api_port),
             ),
             {},
         ),
         (
             "web",
             command(
-                "pnpm", "--filter", "@ai-qa/web", "dev",
-                "--host", "127.0.0.1", "--port", str(web_port), "--strictPort",
+                "pnpm",
+                "--filter",
+                "@ai-qa/web",
+                "dev",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(web_port),
+                "--strictPort",
             ),
             {"VITE_DEV_API_TARGET": f"http://127.0.0.1:{api_port}"},
         ),
