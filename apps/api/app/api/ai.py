@@ -58,7 +58,7 @@ async def test_ai_provider_connection(
     _user: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
     service: AISettingsService = Depends(get_ai_settings_service),
 ):
-    return await service.test_connection(update)
+    return await service.test_connection(update, verify_structured_output=True)
 
 
 def get_ai_service(session: AsyncSession = Depends(get_db)) -> AIService:

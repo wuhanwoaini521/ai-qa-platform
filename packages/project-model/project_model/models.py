@@ -585,6 +585,7 @@ class AIProviderConnectionResult(BaseModel):
     message: str
     model: str
     streaming: bool = False
+    structured_output_supported: bool | None = None
     latency_ms: float | None = None
     checked_at: datetime = Field(default_factory=utc_now)
 

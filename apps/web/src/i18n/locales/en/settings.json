@@ -11,7 +11,7 @@
   "storageNote": "Language, start page and default project stay in this browser; AI provider settings are stored on the server.",
   "aiConfig": {
     "title": "General AI provider",
-    "description": "Used by the QA Assistant, requirement analysis, test generation and failure diagnosis. This configuration is separate from Jev decisions. The API key is encrypted on the server.",
+    "description": "Used by the QA Assistant, requirement analysis, test generation and failure diagnosis. This configuration is separate from Jev decisions. The API key is encrypted on the server. Connection testing checks streaming and structured JSON output.",
     "loading": "Loading AI settings…",
     "loadFailed": "Could not load AI settings. Check the service status.",
     "provider": "Provider",
@@ -92,6 +92,9 @@
     "error": "Unavailable",
     "streamingVerified": "Streaming response verified",
     "streamingUnverified": "Streaming not verified",
+    "structuredOutputVerified": "Structured JSON output verified",
+    "structuredOutputFailed": "Structured JSON output failed",
+    "structuredOutputNotChecked": "Structured JSON output not checked",
     "components": {
       "database": "Database",
       "ai": "AI provider",

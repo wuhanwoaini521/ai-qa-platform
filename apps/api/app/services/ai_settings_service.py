@@ -4,6 +4,9 @@ import asyncio
 import hashlib
 import time
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 from project_model.models import (
     AIProviderConnectionResult,
@@ -14,7 +17,7 @@ from project_model.models import (
     AIStatusResponse,
 )
 from qa_core.ai.models import AICompletionRequest, ProviderHealth
-from qa_core.ai.provider import FakeAIProvider, OpenAICompatibleProvider
+from qa_core.ai.provider import FakeAIProvider, OpenAICompatibleProvider, clean_json_text
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
 
@@ -25,6 +28,10 @@ from app.settings import settings
 
 _health_lock = asyncio.Lock()
 _health_cache: tuple[str, float, AIStatusResponse] | None = None
+
+
+class _StructuredOutputProbe(BaseModel):
+    json_mode: Literal[True]
 
 
 @dataclass(frozen=True)
@@ -180,10 +187,16 @@ class AISettingsService:
             max_task_calls=update.max_task_calls,
         )
 
-    async def test_connection(self, update: AIProviderSettingsUpdate | None = None) -> AIProviderConnectionResult:
+    async def test_connection(
+        self,
+        update: AIProviderSettingsUpdate | None = None,
+        *,
+        verify_structured_output: bool = False,
+    ) -> AIProviderConnectionResult:
         config = await self._config_for_update(update) if update else await self._effective_config()
         started = time.perf_counter()
         streaming = False
+        structured_output_supported: bool | None = None
         if config.provider == "fake":
             health = await FakeAIProvider(model=config.model).check_health()
         else:
@@ -207,6 +220,7 @@ class AISettingsService:
                     async for chunk in guarded.stream_complete(
                         AICompletionRequest(
                             prompt="Reply with OK. This is a synthetic connectivity probe.",
+                            system_instruction="Reply with OK.",
                             prompt_id="provider_connection",
                             prompt_version="v1.0",
                             max_tokens=16,
@@ -218,6 +232,31 @@ class AISettingsService:
                 except Exception as error:
                     health.status = ProviderHealth.UNAVAILABLE
                     health.message = f"Model streaming probe failed ({type(error).__name__})."
+            if (
+                verify_structured_output
+                and config.provider != "fake"
+                and health.status == ProviderHealth.AVAILABLE
+            ):
+                try:
+                    response = await guarded.complete(
+                        AICompletionRequest(
+                            prompt='Return exactly one JSON object with the property "json_mode" set to true.',
+                            system_instruction="Return only the requested JSON object, with no prose or Markdown.",
+                            prompt_id="provider_structured_output_probe",
+                            prompt_version="v1.0",
+                            max_tokens=32,
+                            response_schema=_StructuredOutputProbe,
+                        )
+                    )
+                    if response.structured_data is not None:
+                        _StructuredOutputProbe.model_validate(response.structured_data)
+                    else:
+                        _StructuredOutputProbe.model_validate_json(clean_json_text(response.content))
+                    structured_output_supported = True
+                    health.message = "Model returned valid structured JSON to a synthetic completion probe."
+                except Exception as error:
+                    structured_output_supported = False
+                    health.message = f"Model structured JSON probe failed ({type(error).__name__})."
         return AIProviderConnectionResult(
             connected=health.status in (ProviderHealth.AVAILABLE, ProviderHealth.FALLBACK_ONLY),
             provider=health.provider,
@@ -225,6 +264,7 @@ class AISettingsService:
             message=health.message,
             model=health.model,
             streaming=streaming,
+            structured_output_supported=structured_output_supported,
             latency_ms=(time.perf_counter() - started) * 1000,
         )
 

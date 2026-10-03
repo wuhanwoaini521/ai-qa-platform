@@ -247,7 +247,7 @@ export const SettingsPage: React.FC = () => {
               {aiSettings.api_key_configured && <button type="button" className="btn btn-secondary btn-sm" disabled={savingAI} onClick={() => void saveAI(true)}>{t('aiConfig.clearKey')}</button>}
             </div>
             {aiMessage && <p role="status" style={{ fontSize: '12px', marginTop: '12px' }}>{aiMessage}</p>}
-            {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status} · {t(aiConnection.streaming ? 'health.streamingVerified' : 'health.streamingUnverified')} · {Math.round(aiConnection.latency_ms ?? 0)} ms</p>}
+            {aiConnection && <p role="status" style={{ color: aiConnection.connected && aiConnection.structured_output_supported !== false ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '12px', marginTop: '12px' }}>{aiConnection.message} · {aiConnection.provider} / {aiConnection.status} · {t(aiConnection.streaming ? 'health.streamingVerified' : 'health.streamingUnverified')} · {t(aiConnection.structured_output_supported === true ? 'health.structuredOutputVerified' : aiConnection.structured_output_supported === false ? 'health.structuredOutputFailed' : 'health.structuredOutputNotChecked')} · {Math.round(aiConnection.latency_ms ?? 0)} ms</p>}
           </>}
         </div>
       </div>

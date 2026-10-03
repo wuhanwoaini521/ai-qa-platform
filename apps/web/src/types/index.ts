@@ -694,6 +694,7 @@ export interface AIProviderSettingsUpdate {
 
 export interface AIProviderConnectionResult {
   streaming: boolean;
+  structured_output_supported?: boolean | null;
   latency_ms?: number | null;
   checked_at: string;
   connected: boolean;

@@ -11,7 +11,7 @@
   "storageNote": "界面语言、落地页和默认项目仅保存在当前浏览器；AI 提供方配置保存在服务端。",
   "aiConfig": {
     "title": "常规 AI 提供方",
-    "description": "供 QA 助手、需求分析、用例生成与失败诊断等普通 AI 功能使用，与 Jev 决策配置分开。密钥在服务端加密保存。",
+    "description": "供 QA 助手、需求分析、用例生成与失败诊断等普通 AI 功能使用，与 Jev 决策配置分开。密钥在服务端加密保存。测试连接会检查流式响应和结构化 JSON 输出。",
     "loading": "正在读取 AI 设置…",
     "loadFailed": "读取 AI 设置失败，请检查服务状态。",
     "provider": "提供方",
@@ -92,6 +92,9 @@
     "error": "不可用",
     "streamingVerified": "流式响应已实测",
     "streamingUnverified": "尚未验证流式响应",
+    "structuredOutputVerified": "结构化 JSON 输出已实测",
+    "structuredOutputFailed": "结构化 JSON 输出未通过",
+    "structuredOutputNotChecked": "尚未验证结构化 JSON 输出",
     "components": {
       "database": "数据库",
       "ai": "常规 AI",
