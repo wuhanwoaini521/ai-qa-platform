@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from project_model.models import (
     AIProviderConnectionResult,
     AIProviderSettingsResponse,
@@ -27,6 +28,7 @@ from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.ai_service import AIService
 from app.services.ai_settings_service import AISettingsService
+from app.services.operation_trace import stream_operation
 
 router = APIRouter(prefix="/ai", tags=["Production AI Intelligence"])
 
@@ -153,3 +155,26 @@ async def generate_test_cases(
             status_code=502,
             detail=f"AI Test Case Generation failed ({type(e).__name__}). See AI Usage for invocation status.",
         )
+
+
+@router.post("/requirements/{requirement_id}/analyze/stream")
+async def stream_requirement_analysis(requirement_id: str, service: AIService = Depends(get_ai_service)):
+    return StreamingResponse(
+        stream_operation(lambda: service.analyze_requirement(requirement_id), "分析需求"),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/requirements/{requirement_id}/generate-designs/stream")
+async def stream_design_generation(requirement_id: str, service: AIService = Depends(get_ai_service)):
+    return StreamingResponse(
+        stream_operation(lambda: service.generate_test_designs(requirement_id), "生成测试设计"),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/test-designs/{design_id}/generate-cases/stream")
+async def stream_case_generation(design_id: str, service: AIService = Depends(get_ai_service)):
+    return StreamingResponse(
+        stream_operation(lambda: service.generate_test_cases(design_id), "生成测试用例"), media_type="text/event-stream"
+    )

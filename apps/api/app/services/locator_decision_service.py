@@ -283,6 +283,22 @@ class LocatorDecisionService:
                         selected_id = candidate["candidate_id"]
                         engine = "Local Strategy"
                         fallback_reason = "selected_candidate_failed_verification"
+                        if actual_jev:
+                            await emit(
+                                "decision.fallback",
+                                "Fallback to Local Strategy",
+                                stage="decision",
+                                metadata={
+                                    "provider": "local-strategy",
+                                    "candidate_id": selected_id,
+                                    "selected_locator": selected["locator"],
+                                    "candidate_count": len(candidates),
+                                    "confidence": None,
+                                    "verified": True,
+                                    "fallback_used": True,
+                                    "fallback_reason": fallback_reason,
+                                },
+                            )
                     break
 
         if selected is not None and page is not None and verified_candidate is None:
@@ -293,7 +309,10 @@ class LocatorDecisionService:
             verification["verified"] = False
 
         await emit(
-            "diagnosis_completed", "Locator decision analysis completed", stage="analysis", metadata={"engine": engine}
+            "diagnosis_completed",
+            "Locator decision analysis completed",
+            stage="analysis",
+            metadata={"engine": engine, "fallback_reason": None if engine == "Jev" else fallback_reason},
         )
         elapsed = round((time.perf_counter() - started) * 1000, 1)
         await emit(

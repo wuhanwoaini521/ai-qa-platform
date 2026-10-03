@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from project_model.models import (
     AutomationBinding,
     AutomationBindingCreate,
@@ -13,6 +14,7 @@ from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.automation_binding_service import AutomationBindingService
+from app.services.operation_trace import stream_operation
 from app.services.test_case_service import TestCaseService
 from app.services.workspace_service import WorkspaceService
 
@@ -30,6 +32,21 @@ def get_binding_service(session: AsyncSession = Depends(get_db)) -> AutomationBi
     workspace_repo = WorkspaceRepository(session)
     workspace_service = WorkspaceService()
     return AutomationBindingService(binding_repo, test_case_repo, workspace_repo, workspace_service)
+
+
+@router.post("/{case_id}/generate-automation/stream")
+async def stream_automation_generation(case_id: str, service: AutomationBindingService = Depends(get_binding_service)):
+    async def generate():
+        binding, code = await service.generate_automation_draft(case_id)
+        return {
+            "test_case_id": case_id,
+            "target_file": binding.file_path,
+            "suggested_code": code,
+            "grounded_knowledge": [],
+            "page_objects": [],
+        }
+
+    return StreamingResponse(stream_operation(generate, "生成自动化草稿"), media_type="text/event-stream")
 
 
 @router.get("", response_model=list[TestCase])

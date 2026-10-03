@@ -83,8 +83,9 @@ async def test_status_is_shared_and_requires_streamed_model_response(test_db_ses
     monkeypatch.setattr(AISettingsService, "test_connection", discovery_only)
     unavailable = await service.get_status(refresh=True)
     assert unavailable.real_model_available is False
-    assert unavailable.operational_state == "FALLBACK_ONLY"
-    assert unavailable.fallback_active is True
+    assert unavailable.operational_state == "UNAVAILABLE"
+    assert unavailable.status == "UNAVAILABLE"
+    assert unavailable.fallback_active is False
 
 
 @pytest.mark.asyncio

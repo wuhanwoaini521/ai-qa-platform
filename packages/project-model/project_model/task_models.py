@@ -183,6 +183,8 @@ class Task(BaseModel):
 class TaskDetail(Task):
     steps: list[TaskStep] = Field(default_factory=list)
     events: list[TaskEvent] = Field(default_factory=list)
+    events_truncated: bool = False
+    event_cursor: int = 0
 
 
 class TaskApprovalRequest(BaseModel):

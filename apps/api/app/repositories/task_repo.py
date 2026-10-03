@@ -49,6 +49,15 @@ class TaskRepository:
         stmt = select(TaskStepORM).where(TaskStepORM.task_id == task_id).order_by(TaskStepORM.position)
         return list((await self.session.execute(stmt)).scalars().all())
 
+    async def get_steps_for_tasks(self, task_ids: list[str]) -> dict[str, list[TaskStepORM]]:
+        if not task_ids:
+            return {}
+        stmt = select(TaskStepORM).where(TaskStepORM.task_id.in_(task_ids)).order_by(TaskStepORM.task_id, TaskStepORM.position)
+        grouped: dict[str, list[TaskStepORM]] = {}
+        for step in (await self.session.execute(stmt)).scalars():
+            grouped.setdefault(step.task_id, []).append(step)
+        return grouped
+
     async def get_detail(self, task: TaskORM) -> TaskDetail:
         steps = await self.get_steps(task.id)
         evidence_rows = list(
@@ -87,7 +96,10 @@ class TaskRepository:
         event_rows = list(
             (
                 await self.session.execute(
-                    select(TaskEventORM).where(TaskEventORM.task_id == task.id).order_by(TaskEventORM.id)
+                    select(TaskEventORM)
+                    .where(TaskEventORM.task_id == task.id)
+                    .order_by(TaskEventORM.id.desc())
+                    .limit(501)
                 )
             )
             .scalars()
@@ -129,7 +141,9 @@ class TaskRepository:
                 )
                 for row in decision_rows
             ],
-            events=[TaskEvent.model_validate(row, from_attributes=True) for row in event_rows],
+            events=[TaskEvent.model_validate(row, from_attributes=True) for row in reversed(event_rows[:500])],
+            events_truncated=len(event_rows) > 500,
+            event_cursor=event_rows[0].id if event_rows else 0,
         )
 
     async def list(self, owner_id: str, project_id: str | None = None, limit: int = 50) -> list[TaskORM]:
@@ -186,7 +200,15 @@ class TaskRepository:
         return step
 
     async def add_event(self, task_id: str, event_type: str, payload: dict[str, Any] | None = None) -> TaskEventORM:
-        event = TaskEventORM(task_id=task_id, type=event_type, payload=payload or {})
+        payload = payload or {}
+        step_id = payload.get("step_id")
+        if isinstance(step_id, str):
+            step = await self.session.get(TaskStepORM, step_id)
+            if step is None or step.task_id != task_id:
+                step_id = None
+        else:
+            step_id = None
+        event = TaskEventORM(task_id=task_id, step_id=step_id, type=event_type, payload=payload)
         self.session.add(event)
         await self.session.flush()
         return event

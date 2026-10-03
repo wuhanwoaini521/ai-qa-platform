@@ -67,8 +67,8 @@ class AIProviderRegistry:
                 timeout=timeout,
                 max_retries=max_retries,
             )
-            # Wrap in Fallback with Fake provider backup so platform runs never break
-            return FallbackAIProvider(primary=primary, fallbacks=[FakeAIProvider()])
+            # A real provider outage must remain visible; simulated output is opt-in only.
+            return FallbackAIProvider(primary=primary, fallbacks=[])
 
         if provider_name in cls._factories:
             return cls._factories[provider_name]()

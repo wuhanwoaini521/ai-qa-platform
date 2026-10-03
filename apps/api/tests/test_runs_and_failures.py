@@ -11,6 +11,7 @@ from app.persistence.models import (
     FailureRecordORM,
     RunnerProfileORM,
     TestExecutionORM,
+    TestRunORM,
     utc_now,
 )
 from app.repositories.test_run_repo import TestRunRepository
@@ -1099,3 +1100,35 @@ def test_run_verdict_never_invents_a_pass_from_an_empty_result_set():
     assert service._verdict(1, 3, 1) is RunStatus.FAILED
     # non-zero exit with results parsed is a failure even if the counter disagrees
     assert service._verdict(1, 2, 0) is RunStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_run_stream_updates_equal_length_rolling_log(client, test_db_session):
+    project = (await client.post("/api/projects", json={"name": "Rolling stream"})).json()
+    async with test_db_session() as session:
+        repository = TestRunRepository(session)
+        run = await repository.create_run(TestRunCreate(project_id=project["id"], workspace_id=project["id"]))
+        run.log_output = "a" * 19996 + "old!"
+        await session.commit()
+        service = TestRunService(repository, WorkspaceRepository(session), WorkspaceService())
+        stream = service.event_generator(run.id)
+        try:
+            while True:
+                event = await asyncio.wait_for(anext(stream), timeout=3)
+                if event["type"] == "LOG_STREAM":
+                    break
+            assert event["replace"] is True
+            assert event["log"].endswith("old!")
+            async with test_db_session() as worker:
+                row = await worker.get(TestRunORM, run.id)
+                row.log_output = "a" * 19996 + "new!"
+                await worker.commit()
+            while True:
+                updated = await asyncio.wait_for(anext(stream), timeout=3)
+                if updated["type"] == "LOG_STREAM":
+                    break
+            assert updated["replace"] is True
+            assert len(updated["log"]) == 20000 and updated["log"].endswith("new!")
+        finally:
+            await stream.aclose()
+        assert run.id not in event_bus._subscribers

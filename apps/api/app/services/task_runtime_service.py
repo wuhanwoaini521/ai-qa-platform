@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import difflib
+import hashlib
 import json
 import logging
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -59,6 +62,8 @@ from app.services.browser_proxy import browser_proxy_options
 from app.services.decision_service import DecisionService
 from app.services.task_workflows import build_plan
 from app.services.workspace_service import WorkspaceService
+
+active_runtime_step: ContextVar[str | None] = ContextVar("active_runtime_step", default=None)
 
 logger = logging.getLogger("app.task_runtime")
 
@@ -266,10 +271,11 @@ class TaskRuntimeService:
         async with async_session_factory() as session:
             repo = TaskRepository(session)
             rows = await repo.list(owner_id, project_id=project_id, limit=limit)
+            steps = await repo.get_steps_for_tasks([row.id for row in rows])
             return [
                 Task(
                     **repo.task_values(row),
-                    plan=[TaskStep.model_validate(step, from_attributes=True) for step in await repo.get_steps(row.id)],
+                    plan=[TaskStep.model_validate(step, from_attributes=True) for step in steps.get(row.id, [])],
                 )
                 for row in rows
             ]
@@ -544,7 +550,7 @@ class TaskRuntimeService:
                 await session.commit()
 
             try:
-                outputs = await self._run_tool(task.id, step.key, step.tool)
+                outputs = await self._run_step_tool(task.id, step)
             except ApprovalRequired:
                 async with async_session_factory() as session:
                     repo = TaskRepository(session)
@@ -1104,10 +1110,19 @@ class TaskRuntimeService:
             finally:
                 await browser.close()
 
+    async def _run_step_tool(self, task_id: str, step: TaskStepORM):
+        token = active_runtime_step.set(step.id)
+        try:
+            return await self._run_tool(task_id, step.key, step.tool)
+        finally:
+            active_runtime_step.reset(token)
+
     async def _record_ai_trace(self, task_id: str, event) -> None:
         async with async_session_factory() as session:
             repo = TaskRepository(session)
             payload = event.model_dump(mode="json") if callable(getattr(event, "model_dump", None)) else event
+            if isinstance(payload, dict):
+                payload = {**payload, "step_id": active_runtime_step.get()}
             await repo.add_event(task_id, "ai.trace", SensitiveRedactor.redact_value(payload))
             await session.commit()
 
@@ -1680,25 +1695,63 @@ class TaskRuntimeService:
 
     async def _request_approval(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         change = outputs.get("generate") or outputs.get("refactor") or outputs.get("repair", {})
+        path = change.get("target_file", change.get("file_path"))
+        if not path:
+            raise TaskBlocked("No source proposal is available for approval.")
+        try:
+            original = await WorkspaceService().read_file(task.workspace_id or "", path)
+        except FileNotFoundError:
+            original = None
+        expected = change.get("old_code", outputs.get("inspect", {}).get("source", original))
+        if original != expected:
+            raise TaskBlocked("Source changed after the proposal was prepared. Replan before approval.")
+        updated = str(change.get("suggested_code", change.get("new_code", "")))
+        diff = "".join(difflib.unified_diff(
+            (original or "").splitlines(keepends=True), updated.splitlines(keepends=True),
+            fromfile=f"a/{path}" if original is not None else "/dev/null", tofile=f"b/{path}",
+        ))
+        if not diff:
+            raise TaskBlocked("The proposal contains no source changes.")
+        artifact = await self._artifact(task, "approval", Path(path).name + ".diff", "PATCH_PROPOSAL", diff.encode(), "text/x-diff")
         summary = {
-            "file_path": change.get("target_file", change.get("file_path")),
+            "file_path": path,
             "change_kind": task.type,
-            "preview": str(change.get("suggested_code", change.get("new_code", "")))[:12000],
+            "preview": diff[:12000],
+            "preview_truncated": len(diff) > 12000,
+            "artifact_id": artifact["artifact_id"],
+            "base_exists": original is not None,
+            "base_sha256": hashlib.sha256(original.encode()).hexdigest() if original is not None else None,
         }
         async with async_session_factory() as session:
             repo = TaskRepository(session)
             row = await repo.get(task.id)
             if row:
                 row.context = {**row.context, "pending_change_summary": summary}
+                await repo.add_artifact(task_id=task.id, step_id=task.current_step_id, **artifact)
                 await repo.add_event(task.id, "step.progress", {"type": "approval.requested", **summary})
                 await session.commit()
         raise ApprovalRequired()
+
+    async def _write_approved_source(self, task: TaskORM, outputs: dict[str, Any], path: str, code: str) -> None:
+        if not self._approval_granted(outputs):
+            raise TaskBlocked("Source cannot be applied without explicit approval.")
+        async with async_session_factory() as session:
+            row = await TaskRepository(session).get(task.id)
+            summary = (row.context or {}).get("pending_change_summary", {}) if row else {}
+        if summary.get("file_path") != path or "base_exists" not in summary:
+            raise TaskBlocked("Approval has no source baseline. Replan and review the Diff.")
+        try:
+            await WorkspaceService().write_file_if_unchanged(
+                task.workspace_id or "", path, code, summary["base_exists"], summary.get("base_sha256")
+            )
+        except FileExistsError as exc:
+            raise TaskBlocked("Source changed while awaiting approval. Existing edits were preserved; replan and review a new Diff.") from exc
 
     async def _write_generated(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         change = outputs.get("generate") or outputs.get("refactor")
         if not change:
             raise TaskBlocked("No approved generated source is available.")
-        await WorkspaceService().write_file(task.workspace_id or "", change["target_file"], change["suggested_code"])
+        await self._write_approved_source(task, outputs, change["target_file"], change["suggested_code"])
         return {
             "written": True,
             "file_path": change["target_file"],
@@ -1800,6 +1853,7 @@ class TaskRuntimeService:
             )
             result = {
                 "id": failure.id,
+                "run_id": failure.run_id,
                 "test_nodeid": failure.test_nodeid,
                 "classification": failure.classification,
                 "exception_type": failure.exception_type,
@@ -2066,7 +2120,7 @@ class TaskRuntimeService:
             raise TaskBlocked("No repair proposal is available to apply.")
         if not self._approval_granted(outputs):
             raise TaskBlocked("Repair cannot be applied without an explicit approval step.")
-        await WorkspaceService().write_file(task.workspace_id or "", proposal["file_path"], proposal["suggested_code"])
+        await self._write_approved_source(task, outputs, proposal["file_path"], proposal["suggested_code"])
         return {
             "written": True,
             "file_path": proposal["file_path"],
@@ -2223,7 +2277,7 @@ class TaskRuntimeService:
                 nodeids = [nodeid]
         if not nodeids:
             raise TaskBlocked("Targeted verification requires nodeids or failure_id.")
-        return await self._execute_pytest(task, nodeids[:100])
+        return await self._execute_pytest(task, nodeids[:100], parent_run_id=outputs.get("collect", {}).get("run_id"))
 
     async def _run_regression(self, task: TaskORM, outputs: dict[str, Any]) -> dict[str, Any]:
         nodeids = self._input(task, "regression_nodeids", []) or self._input(task, "nodeids", [])
@@ -2233,9 +2287,11 @@ class TaskRuntimeService:
             nodeids = [item.strip() for item in nodeids.splitlines() if item.strip()]
         if not nodeids:
             raise TaskBlocked("Regression node IDs were not resolved.")
-        return await self._execute_pytest(task, nodeids[:100])
+        return await self._execute_pytest(task, nodeids[:100], parent_run_id=outputs.get("collect", {}).get("run_id"))
 
-    async def _execute_pytest(self, task: TaskORM, nodeids: list[str]) -> dict[str, Any]:
+    async def _execute_pytest(
+        self, task: TaskORM, nodeids: list[str], *, parent_run_id: str | None = None
+    ) -> dict[str, Any]:
         if not task.project_id or not task.workspace_id:
             raise TaskBlocked("Test execution requires project_id and workspace_id.")
         from app.api.runs import open_run_service
@@ -2254,9 +2310,13 @@ class TaskRuntimeService:
             runner_profile_id=self._input(task, "runner_profile_id"),
             environment=environment,
             requested_by=task.owner_id,
+            parent_run_id=(parent_run_id or self._input(task, "run_id"))
+            if task.type == TaskType.FIX_FAILURE.value
+            else None,
+            origin_failure_id=self._input(task, "failure_id") if task.type == TaskType.FIX_FAILURE.value else None,
         )
         async with open_run_service() as service:
-            create_task = asyncio.create_task(service.create_and_execute_run(run_data))
+            create_task = asyncio.create_task(service.create_and_execute_run(run_data, task_id=task.id))
             try:
                 child_run = await asyncio.shield(create_task)
             except asyncio.CancelledError:
@@ -2273,7 +2333,14 @@ class TaskRuntimeService:
             if row:
                 row.context = {**row.context, "run_id": child_run.id}
                 await repo.add_event(
-                    task.id, "step.progress", {"type": "child_run.started", "run_id": child_run.id, "nodeids": nodeids}
+                    task.id,
+                    "step.progress",
+                    {
+                        "type": "child_run.started",
+                        "run_id": child_run.id,
+                        "nodeids": nodeids,
+                        "step_id": active_runtime_step.get(),
+                    },
                 )
                 await session.commit()
 

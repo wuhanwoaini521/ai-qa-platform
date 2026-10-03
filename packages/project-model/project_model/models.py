@@ -434,6 +434,9 @@ class DebugSessionBootstrap(BaseModel):
 class TestRun(EntityBase):
     __test__ = False
     id: str
+    task_id: str | None = None
+    parent_run_id: str | None = None
+    origin_failure_id: str | None = None
     project_id: str
     workspace_id: str
     status: RunStatus = RunStatus.QUEUED
@@ -465,6 +468,8 @@ class TestRun(EntityBase):
 
 
 class TestRunCreate(BaseModel):
+    parent_run_id: str | None = None
+    origin_failure_id: str | None = None
     project_id: str
     workspace_id: str
     nodeids: list[str] = Field(default_factory=list)

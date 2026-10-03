@@ -46,6 +46,7 @@ from app.api.authz import StreamTicketQuerySanitizer, authorize_request
 from app.api.errors import http_error, validation_error
 from app.api.language_service import router as language_service_router
 from app.api.lifecycle import router as lifecycle_router
+from app.api.runtime import router as runtime_router
 from app.persistence.database import engine, init_db
 from app.services.ai_settings_service import AISettingsService
 from app.services.metrics_service import metrics_service
@@ -184,6 +185,7 @@ app.include_router(ai_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 app.include_router(qa_assistant_router, prefix="/api")
 app.include_router(language_service_router, prefix="/api")
+app.include_router(runtime_router, prefix="/api")
 
 
 @app.get("/")

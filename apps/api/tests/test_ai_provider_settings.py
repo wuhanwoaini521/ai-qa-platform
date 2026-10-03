@@ -1,12 +1,42 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from app.persistence.models import AIProviderConfigORM
 from app.services.ai_settings_service import AISettingsService
+from project_model.models import AIProviderConnectionResult
 from qa_core.ai.models import AIStreamChunk, ProviderHealth, ProviderHealthStatus
 from qa_core.ai.provider import FallbackAIProvider, OpenAICompatibleProvider
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
+
+
+@pytest.mark.asyncio
+async def test_unavailable_real_model_does_not_claim_an_active_fallback(monkeypatch):
+    service = AISettingsService()
+
+    async def config():
+        return replace(service._environment_config(), provider="openai-compatible", api_key="")
+
+    async def disconnected():
+        return AIProviderConnectionResult(
+            connected=False,
+            streaming=False,
+            code="KEY_MISSING",
+            message="No model key",
+            provider="openai-compatible",
+            status="UNAVAILABLE",
+            model="test-model",
+        )
+
+    monkeypatch.setattr(service, "_effective_config", config)
+    monkeypatch.setattr(service, "test_connection", disconnected)
+    status = await service.get_status(refresh=True)
+    assert status.status.value == "UNAVAILABLE"
+    assert status.operational_state == "UNAVAILABLE"
+    assert not status.fallback_active
+    assert not status.real_model_available
 
 
 def payload(**overrides):

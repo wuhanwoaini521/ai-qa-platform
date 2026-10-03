@@ -20,6 +20,7 @@ import re
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -38,6 +39,7 @@ class LiveBrowserPlugin:
         self.locator_originals = {}
 
     def emit(self, event):
+        event.setdefault('timestamp',datetime.now(timezone.utc).isoformat())
         event.update({"worker_id": self.worker_id})
         with self.lock:
             self.handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\\n")
@@ -93,9 +95,10 @@ class LiveBrowserPlugin:
         record["recent_steps"] = []
         requests = {}
         def publish(kind, entry):
+            entry.setdefault('timestamp',datetime.now(timezone.utc).isoformat())
             key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[kind]
             record[key].append(entry)
-            del record[key][:-50]
+            del record[key][:-100]
             self.emit({"type": kind, "session_id": record["session_id"], "page_id": record["page_id"],
                 "nodeid": record["nodeid"], "url": getattr(page, "url", ""), "entry": entry})
         def safe_payload(value, depth=0):

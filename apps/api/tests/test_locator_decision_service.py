@@ -72,3 +72,36 @@ async def test_jev_context_and_trace_do_not_receive_url_credentials_or_query_val
     assert "sentinel" not in str(captured["state"])
     assert "password" not in str(captured["state"])
     assert "sentinel" not in str(result["trace"])
+
+
+async def test_jev_verification_failure_keeps_attempt_and_explicit_local_fallback():
+    from playwright.async_api import async_playwright
+
+    class StubDecisionService:
+        async def choose(self, request, **kwargs):
+            return DecisionResult(provider="jev", model="test-only", choice="candidate_1", confidence=0.9)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        try:
+            page = await browser.new_page()
+            await page.set_content('<button>Save</button><button id="help">Help</button>')
+            service = LocatorDecisionService(decision_service=StubDecisionService())
+            candidates = service.generate_candidates(
+                {"candidates": [{"kind": "role", "value": "button"}, {"kind": "id", "value": "help"}]}
+            )
+            result = await service.decide(
+                run_id="trace-test", event={"action": "click"}, candidates=candidates, page=page
+            )
+            trace = result["trace"]
+            assert any(
+                event["type"] == "decision_completed" and event["metadata"]["provider"] == "jev" for event in trace
+            )
+            assert any(
+                event["type"] == "verification_completed" and event["metadata"]["verified"] is False for event in trace
+            )
+            fallback = next(event for event in trace if event["type"] == "decision.fallback")
+            assert fallback["metadata"]["provider"] == "local-strategy" and fallback["metadata"]["verified"] is True
+            assert result["summary"]["provider"] == "local-strategy" and result["summary"]["confidence"] is None
+        finally:
+            await browser.close()

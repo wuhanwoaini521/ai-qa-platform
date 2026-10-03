@@ -186,6 +186,25 @@ class WorkspaceService:
         async with aiofiles.open(target, "w", encoding="utf-8") as f:
             await f.write(content)
 
+    async def write_file_if_unchanged(
+        self, workspace_id: str, relative_path: str, content: str, expected_exists: bool, expected_sha256: str | None
+    ) -> None:
+        """Optimistic source guard; check and write without yielding to another API writer."""
+        import hashlib
+
+        target = self._resolve_safe_file_path(workspace_id, relative_path)
+        exists = target.exists()
+        if exists != expected_exists or (exists and not target.is_file()):
+            raise FileExistsError("Approved source baseline changed")
+        if exists:
+            current = target.read_text(encoding="utf-8", errors="replace")
+            if hashlib.sha256(current.encode()).hexdigest() != expected_sha256:
+                raise FileExistsError("Approved source baseline changed")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Exclusive creation also protects a new path created by an external editor.
+        with target.open("w" if expected_exists else "x", encoding="utf-8") as stream:
+            stream.write(content)
+
     async def create_file_or_dir(
         self, workspace_id: str, relative_path: str, is_directory: bool = False, content: str = ""
     ) -> str:

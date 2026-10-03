@@ -592,7 +592,7 @@ class FallbackAIProvider:
 
     def __init__(self, primary: AIProvider, fallbacks: list[AIProvider] | None = None) -> None:
         self.primary = primary
-        self.fallbacks = fallbacks or [FakeAIProvider()]
+        self.fallbacks = list(fallbacks) if fallbacks is not None else []
 
     async def check_health(self) -> ProviderHealthStatus:
         primary_health = await self.primary.check_health()
@@ -613,6 +613,8 @@ class FallbackAIProvider:
         try:
             return await self.primary.complete(request)
         except Exception as e:
+            if not self.fallbacks:
+                raise
             logger.warning(
                 "Primary AI provider failed: %s. Engaging fallback chain.",
                 SensitiveRedactor.redact_text(str(e)),

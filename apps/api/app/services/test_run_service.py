@@ -8,7 +8,7 @@ import os
 import re
 import tempfile
 from collections import OrderedDict
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -185,6 +185,9 @@ class TestRunService:
         artifacts = [self._to_artifact_dto(a) for a in (getattr(orm, "external_artifacts", []) or [])]
         return TestRun(
             id=orm.id,
+            task_id=orm.task_id,
+            parent_run_id=orm.parent_run_id,
+            origin_failure_id=orm.origin_failure_id,
             project_id=orm.project_id,
             workspace_id=orm.workspace_id,
             status=RunStatus(orm.status),
@@ -249,7 +252,7 @@ class TestRunService:
             return None
         return self._to_run_dto(orm)
 
-    async def create_and_execute_run(self, data: TestRunCreate) -> TestRun:
+    async def create_and_execute_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRun:
         from app.services.golden_demo_service import DEMO_ID, demo_lock
 
         if data.project_id == DEMO_ID:
@@ -258,12 +261,26 @@ class TestRunService:
 
                 if not await self.run_repo.session.get(ProjectORM, DEMO_ID, with_for_update=True):
                     raise ValueError("Demo is being reset or no longer exists")
-                return await self._create_and_execute_run(data)
-        return await self._create_and_execute_run(data)
+                return await self._create_and_execute_run(data, task_id=task_id)
+        return await self._create_and_execute_run(data, task_id=task_id)
 
-    async def _create_and_execute_run(self, data: TestRunCreate) -> TestRun:
+    async def _create_and_execute_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRun:
+        from app.persistence.models import TaskORM
+
+        if task_id:
+            task = await self.run_repo.session.get(TaskORM, task_id)
+            if not task or task.project_id != data.project_id or task.owner_id != data.requested_by:
+                raise ValueError("Task/Run identity mismatch")
+        if data.parent_run_id:
+            parent = await self.run_repo.get_by_id(data.parent_run_id)
+            if not parent or parent.project_id != data.project_id or parent.workspace_id != data.workspace_id:
+                raise ValueError("Retry parent must belong to the same project and workspace")
+        if data.origin_failure_id:
+            failure = await self.run_repo.get_failure_by_id(data.origin_failure_id)
+            if not failure or failure.run_id != data.parent_run_id:
+                raise ValueError("Origin failure must belong to the retry parent")
         # 1. Create Run in DB
-        orm = await self.run_repo.create_run(data)
+        orm = await self.run_repo.create_run(data, task_id=task_id)
         run_id = orm.id
         # The execution task opens its own database session. Persist the queued run before scheduling
         # it so the new session cannot race this request's dependency-managed transaction and see no row.
@@ -327,14 +344,15 @@ class TestRunService:
             )
 
             try:
-                live_logs: list[str] = []
+                live_log = ""
                 artifact_dir = settings.artifact_storage_dir.resolve() / run_id
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 async def on_log(chunk: str) -> None:
+                    nonlocal live_log
                     safe_chunk = SensitiveRedactor.redact_text(chunk)
-                    live_logs.append(safe_chunk)
-                    active = await run_repo.update_run_log_if_active(run_id, "".join(live_logs)[-20000:])
+                    live_log = (live_log + safe_chunk)[-20000:]
+                    active = await run_repo.update_run_log_if_active(run_id, live_log)
                     await session.commit()
                     if not active:
                         return
@@ -904,7 +922,7 @@ class TestRunService:
         from app.persistence.database import get_session
 
         queue = event_bus.subscribe(run_id)
-        sent_log = 0
+        sent_log = ""
         seen_executions: set[str] = set()
         seen_browser_sessions: dict[str, dict] = {}
         last_status: RunStatus | None = None
@@ -938,12 +956,11 @@ class TestRunService:
                 if run.status == RunStatus.RUNNING and last_status != RunStatus.RUNNING:
                     yield {"type": "RUN_STARTED", "run_id": run_id, "status": "RUNNING", "total": run.total}
                 log = run.log_output or ""
-                if len(log) < sent_log:
-                    sent_log = 0
-                if len(log) > sent_log:
-                    chunk = log[sent_log:]
-                    sent_log = len(log)
-                    yield {"type": "LOG_STREAM", "run_id": run_id, "log": chunk}
+                if log != sent_log:
+                    sent_log = log
+                    # The durable log is a bounded ring, so its length stops growing.
+                    # Replacing that observation also makes reconnect replay idempotent.
+                    yield {"type": "LOG_STREAM", "run_id": run_id, "log": log, "replace": True}
                 for execution in run.executions:
                     if execution.id not in seen_executions:
                         seen_executions.add(execution.id)
@@ -988,6 +1005,13 @@ class TestRunService:
         page_id = str(event.get("page_id") or session_id)[:36]
         url = SensitiveRedactor.redact_url(str(event.get("url") or ""))[:2048]
         status = str(event.get("status") or "running")[:30]
+        occurred_at = None
+        try:
+            value = datetime.fromisoformat(str(event.get("timestamp") or "").replace("Z", "+00:00"))
+            if value.tzinfo is not None:
+                occurred_at = value.astimezone(timezone.utc)
+        except ValueError:
+            pass
 
         if event_type in {"session.started", "navigation", "session.finished"}:
             async with get_session() as session:
@@ -1003,13 +1027,14 @@ class TestRunService:
                         case_name=case_name,
                         current_url=url,
                         status=status,
+                        started_at=occurred_at or utc_now(),
                     )
                     session.add(row)
                 elif row is not None:
                     row.current_url = url
                     row.status = status
                     if event_type == "session.finished":
-                        row.finished_at = utc_now()
+                        row.finished_at = occurred_at or utc_now()
                         page_evidence = event.get("page_evidence")
                         if isinstance(page_evidence, dict):
                             safe_evidence = SensitiveRedactor.redact_value(page_evidence)
@@ -1030,7 +1055,7 @@ class TestRunService:
                 if row:
                     evidence = json.loads(row.page_evidence_json or "{}")
                     key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[event_type]
-                    evidence[key] = [*(evidence.get(key) or []), entry][-50:]
+                    evidence[key] = [*(evidence.get(key) or []), entry][-100:]
                     row.page_evidence_json = json.dumps(evidence, ensure_ascii=False)
                     await session.commit()
             if event_type == "step" and entry.get("locator"):
@@ -1045,6 +1070,7 @@ class TestRunService:
                     "session_id": session_id,
                     "channel": event_type,
                     "entry": entry,
+                    "timestamp": event.get("timestamp"),
                 },
             )
         elif event_type == "frame" and isinstance(event.get("frame"), str):

@@ -247,17 +247,17 @@ class AISettingsService:
                 if real
                 else AIProviderRuntimeState.SIMULATION
                 if simulated
-                else AIProviderRuntimeState.FALLBACK,
+                else AIProviderRuntimeState.UNAVAILABLE,
                 message=connection.message,
                 real_model_available=real,
-                fallback_active=not real and not simulated,
+                fallback_active=False,
                 failure_reason=None if real else "fake_provider_selected" if simulated else "provider_probe_failed",
                 health_status=AIProviderStatus.AVAILABLE
                 if real
                 else AIProviderStatus.DISABLED
                 if simulated
                 else AIProviderStatus.UNAVAILABLE,
-                operational_state="REAL_AVAILABLE" if real else "FALLBACK_ONLY",
+                operational_state="REAL_AVAILABLE" if real else "SIMULATION" if simulated else "UNAVAILABLE",
                 streaming=connection.streaming,
                 latency_ms=connection.latency_ms,
                 checked_at=connection.checked_at,

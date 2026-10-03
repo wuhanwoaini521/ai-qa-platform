@@ -22,6 +22,7 @@ from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.ai_observability import log_ai_execution
+from app.services.operation_trace import trace_progress
 
 logger = logging.getLogger("app.ai")
 
@@ -61,6 +62,8 @@ class AIService:
         if not req:
             raise ValueError(f"Requirement with ID {requirement_id} not found.")
 
+        await trace_progress("context.loaded", "需求与测试上下文已加载")
+        await trace_progress("model.started", "调用 AI 模型")
         start = time.perf_counter()
         started_at = utc_now()
         analysis = await self.orchestrator.analyze_requirement(
@@ -72,6 +75,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        await trace_progress("model.completed", "模型调用完成", metadata=invocation, duration_ms=duration_ms)
         log_ai_execution(
             logger,
             feature="requirement_analysis",
@@ -109,6 +113,8 @@ class AIService:
         existing = await self.test_design_repo.list_by_requirement(requirement_id)
         existing_str = "\n".join(f"- {d.title} ({d.category})" for d in existing)
 
+        await trace_progress("context.loaded", "需求与测试上下文已加载")
+        await trace_progress("model.started", "调用 AI 模型")
         start = time.perf_counter()
         started_at = utc_now()
         res = await self.orchestrator.generate_test_designs(
@@ -120,6 +126,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        await trace_progress("model.completed", "模型调用完成", metadata=invocation, duration_ms=duration_ms)
         log_ai_execution(
             logger,
             feature="test_design",
@@ -161,6 +168,8 @@ class AIService:
         req_title = req.title if req else "General Requirement"
         req_ac = req.acceptance_criteria if req else ""
 
+        await trace_progress("context.loaded", "需求与测试上下文已加载")
+        await trace_progress("model.started", "调用 AI 模型")
         start = time.perf_counter()
         started_at = utc_now()
         res = await self.orchestrator.generate_test_cases(
@@ -173,6 +182,7 @@ class AIService:
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         invocation = self.orchestrator.last_invocation_metadata()
+        await trace_progress("model.completed", "模型调用完成", metadata=invocation, duration_ms=duration_ms)
         log_ai_execution(
             logger,
             feature="test_case_generation",

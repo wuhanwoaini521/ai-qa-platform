@@ -78,60 +78,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-#: Columns added after the first release. `create_all` creates missing tables but never alters an
-#: existing one, so an already-deployed database needs these added explicitly. This is a stopgap
-#: until the platform adopts a migration framework; the names are code constants, never user input.
-ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
-    ("projects", "demo_kind", "VARCHAR(50)"),
-    ("requirements", "qa_model", "TEXT"),
-    ("test_designs", "scenario_model", "TEXT"),
-    ("test_cases", "test_model", "TEXT"),
-    ("failure_records", "evidence_bundle", "TEXT"),
-    ("test_runs", "log_output", "TEXT"),
-    ("test_runs", "parallel_workers", "INTEGER NOT NULL DEFAULT 1"),
-    ("browser_sessions", "page_evidence_json", "TEXT"),
-    ("ai_invocations", "decision_name", "VARCHAR(128)"),
-    ("ai_invocations", "request_id", "VARCHAR(128)"),
-    ("ai_invocations", "task_id", "VARCHAR(128)"),
-    ("ai_invocations", "run_id", "VARCHAR(128)"),
-    ("ai_invocations", "decision_choice", "VARCHAR(128)"),
-    ("ai_invocations", "decision_confidence", "FLOAT"),
-    ("ai_invocations", "token_source", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
-    ("ai_provider_configs", "max_request_tokens", "INTEGER NOT NULL DEFAULT 16000"),
-    ("ai_provider_configs", "max_daily_requests", "INTEGER NOT NULL DEFAULT 1000"),
-    ("ai_provider_configs", "max_task_calls", "INTEGER NOT NULL DEFAULT 8"),
-    ("agent_tasks", "max_ai_calls", "INTEGER NOT NULL DEFAULT 8"),
-)
-
-
-async def apply_additive_columns(conn) -> list[str]:
-    """Add columns that exist in the models but not yet in the database. Returns what it added."""
-    added: list[str] = []
-    sqlite = "sqlite" in settings.database_url.lower()
-    for table, column, ddl_type in ADDITIVE_COLUMNS:
-        if sqlite:
-            result = await conn.execute(text(f"PRAGMA table_info({table})"))
-            existing = {row[1] for row in result.fetchall()}
-        else:
-            result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns WHERE table_name = :table"),
-                {"table": table},
-            )
-            existing = {row[0] for row in result.fetchall()}
-        if not existing or column in existing:
-            continue
-        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
-        added.append(f"{table}.{column}")
-    return added
-
-
 async def init_db() -> None:
     import app.persistence.models  # noqa: F401
+    from app.persistence.migrations import upgrade_database
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        for added in await apply_additive_columns(conn):
-            logger.warning("Added missing column %s (no migration framework yet)", added)
+        await conn.run_sync(upgrade_database)
 
 
 async def check_db_health() -> bool:

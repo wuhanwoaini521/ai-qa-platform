@@ -13,6 +13,7 @@ from app.persistence.models import AutomationBindingORM
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.operation_trace import trace_progress
 from app.services.workspace_service import WorkspaceService
 
 
@@ -91,6 +92,8 @@ class AutomationBindingService:
         root = self.workspace_service.get_workspace_dir(workspace_key)
         bundle = ContextSelector().select(root, query=test_case.title)
         default_path = f"tests/test_case_{test_case.id.replace('-', '')[:12]}_{uuid4().hex[:6]}.py"
+        await trace_progress("context.loaded", "用例、工作区与项目上下文已加载")
+        await trace_progress("model.started", "生成自动化草稿")
         result = await ProductionQAOrchestrator().assist_code_chat(
             action="generate_test",
             message=(
@@ -105,9 +108,15 @@ class AutomationBindingService:
             ),
             test_case_title=test_case.title,
         )
+        await trace_progress(
+            "model.completed",
+            "模型调用完成",
+            metadata={"provider": result.provider, "model": result.model, "fallback_used": result.fallback_used},
+        )
         if result.provider == "fake" or result.fallback_used or not result.suggested_code:
             raise ValueError("No grounded real-AI draft is available. Inspect evidence and provider status in Studio.")
         code_content = result.suggested_code
+        await trace_progress("validation.started", "校验测试语法与断言")
         tree = ast.parse(code_content)
         functions = [
             node.name
@@ -122,6 +131,7 @@ class AutomationBindingService:
         ):
             raise ValueError("AI draft contains no test function or meaningful assertion.")
         # New drafts never overwrite a current file. DRAFT remains distinct from validated automation.
+        await trace_progress("validation.completed", "语法与断言校验完成")
         file_rel_path = default_path
         await self.workspace_service.write_file(workspace_key, file_rel_path, code_content)
         nodeid = f"{file_rel_path}::{functions[0]}"

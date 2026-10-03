@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from project_model.models import RunStatus, TestRunCreate
@@ -55,11 +55,14 @@ class TestRunRepository:
         result = await self.session.execute(select(TestRunORM.status).where(TestRunORM.id == run_id))
         return result.scalar_one_or_none()
 
-    async def create_run(self, data: TestRunCreate) -> TestRunORM:
+    async def create_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRunORM:
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         now = utc_now()
         orm = TestRunORM(
             id=run_id,
+            task_id=task_id,
+            parent_run_id=data.parent_run_id,
+            origin_failure_id=data.origin_failure_id,
             project_id=data.project_id,
             workspace_id=data.workspace_id,
             status=RunStatus.QUEUED.value,
@@ -268,8 +271,9 @@ class TestRunRepository:
             stack_trace=stack_trace,
             failure_category=failure_category,
             artifact_paths=artifact_paths or [],
-            started_at=now,
+            started_at=now - timedelta(milliseconds=max(0, duration_ms)),
             finished_at=now,
+            timestamp_source="derived",
         )
         self.session.add(orm)
         await self.session.flush()

@@ -614,6 +614,10 @@ async def test_real_failure_record_repair_approval_and_targeted_rerun(client):
         assert "message = 'new'" in test_path.read_text(encoding="utf-8")
         target_run = next(step for step in body["steps"] if step["key"] == "target_run")
         assert target_run["outputs"]["status"] == "PASSED"
+        verification_run = (await client.get(f"/api/runs/{target_run['outputs']['run_id']}")).json()
+        assert verification_run["task_id"] == task_id
+        assert verification_run["parent_run_id"] == run_id
+        assert verification_run["origin_failure_id"] == failure["id"]
         assert body["verification"]["verified"] is True
     finally:
         await task_runtime_service.stop()
@@ -704,3 +708,62 @@ async def test_optimize_task_requires_approval_and_runs_the_proposed_refactor(cl
         assert body["verification"]["verified"] is True
     finally:
         await task_runtime_service.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["repair", "refactor", "generate"])
+async def test_approval_preserves_source_modified_while_waiting(client, test_db_session, kind):
+    from app.services.task_runtime_service import ApprovalRequired, TaskBlocked
+    from app.services.workspace_service import WorkspaceService
+
+    project = (await client.post("/api/projects", json={"name": "Approval conflict", "bootstrap_workspace": True})).json()
+    workspace_id = project["id"]
+    path = "tests/test_approved.py"
+    original = None if kind == "generate" else "def test_before():\n    assert True\n"
+    source = WorkspaceService()
+    if original is not None:
+        await source.write_file(workspace_id, path, original)
+    created = (await client.post("/api/tasks", json={"type": "EXPLORE_PAGE", "goal": "Approval guard", "project_id": workspace_id, "workspace_id": workspace_id, "inputs": {"url": "http://127.0.0.1:1/"}})).json()
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, created["id"])
+    change = {"target_file": path, "file_path": path, "suggested_code": "def test_after():\n    assert True\n"}
+    if original is not None:
+        change["old_code"] = original
+    outputs = {kind: change, "approval": {"approved": True}}
+    with pytest.raises(ApprovalRequired):
+        await task_runtime_service._request_approval(task, outputs)
+    user_edit = "def test_user_edit():\n    assert True\n"
+    await source.write_file(workspace_id, path, user_edit)
+    apply = task_runtime_service._apply_repair if kind == "repair" else task_runtime_service._write_generated
+    with pytest.raises(TaskBlocked, match="Existing edits were preserved"):
+        await apply(task, outputs)
+    assert await source.read_file(workspace_id, path) == user_edit
+
+
+@pytest.mark.asyncio
+async def test_approval_diff_exposes_tail_and_keeps_complete_artifact(client, test_db_session):
+    from app.services.task_runtime_service import ApprovalRequired
+    from app.services.workspace_service import WorkspaceService
+
+    project = (await client.post("/api/projects", json={"name": "Diff tail", "bootstrap_workspace": True})).json()
+    wid = project["id"]
+    path = "tests/test_tail.py"
+    original = "# " + "unchanged" * 2000 + "\ndef test_tail():\n    assert 1 == 1\n"
+    updated = original.replace("1 == 1", "2 == 2")
+    await WorkspaceService().write_file(wid, path, original)
+    created = (await client.post("/api/tasks", json={"type": "EXPLORE_PAGE", "goal": "Review tail", "project_id": wid, "workspace_id": wid, "inputs": {"url": "http://127.0.0.1:1/"}})).json()
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, created["id"])
+    outputs = {"refactor": {"target_file": path, "suggested_code": updated, "old_code": original}, "approval": {"approved": True}}
+    with pytest.raises(ApprovalRequired):
+        await task_runtime_service._request_approval(task, outputs)
+    detail = await task_runtime_service.get(task.id)
+    summary = detail.context["pending_change_summary"]
+    assert summary["preview_truncated"] is True
+    assert summary["preview"].startswith("--- a/")
+    artifact = next(item for item in detail.artifacts if item.artifact_id == summary["artifact_id"])
+    response = await client.get(f"/api/artifacts/{artifact.artifact_id}/download")
+    assert response.status_code == 200
+    assert "-    assert 1 == 1" in response.text and "+    assert 2 == 2" in response.text
+    await task_runtime_service._write_generated(task, outputs)
+    assert await WorkspaceService().read_file(wid, path) == updated

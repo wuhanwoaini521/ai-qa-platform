@@ -6,7 +6,18 @@ from typing import Any
 from uuid import uuid4
 
 from app.persistence.database import Base
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, TypeDecorator, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    TypeDecorator,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -212,6 +223,15 @@ class WorkspaceORM(Base):
 
 class TestRunORM(Base):
     __tablename__ = "test_runs"
+    task_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    parent_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    origin_failure_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("failure_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
@@ -267,6 +287,7 @@ class TestExecutionORM(Base):
     artifact_paths: Mapped[list[str]] = mapped_column(JsonList, default=list)
     started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    timestamp_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     run: Mapped[TestRunORM] = relationship("TestRunORM", back_populates="executions")
     failure_record: Mapped[FailureRecordORM | None] = relationship(
@@ -721,9 +742,11 @@ class TaskDecisionORM(Base):
 
 class TaskEventORM(Base):
     __tablename__ = "agent_task_events"
+    __table_args__ = (Index("ix_task_event_step_cursor", "task_id", "step_id", "id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_tasks.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)

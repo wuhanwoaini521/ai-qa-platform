@@ -18,7 +18,39 @@ from qa_core.ai.provider import (
     OpenAICompatibleProvider,
     stream_provider_completion,
 )
+from qa_core.ai.registry import AIProviderRegistry
 from qa_core.ai.trace import AITraceEvent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fallbacks", [None, []])
+async def test_real_provider_outage_does_not_create_simulated_success(fallbacks):
+    class Unavailable:
+        async def complete(self, _):
+            raise RuntimeError("actual provider unavailable")
+
+        async def stream_complete(self, _):
+            raise RuntimeError("actual provider unavailable")
+            yield AIStreamChunk()
+
+    provider = FallbackAIProvider(Unavailable(), fallbacks)
+    with pytest.raises(RuntimeError, match="actual provider unavailable"):
+        await provider.complete(AICompletionRequest(prompt="diagnose"))
+    with pytest.raises(RuntimeError, match="AI provider unavailable"):
+        _ = [chunk async for chunk in provider.stream_complete(AICompletionRequest(prompt="diagnose"))]
+
+
+def test_real_provider_registry_has_no_implicit_fake_fallback():
+    AIProviderRegistry.reset()
+    try:
+        AIProviderRegistry.configure_runtime(
+            {"provider": "openai-compatible", "api_key": "", "base_url": "http://127.0.0.1:1/v1"}
+        )
+        provider = AIProviderRegistry.get_provider()
+        assert isinstance(provider, FallbackAIProvider)
+        assert provider.fallbacks == []
+    finally:
+        AIProviderRegistry.reset()
 
 
 @pytest.mark.asyncio

@@ -36,6 +36,9 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
         "        page = browser.new_page()\n"
         "        page.goto(os.environ['WEBSITE_URL'])\n"
         "        assert page.get_by_role('heading').inner_text() == 'Product catalog'\n"
+        "        for index in range(105):\n"
+        "            with page.expect_request_finished():\n"
+        "                assert page.evaluate(\"async index => {const response=await fetch('/?entry='+index);await response.text();return response.status;}\", index) == 200\n"
         "        browser.close()\n",
         encoding="utf-8",
     )
@@ -66,8 +69,13 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
         server.server_close()
         thread.join()
     assert result.exit_code == 0, "\n".join(result.raw_logs)
+    from datetime import datetime
+
+    assert all(datetime.fromisoformat(event["timestamp"]).utcoffset().total_seconds() == 0 for event in events)
     finished = next(event for event in events if event["type"] == "session.finished")
     assert finished["page_evidence"]["url"] == url
+    assert len(finished["page_evidence"]["network_logs"]) == 100
+    assert all(entry.get("timestamp") for entry in finished["page_evidence"]["network_logs"])
     assert any(event["type"] == "frame" and event.get("url") == url and event.get("frame") for event in events)
     snapshot = artifacts / f"browser-{finished['session_id']}-last.jpg"
     assert snapshot.read_bytes().startswith(b"\xff\xd8\xff")

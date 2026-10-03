@@ -51,7 +51,10 @@ async def trigger_test_run(
     data: TestRunCreate,
     service: TestRunService = Depends(get_run_service),
 ):
-    return await service.create_and_execute_run(data)
+    try:
+        return await service.create_and_execute_run(data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/{run_id}", response_model=TestRun)
