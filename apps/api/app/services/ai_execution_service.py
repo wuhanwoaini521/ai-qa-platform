@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from qa_core.ai.budget import BudgetExceededError
 from qa_core.ai.correlation import request_id_context
 from qa_core.ai.models import AICompletionRequest, AICompletionResponse, AIStreamChunk
-from qa_core.ai.provider import stream_provider_completion
+from qa_core.ai.provider import clean_json_text, stream_provider_completion
 from qa_core.failure.redactor import SensitiveRedactor
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -146,7 +146,7 @@ class AIExecutionService:
                 parsed = (
                     request.response_schema.model_validate(response.structured_data)
                     if response.structured_data is not None
-                    else request.response_schema.model_validate_json(response.content)
+                    else request.response_schema.model_validate_json(clean_json_text(response.content))
                 )
                 response = response.model_copy(update={"structured_data": parsed.model_dump()})
             await self._finish(invocation_id, started, response=response)
@@ -182,6 +182,9 @@ class AIExecutionService:
                 yield chunk
             if not response.content.strip():
                 raise ValueError("AI provider returned an empty stream.")
+            if request.response_schema:
+                parsed = request.response_schema.model_validate_json(clean_json_text(response.content))
+                response = response.model_copy(update={"structured_data": parsed.model_dump()})
             await self._finish(invocation_id, started, response=response)
         except (asyncio.CancelledError, GeneratorExit):
             await self._finish(invocation_id, started, response=response, status="CANCELLED")

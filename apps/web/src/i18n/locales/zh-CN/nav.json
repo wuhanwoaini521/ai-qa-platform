@@ -1,5 +1,8 @@
 {
   "dashboard": "总览",
+  "workspace": "QA 工作台",
+  "workflow": "任务与运行",
+  "library": "Library",
   "projects": "项目管理",
   "requirements": "需求与设计",
   "testCases": "测试用例",

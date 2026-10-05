@@ -1,0 +1,10 @@
+{
+  "title": "Run trace",
+  "eyebrow": "Execution Observatory",
+  "allProjects": "All projects",
+  "subtitle": "Inspect real TaskSteps, Test Runs, AI, JEV, Browser, Failure, and Artifact evidence.",
+  "contextActions": "Workflow context actions",
+  "backToWorkspace": "Back to Workspace",
+  "openStudio": "Open code in Studio",
+  "allTasks": "All tasks"
+}

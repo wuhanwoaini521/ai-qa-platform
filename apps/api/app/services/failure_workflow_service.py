@@ -283,7 +283,7 @@ class FailureWorkflowService:
                             "domain": domain,
                             "region": region,
                             "source_path": file_path,
-                            "source_excerpt": SensitiveRedactor.redact_text(source[:5500]),
+                            "source_available": bool(source),
                         },
                         ensure_ascii=False,
                     ),

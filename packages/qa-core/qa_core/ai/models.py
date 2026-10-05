@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +40,8 @@ class AICompletionRequest(BaseModel):
     system_instruction: str = "You are a QA automation assistant."
     temperature: float = 0.2
     max_tokens: int = Field(default=2000, ge=1, le=32000)
+    max_retries: int | None = Field(default=None, ge=0, le=10)
+    timeout_seconds: float | None = Field(default=None, gt=0, le=120)
     response_schema: type[BaseModel] | None = None
     prompt_id: str | None = None
     prompt_version: str | None = None
@@ -152,6 +154,50 @@ class CodeAssistantResponse(BaseModel):
     provider: str = ""
     model: str = ""
     fallback_used: bool = False
+
+
+class BrowserActionCandidate(BaseModel):
+    """One proposed action tied to a control in the current browser observation."""
+
+    candidate_id: str = Field(min_length=1, max_length=48, pattern=r"^[a-zA-Z0-9_-]+$")
+    action_type: Literal[
+        "navigate",
+        "click",
+        "fill",
+        "select",
+        "scroll",
+        "hover",
+        "wait",
+        "inspect",
+        "back",
+        "open_product",
+        "filter",
+        "choose_variant",
+        "add_to_cart",
+    ]
+    target_id: str | None = Field(default=None, max_length=32)
+    target: str = Field(default="", max_length=200)
+    locator_strategy: (
+        Literal["role", "test_id", "label", "placeholder", "id", "name", "text", "href", "page"] | None
+    ) = None
+    locator: dict[str, Any] | None = None
+    value: str | None = Field(default=None, max_length=500)
+    reason_summary: str = Field(default="", max_length=400)
+    expected_effect: str = Field(default="", max_length=400)
+    risk: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"] = "UNKNOWN"
+    evidence: list[str] = Field(default_factory=list, max_length=8)
+
+
+class BrowserAgentPlan(BaseModel):
+    """Bounded AI proposal; execution still validates every target and effect."""
+
+    subgoals: list[str] = Field(default_factory=list, max_length=12)
+    current_subgoal_index: int = Field(default=0, ge=0, le=11)
+    current_subgoal: str = Field(default="", max_length=300)
+    candidates: list[BrowserActionCandidate] = Field(default_factory=list, max_length=5)
+    preferred_candidate_id: str | None = Field(default=None, max_length=48)
+    goal_status: Literal["in_progress", "completed", "blocked"] = "in_progress"
+    completion_evidence: list[str] = Field(default_factory=list, max_length=8)
 
 
 class AIInvocationRecord(BaseModel):

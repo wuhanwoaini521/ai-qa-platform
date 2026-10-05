@@ -128,6 +128,7 @@ Provide a structured JSON output with fields:
 - hypotheses: list of strings (reasoned possibilities to investigate)
 - recommended_actions: list of strings (concrete remediation steps)
 - confidence: float between 0.0 and 1.0
+Keep evidence to at most 5 items, hypotheses to at most 3, and recommended_actions to at most 4. Keep each item concise.
 """,
 )
 

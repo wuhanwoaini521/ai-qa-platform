@@ -5,6 +5,7 @@ import {
   timelineDomain,
   timelineRange,
   timelineSpans,
+  isShortSpan,
 } from '../src/features/runtime/timelineModel.ts';
 const start = '2026-10-02T00:00:00Z',
   now = Date.parse(start) + 5000;
@@ -40,6 +41,11 @@ test('Unavailable and invalid timestamps never become zero-width spans', () => {
     timelineRange([{ status: 'RUNNING', started_at: start }], now).duration,
     30000,
   );
+});
+test('Known sub-100ms spans use a marker threshold while missing timing stays unknown', () => {
+  assert.equal(isShortSpan({ duration_ms: 0, status: 'FAILED' }, now), true);
+  assert.equal(isShortSpan({ duration_ms: 99, status: 'COMPLETED' }, now), true);
+  assert.equal(isShortSpan({ duration_ms: null, status: 'COMPLETED' }, now), false);
 });
 test('Unified lanes use only supplied domain records', () => {
   assert.deepEqual(

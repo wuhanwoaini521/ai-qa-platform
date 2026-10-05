@@ -94,6 +94,13 @@ def test_missing_trace_time_stays_unavailable():
     assert event.trace_run_id == "trace" and event.test_run_id is None
 
 
+def test_task_blocked_event_derives_blocked_status():
+    event = normalize_event(
+        {"type": "task.blocked"}, source="task", source_id="blocked", runtime_id="task", task_id="task"
+    )
+    assert event.status == "BLOCKED"
+
+
 def test_diagnosis_trace_has_failure_category_not_generic_ai():
     event = normalize_event(
         {"run_id": "trace", "type": "diagnosis_completed", "stage": "diagnosis", "title": "Diagnosis"},

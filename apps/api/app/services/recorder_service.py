@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
-from app.services.browser_proxy import browser_proxy_options
+from app.services.browser_proxy import browser_proxy_options, launch_chromium
 
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
@@ -256,23 +256,13 @@ class BrowserRecorderService:
         async with self._lifecycle_lock:
             proxy = browser_proxy_options()
             playwright = await self._start_playwright()
-            browser = None
-            launch_errors: list[str] = []
-            for kwargs in (
-                {"headless": True},
-                {"headless": True, "channel": "msedge"},
-                {"headless": True, "channel": "chrome"},
-            ):
-                try:
-                    browser = await playwright.chromium.launch(**kwargs, **({"proxy": proxy} if proxy else {}))
-                    break
-                except Exception as error:
-                    launch_errors.append(str(error).splitlines()[0])
-            if browser is None:
+            try:
+                browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
+            except Exception as error:
                 raise RuntimeError(
-                    "无法启动 Chromium。请安装 Playwright Chromium：uv run playwright install chromium。 "
-                    + " | ".join(launch_errors)
-                )
+                    "无法启动 Playwright Chromium 或系统 Chrome/Edge。请安装 Playwright Chromium。 "
+                    + str(error).splitlines()[0]
+                ) from error
             context = await browser.new_context(viewport={"width": 1280, "height": 720})
             await context.add_init_script(RECORDER_INIT_SCRIPT)
             page = await context.new_page()

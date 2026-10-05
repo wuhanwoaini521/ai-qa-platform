@@ -10,6 +10,16 @@ export function timelineSpans(snapshot: RuntimeSnapshot): RuntimeSpan[] {
     ...(snapshot.ai_invocations ?? []),
   ];
 }
+
+export function timelineGroups(snapshot: RuntimeSnapshot) {
+  return [
+    { key: 'task', title: 'Task', spans: snapshot.task ? [snapshot.task] : [] },
+    { key: 'steps', title: 'Steps', spans: snapshot.steps },
+    { key: 'ai', title: 'AI', spans: snapshot.ai_invocations ?? [] },
+    { key: 'browser', title: 'Browser', spans: snapshot.browser_sessions },
+    { key: 'test', title: 'Test run', spans: [...snapshot.runs, ...snapshot.executions] },
+  ].filter((group) => group.spans.length > 0);
+}
 export function spanBounds(
   span: RuntimeSpan,
   now: number,
@@ -45,4 +55,11 @@ export function timelineDomain(
     Math.ceil(Math.log2(Math.max(1, observedDuration / baseDuration))),
   );
   return (baseDuration * 2 ** expansion) / zoom;
+}
+
+export function isShortSpan(span: RuntimeSpan, now: number) {
+  const duration = liveSpan(span) && span.started_at
+    ? Math.max(0, now - Date.parse(span.started_at))
+    : span.duration_ms;
+  return duration != null && duration < 100;
 }

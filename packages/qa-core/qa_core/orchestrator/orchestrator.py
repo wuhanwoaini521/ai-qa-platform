@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import ast
+import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from qa_core.ai.budget import AIBudgetGuard
 from qa_core.ai.models import (
@@ -14,6 +19,7 @@ from qa_core.ai.models import (
     TestCaseGenerationResponse,
     TestDesignGenerationResponse,
 )
+from qa_core.ai.provider import clean_json_text, stream_provider_completion
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.author.grounder import KnowledgeGrounder, PytestCodeGenerator
 from qa_core.author.models import AuthoringRequest, AuthoringResult
@@ -31,6 +37,16 @@ from qa_core.prompts import (
     TEST_CASE_GENERATION_PROMPT,
     TEST_DESIGN_PROMPT,
 )
+
+FAILURE_DIAGNOSIS_TIMEOUT_SECONDS = 45.0
+
+
+def _supports_native_streaming(provider) -> bool:
+    for wrapper in ("inner", "primary"):
+        nested = getattr(provider, wrapper, None)
+        if nested is not None:
+            return _supports_native_streaming(nested)
+    return callable(getattr(provider, "stream_complete", None))
 
 
 class ProductionQAOrchestrator:
@@ -51,13 +67,97 @@ class ProductionQAOrchestrator:
         response = await self.ai_provider.complete(request)
         if request.response_schema:
             data = (
-                response.structured_data or request.response_schema.model_validate_json(response.content).model_dump()
+                response.structured_data
+                or request.response_schema.model_validate_json(clean_json_text(response.content)).model_dump()
             )
             response = response.model_copy(
                 update={"structured_data": request.response_schema.model_validate(data).model_dump()}
             )
         self.last_completion = response
         self.budget_guard.record_tokens(response.input_tokens, response.output_tokens)
+        return response
+
+    async def complete_streaming(
+        self,
+        request: AICompletionRequest,
+        *,
+        on_delta: Callable[[int, float], Awaitable[None]] | None = None,
+        timeout_seconds: float = FAILURE_DIAGNOSIS_TIMEOUT_SECONDS,
+    ) -> AICompletionResponse:
+        """Collect a streamed completion while exposing safe progress to the caller."""
+        self.last_completion = None
+        self.budget_guard.check_and_record_request()
+        request = request.model_copy(update={"prompt": SensitiveRedactor.redact_text(request.prompt)})
+        started = time.perf_counter()
+        content = ""
+        provider = getattr(self.ai_provider, "provider_name", "unknown")
+        model = getattr(self.ai_provider, "model", "")
+        invocation_id = None
+        input_tokens = output_tokens = None
+        fallback_used = False
+        progress_callback = on_delta if _supports_native_streaming(self.ai_provider) else None
+        stream = stream_provider_completion(self.ai_provider, request)
+        timeout = asyncio.timeout(timeout_seconds)
+        try:
+            async with timeout:
+                async for chunk in stream:
+                    content += chunk.content_delta
+                    provider = chunk.provider or provider
+                    model = chunk.model or model
+                    invocation_id = chunk.invocation_id or invocation_id
+                    fallback_used = fallback_used or chunk.fallback_used
+                    if chunk.usage:
+                        input_tokens = chunk.usage.get("prompt_tokens", chunk.usage.get("input_tokens"))
+                        output_tokens = chunk.usage.get("completion_tokens", chunk.usage.get("output_tokens"))
+                    if progress_callback and chunk.content_delta:
+                        await progress_callback(len(content), time.perf_counter() - started)
+        except TimeoutError:
+            if not timeout.expired():
+                raise
+            raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
+        finally:
+            remaining = timeout_seconds - (time.perf_counter() - started)
+            try:
+                async with asyncio.timeout(max(remaining, 0)):
+                    await stream.aclose()
+            except TimeoutError:
+                if time.perf_counter() - started < timeout_seconds:
+                    raise
+                raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
+
+        if not content.strip():
+            raise ValueError("AI provider returned an empty stream.")
+        structured_data = None
+        if request.response_schema:
+            try:
+                structured_data = request.response_schema.model_validate_json(clean_json_text(content)).model_dump()
+            except ValidationError:
+                remaining = timeout_seconds - (time.perf_counter() - started)
+                if remaining <= 0:
+                    raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
+                self.budget_guard.record_tokens(input_tokens, output_tokens)
+                repair_timeout = asyncio.timeout(remaining)
+                try:
+                    async with repair_timeout:
+                        return await self.complete(request)
+                except TimeoutError:
+                    if not repair_timeout.expired():
+                        raise
+                    raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
+        response = AICompletionResponse(
+            invocation_id=invocation_id,
+            content=content,
+            structured_data=structured_data,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model,
+            provider=provider,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            fallback_used=fallback_used,
+            prompt_version=request.prompt_version,
+        )
+        self.last_completion = response
+        self.budget_guard.record_tokens(input_tokens, output_tokens)
         return response
 
     async def analyze_requirement(
@@ -184,6 +284,7 @@ class ProductionQAOrchestrator:
         test_nodeid: str = "",
         failing_locator: str | None = None,
         historical_context: str = "No prior executions recorded.",
+        on_progress: Callable[[int], Awaitable[None]] | None = None,
     ) -> FailureAnalysisResponse:
         prompt_str = FAILURE_DIAGNOSIS_PROMPT.format(
             nodeid=test_nodeid,
@@ -198,8 +299,23 @@ class ProductionQAOrchestrator:
             prompt_id=FAILURE_DIAGNOSIS_PROMPT.prompt_id,
             prompt_version=FAILURE_DIAGNOSIS_PROMPT.version,
             response_schema=FailureAnalysisResponse,
+            max_tokens=1000,
+            max_retries=0,
+            timeout_seconds=20,
         )
-        res = await self.complete(req)
+        if on_progress is not None:
+            res = await self.complete_streaming(req, on_delta=on_progress)
+        else:
+            timeout = asyncio.timeout(FAILURE_DIAGNOSIS_TIMEOUT_SECONDS)
+            try:
+                async with timeout:
+                    res = await self.complete(req)
+            except TimeoutError:
+                if not timeout.expired():
+                    raise
+                raise RuntimeError(
+                    f"AI diagnosis timed out after {FAILURE_DIAGNOSIS_TIMEOUT_SECONDS:g} seconds."
+                ) from None
         self.last_completion = res
         analysis = FailureAnalysisResponse.model_validate(res.structured_data)
         return analysis.model_copy(

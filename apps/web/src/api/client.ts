@@ -103,6 +103,7 @@ import {
   AgentTask,
   AgentTaskEvent,
   AgentTaskType,
+  AgentGoalPreview,
   Workspace,
   RecorderStep,
 } from '../types';
@@ -598,8 +599,21 @@ export const api = {
     project_id?: string;
     workspace_id?: string;
     inputs?: Record<string, unknown>;
+    idempotency_key?: string;
+    plan_token?: string;
   }) =>
     request<AgentTask>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  previewTaskGoal: (data: {
+    type: 'QA_GOAL';
+    goal: string;
+    project_id: string;
+    workspace_id: string;
+    inputs: Record<string, unknown>;
+  }) =>
+    request<AgentGoalPreview>('/tasks/preview', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -607,6 +621,14 @@ export const api = {
     request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/approval`, {
       method: 'POST',
       body: JSON.stringify({ approved, comment }),
+    }),
+  pauseTask: (taskId: string) =>
+    request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/pause`, {
+      method: 'POST',
+    }),
+  resumeTask: (taskId: string) =>
+    request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
+      method: 'POST',
     }),
   cancelTask: (taskId: string) =>
     request<AgentTask>(`/tasks/${encodeURIComponent(taskId)}/cancel`, {

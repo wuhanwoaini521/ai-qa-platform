@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
-import shutil
 import sys
 import tempfile
 import time
 from datetime import timedelta
 from pathlib import Path
 
-from sqlalchemy import inspect, select
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import select
 
 from app.persistence import database
 from app.persistence.models import WorkerORM, utc_now
@@ -64,18 +64,19 @@ class PlatformHealthService:
     async def _database(self):
         if not await database.check_db_health():
             return {"status": "error", "message": "Database is unreachable."}
+        from app.persistence.migrations import migration_config
+
+        head_revision = ScriptDirectory.from_config(migration_config()).get_current_head()
         async with database.engine.connect() as connection:
-            pending = []
-            for table, column, _ in database.ADDITIVE_COLUMNS:
-                columns = await connection.run_sync(
-                    lambda conn, name=table: {item["name"] for item in inspect(conn).get_columns(name)}
-                )
-                if column not in columns:
-                    pending.append(f"{table}.{column}")
+            current_revision = await connection.run_sync(
+                lambda conn: MigrationContext.configure(conn).get_current_revision()
+            )
+        pending = current_revision != head_revision
         return {
             "status": "error" if pending else "ok",
             "message": "Database schema update pending." if pending else "Database connected; schema is current.",
-            "pending_columns": pending,
+            "current_revision": current_revision,
+            "head_revision": head_revision,
         }
 
     async def _ai(self):
@@ -121,31 +122,18 @@ class PlatformHealthService:
         }
 
     async def _browser(self):
-        if importlib.util.find_spec("playwright") is None:
-            return {"status": "error", "message": "Playwright is not installed."}
         from playwright.async_api import async_playwright
 
+        from app.services.browser_proxy import browser_proxy_options, launch_chromium
+
+        proxy = browser_proxy_options()
         async with async_playwright() as playwright:
-            candidates = [Path(playwright.chromium.executable_path)]
-        for command in ("google-chrome", "chromium", "chrome", "msedge"):
-            resolved = shutil.which(command)
-            if resolved:
-                candidates.append(Path(resolved))
-        for variable in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
-            base = os.environ.get(variable)
-            if base:
-                candidates.extend(
-                    [
-                        Path(base) / "Google/Chrome/Application/chrome.exe",
-                        Path(base) / "Microsoft/Edge/Application/msedge.exe",
-                    ]
-                )
-        available = any(path.is_file() for path in candidates)
+            browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
+            version = browser.version
+            await browser.close()
         return {
-            "status": "ok" if available else "error",
-            "message": "Playwright and a browser executable are installed."
-            if available
-            else "Browser executable missing; install Playwright Chromium or Chrome.",
+            "status": "ok",
+            "message": f"Playwright launched a browser successfully (version {version}).",
         }
 
     async def _worker(self):

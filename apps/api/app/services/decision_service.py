@@ -86,6 +86,8 @@ class DecisionService:
         status: str,
         error_type: str | None = None,
         usage: dict[str, int | float | None] | None = None,
+        task_id: str | None = None,
+        run_id: str | None = None,
     ) -> None:
         try:
             await self.ai_repo.record_invocation(
@@ -101,6 +103,8 @@ class DecisionService:
                 error_type=error_type,
                 decision_choice=result.choice if result else None,
                 decision_confidence=result.confidence if result else None,
+                task_id=task_id,
+                run_id=run_id,
             )
         except Exception as error:  # telemetry must never turn a safe decision into a failed test run
             logger.warning("Decision telemetry write failed (%s)", type(error).__name__)
@@ -110,6 +114,8 @@ class DecisionService:
         request: DecisionRequest,
         *,
         run_id: str | None = None,
+        task_id: str | None = None,
+        reserve_task_call=None,
         allow_missing_confidence: bool = False,
     ) -> DecisionResult:
         run_id = run_id or uuid4().hex
@@ -128,6 +134,8 @@ class DecisionService:
                 result=result,
                 status="FALLBACK",
                 error_type="provider_disabled",
+                task_id=task_id,
+                run_id=run_id,
             )
             log_ai_execution(
                 logger,
@@ -154,14 +162,23 @@ class DecisionService:
                 > policy.max_request_tokens
             ):
                 raise BudgetExceededError("Decision request exceeds configured token budget.")
-            await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
-            provider = self.provider_registry.create(config.provider, config)
-            remote_result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
-            if remote_result.confidence is None and not allow_missing_confidence:
-                error_code = "confidence_missing"
-            elif remote_result.confidence is not None and remote_result.confidence < config.minimum_confidence:
-                error_code = "below_minimum_confidence"
+            if reserve_task_call is not None and not await reserve_task_call():
+                error_code = "task_ai_budget_exhausted"
             else:
+                await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
+                provider = self.provider_registry.create(config.provider, config)
+                remote_result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
+            if error_code == "task_ai_budget_exhausted":
+                pass
+            elif remote_result.confidence is None and not allow_missing_confidence:
+                error_code = "confidence_missing"
+            elif (
+                remote_result is not None
+                and remote_result.confidence is not None
+                and remote_result.confidence < config.minimum_confidence
+            ):
+                error_code = "below_minimum_confidence"
+            elif remote_result is not None:
                 duration = (time.perf_counter() - started) * 1000
                 await self._record(
                     decision_name=request.name,
@@ -171,6 +188,8 @@ class DecisionService:
                     result=remote_result,
                     status="SUCCESS",
                     usage=remote_result.usage,
+                    task_id=task_id,
+                    run_id=run_id,
                 )
                 logger.info(
                     "Decision completed run_id=%s name=%s provider=%s model=%s latency_ms=%.1f confidence=%s",
@@ -213,6 +232,8 @@ class DecisionService:
             status="FALLBACK",
             error_type=error_code,
             usage=remote_result.usage if remote_result else None,
+            task_id=task_id,
+            run_id=run_id,
         )
         logger.info(
             "Decision fallback run_id=%s name=%s provider=%s latency_ms=%.1f reason=%s",

@@ -14,6 +14,9 @@ import { ReadinessNotice } from '../components/ReadinessNotice';
 const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
   { match: (p) => p === '/', titleKey: 'dashboard' },
   { match: (p) => p.includes('/studio'), titleKey: 'automation' },
+  { match: (p) => p === '/workspace' || p.startsWith('/workspace/'), titleKey: 'workspace' },
+  { match: (p) => p === '/workflow' || p === '/runs/tasks', titleKey: 'workflow' },
+  { match: (p) => p === '/library', titleKey: 'library' },
   { match: (p) => /^\/projects(\/[^/]+)?$/.test(p), titleKey: 'projects' },
   { match: (p) => p.startsWith('/requirements') || p.includes('/requirements'), titleKey: 'requirements' },
   { match: (p) => p.startsWith('/test-cases'), titleKey: 'testCases' },

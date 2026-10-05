@@ -26,7 +26,7 @@ from qa_core.prompts import REQUIREMENT_LIFECYCLE_PROMPT
 from sqlalchemy import or_, select, update
 
 from app.persistence.database import get_session
-from app.persistence.models import RequirementORM, TestCaseORM, TestDesignORM, utc_now
+from app.persistence.models import ProjectORM, RequirementORM, TestCaseORM, TestDesignORM, utc_now
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.services.decision_service import DecisionService
@@ -71,6 +71,17 @@ class RequirementLifecycleService:
             row = await session.get(RequirementORM, requirement_id)
             if not row:
                 raise ValueError("Requirement not found")
+            project = await session.get(ProjectORM, row.project_id)
+            cases = list(
+                (
+                    await session.scalars(
+                        select(TestCaseORM)
+                        .where(TestCaseORM.requirement_id == requirement_id)
+                        .order_by(TestCaseORM.created_at.desc())
+                        .limit(20)
+                    )
+                ).all()
+            )
             raw = row.qa_model or {}
             document = RequirementDocument.model_validate(raw)
             if not document.criteria:
@@ -81,7 +92,19 @@ class RequirementLifecycleService:
                     for number, line in enumerate(row.acceptance_criteria.splitlines(), 1)
                     if line.strip()
                 ][:30]
-            return row.title, row.description, row.project_id, document, raw
+            project_context = {"project_id": row.project_id, "name": project.name if project else row.project_id}
+            existing_cases = [
+                {
+                    "id": case.id,
+                    "title": case.title[:200],
+                    "steps": (case.steps or [])[:8],
+                    "expected_result": (case.expected_result or "")[:600],
+                    "intent": str((case.test_model or {}).get("intent") or "")[:400],
+                    "coverage": (case.test_model or {}).get("coverage", {}),
+                }
+                for case in cases
+            ]
+            return row.title, row.description, row.project_id, document, raw, project_context, existing_cases
 
     async def _store(self, requirement_id, document, *, expected=None, analysis_id=None):
         async with get_session() as session:
@@ -120,8 +143,10 @@ class RequirementLifecycleService:
                 raise RequirementAnalysisBusy("Concurrent requirement update; result was not applied")
             await session.commit()
 
-    async def stream(self, requirement_id):
-        title, description, project_id, document, raw = await self._load(requirement_id)
+    async def stream(self, requirement_id, *, task_id=None, reserve_ai_call=None):
+        title, description, project_id, document, raw, project_context, existing_cases = await self._load(
+            requirement_id
+        )
         if document.history and document.history[-1].status == "RUNNING":
             if datetime.fromisoformat(document.history[-1].started_at) > utc_now() - timedelta(minutes=10):
                 raise RequirementAnalysisBusy("Requirement analysis is already running")
@@ -132,10 +157,15 @@ class RequirementLifecycleService:
         document.history = [*document.history[-9:], record]
         await self._store(requirement_id, document, expected=raw)
         active_stage = "context"
+        active_stage_started = None
 
         async def stage(key, title, status, message="", source="deterministic", duration_ms=0):
-            nonlocal active_stage
+            nonlocal active_stage, active_stage_started
             active_stage = key
+            if status == "RUNNING":
+                active_stage_started = time.perf_counter()
+            elif status in ("COMPLETED", "FAILED", "SKIPPED"):
+                active_stage_started = None
             saved = AnalysisStage(
                 id=key,
                 title=title,
@@ -162,9 +192,29 @@ class RequirementLifecycleService:
         try:
             yield await stage(
                 "context",
-                "读取需求与验收标准",
+                "加载需求输入",
                 "COMPLETED",
-                f"读取 {len(document.criteria)} 条验收标准、{len(document.rules)} 条业务规则",
+                f"已加载需求“{title}”及验收标准文本。",
+            )
+            yield await stage(
+                "project_context",
+                "加载项目上下文",
+                "COMPLETED",
+                f"已加载项目 {project_context['name']}（{project_id}）。",
+            )
+            yield await stage(
+                "existing_cases",
+                "查找已有测试用例",
+                "COMPLETED",
+                f"找到 {len(existing_cases)} 个关联用例。"
+                if existing_cases
+                else "尚无关联用例；本次分析不以既有用例推断覆盖。",
+            )
+            yield await stage(
+                "acceptance_criteria",
+                "提取验收标准与业务规则",
+                "COMPLETED",
+                f"读取 {len(document.criteria)} 条验收标准、{len(document.rules)} 条业务规则。",
             )
             if not document.criteria:
                 raise ValueError("Add explicit acceptance criteria before analyzing")
@@ -180,23 +230,32 @@ class RequirementLifecycleService:
                 raise ValueError(
                     "Fake AI is configured; reference material cannot be presented as real analysis. Configure a real provider and retry."
                 )
+            if reserve_ai_call is not None and not await reserve_ai_call():
+                raise ValueError("Task AI-call budget exhausted before requirement analysis.")
             started = time.perf_counter()
             payload = {
                 "title": title,
                 "description": description[:5000],
+                "project": project_context,
                 "model": document.model_dump(exclude={"history"}, mode="json"),
+                "existing_cases": existing_cases,
             }
-            response = await self.orchestrator.complete(
-                AICompletionRequest(
-                    prompt=REQUIREMENT_LIFECYCLE_PROMPT.format(requirement=json.dumps(payload, ensure_ascii=False)),
-                    system_instruction=REQUIREMENT_LIFECYCLE_PROMPT.system_instruction,
-                    prompt_id=REQUIREMENT_LIFECYCLE_PROMPT.prompt_id,
-                    prompt_version=REQUIREMENT_LIFECYCLE_PROMPT.version,
-                    response_schema=RequirementAnalysis,
-                    max_tokens=4500,
-                    run_id=record.id,
-                )
+            request = AICompletionRequest(
+                prompt=REQUIREMENT_LIFECYCLE_PROMPT.format(requirement=json.dumps(payload, ensure_ascii=False)),
+                system_instruction=REQUIREMENT_LIFECYCLE_PROMPT.system_instruction,
+                prompt_id=REQUIREMENT_LIFECYCLE_PROMPT.prompt_id,
+                prompt_version=REQUIREMENT_LIFECYCLE_PROMPT.version,
+                response_schema=RequirementAnalysis,
+                max_tokens=2800,
+                max_retries=1,
+                task_id=task_id,
+                run_id=record.id,
             )
+            stream_completion = getattr(self.orchestrator, "complete_streaming", None)
+            if callable(stream_completion):
+                response = await stream_completion(request, timeout_seconds=45)
+            else:
+                response = await self.orchestrator.complete(request)
             record.provider, record.model = response.provider, response.model
             record.prompt_version = REQUIREMENT_LIFECYCLE_PROMPT.version
             if response.provider == "fake" or response.fallback_used:
@@ -214,6 +273,33 @@ class RequirementLifecycleService:
                 f"识别 {len(analysis.risks)} 项风险、{len(analysis.ambiguities)} 项歧义与 {len(analysis.scenarios)} 个场景",
                 response.provider,
                 (time.perf_counter() - started) * 1000,
+            )
+            yield await stage(
+                "business_rules",
+                "整理业务规则",
+                "COMPLETED",
+                f"确认 {len(document.rules)} 条持久业务规则，并与分析结果关联。",
+            )
+            yield await stage(
+                "risk_analysis",
+                "分析风险与歧义",
+                "COMPLETED",
+                f"识别 {len(analysis.risks)} 项风险与 {len(analysis.ambiguities)} 项歧义。",
+                response.provider,
+            )
+            yield await stage(
+                "coverage_gaps",
+                "检查覆盖缺口",
+                "COMPLETED",
+                f"识别 {len(analysis.coverage_gaps)} 项覆盖缺口。",
+                response.provider,
+            )
+            yield await stage(
+                "test_design",
+                "生成测试场景草案",
+                "COMPLETED",
+                f"生成 {len(analysis.scenarios)} 个场景草案；需在 Workspace 中确认后采用。",
+                response.provider,
             )
             yield await stage("decision", "Jev 聚焦优先级决策", "RUNNING", source="jev")
             started = time.perf_counter()
@@ -240,6 +326,8 @@ class RequirementLifecycleService:
                         instructions="Choose the most important candidate to validate first. Consider purchase-flow criticality, explicit risk/AC references and automation effort. Select only a supplied ID; abstain when evidence is insufficient.",
                     ),
                     run_id=record.id,
+                    task_id=task_id,
+                    reserve_task_call=reserve_ai_call,
                     allow_missing_confidence=True,
                 )
                 decision = result.model_dump(mode="json")
@@ -303,6 +391,9 @@ class RequirementLifecycleService:
             )
             record.error = SensitiveRedactor.redact_text(str(error))[:1000]
             record.finished_at = utc_now().isoformat()
+            failed_duration_ms = (
+                (time.perf_counter() - active_stage_started) * 1000 if active_stage_started is not None else 0
+            )
             try:
                 summary = (
                     "AI 返回的内容未通过 RequirementAnalysis JSON Schema 校验；Jev 尚未运行，分析结果未应用。"
@@ -319,6 +410,7 @@ class RequirementLifecycleService:
                     else "jev"
                     if active_stage == "decision"
                     else "deterministic",
+                    duration_ms=failed_duration_ms,
                 )
             except (ValueError, RequirementAnalysisBusy):
                 await self._finish_failed(requirement_id, record)
@@ -364,7 +456,7 @@ class RequirementLifecycleService:
             await session.commit()
 
     async def adopt_designs(self, requirement_id):
-        _, _, _, document, _ = await self._load(requirement_id)
+        _, _, _, document, _, _, _ = await self._load(requirement_id)
         if not document.analysis:
             raise ValueError("Analyze this requirement before creating designs")
         async with get_session() as session:

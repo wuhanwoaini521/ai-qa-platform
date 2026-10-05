@@ -5,6 +5,7 @@ import json
 
 import httpx
 import pytest
+from pydantic import BaseModel
 from qa_core.ai.models import (
     AICompletionRequest,
     AICompletionResponse,
@@ -20,6 +21,83 @@ from qa_core.ai.provider import (
 )
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.ai.trace import AITraceEvent
+from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_repairs_invalid_streamed_schema_within_the_same_timeout():
+    class Summary(BaseModel):
+        summary: str
+
+    class InvalidStreamProvider:
+        provider_name = "test"
+        model = "test-model"
+
+        def __init__(self):
+            self.repair_calls = 0
+
+        async def stream_complete(self, _request):
+            yield AIStreamChunk(content_delta='{"summary":', provider=self.provider_name, model=self.model)
+            yield AIStreamChunk(usage={"prompt_tokens": 4, "completion_tokens": 2})
+
+        async def complete(self, _request):
+            self.repair_calls += 1
+            return AICompletionResponse(
+                content='{"summary":"recovered"}',
+                structured_data={"summary": "recovered"},
+                input_tokens=3,
+                output_tokens=1,
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    provider = InvalidStreamProvider()
+    orchestrator = ProductionQAOrchestrator(ai_provider=provider)
+    response = await orchestrator.complete_streaming(
+        AICompletionRequest(prompt="diagnose", response_schema=Summary),
+        timeout_seconds=2,
+    )
+
+    assert response.structured_data == {"summary": "recovered"}
+    assert provider.repair_calls == 1
+    assert orchestrator.budget_guard.requests_count == 2
+    assert orchestrator.budget_guard.input_tokens_count == 7
+    assert orchestrator.budget_guard.output_tokens_count == 3
+
+
+@pytest.mark.asyncio
+async def test_stream_cleanup_cannot_exceed_diagnosis_timeout(monkeypatch):
+    class Summary(BaseModel):
+        summary: str
+
+    class HangingCloseStream:
+        def __init__(self):
+            self.yielded = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self.yielded:
+                raise StopAsyncIteration
+            self.yielded = True
+            return AIStreamChunk(content_delta='{"summary":"done"}')
+
+        async def aclose(self):
+            await asyncio.Event().wait()
+
+    stream = HangingCloseStream()
+    monkeypatch.setattr(
+        "qa_core.orchestrator.orchestrator.stream_provider_completion",
+        lambda *_: stream,
+    )
+    orchestrator = ProductionQAOrchestrator(ai_provider=FakeAIProvider())
+
+    with pytest.raises(RuntimeError, match="AI completion timed out after 0.01 seconds"):
+        await orchestrator.complete_streaming(
+            AICompletionRequest(prompt="diagnose", response_schema=Summary),
+            timeout_seconds=0.01,
+        )
 
 
 @pytest.mark.asyncio

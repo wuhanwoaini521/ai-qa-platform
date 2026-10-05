@@ -8,6 +8,7 @@ import { useJiraImport } from './hooks/useJiraImport';
 import { RequirementToolbar } from './components/RequirementToolbar';
 import { RequirementList } from './components/RequirementList';
 import { RequirementLifecyclePanel } from '../lifecycle/RequirementLifecyclePanel';
+import { api } from '../../api/client';
 import { TestDesignPanel } from './components/TestDesignPanel';
 import { RequirementAnalysisModal } from './components/RequirementAnalysisModal';
 import { TestDesignGenerationModal } from './components/TestDesignGenerationModal';
@@ -28,6 +29,12 @@ interface RequirementsPageProps {
   onNavigateToStudio?: (filePath: string) => void;
   initialRequirementId?: string | null;
   onSelectRequirement?: (requirementId: string) => void;
+  onCaseCreated?: (testCaseId: string, testDesignId?: string) => void;
+  onStartAnalysis?: (requirement: Requirement) => Promise<void>;
+  analysisRunning?: boolean;
+  analysisRefreshVersion?: number | null;
+  onRequirementChanged?: (requirement: Requirement) => void;
+  workspaceMode?: boolean;
 }
 
 export const RequirementsPage: React.FC<RequirementsPageProps> = ({
@@ -35,6 +42,12 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   selectedProjectId,
   initialRequirementId,
   onSelectRequirement,
+  onCaseCreated,
+  onStartAnalysis,
+  analysisRunning = false,
+  analysisRefreshVersion = null,
+  onRequirementChanged,
+  workspaceMode = false,
 }) => {
   const { t } = useTranslation('requirements');
   const reqForm = useRequirementFormModal(
@@ -51,6 +64,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   const ai = useRequirementAI({
     selectedReq: reqs.selectedReq,
     onDesignCreated: designs.appendDesign,
+    onCaseCreated,
   });
   const jira = useJiraImport({
     selectedProjectId,
@@ -59,6 +73,17 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   });
 
   const { selectedReq } = reqs;
+
+  React.useEffect(() => {
+    if (!workspaceMode || analysisRefreshVersion == null || analysisRefreshVersion <= 0 || !selectedReq) return;
+    let active = true;
+    void api.getRequirement(selectedReq.id).then((item) => {
+      if (!active) return;
+      reqs.setSelectedReq(item);
+      onRequirementChanged?.(item);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [analysisRefreshVersion, onRequirementChanged, reqs.setSelectedReq, selectedReq?.id, workspaceMode]);
 
   const handleSelectRequirement = (requirement: Requirement) => {
     reqs.setSelectedReq(requirement);
@@ -87,14 +112,14 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   };
 
   return (
-    <div>
-      <RequirementToolbar
+    <div className={workspaceMode ? 'workspace-requirement-embedded' : undefined}>
+      {!workspaceMode && <RequirementToolbar
         projects={projects}
         onOpenJira={jira.handleOpenJiraModal}
         onNewRequirement={() =>
           reqForm.open(selectedProjectId || projects[0]?.id || '')
         }
-      />
+      />}
 
       {projects.length === 0 ? (
         <div className="card">
@@ -109,6 +134,22 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
             {t('pageNoProject')}
           </div>
         </div>
+      ) : workspaceMode ? (
+          selectedReq ? (
+            <div className="workspace-requirement-detail">
+              <RequirementLifecyclePanel
+                key={selectedReq.id}
+                requirement={selectedReq}
+                onChanged={reqs.setSelectedReq}
+                onCaseCreated={onCaseCreated}
+                onStartAnalysis={workspaceMode ? () => onStartAnalysis?.(selectedReq) ?? Promise.resolve() : undefined}
+                analysisRunning={analysisRunning}
+                showJourney={false}
+              />
+            </div>
+          ) : (
+            <div className="workspace-empty"><p>{t('pageSelectRequirement')}</p></div>
+          )
       ) : (
         <div className="lc-requirements-layout">
           <RequirementList
@@ -126,6 +167,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                 key={selectedReq.id}
                 requirement={selectedReq}
                 onChanged={reqs.setSelectedReq}
+                onCaseCreated={onCaseCreated}
               />
               {!selectedReq.qa_model && (
                 <>
@@ -159,7 +201,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
             </div>
           )}
         </div>
-      )}
+        )}
 
       <RequirementAnalysisModal
         progressEvents={ai.analysisProgress.events}

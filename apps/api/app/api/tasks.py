@@ -11,6 +11,7 @@ from project_model.task_models import (
     TaskApprovalRequest,
     TaskCreate,
     TaskDetail,
+    TaskGoalPreview,
     TaskStatus,
 )
 
@@ -36,6 +37,18 @@ async def create_task(
 ) -> Task:
     try:
         return await runtime.create(data, str(user.id))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/preview", response_model=TaskGoalPreview)
+async def preview_task_goal(
+    data: TaskCreate,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskGoalPreview:
+    try:
+        return await runtime.preview_goal(data)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -72,6 +85,33 @@ async def decide_task_approval(
     detail = await runtime.approve(task_id, str(user.id), request)
     if detail is None:
         raise HTTPException(status_code=409, detail="Task is not waiting for an approval decision")
+    return detail
+
+
+@router.post("/{task_id}/pause", response_model=TaskDetail)
+async def pause_task(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskDetail:
+    detail = await runtime.pause(task_id, str(user.id))
+    if detail is None:
+        raise HTTPException(status_code=409, detail="Task cannot be paused in its current state")
+    return detail
+
+
+@router.post("/{task_id}/resume", response_model=TaskDetail)
+async def resume_task(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    runtime: TaskRuntimeService = Depends(get_task_runtime),
+) -> TaskDetail:
+    try:
+        detail = await runtime.resume(task_id, str(user.id))
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if detail is None:
+        raise HTTPException(status_code=409, detail="Task is not paused")
     return detail
 
 

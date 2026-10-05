@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from app.settings import settings
@@ -36,3 +37,29 @@ def browser_proxy_options() -> dict[str, str] | None:
     if bypass:
         options["bypass"] = bypass
     return options
+
+
+async def launch_chromium(playwright: Any, *, headless: bool = True, **options: Any) -> Any:
+    """Use an installed system browser when the bundled Chromium cannot execute."""
+    try:
+        return await playwright.chromium.launch(headless=headless, **options)
+    except Exception as error:
+        message = str(error).lower()
+        if not any(
+            marker in message
+            for marker in (
+                "spawn eperm",
+                "winerror 5",
+                "permission denied",
+                "access is denied",
+                "executable doesn't exist",
+            )
+        ):
+            raise
+
+        for channel in ("msedge", "chrome"):
+            try:
+                return await playwright.chromium.launch(headless=headless, channel=channel, **options)
+            except Exception:
+                pass
+        raise error

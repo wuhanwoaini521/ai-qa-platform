@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { History, StopCircle } from 'lucide-react';
 import { AITraceEvent, FailureAnalysisRun } from '../types';
+import { AIExecutionTimeline } from './AIExecutionTimeline';
 
 export const FailureWorkflowPanel: React.FC<{
   events: AITraceEvent[];
@@ -10,8 +11,20 @@ export const FailureWorkflowPanel: React.FC<{
   selectedId: string;
   onSelect: (id: string) => void;
   onCancel: () => void;
+  failureCreatedAt?: string;
+  classification?: string;
   error?: string;
-}> = ({ events, running, history, selectedId, onSelect, onCancel, error }) => {
+}> = ({
+  events,
+  running,
+  history,
+  selectedId,
+  onSelect,
+  onCancel,
+  failureCreatedAt,
+  classification,
+  error,
+}) => {
   const { t } = useTranslation('failures');
   const plan = events.find((event) => event.type === 'workflow.plan');
   const domain = String(
@@ -106,6 +119,12 @@ export const FailureWorkflowPanel: React.FC<{
           {model ? ` · ${model}` : ''}
         </div>
       )}
+      {events.length > 0 && (
+        <details className="failure-workflow-live-events">
+          <summary>{t('workflow.liveEvents')}</summary>
+          <AIExecutionTimeline events={events} running={running} workflowMode />
+        </details>
+      )}
       {(error || failed || cancelled || interrupted) && (
         <p className="failure-workflow-error" role="status">
           {error || terminal?.message || t('workflow.interruptedDetail')}
@@ -115,32 +134,58 @@ export const FailureWorkflowPanel: React.FC<{
         {t('workflow.verificationBoundary')}
       </p>
       <div className="failure-workflow-history">
-        <History size={14} aria-hidden="true" />
-        <label htmlFor="failure-analysis-history">
-          {t('workflow.history')}
-        </label>
-        <select
-          id="failure-analysis-history"
-          value={
-            history.some((item) => item.id === selectedId) ? selectedId : ''
-          }
-          disabled={running || !history.length}
-          onChange={(event) => onSelect(event.target.value)}
-        >
-          <option value="">
-            {running
-              ? t('workflow.current')
-              : history.length
-                ? t('workflow.selectHistory')
-                : t('workflow.noHistory')}
-          </option>
-          {history.map((item) => (
-            <option key={item.id} value={item.id}>
-              {new Date(item.created_at).toLocaleString()} ·{' '}
-              {t(`workflow.runStatus.${item.status}`)}
-            </option>
-          ))}
-        </select>
+        <div className="failure-workflow-history-title">
+          <History size={14} aria-hidden="true" />
+          <strong>{t('analysisTimeline')}</strong>
+        </div>
+        {!failureCreatedAt && !history.length ? (
+          <p className="failure-workflow-empty">{t('noDiagnosisHistory')}</p>
+        ) : (
+          <ol className="failure-analysis-timeline">
+            {failureCreatedAt && (
+              <li>
+                <time dateTime={failureCreatedAt}>
+                  {new Date(failureCreatedAt).toLocaleString()}
+                </time>
+                <span>
+                  {t('failureRecorded')}
+                  {classification
+                    ? ` · ${t('ruleClassified', { classification })}`
+                    : ''}
+                </span>
+              </li>
+            )}
+            {history.map((item) => {
+              const selected = item.id === selectedId;
+              const labelKey =
+                item.status === 'COMPLETED'
+                  ? 'analysisCompleted'
+                  : item.status === 'FAILED'
+                    ? 'analysisFailed'
+                    : 'analysisStarted';
+              return (
+                <li key={item.id} className={selected ? 'is-selected' : ''}>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={running}
+                    onClick={() => onSelect(item.id)}
+                  >
+                    <time dateTime={item.created_at}>
+                      {new Date(item.created_at).toLocaleString()}
+                    </time>
+                    <span>
+                      {t(labelKey)} · {t(`workflow.runStatus.${item.status}`)}
+                    </span>
+                    {item.events.length > 0 && (
+                      <small>{item.events.length} {t('recordedEvents')}</small>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        )}
       </div>
     </section>
   );

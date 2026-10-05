@@ -304,6 +304,7 @@ export type TestRunStatus =
 
 export interface TestRun {
   id: string;
+  parent_run_id?: string | null;
   project_id: string;
   workspace_id: string;
   status: TestRunStatus;
@@ -495,12 +496,24 @@ export interface QAChatContext {
 }
 
 export type AgentTaskType =
+  | 'QA_GOAL'
+  | 'ANALYZE_REQUIREMENT'
   | 'CREATE_TEST'
   | 'FIX_FAILURE'
   | 'OPTIMIZE_TEST'
   | 'EXPLORE_PAGE'
   | 'RUN_REGRESSION'
   | 'REVIEW_TEST';
+
+export interface AgentGoalPreview {
+  goal: string;
+  plan_token: string;
+  context: string;
+  steps: Array<{ title: string; conditional: boolean; risk: string }>;
+  effects: string[];
+  approval_required: boolean;
+  constraints: string[];
+}
 export type AgentTaskStatus =
   | 'PENDING'
   | 'PLANNING'
@@ -509,6 +522,9 @@ export type AgentTaskStatus =
   | 'VERIFYING'
   | 'RETRYING'
   | 'REPLANNING'
+  | 'PAUSING'
+  | 'PAUSED'
+  | 'RESUMING'
   | 'COMPLETED'
   | 'FAILED'
   | 'BLOCKED'

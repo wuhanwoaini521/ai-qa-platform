@@ -57,3 +57,22 @@ async def test_timeout_is_recorded_as_an_error_instead_of_a_pass(tmp_path):
     assert result.exit_code is None
     assert result.results == []
     assert any("timed out" in line for line in result.raw_logs)
+
+
+@pytest.mark.asyncio
+async def test_run_timeout_can_be_extended_for_a_long_running_task(tmp_path):
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_slow.py").write_text(
+        "import time\ndef test_slow():\n    time.sleep(0.4)\n    assert True\n",
+        encoding="utf-8",
+    )
+
+    result = await PytestRunner(default_timeout_sec=0.1).run_suite(
+        tmp_path,
+        nodeids=["tests/test_slow.py::test_slow"],
+        timeout_sec=3,
+    )
+
+    assert result.exit_code == 0
+    assert result.passed == result.total == 1

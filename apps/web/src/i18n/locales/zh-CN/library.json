@@ -1,0 +1,26 @@
+{
+  "title": "Library",
+  "eyebrow": "查找 · 历史 · 管理",
+  "subtitle": "浏览平台中已保存的项目、需求、用例、运行和失败记录。日常工作从 Workspace 开始。",
+  "collections": "资源集合",
+  "projects": "项目",
+  "requirements": "需求",
+  "cases": "测试用例",
+  "runs": "运行历史",
+  "failures": "失败记录",
+  "description": {
+    "projects": "项目与工作区",
+    "requirements": "需求和测试设计",
+    "cases": "手工及自动化用例",
+    "runs": "最近加载的最多 8 条运行记录",
+    "failures": "最近加载的最多 8 条失败记录"
+  },
+  "recentRuns": "最近运行",
+  "recentFailures": "最近失败",
+  "empty": "暂无记录。",
+  "loading": "正在读取资源记录…",
+  "retry": "重试加载",
+  "projectManagement": "项目管理",
+  "requirementManagement": "需求管理",
+  "caseManagement": "用例管理"
+}

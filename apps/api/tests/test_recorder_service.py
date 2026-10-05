@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from app.services.browser_proxy import browser_proxy_options
+from app.services.browser_proxy import browser_proxy_options, launch_chromium
 from app.services.recorder_service import (
     BrowserRecorderService,
     RecorderGenerateRequest,
@@ -121,6 +121,9 @@ async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
         async def is_enabled(self):
             return True
 
+        async def evaluate(self, _script):
+            return True
+
         async def click(self, **_kwargs):
             return None
 
@@ -182,6 +185,17 @@ def test_browser_proxy_splits_credentials_and_bypasses_local_hosts(monkeypatch: 
         "password": "p@ss",
         "bypass": "localhost,127.0.0.1",
     }
+
+
+@pytest.mark.asyncio
+async def test_browser_launch_uses_installed_edge_when_bundled_chromium_is_denied() -> None:
+    browser = object()
+    launch = AsyncMock(side_effect=[RuntimeError("BrowserType.launch: spawn EPERM"), browser])
+    playwright = SimpleNamespace(chromium=SimpleNamespace(launch=launch))
+
+    assert await launch_chromium(playwright) is browser
+    assert launch.call_args_list[0].kwargs == {"headless": True}
+    assert launch.call_args_list[1].kwargs == {"headless": True, "channel": "msedge"}
 
 
 def test_generated_case_uses_same_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:

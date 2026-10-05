@@ -12,6 +12,8 @@ def utc_now() -> datetime:
 
 
 class TaskType(str, Enum):
+    QA_GOAL = "QA_GOAL"
+    ANALYZE_REQUIREMENT = "ANALYZE_REQUIREMENT"
     CREATE_TEST = "CREATE_TEST"
     FIX_FAILURE = "FIX_FAILURE"
     OPTIMIZE_TEST = "OPTIMIZE_TEST"
@@ -28,6 +30,9 @@ class TaskStatus(str, Enum):
     VERIFYING = "VERIFYING"
     RETRYING = "RETRYING"
     REPLANNING = "REPLANNING"
+    PAUSING = "PAUSING"
+    PAUSED = "PAUSED"
+    RESUMING = "RESUMING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
@@ -74,6 +79,8 @@ class TaskStepSpec(BaseModel):
 class TaskCreate(BaseModel):
     type: TaskType
     goal: str = Field(min_length=3, max_length=4000)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=100)
+    plan_token: str | None = None
     project_id: str | None = None
     workspace_id: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
@@ -82,6 +89,22 @@ class TaskCreate(BaseModel):
     max_replans: int = Field(default=2, ge=0, le=5)
     max_ai_calls: int = Field(default=8, ge=0, le=50)
     max_duration_seconds: int = Field(default=1800, ge=10, le=86400)
+
+
+class TaskGoalPreviewStep(BaseModel):
+    title: str
+    conditional: bool = False
+    risk: str = "LOW"
+
+
+class TaskGoalPreview(BaseModel):
+    goal: str
+    plan_token: str
+    context: str
+    steps: list[TaskGoalPreviewStep]
+    effects: list[str] = Field(default_factory=list)
+    approval_required: bool = False
+    constraints: list[str] = Field(default_factory=list)
 
 
 class TaskStep(BaseModel):

@@ -1,10 +1,20 @@
 import { useState } from 'react';
-import type { RuntimeSnapshot } from '../../types/runtime';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { RuntimeSnapshot, RuntimeSourceOpener } from '../../types/runtime';
 import { LiveBrowserPanel } from '../runs/LiveBrowserPanel';
 import { useRunStore } from '../runs/useRunStore';
 import { browserEntries } from './browserModel';
-export function RuntimeBrowser({ snapshot, onOpenSource }: { snapshot: RuntimeSnapshot; onOpenSource?: (path: string, line: number) => void }) {
+import { RuntimeFailureWorkspace } from './RuntimeFailureWorkspace';
+
+export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
+  snapshot: RuntimeSnapshot;
+  projectId?: string;
+  onOpenSource?: RuntimeSourceOpener;
+}) {
+  const { t } = useTranslation('runtime');
   const [selected, setSelected] = useState('');
+  const [selectedFailureId, setSelectedFailureId] = useState('');
   const [channel, setChannel] = useState<
     'recent_steps' | 'network_logs' | 'console_logs'
   >('recent_steps');
@@ -14,23 +24,51 @@ export function RuntimeBrowser({ snapshot, onOpenSource }: { snapshot: RuntimeSn
     null;
   const live = useRunStore(runId);
   const entries = browserEntries(live.sessions, channel);
+  const browserUsed = snapshot.browser_sessions.length > 0 || snapshot.events.some((event) => event.category === 'browser');
+  const recorderSessionId = snapshot.task?.recorder_session_id;
+  const failures = snapshot.failures.filter((failure) => !runId || failure.test_run_id === runId);
+  const activeFailure = failures.find((failure) => failure.id === selectedFailureId) ?? failures[0] ?? null;
+  const failureSession = activeFailure
+    ? live.sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
+      ?? snapshot.browser_sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
+    : null;
+  if (!browserUsed && !activeFailure && !recorderSessionId) return <div className="rt-browser"><p className="rt-empty">{t('browserUnused')}</p></div>;
   return (
     <div className="rt-browser">
+      {recorderSessionId && <p className="rt-notice"><Link to={`/recorder?session_id=${encodeURIComponent(recorderSessionId)}`}>{t('takeOverBrowser')}</Link></p>}
       {snapshot.runs.length > 1 && (
         <label>
-          TestRun{' '}
+          {t('testRun')}{' '}
           <select
             value={runId ?? ''}
             onChange={(event) => setSelected(event.target.value)}
           >
             {snapshot.runs.map((run) => (
               <option key={run.id} value={run.id}>
-                {run.id} · {run.status}
+                {run.id} · {t(run.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : run.status.toLowerCase(), { defaultValue: run.status })}
               </option>
             ))}
           </select>
         </label>
       )}
+      {failures.length > 1 && (
+        <label className="rt-failure-select">
+          {t('failureWorkspace.failedCase')}{' '}
+          <select value={activeFailure?.id ?? ''} onChange={(event) => setSelectedFailureId(event.target.value)}>
+            {failures.map((failure) => <option key={failure.id} value={failure.id}>{failure.title}</option>)}
+          </select>
+        </label>
+      )}
+      {activeFailure && (
+        <RuntimeFailureWorkspace
+          key={activeFailure.id}
+          failure={activeFailure}
+          projectId={projectId}
+          pageUrl={failureSession?.current_url}
+          onOpenSource={onOpenSource}
+        />
+      )}
+      {browserUsed && <>
       <LiveBrowserPanel
         sessions={live.sessions}
         frames={live.frames}
@@ -39,17 +77,14 @@ export function RuntimeBrowser({ snapshot, onOpenSource }: { snapshot: RuntimeSn
         streamError={live.error}
       />
       {!runId && (
-        <p className="rt-notice">
-          此 Task 的浏览器工具尚未记录直播 Session；可在 Artifacts
-          查看实际截图证据。
-        </p>
+        <p className="rt-notice">{t('browserNoSession')}</p>
       )}
-      <div className="rt-toolbar" aria-label="Browser 遥测">
+      <div className="rt-toolbar" aria-label={t('browserTelemetry')}>
         {(
           [
-            ['recent_steps', 'Steps'],
-            ['network_logs', 'Network'],
-            ['console_logs', 'Console'],
+            ['recent_steps', t('browserSteps')],
+            ['network_logs', t('network')],
+            ['console_logs', t('console')],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -62,7 +97,7 @@ export function RuntimeBrowser({ snapshot, onOpenSource }: { snapshot: RuntimeSn
         ))}
       </div>
       {!entries.length ? (
-        <p className="rt-muted">尚未记录此类浏览器事件</p>
+        <p className="rt-muted">{t('browserEventsUnrecorded')}</p>
       ) : (
         <div className="rt-browser-entries">
           {entries.map(({ session, entry }, index) => (
@@ -94,6 +129,7 @@ export function RuntimeBrowser({ snapshot, onOpenSource }: { snapshot: RuntimeSn
           ))}
         </div>
       )}
+      </>}
     </div>
   );
 }

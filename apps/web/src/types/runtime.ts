@@ -1,3 +1,17 @@
+export interface RuntimeSourceContext {
+  nodeId?: string;
+  testCaseId?: string;
+  failureId?: string;
+  taskId?: string;
+  runId?: string;
+}
+
+export type RuntimeSourceOpener = (
+  path: string,
+  line: number,
+  context?: RuntimeSourceContext,
+) => void;
+
 export interface RuntimeSpan {
   id: string;
   kind: string;
@@ -10,6 +24,9 @@ export interface RuntimeSpan {
   test_run_id: string | null;
   step_id: string | null;
   timestamp_source?: string | null;
+  operation?: string | null;
+  provider?: string | null;
+  model?: string | null;
 }
 export interface RuntimeStep extends RuntimeSpan {
   key: string;
@@ -19,6 +36,10 @@ export interface RuntimeStep extends RuntimeSpan {
   inputs_summary: string;
   outputs_summary: string;
   error: string | null;
+  failure_type?: string | null;
+  ai_provider?: string | null;
+  ai_model?: string | null;
+  validation_error?: string | null;
 }
 export interface RuntimeEvent {
   id: string;
@@ -66,8 +87,20 @@ export interface RuntimeSnapshot {
         type: string;
         current_step_id: string | null;
         retry_count: number;
+        failure_reason?: string | null;
+        replan_count?: number;
+        max_replans?: number;
+        recorder_session_id?: string | null;
       })
     | null;
+  blocking: {
+    step_id: string | null;
+    step_key: string | null;
+    failure_type: string;
+    reason: string;
+    recoverable: boolean;
+    recovery_actions: ('retry_step' | 'replan' | 'inspect_ai_output')[];
+  } | null;
   steps: RuntimeStep[];
   runs: (RuntimeSpan & {
     relationship_source: string;

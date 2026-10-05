@@ -49,16 +49,18 @@ export function useContextTask(projectId: string | null, origin: string, originI
     return () => { active = false; window.clearInterval(timer); };
   }, [task?.id, task?.status]);
 
-  const start = useCallback(async (request: TaskRequest) => {
-    if (!originId) return;
+  const start = useCallback(async (request: TaskRequest): Promise<AgentTask | null> => {
+    if (!originId) return null;
     const version = ++loadVersion.current;
     setBusy(true);
     setError('');
     try {
       const created = await api.createTask({ ...request, inputs: { ...request.inputs, origin, origin_id: originId } });
       if (version === loadVersion.current) setTask(created);
+      return created;
     } catch (cause) {
       if (version === loadVersion.current) setError(cause instanceof Error ? cause.message : String(cause));
+      return null;
     } finally {
       if (version === loadVersion.current) setBusy(false);
     }

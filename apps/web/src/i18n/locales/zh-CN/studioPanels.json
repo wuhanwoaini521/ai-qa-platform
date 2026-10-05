@@ -103,6 +103,16 @@
     "cancel": "取消",
     "hideTimeline": "收起时间线",
     "showTimeline": "展开时间线",
+    "workflowDetails": "展开此阶段的 {{count}} 条详细事件",
+    "workflowStages": {
+      "context": "读取测试与运行上下文",
+      "logs": "整理错误日志与堆栈",
+      "inspection": "检查已捕获的失败证据",
+      "diagnosis": "AI 分析根因",
+      "decision": "判断定位器修复方向",
+      "suggestion": "整理修复建议",
+      "verification": "复测验证"
+    },
     "eventMetadata": "事件元数据",
     "providerUnavailable": "AI Provider 不可用",
     "cancelled": "运行已取消，部分回答已保留。",

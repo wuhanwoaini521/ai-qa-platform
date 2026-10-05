@@ -1,193 +1,124 @@
-import { Check, Circle, Play, ShieldAlert, Timer } from 'lucide-react';
-import type { RuntimeSnapshot } from '../../types/runtime';
-import { durationLabel, overviewFacts, runtimeActive } from './runtimeModel';
+import { Check, Circle, Play, ShieldAlert } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { RuntimeRunResults } from './RuntimeRunResults';
+import type { RuntimeSnapshot, RuntimeStep } from '../../types/runtime';
+import { durationLabel, nextAction, overviewFacts, retryActionLabel, runtimeActive, runtimeStatusKey } from './runtimeModel';
+
+function StepMark({ status }: { status: string }) {
+  const Icon = status === 'COMPLETED' ? Check : status === 'FAILED' ? ShieldAlert : status === 'RUNNING' ? Play : Circle;
+  return <Icon size={13} aria-hidden="true" />;
+}
 
 export function RuntimeOverview({
   snapshot,
   onOpenFlow,
+  onSelectStep,
 }: {
   snapshot: RuntimeSnapshot;
   onOpenFlow?: () => void;
+  onSelectStep: (stepId: string) => void;
 }) {
+  const { t } = useTranslation('runtime');
   const facts = overviewFacts(snapshot);
   const active = runtimeActive(snapshot.status);
+  const next = nextAction(snapshot);
+  const blocker = snapshot.blocking;
+  const retryLabel = retryActionLabel(snapshot.task?.type);
+  const blockerStep = snapshot.steps.find((step) => step.id === blocker?.step_id);
+  const failed = facts.failed[0];
+  const relatedAi = snapshot.ai_invocations.filter((call) => call.step_id === blocker?.step_id);
+  const testState = snapshot.runs.length ? 'started' : snapshot.status === 'BLOCKED' ? 'notReached' : 'notStarted';
+  const agentProgress = [...snapshot.events].reverse().find((event) => event.type === 'browser.agent_progress');
+  const agentAction = [...snapshot.events].reverse().find((event) => event.type === 'browser.action_started');
+  const agentResult = [...snapshot.events].reverse().find((event) => event.type === 'browser.action_completed');
+  const summaryLines = [
+    facts.counts.completed > 0 && facts.counts.failed > 0,
+    snapshot.status === 'BLOCKED' && blocker?.failure_type === 'AI_OUTPUT_INVALID',
+    snapshot.status === 'BLOCKED' && !snapshot.steps.some((step) => ['source.write_generated', 'source.apply_repair'].includes(step.tool) && step.status === 'COMPLETED'),
+  ];
+
   return (
     <div className="rt-overview">
-      {snapshot.kind === 'run' && snapshot.task && (
-        <Link to={`/runs/tasks?taskId=${encodeURIComponent(snapshot.task.id)}`}>返回工作流 · {snapshot.task.title}</Link>
-      )}
-      {!!snapshot.run_ancestors?.length && (
-        <section className="rt-block">
-          <h3>Retry · 父运行链</h3>
-          <div className="rt-retry-chain">
-            {snapshot.run_ancestors.map((run) => (
-              <Link key={run.id} to={`/runs/${run.id}`}>
-                {run.id} · {run.status} →
-              </Link>
-            ))}
-            <code>{snapshot.id}</code>
+      <section className="rt-overview-state">
+        <div className="rt-overview-state-copy">
+          <span className="rt-eyebrow">{t('currentState')}</span>
+          <div className="rt-overview-status"><span className={`rt-status status-${snapshot.status.toLowerCase()}`}>{t(runtimeStatusKey(snapshot.status))}</span>
+            {blockerStep && <button className="rt-inline-step" onClick={() => onSelectStep(blockerStep.id)}><code>{t('blockedAt')} · {blockerStep.key}</code></button>}
           </div>
-        </section>
-      )}
-      <section className="rt-now">
-        <span className="rt-eyebrow">当前执行</span>
-        <h3>
-          {facts.active.length
-            ? facts.active.map((step) => step.title).join(' · ')
-            : snapshot.summary.approval
-              ? '等待你审批本次变更'
-              : active
-                ? snapshot.kind === 'run'
-                  ? '测试执行正在进行'
-                  : '等待调度或依赖完成'
-                : snapshot.status === 'COMPLETED' ||
-                    snapshot.status === 'PASSED'
-                  ? '本次执行已完成'
-                  : `本次执行 ${snapshot.status}`}
-        </h3>
-        <p>
-          {facts.active.map((step) => step.tool).join(' · ') || snapshot.id}
-        </p>
-        <div className="rt-progress">
-          <span
-            style={{
-              width: `${snapshot.summary.total_steps ? (snapshot.summary.completed_steps / snapshot.summary.total_steps) * 100 : 0}%`,
-            }}
-          />
+          {snapshot.status === 'BLOCKED' && blocker?.reason && <p className="rt-blocker-reason">{blocker.reason}</p>}
+          {snapshot.status === 'BLOCKED' && snapshot.task?.type === 'FIX_FAILURE' && snapshot.runs.length === 0 && <p className="rt-not-reached">{t('testNotStarted')}</p>}
+          {snapshot.status !== 'BLOCKED' && (blocker?.reason || blockerStep?.error) && <p>{blocker?.reason ?? blockerStep?.error}</p>}
+          {snapshot.status !== 'BLOCKED' && !blockerStep && <p>{facts.active.map((step) => step.title).join(' · ') || (active ? t('running') : t('completed'))}</p>}
         </div>
-        <small>
-          {snapshot.summary.completed_steps} / {snapshot.summary.total_steps}{' '}
-          步骤完成{snapshot.summary.approval ? ' · 需要审批' : ''}
-        </small>
+        <div className="rt-next-action">
+          <span className="rt-eyebrow">{t('nextAction')}</span>
+          <strong>{next === 'retry' ? t(retryLabel) : next === 'replan' ? t('replan') : next === 'approval' ? t('approvalRequired') : next === 'run_next' ? t('running') : next === 'running' ? t('running') : next === 'none' ? t('noNextAction') : t('unknown')}</strong>
+          {blockerStep && <button className="btn btn-secondary btn-sm" onClick={() => onSelectStep(blockerStep.id)}>{t('inspectOutput')}</button>}
+        </div>
       </section>
+
+      <section className="rt-overview-progress rt-block">
+        <div className="rt-section-heading"><h3>{t('progress')}</h3><span className="rt-count-summary">{facts.counts.completed} {t('completedCount')} · {facts.counts.failed} {t('failedCount')} · {facts.counts.remaining} {t('pendingCount')}{facts.counts.blocked ? ` (${facts.counts.blocked} ${t('blockedCount')})` : ''}</span></div>
+        <div className="rt-progress-segments" role="img" aria-label={t('progressAria', { completed: facts.counts.completed, failed: facts.counts.failed, pending: facts.counts.remaining })}>
+          {snapshot.steps.map((step) => <span key={step.id} className={`rt-progress-segment status-${step.status.toLowerCase()}`} title={`${step.key} · ${step.status}`} />)}
+        </div>
+        <ol className="rt-step-list">
+          {snapshot.steps.map((step: RuntimeStep) => {
+            const downstream = facts.counts.blockedStepIds.includes(step.id);
+            return <li key={step.id} className={`status-${step.status.toLowerCase()}${downstream ? ' is-blocked-downstream' : ''}`}>
+              <button onClick={() => onSelectStep(step.id)} title={`${step.title} · ${t(runtimeStatusKey(step.status))}`} aria-label={`${step.key}, ${t(runtimeStatusKey(step.status))}`}>
+                <StepMark status={step.status} /><code>{step.key}</code><span>{step.title}</span>
+                {step.status === 'FAILED' && snapshot.status === 'BLOCKED' && <small>{t('blockedHere')}</small>}
+                {downstream && <small>{t('blockedBy', { step: snapshot.blocking?.step_key })}</small>}
+              </button>
+            </li>;
+          })}
+        </ol>
+        {onOpenFlow && snapshot.steps.length > 0 && <button className="btn btn-secondary btn-sm" onClick={onOpenFlow}>{t('openFlow')}</button>}
+      </section>
+
+      {snapshot.task?.type === 'EXPLORE_PAGE' && (agentProgress || agentAction || agentResult) && <section className="rt-block">
+        <h3>QA Agent</h3>
+        <div className="rt-inline-meta"><span>{t('currentGoal')}</span><span>{snapshot.title}</span></div>
+        {agentAction && <div className="rt-inline-meta"><span>{t('currentAction')}</span><span>{agentAction.title}</span></div>}
+        {agentResult && <div className="rt-inline-meta"><span>{t('recentResult')}</span><span>{agentResult.summary || agentResult.title}</span></div>}
+        {!agentResult && agentProgress?.summary && <p>{agentProgress.summary}</p>}
+      </section>}
+
       <div className="rt-overview-grid">
-        <section className="rt-block">
-          <h3>下一可执行步骤</h3>
-          {facts.next.length ? (
-            facts.next.map((step) => (
-              <p key={step.id}>
-                <code>{step.key}</code> · {step.title}
-              </p>
-            ))
-          ) : (
-            <p className="rt-muted">
-              {active ? '等待依赖完成；没有可执行的后续步骤' : '执行已结束'}
-            </p>
-          )}
+        <section className="rt-block rt-summary-block">
+          <h3>{t('executionSummary')}</h3>
+          {summaryLines[0] && <p>{t('stepsBeforeFailure', { count: facts.counts.completed, step: failed?.key ?? '—' })}</p>}
+          {summaryLines[1] && !blocker?.reason && <p>{t('repairFailed')}</p>}
+          {summaryLines[2] && <p>{t('sourceUnchanged')}</p>}
+          {!summaryLines.some(Boolean) && <p className="rt-muted">{facts.active.map((step) => step.title).join(' · ') || snapshot.title}</p>}
+          <div className="rt-inline-meta"><span>{t('browser')}</span><span>{snapshot.browser_sessions.length ? t('sessionCount', { count: snapshot.browser_sessions.length }) : t('browserUnused')}</span></div>
+          <div className="rt-inline-meta"><span>{t('testRun')}</span><span>{testState === 'started' ? t('runCount', { count: snapshot.runs.length }) : t(testState)}</span></div>
+          {snapshot.runs.map((run) => <div className="rt-inline-meta" key={run.id}><Link to={`/runs/${run.id}`}>{t('testRun')} #{run.id}</Link><span>{t(runtimeStatusKey(run.status), { defaultValue: run.status })}</span></div>)}
         </section>
         <section className="rt-block">
-          <h3>测试执行</h3>
-          {snapshot.runs.length ? (
-            <>
-              <strong className="rt-large-number">
-                {facts.tests.passed} <small>/ {facts.tests.total} passed</small>
-              </strong>
-              <p>
-                {facts.tests.failed} failed · {snapshot.runs.length} Run
-              </p>
-              {snapshot.runs.map((run) => (
-                <div className="rt-inline-meta" key={run.id}>
-                  <Link to={`/runs/${run.id}`}><code>{run.id}</code></Link>
-                  <span>{run.status}</span>
-                </div>
-              ))}
-            </>
-          ) : (
-            <p className="rt-muted">尚未记录 TestRun</p>
-          )}
+          <h3>{t('runtimeSummary')}</h3>
+          <dl className="rt-summary-grid">
+            <div><dt>{t('aiTime')}</dt><dd>{facts.aiTimeMs ? durationLabel(facts.aiTimeMs) : '—'}</dd></div>
+            <div><dt>{t('evidence')}</dt><dd>{snapshot.evidence.length}</dd></div>
+            <div><dt>{t('childRuns')}</dt><dd>{snapshot.runs.length}</dd></div>
+            <div><dt>{t('longestStep')}</dt><dd>{facts.slowest ? `${facts.slowest.key} · ${durationLabel(facts.slowest.duration_ms)}` : '—'}</dd></div>
+          </dl>
+          {snapshot.artifacts.length === 0 ? <p className="rt-empty-note">{t('noArtifacts')} {snapshot.status === 'BLOCKED' && t('noArtifactsReason')}</p> : snapshot.artifacts.slice(0, 4).map((artifact) => <div key={artifact.id} className="rt-inline-meta"><span>{artifact.name}</span><code>{artifact.type}</code></div>)}
         </section>
       </div>
-      {!!(facts.failed.length || snapshot.failures.length) && (
-        <section className="rt-block rt-failure">
-          <h3>
-            <ShieldAlert size={14} aria-hidden="true" /> 失败位置
-          </h3>
-          {facts.failed.map((step) => (
-            <p key={step.id}>
-              <code>{step.key}</code> · {step.error || step.status}
-            </p>
-          ))}
-          {snapshot.failures.map((failure) => (
-            <p key={failure.id}>
-              <Link to={`/failures/${encodeURIComponent(failure.id)}`}><strong>{failure.title}</strong></Link> · {failure.classification}
-              <small>{failure.message}</small>
-            </p>
-          ))}
-        </section>
-      )}
-      <RuntimeRunResults snapshot={snapshot} />
-      <section className="rt-block">
-        <div className="rt-toolbar">
-          <h3>TaskStep 执行路径</h3>
-          {onOpenFlow && !!snapshot.steps.length && (
-            <button className="btn btn-secondary btn-sm" onClick={onOpenFlow}>
-              Open Flow
-            </button>
-          )}
-        </div>
-        {snapshot.steps.length ? (
-          <ol className="rt-mini-flow">
-            {snapshot.steps.map((step) => {
-              const Icon =
-                step.status === 'COMPLETED'
-                  ? Check
-                  : step.status === 'RUNNING'
-                    ? Play
-                    : step.status === 'FAILED'
-                      ? ShieldAlert
-                      : Circle;
-              return (
-                <li
-                  key={step.id}
-                  className={`status-${step.status.toLowerCase()}`}
-                >
-                  <Icon size={14} aria-hidden="true" />
-                  <div>
-                    <code>{step.key}</code>
-                    <span>{step.title}</span>
-                  </div>
-                  <small>{step.status}</small>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="rt-muted">
-            独立 TestRun 没有 TaskStep DAG；可查看测试结果与真实执行记录。
-          </p>
-        )}
-      </section>
-      <div className="rt-overview-grid">
-        <section className="rt-block">
-          <h3>
-            <Timer size={14} aria-hidden="true" /> 最慢的已完成步骤
-          </h3>
-          <p>
-            {facts.slowest
-              ? `${facts.slowest.key} · ${durationLabel(facts.slowest.duration_ms)}`
-              : '数据暂未记录'}
-          </p>
-        </section>
-        <section className="rt-block">
-          <h3>决策与制品</h3>
-          <p>
-            {snapshot.decisions.length} 个决策 · {snapshot.artifacts.length}{' '}
-            个制品
-          </p>
-          <p>
-            {snapshot.browser_sessions.length} 个测试浏览器会话 ·{' '}
-            {snapshot.summary.retries} 次步骤重试
-          </p>
-          {snapshot.artifacts.slice(0, 4).map((artifact) => (
-            <div key={artifact.id} className="rt-inline-meta">
-              <span>{artifact.name}</span>
-              <code>{artifact.type}</code>
-            </div>
-          ))}
-        </section>
-      </div>
+
+      {!!failed && <section className="rt-block rt-failure-card">
+        <div className="rt-section-heading"><h3>{t('failure')}</h3><span className="rt-status status-failed">{blocker?.failure_type ?? 'STEP_FAILED'}</span></div>
+        <dl className="rt-failure-facts">
+          <div><dt>{t('step')}</dt><dd><code>{failed.key}</code></dd></div>
+          <div><dt>{t('tool')}</dt><dd><code>{failed.tool}</code></dd></div>
+          <div><dt>{t('attempt')}</dt><dd>{failed.retry_count + 1}</dd></div>
+          <div><dt>{t('providerModel')}</dt><dd>{relatedAi.map((call) => call.title).join(' · ') || [failed.ai_provider, failed.ai_model].filter(Boolean).join(' · ') || '—'}</dd></div>
+        </dl>
+        {failed.validation_error && failed.validation_error !== blocker?.reason && <p><strong>{t('fieldLabels.validation_error')}:</strong> {failed.validation_error}</p>}
+        {failed.error && failed.error !== blocker?.reason && !failed.validation_error && <p>{failed.error}</p>}
+      </section>}
     </div>
   );
 }

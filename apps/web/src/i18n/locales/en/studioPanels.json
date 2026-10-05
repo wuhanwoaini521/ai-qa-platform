@@ -103,6 +103,16 @@
     "cancel": "Cancel",
     "hideTimeline": "Hide timeline",
     "showTimeline": "Show timeline",
+    "workflowDetails": "Show {{count}} detailed events for this stage",
+    "workflowStages": {
+      "context": "Read test and run context",
+      "logs": "Review error logs and traceback",
+      "inspection": "Inspect captured failure evidence",
+      "diagnosis": "Analyze root cause",
+      "decision": "Choose locator repair direction",
+      "suggestion": "Prepare repair suggestions",
+      "verification": "Rerun verification"
+    },
     "eventMetadata": "Event metadata",
     "providerUnavailable": "AI Provider unavailable",
     "cancelled": "Run cancelled. Partial answer preserved.",

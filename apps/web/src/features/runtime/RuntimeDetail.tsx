@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { RuntimeHeader } from './RuntimeHeader';
 import { RuntimeOverview } from './RuntimeOverview';
 import { RuntimeFlow } from './RuntimeFlow';
@@ -11,6 +13,7 @@ import { RuntimeBrowser } from './RuntimeBrowser';
 import { RuntimeArtifacts } from './RuntimeArtifacts';
 import { RuntimeTaskActions } from './RuntimeTaskActions';
 import { useRuntimeSnapshot } from './useRuntimeSnapshot';
+import type { RuntimeSourceOpener } from '../../types/runtime';
 import './runtime.css';
 
 export type RuntimeTab =
@@ -27,89 +30,147 @@ export function RuntimeDetail({
   kind,
   id,
   revision,
+  projectId,
   onOpenSource,
+  onOpenStudio,
 }: {
   kind: 'task' | 'run';
   id: string;
   revision?: string;
-  onOpenSource?: (path: string, line: number) => void;
+  projectId?: string;
+  onOpenSource?: RuntimeSourceOpener;
+  onOpenStudio?: () => void;
 }) {
+  const { t } = useTranslation('runtime');
   const { snapshot, error, connection, refresh } = useRuntimeSnapshot(
     kind,
     id,
     revision,
   );
-  const [tab, setTab] = useState<RuntimeTab>('Overview');
+  const [tab, setTab] = useState<RuntimeTab>('Flow');
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [focus, setFocus] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const initialStepResolved = useRef(false);
   const selectStep = useCallback((id: string) => {
     setSelectedStepId(id);
     setInspectorOpen(true);
-  }, []);
-  useEffect(() => {
+    setSearchParams((params) => {
+      params.set('step', id);
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const clearStepSelection = useCallback(() => {
     setSelectedStepId(null);
-    setTab('Overview');
+    setSearchParams((params) => { params.delete('step'); return params; }, { replace: true });
+  }, [setSearchParams]);
+  useEffect(() => {
+    setTab('Flow');
     setFocus(false);
+    setSelectedStepId(null);
     setInspectorOpen(true);
+    initialStepResolved.current = false;
   }, [kind, id]);
   useEffect(() => {
     document.documentElement.classList.toggle('runtime-focus', focus);
     return () => document.documentElement.classList.remove('runtime-focus');
   }, [focus]);
   useEffect(() => {
-    if (!focus) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFocus(false);
+      if (event.key === 'Escape') {
+        if (focus) setFocus(false);
+        else setInspectorOpen(false);
+      }
     };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
   }, [focus]);
+  useEffect(() => {
+    if (!snapshot) return;
+    const requested = searchParams.get('step');
+    if (requested && snapshot.steps.some((step) => step.id === requested)) {
+      setSelectedStepId(requested);
+      setInspectorOpen(true);
+      initialStepResolved.current = true;
+      return;
+    }
+    if (!initialStepResolved.current) {
+      initialStepResolved.current = true;
+      const initial = snapshot.blocking?.step_id ?? snapshot.summary.active_step_ids[0] ?? null;
+      if (initial) {
+        setSelectedStepId(initial);
+        setInspectorOpen(true);
+        setSearchParams((params) => {
+          params.set('step', initial);
+          return params;
+        }, { replace: true });
+      }
+    }
+  }, [snapshot, searchParams, setSearchParams]);
+  useEffect(() => {
+    if (!snapshot || !selectedStepId) return;
+    const handle = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
+      const index = snapshot.steps.findIndex((step) => step.id === selectedStepId);
+      const next = snapshot.steps[index + (event.key === 'ArrowRight' ? 1 : -1)];
+      if (next) {
+        event.preventDefault();
+        selectStep(next.id);
+      }
+    };
+    window.addEventListener('keydown', handle);
+    return () => window.removeEventListener('keydown', handle);
+  }, [snapshot, selectedStepId, selectStep]);
   if (!snapshot)
     return (
       <section className="rt-shell rt-empty" role={error ? 'alert' : 'status'}>
-        {error || '正在读取真实执行记录…'}
+        {error || t('loadingRuntime')}
         {error && (
           <button className="btn btn-secondary" onClick={refresh}>
-            重试
+            {t('retry')}
           </button>
         )}
       </section>
     );
   return (
-    <section
-      className={`rt-shell${focus ? ' rt-focus' : ''}`}
-      aria-label="Runtime Detail"
-    >
+      <section
+        className={`rt-shell${focus ? ' rt-focus' : ''}`}
+        aria-label={t('observatory')}
+        data-active-tab={tab}
+        data-has-steps={snapshot.steps.length > 0 ? 'true' : 'false'}
+      >
       <RuntimeHeader snapshot={snapshot} connection={connection} />
-      <RuntimeTaskActions snapshot={snapshot} onChanged={refresh} />
+      <RuntimeTaskActions snapshot={snapshot} onChanged={refresh} onInspect={(stepId) => { selectStep(stepId); setTab('Flow'); }} onOpenStudio={onOpenStudio} />
       {focus && (
         <button
           className="rt-focus-exit btn btn-secondary btn-sm"
           onClick={() => setFocus(false)}
         >
-          退出 Focus · Esc
+          {t('exitFocus')} · Esc
         </button>
       )}
       {error && (
         <div className="rt-notice" role="alert">
           {error}
           <button className="btn btn-secondary btn-sm" onClick={refresh}>
-            重新连接
+            {t('reconnect')}
           </button>
         </div>
       )}
-      <nav className="rt-tabs" aria-label="Runtime 视图">
+      <nav className="rt-tabs" aria-label={t('runtimeViews')}>
         {tabs.map((key) => (
           <button
             key={key}
             aria-current={key === tab ? 'page' : undefined}
             onClick={() => setTab(key)}
           >
-            {key}
+            {t(key)}
           </button>
         ))}
-        <button aria-label="刷新执行记录" onClick={refresh}>
+        <button aria-label={t('forceRefresh')} title={t('forceRefresh')} onClick={refresh}>
           <RefreshCw size={15} />
         </button>
       </nav>
@@ -118,21 +179,21 @@ export function RuntimeDetail({
           className="btn btn-secondary btn-sm rt-reopen"
           onClick={() => setInspectorOpen(true)}
         >
-          打开 Inspector
+          {t('openInspector')}
         </button>
       )}
       {selectedStepId && (
         <div className="rt-selection">
           <code>
-            已选步骤 ·{' '}
+            {t('selectedStep')} ·{' '}
             {snapshot.steps.find((step) => step.id === selectedStepId)?.key ??
               selectedStepId}
           </code>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => setSelectedStepId(null)}
+            onClick={clearStepSelection}
           >
-            清除步骤筛选
+            {t('clearStepFilter')}
           </button>
         </div>
       )}
@@ -144,11 +205,12 @@ export function RuntimeDetail({
             <RuntimeOverview
               snapshot={snapshot}
               onOpenFlow={() => setTab('Flow')}
+              onSelectStep={selectStep}
             />
           ) : tab === 'Artifacts' ? (
             <RuntimeArtifacts snapshot={snapshot} />
           ) : tab === 'Browser' ? (
-            <RuntimeBrowser snapshot={snapshot} onOpenSource={onOpenSource} />
+            <RuntimeBrowser snapshot={snapshot} projectId={projectId} onOpenSource={onOpenSource} />
           ) : tab === 'Timeline' ? (
             <RuntimeTimeline
               snapshot={snapshot}
@@ -166,6 +228,7 @@ export function RuntimeDetail({
               snapshot={snapshot}
               selectedStepId={selectedStepId}
               onSelect={selectStep}
+              onClearSelection={clearStepSelection}
               focus={focus}
               onFocus={() => setFocus((value) => !value)}
             />
@@ -176,6 +239,7 @@ export function RuntimeDetail({
             snapshot={snapshot}
             selectedStepId={selectedStepId}
             onClose={() => setInspectorOpen(false)}
+            onOpenSource={onOpenSource}
           />
         )}
       </div>

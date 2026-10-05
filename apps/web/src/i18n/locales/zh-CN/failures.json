@@ -155,8 +155,133 @@
     "audit": "查看完整执行记录（事件、来源与时间）",
     "verified": "实际复测已通过",
     "verifying": "正在复测 · 等待真实结果",
-    "verificationFailed": "实际复测未通过 · 修复尚未验证"
+    "verificationFailed": "实际复测未通过 · 修复尚未验证",
+    "liveEvents": "查看已发生的分析阶段"
   },
   "patchAwaitingVerification": "补丁已应用 · 待复测",
   "evidenceBundle": "失败证据包（来源与缺失项）"
+  ,"failureHeader": "失败概览"
+  ,"failureStatus": "失败"
+  ,"testName": "测试用例"
+  ,"environment": "环境"
+  ,"browser": "浏览器"
+  ,"time": "时间"
+  ,"diagnosisState": "诊断状态"
+  ,"diagnosisStateLabels": {
+    "NOT_ANALYZED": "尚未诊断",
+    "ANALYZING": "正在分析",
+    "DIAGNOSED": "已诊断",
+    "REPAIR_PROPOSED": "已提出修复建议",
+    "REPAIR_APPLIED": "修复已应用",
+    "VERIFYING": "正在验证",
+    "VERIFIED": "验证通过",
+    "BLOCKED": "流程受阻"
+  }
+  ,"primaryAction": "推荐下一步"
+  ,"primaryActions": {
+    "RUN_DIAGNOSIS": "运行 AI 诊断",
+    "GENERATE_LOCATOR_REPAIR": "生成定位器修复提案",
+    "RETRY": "重跑测试用例",
+    "CREATE_ISSUE_DRAFT": "创建 Jira 缺陷草稿",
+    "REVIEW_REPAIR": "查看修复提案",
+    "VERIFY_FIX": "验证修复",
+    "ANALYZING": "正在分析…",
+    "VERIFYING": "等待验证结果…",
+    "VERIFIED": "验证已通过",
+    "BLOCKED": "没有安全的自动操作"
+  }
+  ,"primaryReasons": {
+    "automationRepairUnavailable": "当前后端没有受控的代码修复提案与差异审阅契约；为避免自动改写测试，代码修复暂不可用。",
+    "locatorUnavailable": "定位器修复只适用于已确认的 LOCATOR_CHANGED，且需要记录失败定位器和真实诊断结果。",
+    "diagnosisRequired": "先完成真实 AI 诊断，再决定是否适合修复。",
+    "repairUnavailable": "该分类没有安全且受支持的自动修复路径。"
+  }
+  ,"classification": "分类"
+  ,"run": "运行"
+  ,"whatFailed": "失败摘要"
+  ,"analysisNotRun": "诊断尚未运行。"
+  ,"evidenceWorkspace": "证据"
+  ,"evidenceTabs": {
+    "SUMMARY": "摘要",
+    "SOURCE": "源码",
+    "STACK": "堆栈",
+    "BROWSER": "浏览器",
+    "CONSOLE": "控制台",
+    "NETWORK": "网络",
+    "ARTIFACTS": "产物"
+  }
+  ,"summary": {
+    "browserLaunch": "浏览器进程无法启动。Playwright 在启动 Chromium 时收到 EPERM。",
+    "browserLaunchWithPlatform": "浏览器进程无法启动。{{platform}} 环境下 Playwright 在启动 Chromium 时收到 EPERM。",
+    "timeout": "测试执行超时。",
+    "assertion": "测试断言未通过。",
+    "generic": "失败摘要：{{detail}}",
+    "environmentHint": "可能与环境或运行时有关；这是启发式提示，尚未确认。"
+  }
+  ,"heuristicUnconfirmed": "启发式 · 未确认"
+  ,"relevantFrames": "相关代码帧"
+  ,"noRelevantFrames": "未从堆栈中提取到项目代码帧。"
+  ,"viewFullStack": "查看完整堆栈"
+  ,"viewRawError": "查看原始错误"
+  ,"failedLocatorRecorded": "已记录失败定位器"
+  ,"pageUrl": "页面 URL"
+  ,"screenshot": "截图"
+  ,"domSnapshot": "DOM 快照"
+  ,"repairEligibility": "自动修复适用性"
+  ,"repairUnavailableUntilDiagnosis": "诊断确认可修复且证据充分前，自动修复不可用。"
+  ,"repairNotRecommended": "不建议对此失败类型自动修改测试代码。"
+  ,"affectedAreaUnknown": "影响范围：未知（后端未提供该字段）"
+  ,"repairabilityUnknown": "可修复性：未评估"
+  ,"riskUnknown": "风险：未评估"
+  ,"sharedFailureTitle": "可能存在共同根因"
+  ,"sharedFailureSummary": "{{count}} 个失败具有相同的浏览器启动错误特征。"
+  ,"sharedFailureHeuristic": "只读启发式分组 · 未确认分类或根因"
+  ,"sharedFailureTests": "受影响测试"
+  ,"groupAnalysisUnavailable": "后端尚不支持安全的分组诊断；请勿把该提示当作诊断结论。"
+  ,"verificationChain": "重跑与验证"
+  ,"originalRun": "原始运行"
+  ,"failureStep": "失败记录"
+  ,"diagnosisStep": "诊断"
+  ,"repairStep": "修复"
+  ,"retryStep": "重跑"
+  ,"verificationStep": "验证结果"
+  ,"currentStage": "当前阶段"
+  ,"notStarted": "尚未开始"
+  ,"repairPending": "尚未应用"
+  ,"repairProposalAvailable": "提案待审阅"
+  ,"repairAppliedStatus": "已应用"
+  ,"verificationAttempt": "第 {{count}} 次尝试"
+  ,"secondaryActions": "更多操作"
+  ,"developerActions": "开发者操作"
+  ,"externalActions": "外部操作"
+  ,"failureRecorded": "失败已记录"
+  ,"ruleClassified": "规则分类：{{classification}}"
+  ,"analysisTimeline": "分析时间线"
+  ,"noDiagnosisHistory": "暂无诊断记录"
+  ,"analysisStarted": "分析已启动"
+  ,"analysisCompleted": "分析已完成"
+  ,"analysisFailed": "分析失败"
+  ,"candidateClassification": "诊断分类"
+  ,"confidenceLabel": "置信度"
+  ,"affectedArea": "影响范围"
+  ,"riskLabel": "风险"
+  ,"repairEligible": "适合生成定位器提案；仍需审阅与验证"
+  ,"autoRepairNotSupported": "当前后端没有安全的通用自动修复提案流程，不能自动改写测试代码。"
+  ,"repairProposalNotCreated": "尚未生成修复提案"
+  ,"diagnosisMissingSignals": "当前诊断 API 不返回影响范围和风险评估。"
+  ,"rootCauseShownInOverview": "见失败概览"
+  ,"issueHandoff": "诊断已完成。请使用上方推荐的创建问题草稿操作；此分类不会进入自动测试修复阶段。"
+  ,"repairType": "类型"
+  ,"repairFiles": "文件"
+  ,"repairSummary": "摘要"
+  ,"recordedEvents": "个真实事件"
+  ,"verificationStatuses": {
+    "QUEUED": "排队中",
+    "RUNNING": "进行中",
+    "PASSED": "通过",
+    "FAILED": "失败",
+    "ERROR": "错误",
+    "CANCELLED": "已取消"
+  }
+  ,"unknownValue": "未知"
 }

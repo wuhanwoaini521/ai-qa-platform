@@ -5,6 +5,24 @@ from app.services.platform_health_service import PlatformHealthService
 
 
 @pytest.mark.asyncio
+async def test_database_health_compares_applied_migration_revision(test_db_session):
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from app.persistence import database
+    from app.persistence.migrations import migration_config
+
+    script_directory = ScriptDirectory.from_config(migration_config())
+    head_revision = script_directory.get_current_head()
+    async with database.engine.begin() as connection:
+        await connection.run_sync(lambda conn: MigrationContext.configure(conn).stamp(script_directory, head_revision))
+
+    result = await PlatformHealthService()._database()
+
+    assert result["status"] == "ok"
+    assert result["current_revision"] == result["head_revision"]
+
+
+@pytest.mark.asyncio
 async def test_health_is_cached_and_component_failure_does_not_hide_other_results(monkeypatch):
     service = PlatformHealthService()
     calls = []

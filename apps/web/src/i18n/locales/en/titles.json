@@ -1,5 +1,8 @@
 {
   "dashboard": "Platform Overview",
+  "workspace": "QA Workspace",
+  "workflow": "Live Workflow",
+  "library": "Library",
   "projects": "QA Projects",
   "requirements": "Requirements & Design",
   "testCases": "Test Cases",

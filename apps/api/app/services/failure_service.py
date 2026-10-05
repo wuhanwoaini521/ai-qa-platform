@@ -154,6 +154,29 @@ class FailureService:
             if on_event is not None:
                 await on_event(event)
 
+        last_progress_at = 0.0
+        last_progress_chars = 0
+
+        async def report_model_progress(generated_chars: int, elapsed_seconds: float) -> None:
+            nonlocal last_progress_at, last_progress_chars
+            if on_event is None:
+                return
+            now = time.monotonic()
+            if not last_progress_at and elapsed_seconds < 1.5:
+                return
+            if last_progress_at and now - last_progress_at < 1.5 and generated_chars - last_progress_chars < 800:
+                return
+            last_progress_at = now
+            last_progress_chars = generated_chars
+            await emit(
+                "model.progress",
+                stage="model",
+                title="模型正在生成诊断",
+                status="RUNNING",
+                message=f"模型已开始返回诊断（等待 {elapsed_seconds:.0f} 秒，收到 {generated_chars} 字符）。",
+                metadata={"generated_chars": generated_chars, "elapsed_seconds": round(elapsed_seconds, 1)},
+            )
+
         await emit(
             "analysis_started",
             stage="diagnosis",
@@ -240,13 +263,14 @@ class FailureService:
             metadata={"provider": configured_provider, "model": configured_model},
         )
         diag_ai = await self.orchestrator.diagnose_failure_ai(
-            error_message=safe_error,
-            stack_trace=safe_stack,
+            error_message=safe_error[:3000],
+            stack_trace=safe_stack[-8000:],
             test_nodeid=orm.test_nodeid,
             failing_locator=safe_locator,
             historical_context=SensitiveRedactor.redact_text(history_summary)[:3000]
             + "\nFailure evidence bundle:\n"
-            + evidence.render(),
+            + evidence.model_copy(update={"error": "", "traceback": "", "assertion": ""}).render(limit=14000),
+            on_progress=report_model_progress if on_event is not None else None,
         )
         observed, _, _ = FailureClassifier.classify(safe_error, safe_stack)
         if observed != FailureCategory.UNKNOWN:
@@ -437,11 +461,11 @@ class FailureService:
             try:
                 from playwright.async_api import async_playwright
 
-                from app.services.browser_proxy import browser_proxy_options
+                from app.services.browser_proxy import browser_proxy_options, launch_chromium
 
                 async with async_playwright() as playwright:
                     proxy = browser_proxy_options()
-                    browser = await playwright.chromium.launch(headless=True, **({"proxy": proxy} if proxy else {}))
+                    browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
                     try:
                         page = await browser.new_page()
                         await page.goto(browser_session.current_url, wait_until="domcontentloaded", timeout=12000)

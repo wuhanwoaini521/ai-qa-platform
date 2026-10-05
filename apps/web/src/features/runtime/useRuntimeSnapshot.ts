@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { RuntimeSnapshot } from '../../types/runtime';
 import { useRunStore } from '../runs/useRunStore';
-import { runtimeActive } from './runtimeModel';
+import { runtimeActive, runtimeNeedsTerminalRefresh } from './runtimeModel';
 import { reconcileSnapshot } from './reconcileSnapshot';
 
 export function useRuntimeSnapshot(
@@ -16,42 +16,22 @@ export function useRuntimeSnapshot(
   const refresh = useRef<() => void>(() => {});
   const live = useRunStore(kind === 'run' ? id : null);
   useEffect(() => {
+    if (!id) {
+      setSnapshot(null);
+      setError('');
+      setConnection('idle');
+      return;
+    }
     let disposed = false,
       fetching = false,
       dirty = false;
     let close = () => {};
+    let streamOpen = false;
     let terminal = false;
-    const sync = async () => {
-      if (disposed) return;
-      if (fetching) {
-        dirty = true;
-        return;
-      }
-      fetching = true;
-      try {
-        const value = await api.getRuntime(kind, id);
-        if (disposed) return;
-        setSnapshot((previous) => reconcileSnapshot(previous, value));
-        setError('');
-        terminal = !runtimeActive(value.status);
-        if (terminal) {
-          close();
-          setConnection('idle');
-        }
-      } catch (reason) {
-        if (!disposed) setError(String(reason));
-      } finally {
-        fetching = false;
-        if (dirty && !disposed) {
-          dirty = false;
-          void sync();
-        }
-      }
-    };
-    refresh.current = () => {
-      void sync();
-    };
-    if (kind === 'task')
+    let terminalStatus = '';
+    const connect = () => {
+      if (kind !== 'task' || disposed || streamOpen) return;
+      streamOpen = true;
       close = api.streamTaskEvents(
         id,
         () => {
@@ -67,14 +47,61 @@ export function useRuntimeSnapshot(
           }
         },
       );
+    };
+    const sync = async () => {
+      if (disposed) return;
+      if (fetching) {
+        dirty = true;
+        return;
+      }
+      fetching = true;
+      try {
+        const value = await api.getRuntime(kind, id);
+        if (disposed) return;
+        setSnapshot((previous) => reconcileSnapshot(previous, value));
+        setError('');
+        terminal = !runtimeActive(value.status);
+        terminalStatus = value.status;
+        if (terminal) {
+          close();
+          streamOpen = false;
+          setConnection('idle');
+        } else {
+          connect();
+        }
+      } catch (reason) {
+        if (!disposed) setError(String(reason));
+      } finally {
+        fetching = false;
+        if (dirty && !disposed) {
+          dirty = false;
+          void sync();
+        }
+      }
+    };
+    refresh.current = () => {
+      void sync();
+    };
+    if (kind === 'task') connect();
     void sync();
     const timer = window.setInterval(() => {
       if (!terminal) void sync();
     }, 1500);
+    const terminalTimer = window.setInterval(() => {
+      if (terminal && runtimeNeedsTerminalRefresh(terminalStatus)) void sync();
+    }, 15_000);
+    const refreshTerminal = () => {
+      if (terminal) void sync();
+    };
+    window.addEventListener('focus', refreshTerminal);
+    document.addEventListener('visibilitychange', refreshTerminal);
     return () => {
       disposed = true;
       close();
       window.clearInterval(timer);
+      window.clearInterval(terminalTimer);
+      window.removeEventListener('focus', refreshTerminal);
+      document.removeEventListener('visibilitychange', refreshTerminal);
       refresh.current = () => {};
     };
   }, [kind, id, revision]);

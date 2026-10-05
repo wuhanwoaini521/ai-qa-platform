@@ -1,4 +1,5 @@
 import asyncio
+import time
 import warnings
 from datetime import timedelta
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from app.persistence.models import (
     BrowserSessionORM,
     FailureRecordORM,
     RunnerProfileORM,
+    TaskORM,
     TestExecutionORM,
     TestRunORM,
     utc_now,
@@ -1084,6 +1086,52 @@ async def test_a_suite_that_never_ran_is_an_error_not_a_pass(client: AsyncClient
         assert stored.status == RunStatus.ERROR.value, stored.status
         assert stored.passed == 0
         assert stored.log_output and "package_that_does_not_exist" in stored.log_output
+
+
+@pytest.mark.integration
+async def test_task_run_worker_uses_remaining_budget_without_a_short_hard_cap(client, test_db_session, monkeypatch):
+    project = (await client.post("/api/projects", json={"name": "Task deadline", "bootstrap_workspace": True})).json()
+    project_id = project["id"]
+    task_id = "task-deadline-test"
+    task = TaskORM(
+        id=task_id,
+        type="QA_GOAL",
+        goal="Run the scoped test before the task deadline",
+        status="RUNNING",
+        owner_id="deadline-test-owner",
+        project_id=project_id,
+        workspace_id=project_id,
+        inputs={},
+        context={},
+        max_duration_seconds=2000,
+    )
+    run_data = TestRunCreate(
+        project_id=project_id,
+        workspace_id=project_id,
+        nodeids=["tests/test_smoke.py::test_ok"],
+        requested_by=task.owner_id,
+    )
+    async with test_db_session() as session:
+        session.add(task)
+        await session.flush()
+        run = await TestRunRepository(session).create_run(run_data, task_id=task_id)
+        await session.commit()
+        run_id = run.id
+
+    service = TestRunService(
+        TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
+    )
+    observed: dict[str, float] = {}
+
+    async def record_timeout(**kwargs):
+        observed["timeout_sec"] = kwargs["timeout_sec"]
+        raise RuntimeError("stop after timeout was captured")
+
+    monkeypatch.setattr(service.pytest_runner, "run_suite", record_timeout)
+    execution_deadline = time.monotonic() + 1000
+    await service._run_worker_task(run_id, run_data, execution_deadline=execution_deadline)
+
+    assert 900 < observed["timeout_sec"] < 1000
 
 
 @pytest.mark.unit

@@ -31,6 +31,9 @@
   "status_VERIFYING": "Verifying",
   "status_RETRYING": "Retrying",
   "status_REPLANNING": "Replanning",
+  "status_PAUSING": "Pausing safely",
+  "status_PAUSED": "Paused",
+  "status_RESUMING": "Resuming",
   "status_COMPLETED": "Completed",
   "status_FAILED": "Failed",
   "status_BLOCKED": "Blocked",
@@ -50,6 +53,9 @@
   "allTasks": "All tasks",
   "recentTasks": "Recent tasks",
   "currentStep": "Current step",
+  "stepsProgress": "Steps",
+  "pendingShort": "pending",
+  "taskTime": "Updated",
   "createDescription": "Tasks run as recoverable step graphs and preserve evidence, approvals, and execution results.",
   "refresh": "Refresh",
   "type": "Task type",
@@ -105,5 +111,6 @@
   "type_EXPLORE_PAGE": "Explore page",
   "type_RUN_REGRESSION": "Run regression",
   "type_REVIEW_TEST": "Review test code",
+  "type_ANALYZE_REQUIREMENT": "Analyze requirement",
   "caseCopilot": "AI Copilot · generate, review and validate this case"
 }

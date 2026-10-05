@@ -7,6 +7,7 @@ import mimetypes
 import os
 import re
 import tempfile
+import time
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -252,7 +253,13 @@ class TestRunService:
             return None
         return self._to_run_dto(orm)
 
-    async def create_and_execute_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRun:
+    async def create_and_execute_run(
+        self,
+        data: TestRunCreate,
+        *,
+        task_id: str | None = None,
+        execution_deadline: float | None = None,
+    ) -> TestRun:
         from app.services.golden_demo_service import DEMO_ID, demo_lock
 
         if data.project_id == DEMO_ID:
@@ -261,10 +268,16 @@ class TestRunService:
 
                 if not await self.run_repo.session.get(ProjectORM, DEMO_ID, with_for_update=True):
                     raise ValueError("Demo is being reset or no longer exists")
-                return await self._create_and_execute_run(data, task_id=task_id)
-        return await self._create_and_execute_run(data, task_id=task_id)
+                return await self._create_and_execute_run(data, task_id=task_id, execution_deadline=execution_deadline)
+        return await self._create_and_execute_run(data, task_id=task_id, execution_deadline=execution_deadline)
 
-    async def _create_and_execute_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRun:
+    async def _create_and_execute_run(
+        self,
+        data: TestRunCreate,
+        *,
+        task_id: str | None = None,
+        execution_deadline: float | None = None,
+    ) -> TestRun:
         from app.persistence.models import TaskORM
 
         if task_id:
@@ -305,14 +318,19 @@ class TestRunService:
             )
             await self.run_repo.session.commit()
         else:
-            worker = asyncio.create_task(self._run_worker_task(run_id, data), name=f"test-run-{run_id}")
+            worker = asyncio.create_task(
+                self._run_worker_task(run_id, data, execution_deadline=execution_deadline), name=f"test-run-{run_id}"
+            )
             _RUN_WORKER_TASKS[run_id] = worker
             worker.add_done_callback(lambda done, rid=run_id: _RUN_WORKER_TASKS.pop(rid, None))
 
         return self._to_run_dto(orm)
 
-    async def _run_worker_task(self, run_id: str, data: TestRunCreate) -> None:
+    async def _run_worker_task(
+        self, run_id: str, data: TestRunCreate, *, execution_deadline: float | None = None
+    ) -> None:
         from app.persistence.database import get_session
+        from app.persistence.models import TaskORM
 
         async with get_session() as session:
             run_repo = TestRunRepository(session)
@@ -320,6 +338,15 @@ class TestRunService:
             if existing is None or existing.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
                 return
             ws_dir = self.workspace_service.get_workspace_dir(data.workspace_id)
+            execution_timeout = 120.0
+            if existing.task_id:
+                task = await session.get(TaskORM, existing.task_id)
+                if task:
+                    execution_timeout = (
+                        max(0.01, execution_deadline - time.monotonic())
+                        if execution_deadline is not None
+                        else float(task.max_duration_seconds)
+                    )
             start_time = utc_now()
 
             started = await run_repo.transition_run_status(
@@ -395,6 +422,7 @@ class TestRunService:
                         on_browser_event=on_browser_event,
                         parallel_workers=data.parallel_workers,
                         extra_pytest_args=["-p", live_plugin],
+                        timeout_sec=execution_timeout,
                     )
                 suite_result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
 

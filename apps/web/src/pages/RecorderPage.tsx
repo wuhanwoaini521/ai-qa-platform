@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
 import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
@@ -30,6 +30,8 @@ const recorderErrorMessage = (error: unknown, targetUrl?: string): string => {
 
 export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: string | null }> = ({ projects, selectedProjectId }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedSessionId = searchParams.get('session_id');
   const projectId = selectedProjectId ?? projects[0]?.id ?? null;
   const [url, setUrl] = useState('about:blank');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   }, [code]);
 
   useEffect(() => {
-    if (!projectId || sessionId) return;
+    if (!projectId || sessionId || requestedSessionId) return;
     try {
       const savedSteps = window.localStorage.getItem(`ai-qa.recorder.draft-steps.${projectId}`);
       if (savedSteps) setSteps(JSON.parse(savedSteps) as RecorderStep[]);
@@ -109,7 +111,27 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
       setRecording(saved.state === 'RECORDING');
     }).catch(() => window.localStorage.removeItem(`ai-qa.recorder.session.${projectId}`)).finally(() => { if (active) setRestoreCheckedProjectId(projectId); });
     return () => { active = false; };
-  }, [projectId, sessionId]);
+  }, [projectId, requestedSessionId, sessionId]);
+
+  useEffect(() => {
+    if (!projectId || !requestedSessionId || sessionId === requestedSessionId) return;
+    let active = true;
+    void api.getRecorderSession(requestedSessionId).then((saved) => {
+      if (!active) return;
+      if (saved.project_id !== projectId) {
+        setError('该浏览器会话不属于当前项目。请先切换到所属项目。');
+        return;
+      }
+      setSessionId(saved.id);
+      setSteps(saved.steps);
+      setUrl(saved.navigation_error ? saved.requested_url : saved.url);
+      setError(saved.navigation_error ? recorderErrorMessage(saved.navigation_error, saved.requested_url) : '');
+      setRecording(saved.state === 'RECORDING');
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { active = false; };
+  }, [projectId, requestedSessionId, sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;

@@ -1,5 +1,8 @@
 {
   "dashboard": "Dashboard",
+  "workspace": "QA Workspace",
+  "workflow": "Tasks & runs",
+  "library": "Library",
   "projects": "Projects",
   "requirements": "Requirements",
   "testCases": "Test Cases",

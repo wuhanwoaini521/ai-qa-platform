@@ -385,11 +385,21 @@ class LocatorDecisionService:
             editable = count > 0 and await target.is_editable() if event.get("action") == "fill" else None
             clickable = None
             if event.get("action") in {"click", "double_click"}:
-                try:
-                    await target.click(trial=True, timeout=1000)
-                    clickable = True
-                except Exception:
-                    clickable = False
+                clickable = bool(
+                    await target.evaluate("""el => {
+                      const tag = el.tagName.toLowerCase();
+                      const role = el.getAttribute('role');
+                      const interactive = (tag === 'a' && Boolean(el.getAttribute('href')))
+                        || ['button', 'input', 'textarea', 'select', 'summary'].includes(tag)
+                        || ['button', 'link', 'checkbox', 'radio', 'switch', 'menuitem'].includes(role);
+                      const rect = el.getBoundingClientRect();
+                      if (!interactive || rect.width <= 0 || rect.height <= 0) return false;
+                      const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                      if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
+                      const hit = document.elementFromPoint(x, y);
+                      return hit === el || el.contains(hit);
+                    }""")
+                )
             unique = count == 1
             verified = unique and visible and enabled is not False and editable is not False and clickable is not False
             return {

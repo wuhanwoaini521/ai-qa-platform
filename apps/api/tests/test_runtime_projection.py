@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pytest
-from app.persistence.models import TaskORM, TaskStepORM, TestRunORM, utc_now
+from app.persistence.models import AIInvocationORM, TaskORM, TaskStepORM, TestRunORM, utc_now
 from app.services.runtime_projection import RuntimeProjection
 
 
@@ -63,6 +63,258 @@ async def test_task_step_projection_has_real_dependencies_and_no_large_or_secret
         assert "private" not in snapshot.model_dump_json()
         assert "hidden" not in snapshot.model_dump_json()
         assert len(snapshot.model_dump_json()) < 5000
+
+
+async def test_blocked_repair_projection_explains_ai_failure_and_real_recovery_actions(test_db_session):
+    async with test_db_session() as session:
+        session.add(
+            TaskORM(
+                id="blocked-task",
+                owner_id="owner",
+                type="FIX_FAILURE",
+                goal="Fix test_empty_search",
+                status="BLOCKED",
+                current_step_id="repair-step",
+                failure_reason="AI returned structured output without suggested_code.",
+                replan_count=0,
+                max_replans=2,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                TaskStepORM(
+                    id="diagnose-step",
+                    task_id="blocked-task",
+                    position=3,
+                    key="diagnose",
+                    name="Diagnose",
+                    tool="failure.diagnose",
+                    status="COMPLETED",
+                ),
+                TaskStepORM(
+                    id="repair-step",
+                    task_id="blocked-task",
+                    position=4,
+                    key="repair",
+                    name="Prepare repair",
+                    tool="failure.prepare_repair",
+                    status="FAILED",
+                    dependencies=["diagnose"],
+                    error="AI returned structured output without suggested_code (provider=openai-compatible, model=space-bunny-free).",
+                    outputs={
+                        "failure_type": "AI_OUTPUT_INVALID",
+                        "provider": "openai-compatible",
+                        "model": "space-bunny-free",
+                        "response_fields": "reply",
+                        "validation_error": "suggested_code was empty",
+                        "reasoning": "must not be returned",
+                    },
+                ),
+                TaskStepORM(
+                    id="approval-step",
+                    task_id="blocked-task",
+                    position=5,
+                    key="approval",
+                    name="Approve repair",
+                    tool="task.request_approval",
+                    status="PENDING",
+                    dependencies=["repair"],
+                ),
+                TaskStepORM(
+                    id="apply-step",
+                    task_id="blocked-task",
+                    position=6,
+                    key="apply",
+                    name="Apply repair",
+                    tool="source.apply_repair",
+                    status="PENDING",
+                    dependencies=["approval"],
+                ),
+            ]
+        )
+        await session.commit()
+
+        snapshot = await RuntimeProjection(session).task("blocked-task", "owner")
+        assert snapshot is not None
+        assert snapshot.blocking is not None
+        assert snapshot.blocking.step_key == "repair"
+        assert snapshot.blocking.failure_type == "AI_OUTPUT_INVALID"
+        assert snapshot.blocking.recoverable is True
+        assert snapshot.blocking.recovery_actions == ["inspect_ai_output", "retry_step", "replan"]
+        assert snapshot.steps[1].failure_type == "AI_OUTPUT_INVALID"
+        assert snapshot.steps[1].ai_provider == "openai-compatible"
+        assert snapshot.steps[1].ai_model == "space-bunny-free"
+        assert snapshot.task.failure_reason.startswith("AI returned structured output")
+        assert snapshot.steps[1].duration_ms is None
+        assert "must not be returned" not in snapshot.model_dump_json()
+
+
+async def test_blocked_projection_disables_replan_after_limit_or_source_write(test_db_session):
+    async with test_db_session() as session:
+        session.add(
+            TaskORM(
+                id="blocked-locked",
+                owner_id="owner",
+                type="FIX_FAILURE",
+                goal="Fix test",
+                status="BLOCKED",
+                current_step_id="repair-step",
+                replan_count=2,
+                max_replans=2,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                TaskStepORM(
+                    id="repair-step",
+                    task_id="blocked-locked",
+                    position=1,
+                    key="repair",
+                    name="Repair",
+                    tool="failure.prepare_repair",
+                    status="FAILED",
+                    error="AI did not return executable source code.",
+                ),
+                TaskStepORM(
+                    id="apply-step",
+                    task_id="blocked-locked",
+                    position=2,
+                    key="apply",
+                    name="Apply",
+                    tool="source.apply_repair",
+                    status="COMPLETED",
+                    dependencies=["repair"],
+                ),
+            ]
+        )
+        await session.commit()
+
+        snapshot = await RuntimeProjection(session).task("blocked-locked", "owner")
+        assert snapshot is not None and snapshot.blocking is not None
+        assert snapshot.blocking.failure_type == "AI_OUTPUT_INVALID"
+        assert snapshot.blocking.recoverable is False
+        assert snapshot.blocking.recovery_actions == ["inspect_ai_output"]
+
+
+async def test_legacy_ai_blocker_recovers_step_duration_and_ai_association_from_recorded_times(test_db_session):
+    started = utc_now()
+    async with test_db_session() as session:
+        session.add(
+            TaskORM(
+                id="legacy-ai-task",
+                owner_id="owner",
+                type="FIX_FAILURE",
+                goal="Fix a test",
+                status="BLOCKED",
+                current_step_id="legacy-repair",
+                replan_count=0,
+                max_replans=2,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                TaskStepORM(
+                    id="legacy-repair",
+                    task_id="legacy-ai-task",
+                    key="repair",
+                    name="Repair",
+                    tool="failure.prepare_repair",
+                    status="FAILED",
+                    started_at=started,
+                    finished_at=started + timedelta(seconds=51),
+                    duration_ms=0,
+                    error="AI did not return executable source code.",
+                    outputs={},
+                ),
+                AIInvocationORM(
+                    id="legacy-ai-call",
+                    task_id="legacy-ai-task",
+                    run_id="legacy-repair-call",
+                    task="task_code",
+                    provider="openai-compatible",
+                    model="space-bunny-free",
+                    started_at=started + timedelta(seconds=1),
+                    duration_ms=50_000,
+                    status="SUCCESS",
+                ),
+            ]
+        )
+        await session.commit()
+
+        snapshot = await RuntimeProjection(session).task("legacy-ai-task", "owner")
+        repair = snapshot.steps[0]
+        call = snapshot.ai_invocations[0]
+        assert repair.failure_type == "AI_OUTPUT_INVALID"
+        assert repair.duration_ms == 51_000
+        assert repair.ai_provider == "openai-compatible"
+        assert repair.ai_model == "space-bunny-free"
+        assert call.step_id == repair.id
+        assert call.provider == "openai-compatible" and call.model == "space-bunny-free"
+        assert not session.new and not session.dirty and not session.deleted
+
+
+async def test_unknown_interruption_and_rejected_approval_do_not_offer_unsafe_retry(test_db_session):
+    async with test_db_session() as session:
+        session.add_all(
+            [
+                TaskORM(
+                    id="interrupted-task",
+                    owner_id="owner",
+                    type="EXPLORE_PAGE",
+                    goal="Explore",
+                    status="BLOCKED",
+                    current_step_id="interrupted-step",
+                    failure_reason="Interrupted by API restart; inspect side effects before resuming.",
+                    replan_count=0,
+                    max_replans=2,
+                ),
+                TaskORM(
+                    id="rejected-task",
+                    owner_id="owner",
+                    type="FIX_FAILURE",
+                    goal="Fix a test",
+                    status="BLOCKED",
+                    current_step_id="rejected-approval",
+                    failure_reason="User rejected the proposed workspace change.",
+                    replan_count=0,
+                    max_replans=2,
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                TaskStepORM(
+                    id="interrupted-step",
+                    task_id="interrupted-task",
+                    key="browser_action",
+                    name="Browser action",
+                    tool="browser.click",
+                    status="FAILED",
+                    error="Interrupted by API restart.",
+                ),
+                TaskStepORM(
+                    id="rejected-approval",
+                    task_id="rejected-task",
+                    key="approval",
+                    name="Approval",
+                    tool="task.request_approval",
+                    status="SKIPPED",
+                ),
+            ]
+        )
+        await session.commit()
+
+        interrupted = await RuntimeProjection(session).task("interrupted-task", "owner")
+        rejected = await RuntimeProjection(session).task("rejected-task", "owner")
+        assert interrupted.blocking.recoverable is False
+        assert interrupted.blocking.recovery_actions == []
+        assert rejected.blocking.step_key == "approval"
+        assert rejected.blocking.recoverable is False
+        assert rejected.blocking.recovery_actions == []
 
 
 async def test_legacy_context_is_explicit_and_ambiguous_or_foreign_project_links_are_not_guessed(

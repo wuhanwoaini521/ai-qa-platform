@@ -9,6 +9,12 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
       return '/';
     case 'projects':
       return '/projects';
+    case 'workspace':
+      return projectId ? `/workspace/${projectId}` : '/workspace';
+    case 'workflow':
+      return '/workflow';
+    case 'library':
+      return '/library';
     case 'requirements':
       return projectId
         ? `/projects/${projectId}/requirements`

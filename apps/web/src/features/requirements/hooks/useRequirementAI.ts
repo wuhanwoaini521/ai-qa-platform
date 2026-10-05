@@ -14,11 +14,13 @@ import {
 interface UseRequirementAIOptions {
   selectedReq: Requirement | null;
   onDesignCreated: (design: TestDesign) => void;
+  onCaseCreated?: (testCaseId: string, testDesignId?: string) => void;
 }
 
 export function useRequirementAI({
   selectedReq,
   onDesignCreated,
+  onCaseCreated,
 }: UseRequirementAIOptions) {
   const [isAiAnalysisOpen, setIsAiAnalysisOpen] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<RequirementAnalysisDTO | null>(
@@ -118,7 +120,7 @@ export function useRequirementAI({
   const handleAdoptCase = async (item: TestCaseGenerationItem) => {
     if (!selectedReq || !activeDesignForCases) return;
     try {
-      await api.createTestCase({
+      const created = await api.createTestCase({
         project_id: selectedReq.project_id,
         requirement_id: selectedReq.id,
         test_design_id: activeDesignForCases.id,
@@ -131,6 +133,7 @@ export function useRequirementAI({
         tags: item.tags,
         automation_status: 'DRAFT',
       });
+      onCaseCreated?.(created.id, created.test_design_id ?? activeDesignForCases.id);
       setSuggestedCases(suggestedCases.filter((c) => c.title !== item.title));
     } catch (err) {
       console.error('Failed to adopt test case', err);

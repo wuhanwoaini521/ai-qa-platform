@@ -13,6 +13,11 @@ export function decisionFacts(events: RuntimeEvent[]) {
       'verified',
       'fallback_reason',
       'fallback_used',
+      'candidate_summary',
+      'candidate_scores',
+      'expected_effect',
+      'rejected_count',
+      'jev_attempted',
     ]) {
       if (Object.hasOwn(event.metadata, key)) facts[key] = event.metadata[key];
     }

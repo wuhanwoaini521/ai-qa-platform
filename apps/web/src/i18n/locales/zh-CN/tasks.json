@@ -31,6 +31,9 @@
   "status_VERIFYING": "验证中",
   "status_RETRYING": "重试中",
   "status_REPLANNING": "重新规划中",
+  "status_PAUSING": "正在安全暂停",
+  "status_PAUSED": "已暂停",
+  "status_RESUMING": "正在恢复",
   "status_COMPLETED": "已完成",
   "status_FAILED": "失败",
   "status_BLOCKED": "受阻",
@@ -50,6 +53,9 @@
   "allTasks": "查看全部任务",
   "recentTasks": "最近任务",
   "currentStep": "当前步骤",
+  "stepsProgress": "步骤",
+  "pendingShort": "待处理",
+  "taskTime": "最近更新",
   "createDescription": "目标任务会形成可恢复的步骤图，并记录证据、审批和执行结果。",
   "refresh": "刷新",
   "type": "任务类型",
@@ -105,5 +111,6 @@
   "type_EXPLORE_PAGE": "探索网页",
   "type_RUN_REGRESSION": "运行回归",
   "type_REVIEW_TEST": "审查测试代码",
+  "type_ANALYZE_REQUIREMENT": "分析需求",
   "caseCopilot": "AI Copilot · 生成、审阅并验证此用例"
 }

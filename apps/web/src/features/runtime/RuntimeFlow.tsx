@@ -1,16 +1,17 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   Circle,
-  Crosshair,
   Maximize2,
   Minus,
   Plus,
   Scan,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 import type { RuntimeSnapshot, RuntimeStep } from '../../types/runtime';
 import {
@@ -31,6 +32,8 @@ const StepNode = memo(function StepNode({
   jev,
   artifacts,
   runs,
+  blocked,
+  downstreamBlocked,
 }: {
   step: RuntimeStep;
   selected: boolean;
@@ -39,7 +42,10 @@ const StepNode = memo(function StepNode({
   jev: boolean;
   artifacts: number;
   runs: number;
+  blocked: boolean;
+  downstreamBlocked: boolean;
 }) {
+  const { t } = useTranslation('runtime');
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (step.status !== 'RUNNING') return;
@@ -52,10 +58,13 @@ const StepNode = memo(function StepNode({
       : step.status === 'FAILED'
         ? ShieldAlert
         : Circle;
+  const status = step.status === 'PENDING' ? t('pending') : step.status === 'WAITING_FOR_APPROVAL' ? t('waitingApproval') : t(step.status.toLowerCase());
   return (
     <button
-      className={`rt-node status-${step.status.toLowerCase()}${selected ? ' is-selected' : ''}`}
+      className={`rt-node status-${step.status.toLowerCase()}${selected ? ' is-selected' : ''}${blocked ? ' is-blocker' : ''}${downstreamBlocked ? ' is-downstream-blocked' : ''}`}
       aria-pressed={selected}
+      aria-label={`${step.key}: ${step.title}, ${t(step.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : step.status.toLowerCase())}${blocked ? `, ${t('blockedHere')}` : ''}`}
+      title={`${step.key} · ${step.title} · ${step.tool}`}
       onClick={() => onSelect(step.id)}
     >
       <div className="rt-node-key">
@@ -63,19 +72,20 @@ const StepNode = memo(function StepNode({
         <code title={step.key}>{step.key}</code>
         {step.status === 'RUNNING' && <span className="rt-pulse" />}
       </div>
+      {blocked && <small className="rt-blocker-marker">{t('blockedHere')}</small>}
       <strong title={step.title}>{step.title}</strong>
       <div className="rt-node-meta">
         <span title={step.tool}>{step.tool}</span>
         <time>{durationLabel(spanDuration(step, now))}</time>
       </div>
       <div className="rt-node-footer">
-        <span>{step.status}</span>
+        <span>{status}</span>
         <div>
-          {decisions > 0 && <small>Decision {decisions}</small>}
+          {decisions > 0 && <small>{t('decision')} {decisions}</small>}
           {jev && <small>JEV</small>}
-          {step.retry_count > 0 && <small>Retry {step.retry_count}</small>}
-          {artifacts > 0 && <small>Artifact {artifacts}</small>}
-          {runs > 0 && <small>Run {runs}</small>}
+          {step.retry_count > 0 && <small>{t('retry')} {step.retry_count}</small>}
+          {artifacts > 0 && <small>{t('artifacts')} {artifacts}</small>}
+          {runs > 0 && <small>{t('testRun')} {runs}</small>}
         </div>
       </div>
     </button>
@@ -86,15 +96,18 @@ export function RuntimeFlow({
   snapshot,
   selectedStepId,
   onSelect,
+  onClearSelection,
   focus,
   onFocus,
 }: {
   snapshot: RuntimeSnapshot;
   selectedStepId: string | null;
   onSelect: (id: string) => void;
+  onClearSelection: () => void;
   focus: boolean;
   onFocus: () => void;
 }) {
+  const { t } = useTranslation('runtime');
   const structure = graphStructure(snapshot.steps);
   const [direction, setDirection] = useState<FlowDirection>('vertical');
   const layout = useMemo(
@@ -105,6 +118,22 @@ export function RuntimeFlow({
   const view = useFlowViewport(layout.width, layout.height, hasSteps);
   const [follow, setFollow] = useState(!selectedStepId);
   const activeId = snapshot.summary.active_step_ids[0] ?? null;
+  const blockedStepIds = new Set(snapshot.blocking?.step_id ? [snapshot.blocking.step_id] : []);
+  const downstreamBlocked = new Set<string>();
+  if (snapshot.status === 'BLOCKED' && snapshot.blocking?.step_key) {
+    const keys = new Set([snapshot.blocking.step_key]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const step of snapshot.steps) {
+        if (step.status === 'PENDING' && !keys.has(step.key) && step.dependencies.some((key) => keys.has(key))) {
+          keys.add(step.key);
+          changed = true;
+        }
+      }
+    }
+    for (const step of snapshot.steps) if (step.status === 'PENDING' && keys.has(step.key)) downstreamBlocked.add(step.id);
+  }
   const steps = new Map(snapshot.steps.map((step) => [step.id, step]));
   const currentId = selectedStepId ?? activeId;
   const currentIndex = currentId ? layout.order.indexOf(currentId) : -1;
@@ -151,14 +180,12 @@ export function RuntimeFlow({
   }, [view.scale, view.inset, layout.width, hasSteps]);
   if (!snapshot.steps.length)
     return (
-      <p className="rt-empty">
-        此独立 TestRun 没有 TaskStep DAG。数据暂未记录。
-      </p>
+      <p className="rt-empty">{t('noTaskDag')}</p>
     );
   return (
     <section
       className="rt-flow"
-      aria-label="Live Runtime Canvas"
+      aria-label={t('observatory')}
       style={
         {
           '--rt-node-width': `${FLOW_NODE_WIDTH}px`,
@@ -168,18 +195,11 @@ export function RuntimeFlow({
     >
       <div className="rt-toolbar rt-flow-controls">
         <div className="rt-control-group">
-          <button
-            aria-pressed={direction === 'vertical'}
-            onClick={() => setDirection('vertical')}
-          >
-            纵向
-          </button>
-          <button
-            aria-pressed={direction === 'horizontal'}
-            onClick={() => setDirection('horizontal')}
-          >
-            横向
-          </button>
+          <label className="rt-direction-control">{t('direction')}
+            <select aria-label={t('direction')} value={direction} onChange={(event) => setDirection(event.target.value as FlowDirection)}>
+              <option value="vertical">{t('vertical')}</option><option value="horizontal">{t('horizontal')}</option>
+            </select>
+          </label>
           <button
             onClick={() => {
               setFollow(false);
@@ -187,10 +207,10 @@ export function RuntimeFlow({
             }}
           >
             <Scan size={14} aria-hidden="true" />
-            查看全图
+            {t('fit')}
           </button>
           <button
-            aria-label="缩小画布"
+            aria-label={t('zoomOut')}
             disabled={view.scale <= 0.15}
             onClick={() => {
               setFollow(false);
@@ -201,7 +221,7 @@ export function RuntimeFlow({
           </button>
           <code>{Math.round(view.scale * 100)}%</code>
           <button
-            aria-label="放大画布"
+            aria-label={t('zoomIn')}
             disabled={view.scale >= 2}
             onClick={() => {
               setFollow(false);
@@ -210,49 +230,37 @@ export function RuntimeFlow({
           >
             <Plus size={14} aria-hidden="true" />
           </button>
-          <button
-            onClick={() => {
-              setFollow(false);
-              view.zoom(1);
-            }}
-          >
-            实际大小
-          </button>
         </div>
         <div className="rt-control-group">
-          <button disabled={!activeId} onClick={centerActive}>
-            <Crosshair size={14} aria-hidden="true" />
-            定位执行中
-          </button>
           <button
             aria-pressed={follow && !!activeId}
             disabled={!activeId}
             onClick={() => setFollow((value) => !value)}
           >
-            跟随执行
+            {t('followActive')}
           </button>
-          <button aria-pressed={focus} onClick={onFocus}>
+          <button className="rt-flow-focus" aria-label={t(focus ? 'exitFocus' : 'focusMode')} title={t(focus ? 'exitFocus' : 'focusMode')} aria-pressed={focus} onClick={onFocus}>
             <Maximize2 size={14} aria-hidden="true" />
-            {focus ? '退出专注' : '专注模式'}
+            <span>{focus ? t('exitFocus') : t('focusMode')}</span>
           </button>
         </div>
       </div>
       <div className="rt-flow-navigation">
         <div className="rt-control-group">
           <button
-            aria-label="上一步"
+            aria-label={t('previousStep')}
             disabled={currentIndex <= 0}
             onClick={() => select(layout.order[currentIndex - 1])}
           >
             <ChevronLeft size={14} aria-hidden="true" />
           </button>
           <select
-            aria-label="定位步骤"
+            aria-label={t('jumpToStep')}
             value={currentId ?? ''}
             onChange={(event) => select(event.target.value)}
           >
             <option value="" disabled>
-              选择步骤 · {layout.order.length} 个步骤
+              {t('jumpToStep')} · {layout.order.length} {t('step')}
             </option>
             {layout.order.map((id, index) => (
               <option key={id} value={id}>
@@ -261,7 +269,7 @@ export function RuntimeFlow({
             ))}
           </select>
           <button
-            aria-label="下一步"
+            aria-label={t('nextStep')}
             disabled={currentIndex >= layout.order.length - 1}
             onClick={() => select(layout.order[currentIndex + 1])}
           >
@@ -270,21 +278,20 @@ export function RuntimeFlow({
           <code>
             {currentIndex >= 0 ? currentIndex + 1 : '—'} / {layout.order.length}
           </code>
+          {selectedStepId && <button className="rt-flow-clear-selection" aria-label={t('clearStepFilter')} title={t('clearStepFilter')} onClick={() => { setFollow(false); onClearSelection(); }}><X size={14} aria-hidden="true" /></button>}
         </div>
         <span id="rt-flow-help">
-          滚动浏览 · Ctrl / ⌘ + 滚轮缩放 · 点击步骤查看详情
+          {t('flowHelp')}
         </span>
       </div>
       {!!(layout.cycle.length || layout.unknown.length) && (
-        <p className="rt-notice">
-          历史 DAG 存在循环或缺失依赖；仅展示已记录的关系。
-        </p>
+        <p className="rt-notice">{t('invalidDag')}</p>
       )}
       <div
         className="rt-viewport rt-flow-viewport"
         ref={view.viewport}
         tabIndex={0}
-        aria-label="执行流程画布"
+        aria-label={t('flowCanvas')}
         aria-describedby="rt-flow-help"
         onPointerDown={(event) => {
           if (!(event.target as HTMLElement).closest('button,a'))
@@ -325,10 +332,16 @@ export function RuntimeFlow({
             }}
           >
             <svg width={layout.width} height={layout.height} aria-hidden="true">
+              <defs><marker id="rt-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="rt-edge-arrow" /></marker></defs>
               {layout.edges.map((edge) => {
                 const source = layout.positions.get(edge.source)!;
                 const target = layout.positions.get(edge.target)!;
-                const status = steps.get(edge.target)?.status;
+                const sourceStep = steps.get(edge.source);
+                const targetStep = steps.get(edge.target);
+                const status = targetStep?.status;
+                const blockedEdge = sourceStep?.status === 'FAILED' && targetStep?.status === 'PENDING';
+                const activeEdge = sourceStep?.status === 'COMPLETED' && ['RUNNING', 'FAILED'].includes(targetStep?.status ?? '');
+                const edgeState = blockedEdge ? 'is-blocked' : status === 'FAILED' ? 'is-failed' : activeEdge ? 'is-active' : status === 'COMPLETED' ? 'is-completed' : '';
                 return (
                   <path
                     key={`${edge.source}:${edge.target}`}
@@ -337,15 +350,8 @@ export function RuntimeFlow({
                         ? `M${source.x + FLOW_NODE_WIDTH},${source.y + FLOW_NODE_HEIGHT / 2} C${source.x + FLOW_NODE_WIDTH + 32},${source.y + FLOW_NODE_HEIGHT / 2} ${target.x - 32},${target.y + FLOW_NODE_HEIGHT / 2} ${target.x},${target.y + FLOW_NODE_HEIGHT / 2}`
                         : `M${source.x + FLOW_NODE_WIDTH / 2},${source.y + FLOW_NODE_HEIGHT} C${source.x + FLOW_NODE_WIDTH / 2},${source.y + FLOW_NODE_HEIGHT + 28} ${target.x + FLOW_NODE_WIDTH / 2},${target.y - 28} ${target.x + FLOW_NODE_WIDTH / 2},${target.y}`
                     }
-                    className={
-                      status === 'RUNNING'
-                        ? 'is-active'
-                        : status === 'FAILED'
-                          ? 'is-failed'
-                          : status === 'COMPLETED'
-                            ? 'is-completed'
-                            : ''
-                    }
+                    markerEnd="url(#rt-arrow)"
+                    className={edgeState}
                   />
                 );
               })}
@@ -387,6 +393,8 @@ export function RuntimeFlow({
                       snapshot.runs.filter((item) => item.step_id === step.id)
                         .length
                     }
+                    blocked={blockedStepIds.has(step.id)}
+                    downstreamBlocked={downstreamBlocked.has(step.id)}
                   />
                 </div>
               );
@@ -395,12 +403,12 @@ export function RuntimeFlow({
         </div>
       </div>
       <div className="rt-flow-legend">
-        <span>○ Pending</span>
-        <span className="status-running">● Running</span>
-        <span className="status-completed">✓ Completed</span>
-        <span className="status-failed">! Failed</span>
+        <span>○ {t('pending')}</span>
+        <span className="status-running">● {t('running')}</span>
+        <span className="status-completed">✓ {t('completed')}</span>
+        <span className="status-failed">! {t('failed')} · {t('blocker')}</span>
         <span>
-          {snapshot.steps.length} steps · {layout.edges.length} dependencies
+          {snapshot.steps.length} {t('step')} · {layout.edges.length} {t('dependencies')}
         </span>
       </div>
     </section>

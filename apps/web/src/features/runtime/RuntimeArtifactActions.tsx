@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type { RuntimeArtifact } from '../../types/runtime';
 import {
@@ -11,6 +12,7 @@ export function RuntimeArtifactActions({
 }: {
   artifact: RuntimeArtifact;
 }) {
+  const { t } = useTranslation('runtime');
   const [preview, setPreview] = useState<{ url: string; text: string } | null>(
     null,
   );
@@ -73,7 +75,7 @@ export function RuntimeArtifactActions({
             className="btn btn-secondary btn-sm"
             onClick={() => void fetchArtifact(true)}
           >
-            Download
+            {t('download')}
           </button>
           {kind && (
             <button
@@ -83,7 +85,7 @@ export function RuntimeArtifactActions({
                 preview ? setOpen((value) => !value) : void fetchArtifact(false)
               }
             >
-              {kind === 'report' ? 'Open Report' : 'Preview'}
+              {kind === 'report' ? t('openReport') : t('preview')}
             </button>
           )}
         </>
@@ -95,10 +97,10 @@ export function RuntimeArtifactActions({
           target="_blank"
           rel="noopener noreferrer"
         >
-          Open
+          {t('open')}
         </a>
       )}
-      {loading && <small role="status">读取制品…</small>}
+      {loading && <small role="status">{t('loadingArtifact')}</small>}
       {error && <p role="alert">{error}</p>}
       {open && preview && (
         <div className="rt-artifact-preview">
@@ -106,7 +108,7 @@ export function RuntimeArtifactActions({
             className="btn btn-secondary btn-sm"
             onClick={() => setOpen(false)}
           >
-            关闭预览
+            {t('closePreview')}
           </button>
           {kind === 'image' ? (
             <img src={preview.url} alt={artifact.name} />
@@ -116,7 +118,7 @@ export function RuntimeArtifactActions({
             <pre>
               {preview.text}
               {(artifact.size_bytes ?? 0) > 65536
-                ? '\n…仅预览前 64 KiB，请下载完整内容。'
+                ? `\n${t('previewFirst64KiB')}`
                 : ''}
             </pre>
           )}

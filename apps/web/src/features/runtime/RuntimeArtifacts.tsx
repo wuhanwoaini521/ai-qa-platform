@@ -1,10 +1,12 @@
 import type { RuntimeSnapshot } from '../../types/runtime';
+import { useTranslation } from 'react-i18next';
 import { RuntimeArtifactActions } from './RuntimeArtifactActions';
 export function RuntimeArtifacts({ snapshot }: { snapshot: RuntimeSnapshot }) {
+  const { t } = useTranslation('runtime');
   return (
-    <section className="rt-artifacts" aria-label="运行制品">
+    <section className="rt-artifacts" aria-label={t('artifacts')}>
       {!snapshot.artifacts.length ? (
-        <p className="rt-empty">此运行尚未产生制品</p>
+        <div className="rt-empty"><strong>{t('noArtifacts')}</strong>{snapshot.status === 'BLOCKED' && <p>{t('noArtifactsReason')}</p>}</div>
       ) : (
         snapshot.artifacts.map((artifact) => (
           <article className="rt-artifact" key={artifact.id}>
@@ -16,7 +18,7 @@ export function RuntimeArtifacts({ snapshot }: { snapshot: RuntimeSnapshot }) {
             </div>
             <dl className="rt-artifact-info">
               <div>
-                <dt>Created</dt>
+                <dt>{t('createdAt')}</dt>
                 <dd>
                   {artifact.created_at
                     ? new Date(artifact.created_at).toLocaleString()
@@ -24,7 +26,7 @@ export function RuntimeArtifacts({ snapshot }: { snapshot: RuntimeSnapshot }) {
                 </dd>
               </div>
               <div>
-                <dt>Size</dt>
+                <dt>{t('size')}</dt>
                 <dd>
                   {artifact.size_bytes == null
                     ? '—'
@@ -32,14 +34,14 @@ export function RuntimeArtifacts({ snapshot }: { snapshot: RuntimeSnapshot }) {
                 </dd>
               </div>
               <div>
-                <dt>Step</dt>
+                <dt>{t('step')}</dt>
                 <dd>
                   {snapshot.steps.find((step) => step.id === artifact.step_id)
                     ?.key ?? '—'}
                 </dd>
               </div>
               <div>
-                <dt>Run / Case</dt>
+                <dt>{t('runCase')}</dt>
                 <dd>
                   {artifact.test_run_id ?? '—'} / {artifact.case_id ?? '—'}
                 </dd>

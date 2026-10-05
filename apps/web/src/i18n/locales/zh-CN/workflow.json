@@ -1,0 +1,10 @@
+{
+  "title": "运行追踪",
+  "eyebrow": "执行观察器",
+  "allProjects": "全部项目",
+  "subtitle": "查看真实 TaskStep、Test Run、AI、JEV、Browser、Failure 与 Artifact 的执行轨迹。",
+  "contextActions": "Workflow 上下文操作",
+  "backToWorkspace": "返回 Workspace",
+  "openStudio": "在 Studio 打开代码",
+  "allTasks": "全部任务"
+}

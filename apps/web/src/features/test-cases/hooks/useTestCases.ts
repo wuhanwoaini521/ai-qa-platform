@@ -7,6 +7,7 @@ interface UseTestCasesOptions {
   selectedProjectId: string | null;
   projects: Project[];
   initialTestCaseId?: string | null;
+  emptySelectionWhenUnmatched?: boolean;
   onCaseSelected: (caseId: string) => void;
   onCaseListEmpty: () => void;
 }
@@ -15,6 +16,7 @@ export function useTestCases({
   selectedProjectId,
   projects,
   initialTestCaseId,
+  emptySelectionWhenUnmatched = false,
   onCaseSelected,
   onCaseListEmpty,
 }: UseTestCasesOptions) {
@@ -28,10 +30,16 @@ export function useTestCases({
       const data = await api.getTestCases(selectedProjectId || undefined);
       setTestCases(data);
       if (data.length > 0) {
-        const id=initialTestCaseId??recallEntity(selectedProjectId,'case');
-        const found=data.find(c=>c.id===id)??data[0];
-        setSelectedCase(found);
-        onCaseSelected(found.id);
+        const id = initialTestCaseId ?? (emptySelectionWhenUnmatched ? undefined : recallEntity(selectedProjectId, 'case'));
+        const found = (id ? data.find((item) => item.id === id) : undefined)
+          ?? (emptySelectionWhenUnmatched ? undefined : data[0]);
+        if (found) {
+          setSelectedCase(found);
+          onCaseSelected(found.id);
+        } else {
+          setSelectedCase(null);
+          onCaseListEmpty();
+        }
       } else {
         setSelectedCase(null);
         onCaseListEmpty();
@@ -45,7 +53,7 @@ export function useTestCases({
 
   useEffect(() => {
     fetchTestCases();
-  }, [selectedProjectId,initialTestCaseId]);
+  }, [selectedProjectId, initialTestCaseId, emptySelectionWhenUnmatched]);
   useEffect(()=>{if(selectedCase)rememberEntity(selectedCase.project_id,'case',selectedCase.id);},[selectedCase]);
 
   const createTestCase = async (data: TestCaseCreate): Promise<TestCase | null> => {

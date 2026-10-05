@@ -1,0 +1,26 @@
+{
+  "title": "Library",
+  "eyebrow": "Search · History · Management",
+  "subtitle": "Browse saved projects, requirements, cases, runs, and failure records. Start daily work in Workspace.",
+  "collections": "Collections",
+  "projects": "Projects",
+  "requirements": "Requirements",
+  "cases": "Test cases",
+  "runs": "Run history",
+  "failures": "Failures",
+  "description": {
+    "projects": "Projects and workspaces",
+    "requirements": "Requirements and test designs",
+    "cases": "Manual and automated cases",
+    "runs": "Up to 8 most recent run records",
+    "failures": "Up to 8 most recent failure records"
+  },
+  "recentRuns": "Recent runs",
+  "recentFailures": "Recent failures",
+  "empty": "No records yet.",
+  "loading": "Loading library records…",
+  "retry": "Retry loading",
+  "projectManagement": "Project management",
+  "requirementManagement": "Requirement management",
+  "caseManagement": "Case management"
+}

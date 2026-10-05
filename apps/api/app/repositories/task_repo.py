@@ -52,7 +52,11 @@ class TaskRepository:
     async def get_steps_for_tasks(self, task_ids: list[str]) -> dict[str, list[TaskStepORM]]:
         if not task_ids:
             return {}
-        stmt = select(TaskStepORM).where(TaskStepORM.task_id.in_(task_ids)).order_by(TaskStepORM.task_id, TaskStepORM.position)
+        stmt = (
+            select(TaskStepORM)
+            .where(TaskStepORM.task_id.in_(task_ids))
+            .order_by(TaskStepORM.task_id, TaskStepORM.position)
+        )
         grouped: dict[str, list[TaskStepORM]] = {}
         for step in (await self.session.execute(stmt)).scalars():
             grouped.setdefault(step.task_id, []).append(step)
@@ -241,7 +245,9 @@ class TaskRepository:
         return list((await self.session.execute(stmt)).scalars().all())
 
     async def unfinished(self) -> list[TaskORM]:
-        stmt = select(TaskORM).where(TaskORM.status.in_(["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING"]))
+        stmt = select(TaskORM).where(
+            TaskORM.status.in_(["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING", "PAUSING", "RESUMING"])
+        )
         return list((await self.session.execute(stmt)).scalars().all())
 
     async def pending(self, limit: int = 100) -> list[TaskORM]:

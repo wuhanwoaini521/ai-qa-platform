@@ -6,8 +6,6 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel
-
 from project_model.models import (
     AIProviderConnectionResult,
     AIProviderRuntimeState,
@@ -16,6 +14,7 @@ from project_model.models import (
     AIProviderStatus,
     AIStatusResponse,
 )
+from pydantic import BaseModel
 from qa_core.ai.models import AICompletionRequest, ProviderHealth
 from qa_core.ai.provider import FakeAIProvider, OpenAICompatibleProvider, clean_json_text
 from qa_core.ai.registry import AIProviderRegistry
@@ -232,11 +231,7 @@ class AISettingsService:
                 except Exception as error:
                     health.status = ProviderHealth.UNAVAILABLE
                     health.message = f"Model streaming probe failed ({type(error).__name__})."
-            if (
-                verify_structured_output
-                and config.provider != "fake"
-                and health.status == ProviderHealth.AVAILABLE
-            ):
+            if verify_structured_output and config.provider != "fake" and health.status == ProviderHealth.AVAILABLE:
                 try:
                     response = await guarded.complete(
                         AICompletionRequest(

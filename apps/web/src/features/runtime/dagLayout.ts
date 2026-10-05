@@ -2,8 +2,8 @@ import type { RuntimeStep } from '../../types/runtime';
 
 type GraphStep = Pick<RuntimeStep, 'id' | 'key' | 'dependencies'>;
 export type FlowDirection = 'horizontal' | 'vertical';
-export const FLOW_NODE_WIDTH = 272;
-export const FLOW_NODE_HEIGHT = 184;
+export const FLOW_NODE_WIDTH = 228;
+export const FLOW_NODE_HEIGHT = 108;
 export function graphStructure(steps: GraphStep[]) {
   return JSON.stringify(
     steps

@@ -3,12 +3,10 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
-  FolderGit2,
-  FileText,
-  CheckSquare,
   Code2,
-  Bug,
-  ListChecks,
+  PanelsTopLeft,
+  GitBranch,
+  BookOpen,
   Flame,
   ShieldCheck,
   Shield,
@@ -34,7 +32,10 @@ export type NavTab =
   | 'quality'
   | 'security'
   | 'workers'
-  | 'settings';
+  | 'settings'
+  | 'workspace'
+  | 'workflow'
+  | 'library';
 
 interface NavItem {
   id: NavTab;
@@ -61,34 +62,22 @@ export const Navigation: React.FC = () => {
 
   const navItems: NavItem[] = [
     { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, to: '/', end: true },
-    { id: 'projects', labelKey: 'projects', icon: FolderGit2, to: '/projects', end: true },
-    {
-      id: 'requirements',
-      labelKey: 'requirements',
-      icon: FileText,
-      to: projectBase ? `${projectBase}/requirements` : '/requirements',
-    },
-    {
-      id: 'test_cases',
-      labelKey: 'testCases',
-      icon: CheckSquare,
-      to: projectBase ? `${projectBase}/test-cases` : '/test-cases',
-    },
+    { id: 'workspace', labelKey: 'workspace', icon: PanelsTopLeft, to: projectBase ? `/workspace/${selectedProjectId}` : '/workspace' },
     {
       id: 'automation',
       labelKey: 'automation',
       icon: Code2,
       to: projectBase ? `${projectBase}/studio` : '/projects',
     },
-    { id: 'runs', labelKey: 'runs', icon: ListChecks, to: '/runs' },
-    { id: 'failures', labelKey: 'failures', icon: Bug, to: '/failures' },
+    { id: 'workflow', labelKey: 'workflow', icon: GitBranch, to: '/workflow' },
+    { id: 'library', labelKey: 'library', icon: BookOpen, to: '/library' },
+    { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
   ];
   const platformItems: NavItem[] = [
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
     { id: 'quality', labelKey: 'quality', icon: ShieldCheck, to: '/quality' },
     { id: 'security', labelKey: 'security', icon: Shield, to: '/security' },
     { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
-    { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
   ];
 
   const matches = useMemo(() => {

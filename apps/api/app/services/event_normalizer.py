@@ -32,6 +32,7 @@ PUBLIC_METADATA = frozenset(
         "output_tokens",
         "token_source",
         "retry_count",
+        "generated_chars",
         "key",
         "tool",
         "nodeid",
@@ -47,6 +48,21 @@ PUBLIC_METADATA = frozenset(
         "approved",
         "skipped",
         "error_type",
+        "failure_type",
+        "candidate_summary",
+        "candidate_scores",
+        "expected_effect",
+        "rejected_count",
+        "subgoal_count",
+        "network_requests",
+        "network_failed",
+        "state_hash",
+        "action_count",
+        "goal_completed",
+        "operation",
+        "jev_attempted",
+        "ai_preference",
+        "blocked_candidates",
     }
 )
 TRACE_TYPES = frozenset(
@@ -63,6 +79,7 @@ TRACE_TYPES = frozenset(
         "decision.completed",
         "decision.fallback",
         "model.started",
+        "model.progress",
         "model.completed",
         "validation.started",
         "validation.completed",
@@ -166,6 +183,8 @@ def normalize_event(
         status, duration, step_id = trace.status, _duration(trace.duration_ms), trace.step_id or step_id
         metadata = public_metadata(trace.metadata)
     elif source == "task":
+        title = _text(payload.get("title") or title)
+        summary = _text(payload.get("summary") or summary)
         if original == "step.progress" and str(payload.get("type", "")).startswith("child_run."):
             event_type = payload["type"]
         # run_id in a Task payload denotes a child TestRun, never an AI trace.
@@ -204,6 +223,7 @@ def normalize_event(
                     "started": "RUNNING",
                     "completed": "COMPLETED",
                     "failed": "FAILED",
+                    "blocked": "BLOCKED",
                     "cancelled": "CANCELLED",
                     "retrying": "RETRYING",
                 }.items()

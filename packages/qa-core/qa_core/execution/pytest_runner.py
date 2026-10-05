@@ -59,6 +59,7 @@ class PytestRunner:
         env: dict[str, str],
         raw_logs: list[str],
         on_log: Callable[[str], Awaitable[None]] | None,
+        timeout_sec: float,
     ) -> tuple[int | None, bool]:
         """Stream a child process from a worker thread on Windows selector loops."""
         loop = asyncio.get_running_loop()
@@ -99,7 +100,7 @@ class PytestRunner:
                     await on_log(line + "\n")
 
         try:
-            await asyncio.wait_for(collect_output(), timeout=self.default_timeout_sec)
+            await asyncio.wait_for(collect_output(), timeout=timeout_sec)
         except asyncio.TimeoutError:
             await asyncio.to_thread(self._kill_process_tree, process.pid)
             if process.poll() is None:
@@ -139,7 +140,9 @@ class PytestRunner:
         on_browser_event: Callable[[dict], Awaitable[None]] | None = None,
         extra_pytest_args: list[str] | None = None,
         parallel_workers: int = 1,
+        timeout_sec: float | None = None,
     ) -> SuiteExecutionResult:
+        execution_timeout = self.default_timeout_sec if timeout_sec is None else timeout_sec
         ws_path = Path(workspace_dir).resolve()
         if not ws_path.exists():
             raise FileNotFoundError(f"Workspace directory not found: {ws_path}")
@@ -218,10 +221,12 @@ class PytestRunner:
                 proc = await asyncio.create_subprocess_exec(*cmd, **process_options)
             except NotImplementedError:
                 # Uvicorn uses a selector loop on Windows, which cannot create subprocess transports.
-                exit_code, timed_out = await self._run_in_thread(cmd, ws_path, env, raw_logs, on_log)
+                exit_code, timed_out = await self._run_in_thread(
+                    cmd, ws_path, env, raw_logs, on_log, execution_timeout
+                )
             else:
                 try:
-                    await asyncio.wait_for(collect_output(), timeout=self.default_timeout_sec)
+                    await asyncio.wait_for(collect_output(), timeout=execution_timeout)
                     await proc.wait()
                 except asyncio.TimeoutError:
                     await asyncio.to_thread(self._kill_process_tree, proc.pid)
@@ -262,7 +267,7 @@ class PytestRunner:
                 report_runtime.cleanup()
 
         if timed_out:
-            message = f"Execution timed out after {self.default_timeout_sec:g}s."
+            message = f"Execution timed out after {execution_timeout:g}s."
             raw_logs.append(message)
             if on_log:
                 await on_log(message + "\n")

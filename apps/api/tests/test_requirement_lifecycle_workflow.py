@@ -1,10 +1,15 @@
 """Workflow tests use explicit fixtures; these are not Golden Demo invocation evidence."""
 
+import time
 from types import SimpleNamespace
 
 import pytest
-from app.persistence.models import RequirementORM
+from app.api.tasks import task_runtime_service
+from app.persistence.models import RequirementORM, TaskORM
+from app.repositories.ai_repo import AIRepository
 from app.repositories.requirement_repo import RequirementRepository
+from app.repositories.task_repo import TaskRepository
+from app.services import requirement_lifecycle_service
 from app.services.golden_demo_service import DEMO_REQUIREMENT, demo_document
 from app.services.requirement_lifecycle_service import RequirementAnalysisBusy, RequirementLifecycleService
 from app.services.requirement_service import RequirementService
@@ -19,6 +24,11 @@ class TestOrchestrator:
     __test__ = False
     ai_provider = SimpleNamespace(provider_name="unit_fixture", model="schema_fixture")
 
+    async def complete_streaming(self, request, *, timeout_seconds):
+        assert timeout_seconds == 45
+        self.streaming_calls = getattr(self, "streaming_calls", 0) + 1
+        return await self.complete(request)
+
     async def complete(self, request):
         analysis = demo_document().analysis
         analysis.summary = "A structured fixture response, not a production model invocation"
@@ -28,6 +38,19 @@ class TestOrchestrator:
             provider="unit_fixture",
             model="schema_fixture",
         )
+
+
+class RuntimeTestOrchestrator(TestOrchestrator):
+    async def complete(self, request):
+        await AIRepository().record_invocation(
+            task="requirement_lifecycle",
+            provider="unit_fixture",
+            model="schema_fixture",
+            task_id=request.task_id,
+            run_id=request.run_id,
+            status="SUCCESS",
+        )
+        return await super().complete(request)
 
 
 class TestDecisions:
@@ -44,19 +67,43 @@ class TestDecisions:
         )
 
 
+class RuntimeTestDecisions(TestDecisions):
+    async def choose(self, request, **kwargs):
+        task_id = kwargs.get("task_id")
+        reserve_task_call = kwargs.get("reserve_task_call")
+        if task_id and reserve_task_call and not await reserve_task_call():
+            return DecisionResult(provider="fallback", fallback_used=True, reason="task_ai_budget_exhausted")
+        if task_id:
+            await AIRepository().record_invocation(
+                task=request.name,
+                provider="jev",
+                model="unit_fixture",
+                task_id=task_id,
+                run_id=kwargs.get("run_id"),
+                status="SUCCESS",
+            )
+        return await super().choose(request, **kwargs)
+
+
 @pytest.mark.asyncio
 async def test_structured_analysis_preserves_history_and_detects_changed_inputs(client):
     await client.post("/api/projects/golden-demo/seed")
     workflow = RequirementLifecycleService(TestOrchestrator(), TestDecisions())
     events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
     assert events[-1].type == "run.completed"
+    assert workflow.orchestrator.streaming_calls == 1
     requirement = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()
     document = RequirementDocument.model_validate(requirement["qa_model"])
     assert document.analysis.scenarios[0].id == "SCN-004"
     assert document.analysis.risks[0].id == "RISK-002"
     record = document.history[-1]
     assert record.status == "SUCCESS" and record.analysis_snapshot.summary == document.analysis.summary
-    assert record.input_hash and len(record.stages) == 4 and len(record.decisions) == 2
+    stage_ids = {stage.id for stage in record.stages}
+    assert (
+        record.input_hash
+        and {"project_context", "existing_cases", "business_rules", "coverage_gaps", "test_design"} <= stage_ids
+    )
+    assert len(record.decisions) == 2
     assert not requirement["analysis_stale"]
     changed = await client.patch(
         f"/api/requirements/{DEMO_REQUIREMENT}", json={"description": "Changed requirement intent"}
@@ -67,6 +114,106 @@ async def test_structured_analysis_preserves_history_and_detects_changed_inputs(
         f"/api/requirements/{DEMO_REQUIREMENT}", json={"qa_model": document.model_dump(mode="json")}
     )
     assert rejected.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_runtime_requirement_analysis_projects_events_ai_decisions_and_evidence(
+    client, test_db_session, monkeypatch
+):
+    await client.post("/api/projects/golden-demo/seed")
+    created = await client.post(
+        "/api/tasks",
+        json={
+            "type": "ANALYZE_REQUIREMENT",
+            "goal": "Analyze the Golden Demo requirement",
+            "project_id": "proj_golden_shop_v1",
+            "inputs": {"requirement_id": DEMO_REQUIREMENT},
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    monkeypatch.setattr(
+        requirement_lifecycle_service,
+        "RequirementLifecycleService",
+        lambda: RequirementLifecycleService(RuntimeTestOrchestrator(), RuntimeTestDecisions()),
+    )
+
+    await task_runtime_service._execute_dag(task_id, time.monotonic())
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, task_id)
+        assert task is not None and task.status == "COMPLETED"
+        step = (await TaskRepository(session).steps_for_task(task_id))[0]
+        result = step.outputs
+        assert result["requirement_id"] == DEMO_REQUIREMENT
+        assert result["risk_count"] > 0 and result["scenario_count"] > 0
+
+    runtime = await client.get(f"/api/tasks/{task_id}/runtime")
+    assert runtime.status_code == 200, runtime.text
+    snapshot = runtime.json()
+    assert snapshot["task"]["type"] == "ANALYZE_REQUIREMENT"
+    assert snapshot["steps"][0]["status"] == "COMPLETED"
+    assert len(snapshot["ai_invocations"]) == 3
+    assert all(invocation["task_id"] == task_id for invocation in snapshot["ai_invocations"])
+    assert all(invocation["step_id"] == snapshot["steps"][0]["id"] for invocation in snapshot["ai_invocations"])
+    assert {invocation["provider"] for invocation in snapshot["ai_invocations"]} == {"unit_fixture", "jev"}
+    assert {event["type"] for event in snapshot["events"]} >= {"workflow.step", "run.completed"}
+    assert all(
+        event["step_id"] == snapshot["steps"][0]["id"]
+        for event in snapshot["events"]
+        if event["type"] == "workflow.step"
+    )
+    assert len(snapshot["decisions"]) == 2
+    assert any(item["type"] == "Analysis" for item in snapshot["evidence"])
+
+    saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
+    assert saved["history"][-1]["status"] == "SUCCESS"
+    assert saved["history"][-1]["id"] == result["analysis_record_id"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_requirement_analysis_rejects_unstructured_output_as_recoverable_block(
+    client, test_db_session, monkeypatch
+):
+    await client.post("/api/projects/golden-demo/seed")
+
+    class InvalidOrchestrator:
+        ai_provider = type("Provider", (), {"provider_name": "unit_fixture", "model": "invalid_fixture"})()
+
+        async def complete(self, request):
+            from project_model.lifecycle import RequirementAnalysis
+
+            return RequirementAnalysis.model_validate({})
+
+    created = await client.post(
+        "/api/tasks",
+        json={
+            "type": "ANALYZE_REQUIREMENT",
+            "goal": "Verify invalid analysis recovery",
+            "project_id": "proj_golden_shop_v1",
+            "inputs": {"requirement_id": DEMO_REQUIREMENT},
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    monkeypatch.setattr(
+        requirement_lifecycle_service,
+        "RequirementLifecycleService",
+        lambda: RequirementLifecycleService(InvalidOrchestrator(), TestDecisions()),
+    )
+
+    await task_runtime_service._execute_dag(task_id, time.monotonic())
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, task_id)
+        assert task is not None and task.status == "BLOCKED"
+        step = (await TaskRepository(session).steps_for_task(task_id))[0]
+        assert step.status == "FAILED"
+        assert step.outputs["failure_type"] == "AI_OUTPUT_INVALID"
+
+    runtime = await client.get(f"/api/tasks/{task_id}/runtime")
+    assert runtime.status_code == 200, runtime.text
+    assert runtime.json()["blocking"]["failure_type"] == "AI_OUTPUT_INVALID"
+    saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
+    assert saved["history"][-1]["status"] == "FAILED"
 
 
 @pytest.mark.asyncio

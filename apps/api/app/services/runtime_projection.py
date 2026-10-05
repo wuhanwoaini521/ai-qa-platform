@@ -30,6 +30,7 @@ from app.persistence.models import (
 from app.services.event_normalizer import normalize_event
 from app.services.runtime_models import (
     RuntimeArtifact,
+    RuntimeBlocking,
     RuntimeBrowser,
     RuntimeDecision,
     RuntimeEvidence,
@@ -85,6 +86,9 @@ STEP_FIELDS = frozenset(
         "selected_locator",
         "fallback_reason",
         "fallback_used",
+        "failure_type",
+        "response_fields",
+        "validation_error",
         "screenshot_artifact_id",
         "reason",
         "before_url",
@@ -245,6 +249,12 @@ class RuntimeProjection:
                 duration_ms=elapsed(task.started_at, task.finished_at),
                 current_step_id=task.current_step_id,
                 retry_count=task.retry_count or 0,
+                failure_reason=safe_text(task.failure_reason) if task.failure_reason else None,
+                replan_count=task.replan_count or 0,
+                max_replans=task.max_replans or 0,
+                recorder_session_id=(task.inputs or {}).get("recorder_session_id")
+                if isinstance((task.inputs or {}).get("recorder_session_id"), str)
+                else None,
             )
             steps = list(
                 (
@@ -268,14 +278,73 @@ class RuntimeProjection:
                     dependencies=row.dependencies or [],
                     started_at=row.started_at,
                     finished_at=row.finished_at,
-                    duration_ms=row.duration_ms if row.finished_at else None,
+                    duration_ms=(
+                        elapsed(row.started_at, row.finished_at)
+                        if row.finished_at and row.duration_ms in (None, 0)
+                        else row.duration_ms
+                        if row.finished_at
+                        else None
+                    ),
                     retry_count=row.retry_count or 0,
                     inputs_summary=fields_summary(row.inputs),
                     outputs_summary=fields_summary(row.outputs),
                     error=safe_text(row.error) if row.error else None,
+                    failure_type=safe_text((row.outputs or {}).get("failure_type"))
+                    if isinstance(row.outputs, dict) and row.outputs.get("failure_type")
+                    else None,
+                    ai_provider=safe_text((row.outputs or {}).get("provider"))
+                    if isinstance(row.outputs, dict) and row.outputs.get("provider")
+                    else None,
+                    ai_model=safe_text((row.outputs or {}).get("model"))
+                    if isinstance(row.outputs, dict) and row.outputs.get("model")
+                    else None,
+                    validation_error=safe_text((row.outputs or {}).get("validation_error"))
+                    if isinstance(row.outputs, dict) and row.outputs.get("validation_error")
+                    else None,
                 )
                 for row in steps
             ]
+            if task.status in {"BLOCKED", "FAILED"}:
+                blocked_step = next(
+                    (step for step in snapshot.steps if step.id == task.current_step_id),
+                    next((step for step in reversed(snapshot.steps) if step.status == "FAILED"), None),
+                )
+                reason = (blocked_step.error if blocked_step else None) or task.failure_reason or "Task is blocked."
+                lowered_reason = reason.lower()
+                invalid_ai_output = (blocked_step.failure_type == "AI_OUTPUT_INVALID") if blocked_step else False
+                invalid_ai_output = invalid_ai_output or any(
+                    marker in lowered_reason
+                    for marker in ("suggested_code", "executable source code", "structured output")
+                )
+                failure_type = "AI_OUTPUT_INVALID" if invalid_ai_output else "STEP_BLOCKED"
+                if blocked_step and invalid_ai_output:
+                    # Older task rows predate the typed failure metadata. Put the
+                    # compatible classification on the step so every consumer
+                    # (including the inspector) sees the same blocker state.
+                    blocked_step.failure_type = failure_type
+                changed_source = any(
+                    step.status == "COMPLETED" and step.tool in {"source.write_generated", "source.apply_repair"}
+                    for step in snapshot.steps
+                )
+                safe_retry = bool(invalid_ai_output and blocked_step and blocked_step.status == "FAILED")
+                recoverable = bool(
+                    safe_retry and not changed_source and (task.replan_count or 0) < (task.max_replans or 0)
+                )
+                actions = []
+                if invalid_ai_output:
+                    actions.append("inspect_ai_output")
+                if recoverable and blocked_step and blocked_step.status == "FAILED":
+                    actions.append("retry_step")
+                if recoverable and blocked_step and blocked_step.status == "FAILED":
+                    actions.append("replan")
+                snapshot.blocking = RuntimeBlocking(
+                    step_id=blocked_step.id if blocked_step else None,
+                    step_key=blocked_step.key if blocked_step else None,
+                    failure_type=failure_type,
+                    reason=safe_text(reason, 2000),
+                    recoverable=recoverable,
+                    recovery_actions=actions,
+                )
             valid_step_ids = {step.id for step in snapshot.steps}
             for event in snapshot.events:
                 if event.step_id not in valid_step_ids:
@@ -622,6 +691,24 @@ class RuntimeProjection:
         for event in snapshot.events:
             if event.trace_run_id and event.step_id:
                 trace_steps.setdefault(event.trace_run_id, set()).add(event.step_id)
+
+        def invocation_step_id(row: AIInvocationORM) -> str | None:
+            linked = trace_steps.get(row.run_id, set())
+            if len(linked) == 1:
+                return next(iter(linked))
+            if not row.started_at or row.duration_ms is None:
+                return None
+            invocation_finished = row.started_at + timedelta(milliseconds=row.duration_ms)
+            matches = [
+                step.id
+                for step in snapshot.steps
+                if step.started_at
+                and step.finished_at
+                and step.started_at <= row.started_at
+                and invocation_finished <= step.finished_at
+            ]
+            return matches[0] if len(matches) == 1 else None
+
         snapshot.ai_invocations = [
             RuntimeSpan(
                 id=row.id,
@@ -635,12 +722,27 @@ class RuntimeProjection:
                 else None,
                 duration_ms=row.duration_ms,
                 timestamp_source="derived",
-                step_id=next(iter(trace_steps[row.run_id]))
-                if row.run_id in trace_steps and len(trace_steps[row.run_id]) == 1
-                else None,
+                operation=safe_text(row.task),
+                provider=safe_text(row.provider),
+                model=safe_text(row.model),
+                step_id=invocation_step_id(row),
             )
             for row in invocations
         ]
+        invocations_by_step: dict[str, list[RuntimeSpan]] = {}
+        for invocation in snapshot.ai_invocations:
+            if invocation.step_id:
+                invocations_by_step.setdefault(invocation.step_id, []).append(invocation)
+        for step in snapshot.steps:
+            associated = invocations_by_step.get(step.id, [])
+            if not associated:
+                continue
+            providers = {row.provider for row in associated if row.provider}
+            models = {row.model for row in associated if row.model}
+            if len(providers) == 1 and not step.ai_provider:
+                step.ai_provider = next(iter(providers))
+            if len(models) == 1 and not step.ai_model:
+                step.ai_model = next(iter(models))
         run_steps = {run.id: run.step_id for run in snapshot.runs}
         valid_step_ids = {step.id for step in snapshot.steps}
         for event in snapshot.events:

@@ -25,6 +25,9 @@ interface TestCasesPageProps {
   onNavigateToRuns?: (runId?: string) => void;
   initialTestCaseId?: string | null;
   onSelectTestCase?: (testCaseId: string) => void;
+  onTaskStarted?: (taskId: string) => void;
+  workspaceMode?: boolean;
+  focusAutomation?: boolean;
 }
 
 export const TestCasesPage: React.FC<TestCasesPageProps> = ({
@@ -34,6 +37,9 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   onNavigateToRuns,
   initialTestCaseId,
   onSelectTestCase,
+  onTaskStarted,
+  workspaceMode = false,
+  focusAutomation = false,
 }) => {
   const { t } = useTranslation('testCases');
   const form = useTestCaseFormModal(
@@ -45,6 +51,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     selectedProjectId,
     projects,
     initialTestCaseId,
+    emptySelectionWhenUnmatched: workspaceMode,
     onCaseSelected: (caseId) => binding.fetchBinding(caseId),
     onCaseListEmpty: () => binding.clearBinding(),
   });
@@ -62,12 +69,12 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     selectedCase?.id ?? null,
   );
 
-  const startCaseTask = (
+  const startCaseTask = async (
     type: 'CREATE_TEST' | 'OPTIMIZE_TEST' | 'REVIEW_TEST',
   ) => {
     const target = binding.selectedBinding;
     if (!selectedCase || (!target && type !== 'CREATE_TEST')) return;
-    void caseTask.start({
+    const created = await caseTask.start({
       type,
       goal:
         type === 'CREATE_TEST'
@@ -90,6 +97,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           : { file_path: target?.file_path, test_nodeid: target?.nodeid }),
       },
     });
+    if (created) onTaskStarted?.(created.id);
   };
 
   const handleSelectCase = (tc: TestCase) => {
@@ -124,8 +132,8 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   };
 
   return (
-    <div className="page-container test-cases-page">
-      <div className="page-header">
+    <div className={`page-container test-cases-page${workspaceMode ? ' workspace-cases-embedded' : ''}${focusAutomation ? ' is-automation-focus' : ''}`}>
+      {!workspaceMode && <div className="page-header">
         <div>
           <h2>{t('pageTitle')}</h2>
           <p className="subtitle">{t('pageSubtitle')}</p>
@@ -137,7 +145,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
         >
           <Plus size={16} /> {t('newTestCase')}
         </button>
-      </div>
+      </div>}
 
       {projects.length === 0 ? (
         <div className="card">
@@ -154,12 +162,12 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
         </div>
       ) : (
         <div className="test-cases-grid">
-          <TestCaseList
+          {!workspaceMode && <TestCaseList
             testCases={cases.testCases}
             loading={cases.loading}
             selectedCase={selectedCase}
             onSelect={handleSelectCase}
-          />
+          />}
 
           {selectedCase ? (
             <div className="test-case-workspace">

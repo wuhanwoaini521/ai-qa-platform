@@ -18,6 +18,9 @@ class RuntimeSpan(BaseModel):
     test_run_id: str | None = None
     step_id: str | None = None
     timestamp_source: str | None = None
+    operation: str | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class RuntimeStep(RuntimeSpan):
@@ -28,12 +31,29 @@ class RuntimeStep(RuntimeSpan):
     inputs_summary: str = ""
     outputs_summary: str = ""
     error: str | None = None
+    failure_type: str | None = None
+    ai_provider: str | None = None
+    ai_model: str | None = None
+    validation_error: str | None = None
 
 
 class RuntimeTask(RuntimeSpan):
     type: str
     current_step_id: str | None = None
     retry_count: int = 0
+    failure_reason: str | None = None
+    replan_count: int = 0
+    max_replans: int = 0
+    recorder_session_id: str | None = None
+
+
+class RuntimeBlocking(BaseModel):
+    step_id: str | None = None
+    step_key: str | None = None
+    failure_type: str
+    reason: str
+    recoverable: bool = False
+    recovery_actions: list[Literal["retry_step", "replan", "inspect_ai_output"]] = Field(default_factory=list)
 
 
 class RuntimeRun(RuntimeSpan):
@@ -138,6 +158,7 @@ class RuntimeSnapshot(BaseModel):
     finished_at: datetime | None = None
     duration_ms: float | None = None
     task: RuntimeTask | None = None
+    blocking: RuntimeBlocking | None = None
     steps: list[RuntimeStep] = Field(default_factory=list)
     runs: list[RuntimeRun] = Field(default_factory=list)
     run_ancestors: list[RuntimeRun] = Field(default_factory=list)

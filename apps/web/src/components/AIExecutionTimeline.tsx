@@ -17,8 +17,99 @@ interface AIExecutionTimelineProps {
   onCancel?: () => void;
   debugMode?: boolean;
   runtime?: boolean;
+  workflowMode?: boolean;
   selectedStepId?: string | null;
   onSelectStep?: (id: string) => void;
+}
+
+interface TimelineEntry {
+  event: AITraceEvent;
+  children: AITraceEvent[];
+}
+
+const DEFAULT_WORKFLOW_STAGES = [
+  'context',
+  'logs',
+  'inspection',
+  'diagnosis',
+  'decision',
+  'suggestion',
+  'verification',
+];
+
+function buildWorkflowTimeline(events: AITraceEvent[]): TimelineEntry[] {
+  const plan = events.find((event) => event.type === 'workflow.plan');
+  const hasWorkflowSteps = events.some(
+    (event) => event.type === 'workflow.step',
+  );
+  if (!hasWorkflowSteps) {
+    return events
+      .filter((event) => event.type !== 'workflow.plan')
+      .map((event) => ({ event, children: [] }));
+  }
+
+  const plannedStages = Array.isArray(plan?.metadata.steps)
+    ? plan.metadata.steps.filter(
+        (stage): stage is string => typeof stage === 'string',
+      )
+    : DEFAULT_WORKFLOW_STAGES;
+  const stages = [...new Set([...plannedStages, ...DEFAULT_WORKFLOW_STAGES])];
+  const entries: TimelineEntry[] = stages.map((stage) => ({
+    event: {
+      run_id: plan?.run_id ?? events[0]?.run_id ?? '',
+      event_id: `${plan?.event_id ?? 'workflow'}:pending:${stage}`,
+      type: 'workflow.step',
+      step_id: `${plan?.event_id ?? 'workflow'}:${stage}`,
+      timestamp: plan?.timestamp ?? null,
+      stage,
+      title: stage,
+      status: 'PENDING',
+      message: '',
+      metadata: {},
+    },
+    children: [],
+  }));
+  const byStage = new Map<string, TimelineEntry>();
+  entries.forEach((entry) => byStage.set(entry.event.stage, entry));
+  const terminalEntries: TimelineEntry[] = [];
+  let activeEntry: TimelineEntry | null = null;
+
+  for (const event of events) {
+    if (event.type === 'workflow.plan') continue;
+    if (event.type === 'workflow.step') {
+      let entry = byStage.get(event.stage);
+      if (!entry) {
+        entry = { event, children: [] };
+        entries.push(entry);
+        byStage.set(event.stage, entry);
+      }
+      entry.event = event;
+      if ((event.status ?? '').toUpperCase() === 'RUNNING') activeEntry = entry;
+      else if (activeEntry === entry) activeEntry = null;
+      continue;
+    }
+    if (event.type === 'model.progress') {
+      const owner = activeEntry ?? byStage.get(event.stage);
+      if (owner) {
+        owner.event = {
+          ...owner.event,
+          timestamp: event.timestamp,
+          message: event.message,
+          metadata: { ...owner.event.metadata, ...event.metadata },
+        };
+      }
+      continue;
+    }
+    if (event.type.startsWith('run.')) {
+      terminalEntries.push({ event, children: [] });
+      activeEntry = null;
+      continue;
+    }
+    const owner = activeEntry ?? byStage.get(event.stage);
+    if (owner) owner.children.push(event);
+  }
+
+  return [...entries, ...terminalEntries];
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -56,15 +147,25 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
   onCancel,
   debugMode = false,
   runtime = false,
+  workflowMode = false,
   selectedStepId,
   onSelectStep,
 }) => {
   const { t } = useTranslation('studioPanels');
   const [expanded, setExpanded] = useState(true);
-  const visibleEvents = useMemo(
-    () => events.filter((event) => event.type !== 'model.delta'),
-    [events],
+  const sourceEvents = useMemo(
+    () => events.filter(
+      (event) => event.type !== 'model.delta' && (workflowMode || event.type !== 'model.progress'),
+    ),
+    [events, workflowMode],
   );
+  const timelineEntries = useMemo(
+    () => workflowMode
+      ? buildWorkflowTimeline(sourceEvents)
+      : sourceEvents.map((event) => ({ event, children: [] })),
+    [sourceEvents, workflowMode],
+  );
+  const visibleEvents = timelineEntries.map((entry) => entry.event);
   if (!visibleEvents.length && !running) return null;
 
   const latestModelEvent = [...events]
@@ -146,7 +247,8 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
               </div>
             </li>
           )}
-          {visibleEvents.map((event, index) => {
+          {timelineEntries.map((entry, index) => {
+            const event = entry.event;
             const state = traceState(visibleEvents, index, running);
             const detail =
               event.message &&
@@ -195,12 +297,58 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
                     </button>
                   ) : (
                     <strong>
-                      {runtime && runtimeLabels[event.type] ? runtimeLabels[event.type] : EVENT_LABELS[event.type]
-                        ? t(`assistant.${EVENT_LABELS[event.type]}`)
-                        : event.title}
+                      {workflowMode && event.type === 'workflow.step' ? (
+                        t(`assistant.workflowStages.${event.stage}`, {
+                          defaultValue: event.title,
+                        })
+                      ) : runtime && runtimeLabels[event.type] ? (
+                        runtimeLabels[event.type]
+                      ) : EVENT_LABELS[event.type] ? (
+                        t(`assistant.${EVENT_LABELS[event.type]}`)
+                      ) : (
+                        event.title
+                      )}
                     </strong>
                   )}
                   {detail && <small>{detail}</small>}
+                  {entry.children.length > 0 && (
+                    <details className="ai-workflow-substeps">
+                      <summary>{t('assistant.workflowDetails', { count: entry.children.length })}</summary>
+                      <ol className="ai-execution-list">
+                        {entry.children.map((child, childIndex) => {
+                          const childState = traceState(
+                            entry.children,
+                            childIndex,
+                            running && state === 'active',
+                          );
+                          const ChildIcon =
+                            childState === 'done'
+                              ? Check
+                              : childState === 'active'
+                                ? LoaderCircle
+                                : childState === 'error'
+                                  ? ShieldAlert
+                                  : Circle;
+                          return (
+                            <li
+                              key={child.event_id}
+                              className={`ai-execution-step is-${childState}`}
+                            >
+                              <ChildIcon size={14} aria-hidden="true" />
+                              <div>
+                                <strong>
+                                  {EVENT_LABELS[child.type]
+                                    ? t(`assistant.${EVENT_LABELS[child.type]}`)
+                                    : child.title}
+                                </strong>
+                                {child.message && <small>{child.message}</small>}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </details>
+                  )}
                   {runtime && (
                     <div className="rt-trace-meta">
                       {[

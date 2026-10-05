@@ -15,6 +15,7 @@ import { AppLayout } from './AppLayout';
 import { useProjectScope, useRouteProjectScope } from './ProjectScope';
 import { useAppNavigation } from './navigation';
 import { EmptyState } from '../components/AsyncState';
+import { buildWorkflowHref, readWorkspaceContext } from './workspaceContext';
 
 const RequirementsPage = lazy(() =>
   import('../features/requirements/RequirementsPage').then((m) => ({
@@ -33,9 +34,6 @@ const AutomationStudioPage = lazy(() =>
 );
 const RunsPage = lazy(() =>
   import('../pages/RunsPage').then((m) => ({ default: m.RunsPage })),
-);
-const TasksPage = lazy(() =>
-  import('../pages/TasksPage').then((m) => ({ default: m.TasksPage })),
 );
 const FailuresPage = lazy(() =>
   import('../pages/FailuresPage').then((m) => ({ default: m.FailuresPage })),
@@ -61,6 +59,21 @@ const RecorderPage = lazy(() =>
 const ProjectOverviewPage = lazy(() =>
   import('../features/lifecycle/ProjectOverviewPage').then((m) => ({
     default: m.ProjectOverviewPage,
+  })),
+);
+const WorkspacePage = lazy(() =>
+  import('../features/workspace/WorkspacePage').then((m) => ({
+    default: m.WorkspacePage,
+  })),
+);
+const WorkflowPage = lazy(() =>
+  import('../features/workflow/WorkflowPage').then((m) => ({
+    default: m.WorkflowPage,
+  })),
+);
+const LibraryPage = lazy(() =>
+  import('../pages/LibraryPage').then((m) => ({
+    default: m.LibraryPage,
   })),
 );
 
@@ -142,7 +155,6 @@ const StudioRoute: React.FC = () => {
   const params = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const nav = useAppNavigation();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
   const projectId = params.projectId;
   useRouteProjectScope(projectId);
@@ -194,14 +206,23 @@ const StudioRoute: React.FC = () => {
             selectProject(nextProjectId);
             navigate(`/projects/${nextProjectId}/studio`);
           }}
-          onNavigateToRuns={nav.toRun}
+          onNavigateToRuns={(runId) => {
+            const context = readWorkspaceContext(location.search, projectId ?? selectedProjectId);
+            navigate(buildWorkflowHref({
+              ...context,
+              projectId: projectId ?? selectedProjectId ?? undefined,
+              runId: runId ?? context.runId,
+              taskId: runId ? undefined : context.taskId,
+              file: splat ?? context.file,
+            }));
+          }}
           initialOpenFilePath={splat ?? null}
           initialOpenLineNumber={
             Number(new URLSearchParams(location.search).get('line')) || null
           }
-          initialDebugNodeId={new URLSearchParams(location.search).get(
-            'nodeid',
-          )}
+          initialDebugNodeId={readWorkspaceContext(location.search).failureId
+            ? new URLSearchParams(location.search).get('nodeid')
+            : null}
         />
       )}
     </div>
@@ -231,10 +252,10 @@ const RuntimeSources: React.FC = () => {
   return (
     <nav className="runtime-sources" aria-label="Runtime sources">
       <Link
-        aria-current={pathname === '/runs/tasks' ? 'page' : undefined}
-        to="/runs/tasks"
+        aria-current={pathname === '/workflow' || pathname === '/runs/tasks' ? 'page' : undefined}
+        to="/workflow"
       >
-        工作流执行
+        Live Workflow
       </Link>
       <Link
         aria-current={
@@ -258,7 +279,7 @@ const RuntimeSources: React.FC = () => {
 
 const LegacyTasksRoute: React.FC = () => {
   const { search, hash } = useLocation();
-  return <Navigate replace to={`/runs/tasks${search}${hash}`} />;
+  return <Navigate replace to={`/workflow${search}${hash}`} />;
 };
 
 const RecorderRoute: React.FC = () => {
@@ -273,16 +294,6 @@ const RecorderRoute: React.FC = () => {
           : '/projects'
       }
     />
-  );
-};
-
-const TasksRoute: React.FC = () => {
-  const { projects, selectedProjectId } = useProjectScope();
-  return (
-    <>
-      <RuntimeSources />
-      <TasksPage projects={projects} selectedProjectId={selectedProjectId} />
-    </>
   );
 };
 
@@ -354,6 +365,10 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
   <Routes>
     <Route element={<AppLayout onSignOut={onSignOut} />}>
       <Route path="/" element={<DashboardRoute />} />
+      <Route path="/workspace" element={<WorkspacePage />} />
+      <Route path="/workspace/:projectId" element={<WorkspacePage />} />
+      <Route path="/workflow" element={<WorkflowPage />} />
+      <Route path="/library" element={<LibraryPage />} />
       <Route path="/projects" element={<ProjectsRoute />} />
       <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />
       <Route
@@ -385,7 +400,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/test-cases" element={<TestCasesRoute />} />
       <Route path="/test-cases/:testCaseId" element={<TestCasesRoute />} />
       <Route path="/runs" element={<RunsRoute />} />
-      <Route path="/runs/tasks" element={<TasksRoute />} />
+      <Route path="/runs/tasks" element={<WorkflowPage />} />
       <Route path="/runs/:runId" element={<RunsRoute />} />
       <Route path="/tasks" element={<LegacyTasksRoute />} />
       <Route path="/recorder" element={<RecorderRoute />} />
@@ -397,7 +412,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/security" element={<SecurityPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/dashboard" element={<Navigate to="/" replace />} />
-      <Route path="/automation" element={<Navigate to="/projects" replace />} />
+      <Route path="/automation" element={<Navigate to="/library" replace />} />
       <Route path="*" element={<NotFoundRoute />} />
     </Route>
   </Routes>
