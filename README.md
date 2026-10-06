@@ -4,7 +4,6 @@
 
 [![CI](https://github.com/wuhanwoaini521/ai-qa-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/wuhanwoaini521/ai-qa-platform/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/wuhanwoaini521/ai-qa-platform)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
@@ -25,7 +24,7 @@ Code Editing in Automation Studio V2 (Monaco + AST + Explorer)
       ↓
 Distributed Test Runner Execution & Live SSE Streaming
       ↓
-Live Test Outcome & Multi-Artifact Capture (Traces / DOM / Allure)
+Live Test Outcomes & Execution Evidence
       ↓
 Failure Classification & AI Root-Cause Diagnosis
       ↓
@@ -38,23 +37,15 @@ Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 
 ---
 
-## 🚀 Key Platform Features (Phases 1 — 13)
+## 🚀 Current Platform Capabilities
 
-- **Phase 1: Platform Foundation** — Requirements, Test Designs, Test Cases, and Automation Binding models.
-- **Phase 2: Automation Studio V2** — Multi-tab Monaco editor with dirty tracking, AST syntax validator, Pytest explorer tree, and QA Assistant sidecar.
-- **Phase 3: Real QA Core Migration** — Real Pytest execution engine, safe subprocess sandboxing, and deterministic exit code verdicts.
-- **Phase 4: Test Execution Platform** — Real-time Server-Sent Events (SSE) live streaming of stdout/stderr and telemetry.
-- **Phase 5: Production AI Provider** — Pluggable multi-model inference router (OpenAI, Anthropic, Gemini, Mock) with monthly budgets and audit logs.
-- **Phase 6: Flaky & Failure Intelligence** — Heuristic & AI root cause diagnosis, locator repair proposal, human review & apply.
-- **Phase 7: Jenkins / Multi-Runner Platform** — Trigger remote Jenkins jobs and consume asynchronous test report webhooks.
-- **Phase 8: GitHub / PR Engineering Workflow** — Automated PR check run aggregation, PR test summary comments, and failure diagnosis.
-- **Phase 9: Jira & TestRail Integration** — Bi-directional requirement sync, preview-first bug creation, and TestRail case result publisher.
-- **Phase 10: Quality Intelligence & Gating** — Multi-dimensional coverage score, quality risk matrix, git change impact analysis, and release gates.
-- **Phase 11: Enterprise RBAC, Security & Audit** — 4-tier Role Based Access Control (`ADMIN`, `QA_LEAD`, `QA_ENGINEER`, `VIEWER`), API keys, and immutable security audit trails.
-- **Phase 12: Distributed Execution Platform** — Multi-node worker registry with heartbeat liveness, browser capability matching, and local artifact storage (S3/MinIO object storage is reserved, not implemented).
-- **Phase 13: Production Deployment & Operations** — Multi-stage Dockerfiles, Docker Compose stack, Prometheus metrics, backup/restore runbooks, and zero-downtime health probes.
-- **Phase 13.5: Architecture Stabilization** — feature-based frontend modularization, routed application shell, PostgreSQL parity in CI, central route authorization, dead-code removal, audit-driven defect fixes.
-- **Phase 14: Real-Project Pilot** — detect, import and pilot an existing pytest/Playwright repository in isolation: structured collection, test identity, safety-checked execution, rerun and xdist accounting, Allure import, and failure diagnosis on real runs.
+- Manage requirements, test cases, automation bindings, and execution history in a unified workspace.
+- Author and review automation in the Monaco-based Automation Studio, with browser recording and test exploration.
+- Run isolated pytest projects and stream execution events and test results to the web application.
+- Use configured AI providers for assistance, diagnosis, and repair proposals while keeping test verdicts tied to actual execution.
+- Review failure evidence and proposed changes before applying repairs.
+- Connect external workflows through Jira, TestRail, GitHub, and Jenkins integrations.
+- Operate the platform with role-based access, health checks, metrics, and backup/restore procedures.
 
 ---
 
@@ -168,12 +159,20 @@ pnpm build
 
 ---
 
-## 📚 Complete Documentation
+## 📚 Documentation
 
+- [Developer Guide](docs/DEVELOPMENT.md)
+- [System Architecture](docs/ARCHITECTURE.md)
 - [Production Deployment Guide](docs/DEPLOYMENT.md)
 - [Operations & Monitoring Guide](docs/OPERATIONS.md)
 - [Backup & Disaster Recovery](docs/BACKUP_RESTORE.md)
-- [System Architecture](docs/ARCHITECTURE.md)
+- [Security](docs/SECURITY.md)
+- [AI Providers](docs/AI_PROVIDER.md)
+- [Production AI Architecture](docs/PRODUCTION_AI.md)
+- [Platform Runtime Guide](docs/PLATFORM_RUNTIME_GUIDE.md)
+- [Browser Recorder](docs/BROWSER_RECORDER.md)
+- [Automation Studio](docs/AUTOMATION_STUDIO.md)
+- [Failure Intelligence](docs/FAILURE_INTELLIGENCE.md)
 - [Platform Roadmap](docs/ROADMAP.md)
 - [Quality Intelligence & Coverage](docs/QUALITY_INTELLIGENCE.md)
 - [Distributed Execution Architecture](docs/DISTRIBUTED_EXECUTION.md)
@@ -181,11 +180,4 @@ pnpm build
 - [Jira & TestRail Integration](docs/JIRA_INTEGRATION.md)
 - [TestRail Integration](docs/TESTRAIL_INTEGRATION.md)
 - [GitHub PR Engineering Workflow](docs/GITHUB_INTEGRATION.md)
-- [Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)
-- [Failure Intelligence & Human-Approved Repair](docs/FAILURE_INTELLIGENCE.md)
 - [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
-- [Architecture Stabilization Audit (Phase 13.5)](docs/ARCHITECTURE_STABILIZATION_AUDIT.md)
-- [Pilot Reference Project](docs/PILOT_REFERENCE_PROJECT.md)
-- [Phase 14 Pilot Report](docs/PHASE_14_PILOT_REPORT.md)
-- [Pilot Gap Analysis](docs/PILOT_GAP_ANALYSIS.md)
-- [Release Readiness](docs/RELEASE_READINESS.md)

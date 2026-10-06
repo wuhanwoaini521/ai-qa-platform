@@ -101,13 +101,32 @@ runtime/pytest-reports/*
 
 # Local browser verification and temporary test workspaces
 /.playwright-cli/
+/.playwright-mcp/
 /.tmp-ai-trace-tests/
 /runtime/pytest-*/
 /runtime/uv-cache/
 /output/pytest-*/
-/output/playwright/
+/.uv-cache-*/
 
 # Local V2 acceptance backups, logs and isolated databases
 /runtime/platform-v2-*/
 /runtime/platform-v2-*.log
 /runtime/ui-review/
+
+# Agent and test scratch directories/files
+**/.tmp-*/
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.backup
+
+# Generated reports and local application state
+*.log
+/playwright-report/
+/test-results/
+/allure-results/
+/allure-report/
+/apps/api/runtime/
+/output/

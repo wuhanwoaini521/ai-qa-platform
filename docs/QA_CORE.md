@@ -14,5 +14,3 @@
 | prompts | 已注册且有版本的 prompt |
 
 旧根级 `contracts.py`、`fake_adapters.py` 及只使用它们的旧模拟测试已删除。真实模块使用领域合约，禁止重新隐式引入旧 Fake QA Runner。FakeAIProvider 保留用于明确模拟，Usage 记录真实来源。
-
-业务调用链与验收见 [架构验收](ARCHITECTURE_CLEANUP_ACCEPTANCE.md)。

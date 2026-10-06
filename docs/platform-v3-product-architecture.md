@@ -54,7 +54,7 @@ Runtime TaskStep 与 RequirementLifecycle 的子阶段有意保持两层粒度�
 
 用户在 Workspace 成功完成分析后留在同一 Workspace，需求面板切到设计视图；生成设计、创建 Case、打开 Studio、运行及失败处理沿用既有命令与实体。Workspace 嵌入式 TestCase 页面隐藏独立导航列表时使用单列布局，详情卡横跨主工作区，避免沿用独立页面双列网格后内容缩在左侧。
 
-接口与映射细节、失败恢复边界和验收记录见 `platform-v3.1-runtime-integration.md` 与 `platform-v3.1-acceptance.md`。
+接口映射与失败恢复边界见 `platform-v3.1-runtime-integration.md`。
 
 ## Navigation 与 Context
 
@@ -76,4 +76,4 @@ Workspace 的 Failure 阶段嵌入现有 Failure Intelligence，保留分类、�
 
 ## 适用范围与后续
 
-这次确立前端产品骨架和已有执行数据的连通方式，不声称将所有 AI Provider/流接口重写为单一服务，也不声称已完成真实 AI 生成、完整 Failure 写操作、Recorder 保存或 10 分钟压力场景验收。生产构建仍包含约 4.03 MB 的 Monaco Editor chunk；性能拆分和 V4 项目见 `platform-v3-acceptance.md`。
+前端产品骨架复用已有执行数据和服务接口。AI Provider、流式接口、Failure 写操作和 Recorder 保存各自保留现有服务边界，不汇总为单一服务。
