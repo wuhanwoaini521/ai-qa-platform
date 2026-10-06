@@ -218,6 +218,7 @@ async def test_decision_service_falls_back_when_disabled_or_below_confidence():
     result = await low_confidence.choose(request)
     assert result.choice == "unknown" and result.fallback_used
     assert result.reason == "below_minimum_confidence"
+    assert result.confidence == 0.59
 
 
 @pytest.mark.unit

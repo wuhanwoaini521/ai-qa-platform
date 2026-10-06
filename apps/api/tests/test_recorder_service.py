@@ -43,6 +43,21 @@ def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
     assert 'expect(page.locator("#status")).to_contain_text("Order saved")' in source
 
 
+def test_generator_preserves_agent_search_submission_keypress() -> None:
+    source = generate_python_case(
+        RecorderGenerateRequest(
+            steps=[
+                RecorderStep(action="fill", locator=RecorderLocator(kind="role", value="textbox", name="Search"), value="Selenium"),
+                RecorderStep(action="press", locator=RecorderLocator(kind="role", value="textbox", name="Search"), key="Enter"),
+            ]
+        )
+    )
+
+    compile(source, "recorded_search.py", "exec")
+    assert '.get_by_role("textbox", name="Search", exact=True).fill("Selenium")' in source
+    assert '.get_by_role("textbox", name="Search", exact=True).press("Enter")' in source
+
+
 def test_locator_nth_zero_is_preserved_for_duplicate_matches() -> None:
     source = generate_python_case(
         RecorderGenerateRequest(

@@ -6,7 +6,7 @@ from project_model.models import Permission
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import require_permission
-from app.api.event_stream import event_frame
+from app.event_stream import event_frame
 from app.persistence.database import get_db
 from app.services.golden_demo_service import DEMO_SOURCE, GoldenDemoService
 from app.services.project_knowledge_service import ProjectKnowledgeService

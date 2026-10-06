@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from project_model.models import QAChatRequest, QAChatResponse
 
-from app.api.event_stream import event_frame
+from app.event_stream import event_frame
 from app.services.qa_assistant_service import QAAssistantService
 
 router = APIRouter(prefix="/qa-assistant", tags=["QA Assistant Sidecar"])

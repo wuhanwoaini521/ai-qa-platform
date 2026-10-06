@@ -1,22 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from project_model.models import Permission, User
+from project_model.models import (
+    AutomationBindingCreate,
+    AutomationBindingStatus,
+    AutomationStatus,
+    FrameworkType,
+    Permission,
+    TestCaseUpdate,
+    User,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import authenticate_websocket_stream, has_permission, require_permission
 from app.persistence.database import get_db
+from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.test_case_repo import TestCaseRepository
+from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.automation_binding_service import AutomationBindingService
 from app.services.recorder_service import (
     RecorderGenerateRequest,
     RecorderOptimization,
+    RecorderSaveCaseRequest,
     RecorderSessionCreate,
     generate_python_case,
     recorder_service,
     validate_recording_optimization,
 )
+from app.services.test_case_service import TestCaseService
+from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
 
@@ -72,6 +88,71 @@ async def generate_case(
     if not session:
         raise HTTPException(status_code=404, detail="Recorder session not found")
     return {"code": generate_python_case(request), "project_id": session.project_id}
+
+
+@router.post("/sessions/{session_id}/save-case")
+async def save_recorded_case(
+    session_id: str,
+    request: RecorderSaveCaseRequest,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+    db_session: AsyncSession = Depends(get_db),
+):
+    recording = await recorder_service.get(session_id, user.id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    if request.test_case.project_id != recording.project_id:
+        raise HTTPException(status_code=422, detail="Test case project must match the recorder project")
+
+    identity = hashlib.sha256(
+        f"{recording.project_id}\0{request.file_path}\0{request.test_name}".encode("utf-8")
+    ).hexdigest()[:29]
+    case_id = f"tc_rec_{identity}"
+    case_data = request.test_case.model_copy(
+        update={
+            "automation_status": AutomationStatus.AUTOMATED,
+            "external_system": "RECORDER",
+            "external_case_id": identity,
+        }
+    )
+    case_repo = TestCaseRepository(db_session)
+    case_service = TestCaseService(case_repo)
+    existing = await case_repo.get_by_id(case_id)
+    if existing:
+        if (
+            existing.project_id != recording.project_id
+            or existing.external_system != "RECORDER"
+            or existing.external_case_id != identity
+        ):
+            raise HTTPException(status_code=409, detail="Recorder case identity conflicts with an existing case")
+        saved_case = await case_service.update_test_case(
+            case_id,
+            TestCaseUpdate.model_validate(case_data.model_dump(exclude={"project_id"})),
+        )
+        reused = True
+    else:
+        saved_case = await case_service.create_test_case(case_data, case_id=case_id)
+        reused = False
+
+    binding_service = AutomationBindingService(
+        AutomationBindingRepository(db_session),
+        case_repo,
+        WorkspaceRepository(db_session),
+        WorkspaceService(),
+    )
+    nodeid = f"{request.file_path}::{request.test_name}"
+    binding = await binding_service.bind_test_case(
+        AutomationBindingCreate(
+            test_case_id=case_id,
+            workspace_id=recording.project_id,
+            nodeid=nodeid,
+            file_path=request.file_path,
+            framework=FrameworkType.PLAYWRIGHT_PYTHON,
+            status=AutomationBindingStatus.ACTIVE,
+        )
+    )
+    if not saved_case:
+        raise HTTPException(status_code=500, detail="Failed to save recorder test case")
+    return {"test_case": saved_case, "binding": binding, "nodeid": nodeid, "reused": reused}
 
 
 @router.post("/sessions/{session_id}/optimize")
@@ -220,6 +301,13 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                     from app.services.recorder_service import RecorderStep
 
                     session.steps.append(RecorderStep.model_validate(command["step"]).model_dump(mode="json"))
+                elif action == "replace_steps":
+                    from app.services.recorder_service import RecorderStep
+
+                    raw_steps = command.get("steps")
+                    if not isinstance(raw_steps, list) or len(raw_steps) > 500:
+                        raise ValueError("A recorder session can contain at most 500 steps.")
+                    session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
                 elif action == "edit_step":
                     from app.services.recorder_service import RecorderStep
 

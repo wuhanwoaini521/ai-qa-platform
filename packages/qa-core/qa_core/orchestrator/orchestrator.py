@@ -19,7 +19,13 @@ from qa_core.ai.models import (
     TestCaseGenerationResponse,
     TestDesignGenerationResponse,
 )
-from qa_core.ai.provider import clean_json_text, stream_provider_completion
+from qa_core.ai.provider import (
+    clean_json_text,
+    empty_response_error,
+    is_output_limit_finish_reason,
+    output_limit_error,
+    stream_provider_completion,
+)
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.author.grounder import KnowledgeGrounder, PytestCodeGenerator
 from qa_core.author.models import AuthoringRequest, AuthoringResult
@@ -38,7 +44,7 @@ from qa_core.prompts import (
     TEST_DESIGN_PROMPT,
 )
 
-FAILURE_DIAGNOSIS_TIMEOUT_SECONDS = 45.0
+FAILURE_DIAGNOSIS_TIMEOUT_SECONDS = 120.0
 
 
 def _supports_native_streaming(provider) -> bool:
@@ -94,6 +100,7 @@ class ProductionQAOrchestrator:
         model = getattr(self.ai_provider, "model", "")
         invocation_id = None
         input_tokens = output_tokens = None
+        finish_reason = None
         fallback_used = False
         progress_callback = on_delta if _supports_native_streaming(self.ai_provider) else None
         stream = stream_provider_completion(self.ai_provider, request)
@@ -109,6 +116,8 @@ class ProductionQAOrchestrator:
                     if chunk.usage:
                         input_tokens = chunk.usage.get("prompt_tokens", chunk.usage.get("input_tokens"))
                         output_tokens = chunk.usage.get("completion_tokens", chunk.usage.get("output_tokens"))
+                    if chunk.finish_reason:
+                        finish_reason = chunk.finish_reason
                     if progress_callback and chunk.content_delta:
                         await progress_callback(len(content), time.perf_counter() - started)
         except TimeoutError:
@@ -125,8 +134,10 @@ class ProductionQAOrchestrator:
                     raise
                 raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
 
+        if is_output_limit_finish_reason(finish_reason):
+            raise output_limit_error(max_tokens=request.max_tokens, output_tokens=output_tokens)
         if not content.strip():
-            raise ValueError("AI provider returned an empty stream.")
+            raise empty_response_error(streamed=True)
         structured_data = None
         if request.response_schema:
             try:
@@ -285,7 +296,13 @@ class ProductionQAOrchestrator:
         failing_locator: str | None = None,
         historical_context: str = "No prior executions recorded.",
         on_progress: Callable[[int], Awaitable[None]] | None = None,
+        response_language: str = "en",
     ) -> FailureAnalysisResponse:
+        language_instruction = (
+            "Write every narrative field in Simplified Chinese. Preserve code, selectors, test paths, exception names, and identifiers exactly."
+            if response_language.lower().startswith("zh")
+            else "Write every narrative field in English. Preserve code, selectors, test paths, exception names, and identifiers exactly."
+        )
         prompt_str = FAILURE_DIAGNOSIS_PROMPT.format(
             nodeid=test_nodeid,
             error_message=error_message,
@@ -295,11 +312,11 @@ class ProductionQAOrchestrator:
         )
         req = AICompletionRequest(
             prompt=prompt_str,
-            system_instruction=FAILURE_DIAGNOSIS_PROMPT.system_instruction,
+            system_instruction=f"{FAILURE_DIAGNOSIS_PROMPT.system_instruction} {language_instruction}",
             prompt_id=FAILURE_DIAGNOSIS_PROMPT.prompt_id,
             prompt_version=FAILURE_DIAGNOSIS_PROMPT.version,
             response_schema=FailureAnalysisResponse,
-            max_tokens=1000,
+            max_tokens=2500,
             max_retries=0,
             timeout_seconds=20,
         )

@@ -16,7 +16,7 @@ from project_model.task_models import (
 )
 
 from app.api.authz import get_current_user
-from app.api.event_stream import event_frame
+from app.event_stream import event_frame
 from app.persistence.database import async_session_factory
 from app.repositories.task_repo import TaskRepository
 from app.services.task_runtime_service import TaskRuntimeService

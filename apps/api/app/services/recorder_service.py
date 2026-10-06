@@ -7,9 +7,11 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from project_model.models import TestCaseCreate
 from pydantic import BaseModel, Field, field_validator
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
@@ -133,6 +135,8 @@ class RecorderStep(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     action: Literal[
         "navigate",
+        "back",
+        "scroll",
         "click",
         "double_click",
         "fill",
@@ -178,6 +182,34 @@ class RecorderGenerateRequest(BaseModel):
     file_path: str = "tests/test_recorded_case.py"
     test_name: str = "test_recorded_case"
     steps: list[RecorderStep]
+
+
+class RecorderSaveCaseRequest(BaseModel):
+    test_case: TestCaseCreate
+    file_path: str = Field(min_length=1, max_length=500)
+    test_name: str = Field(min_length=1, max_length=128)
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, value: str) -> str:
+        path = value.replace("\\", "/").strip()
+        posix_path = PurePosixPath(path)
+        if (
+            path.startswith("/")
+            or PureWindowsPath(path).is_absolute()
+            or PureWindowsPath(path).drive
+            or not path.endswith(".py")
+            or ".." in posix_path.parts
+        ):
+            raise ValueError("Recorder file path must be a project-relative .py path.")
+        return str(posix_path)
+
+    @field_validator("test_name")
+    @classmethod
+    def validate_test_name(cls, value: str) -> str:
+        if not re.fullmatch(r"test_[A-Za-z0-9_]+", value):
+            raise ValueError("Recorder test name must be a valid pytest test function name.")
+        return value
 
 
 class RecorderOptimization(BaseModel):
@@ -312,6 +344,21 @@ class BrowserRecorderService:
         for session in list(self._sessions.values()):
             await self.close(session.id, session.owner_id)
 
+    @staticmethod
+    def _is_navigation_context_error(error: Exception) -> bool:
+        message = str(error).casefold()
+        return any(
+            marker in message
+            for marker in (
+                "execution context was destroyed",
+                "most likely because of a navigation",
+                "frame was detached",
+                "navigation interrupted",
+                "navigation in progress",
+                "cannot find context with specified id",
+            )
+        )
+
     async def page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
         page = session.page
         if page.is_closed():
@@ -324,6 +371,14 @@ class BrowserRecorderService:
             }
         try:
             new_steps: list[dict[str, Any]] = []
+            if page.url.startswith("chrome-error://"):
+                return {
+                    "type": "error",
+                    "message": "Chrome 显示网络错误页，目标网站没有加载成功。请检查网址、网络或浏览器代理。",
+                    "url": page.url,
+                    "state": session.state,
+                    "steps": session.steps,
+                }
             if session.state == "RECORDING" and page.url != session.last_url:
                 step = self.events_to_steps([{"action": "navigate", "url": page.url}])[0]
                 session.steps.append(step)
@@ -373,6 +428,13 @@ class BrowserRecorderService:
                 "locator_trace": session.locator_trace,
             }
         except Exception as error:
+            if self._is_navigation_context_error(error):
+                return {
+                    "type": "navigating",
+                    "url": page.url,
+                    "state": session.state,
+                    "steps": session.steps,
+                }
             return {
                 "type": "error",
                 "message": str(error),
@@ -561,6 +623,11 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         lines.append(f"            # Step {index}: {step.description or step.action}")
         if step.action == "navigate":
             lines.append(f"            page.goto({_py_literal(step.url)})")
+        elif step.action == "back":
+            lines.append("            page.go_back()")
+        elif step.action == "scroll":
+            direction = -650 if str(step.value or "down").lower() == "up" else 650
+            lines.append(f"            page.mouse.wheel(0, {direction})")
         elif step.action == "wait":
             lines.append(f"            page.wait_for_timeout({int(step.value or '1000')})")
         elif step.action == "assert_url":

@@ -10,7 +10,13 @@ from collections.abc import AsyncIterator
 from qa_core.ai.budget import BudgetExceededError
 from qa_core.ai.correlation import request_id_context
 from qa_core.ai.models import AICompletionRequest, AICompletionResponse, AIStreamChunk
-from qa_core.ai.provider import clean_json_text, stream_provider_completion
+from qa_core.ai.provider import (
+    clean_json_text,
+    empty_response_error,
+    is_output_limit_finish_reason,
+    output_limit_error,
+    stream_provider_completion,
+)
 from qa_core.failure.redactor import SensitiveRedactor
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -141,7 +147,7 @@ class AIExecutionService:
             response = await self.inner.complete(request)
             response = response.model_copy(update={"invocation_id": invocation_id})
             if not response.content.strip() and response.structured_data is None:
-                raise ValueError("AI provider returned an empty response.")
+                raise empty_response_error(streamed=False)
             if request.response_schema:
                 parsed = (
                     request.response_schema.model_validate(response.structured_data)
@@ -155,17 +161,24 @@ class AIExecutionService:
             await self._finish(invocation_id, started, status="CANCELLED")
             raise
         except Exception as error:
-            await self._finish(invocation_id, started, status="FAILED", error_type=type(error).__name__)
+            await self._finish(
+                invocation_id,
+                started,
+                status="FAILED",
+                error_type=getattr(error, "code", None) or type(error).__name__,
+            )
             raise
 
     async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]:
         request, invocation_id, started = await self._begin(request)
         response = AICompletionResponse(content="", provider=self.provider_name, model=self.model)
         stream = stream_provider_completion(self.inner, request)
+        finish_reason = None
         try:
             async for chunk in stream:
                 chunk = chunk.model_copy(update={"invocation_id": invocation_id})
                 response.content += chunk.content_delta
+                finish_reason = chunk.finish_reason or finish_reason
                 response.provider = chunk.provider
                 response.model = chunk.model or response.model
                 response.fallback_used = response.fallback_used or chunk.fallback_used
@@ -181,7 +194,14 @@ class AIExecutionService:
                             setattr(response, target, value)
                 yield chunk
             if not response.content.strip():
-                raise ValueError("AI provider returned an empty stream.")
+                if is_output_limit_finish_reason(finish_reason) or (
+                    response.output_tokens is not None and response.output_tokens >= request.max_tokens
+                ):
+                    raise output_limit_error(
+                        max_tokens=request.max_tokens,
+                        output_tokens=response.output_tokens,
+                    )
+                raise empty_response_error(streamed=True)
             if request.response_schema:
                 parsed = request.response_schema.model_validate_json(clean_json_text(response.content))
                 response = response.model_copy(update={"structured_data": parsed.model_dump()})
@@ -191,7 +211,11 @@ class AIExecutionService:
             raise
         except Exception as error:
             await self._finish(
-                invocation_id, started, response=response, status="FAILED", error_type=type(error).__name__
+                invocation_id,
+                started,
+                response=response,
+                status="FAILED",
+                error_type=getattr(error, "code", None) or type(error).__name__,
             )
             raise
         finally:

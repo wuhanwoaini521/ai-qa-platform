@@ -468,6 +468,7 @@ class TestRun(EntityBase):
 
 
 class TestRunCreate(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
     parent_run_id: str | None = None
     origin_failure_id: str | None = None
     project_id: str
@@ -487,6 +488,8 @@ class TestRunCreate(BaseModel):
     def validate_parallel_runner(self) -> TestRunCreate:
         if self.parallel_workers > 1 and self.runner_type.upper() != "LOCAL":
             raise ValueError("Parallel pytest workers are supported by the local runner only.")
+        if self.idempotency_key and self.runner_type.upper() != "LOCAL":
+            raise ValueError("Run request idempotency is currently supported by the local runner only.")
         return self
 
 

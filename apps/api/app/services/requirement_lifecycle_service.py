@@ -34,6 +34,9 @@ from app.services.lifecycle_validation import input_hash, validate_requirement_r
 from app.services.test_case_service import TestCaseService
 from app.services.test_design_service import TestDesignService
 
+DEFAULT_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS = 45.0
+MIN_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS = 120.0
+
 
 class RequirementAnalysisBusy(ValueError):
     pass
@@ -246,14 +249,21 @@ class RequirementLifecycleService:
                 prompt_id=REQUIREMENT_LIFECYCLE_PROMPT.prompt_id,
                 prompt_version=REQUIREMENT_LIFECYCLE_PROMPT.version,
                 response_schema=RequirementAnalysis,
-                max_tokens=2800,
+                max_tokens=6000,
                 max_retries=1,
                 task_id=task_id,
                 run_id=record.id,
             )
             stream_completion = getattr(self.orchestrator, "complete_streaming", None)
             if callable(stream_completion):
-                response = await stream_completion(request, timeout_seconds=45)
+                configured_timeout = getattr(provider, "timeout", None)
+                if configured_timeout is None:
+                    timeout_seconds = DEFAULT_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS
+                else:
+                    # The provider timeout limits an individual HTTP read; a healthy stream
+                    # can take longer overall while continuing to emit chunks.
+                    timeout_seconds = max(MIN_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS, float(configured_timeout))
+                response = await stream_completion(request, timeout_seconds=timeout_seconds)
             else:
                 response = await self.orchestrator.complete(request)
             record.provider, record.model = response.provider, response.model
@@ -387,7 +397,9 @@ class RequirementLifecycleService:
         except Exception as error:
             record.status = "FALLBACK" if record.status == "FALLBACK" else "FAILED"
             record.error_code = (
-                "INVALID_STRUCTURED_OUTPUT" if isinstance(error, ValidationError) else type(error).__name__.upper()
+                "INVALID_STRUCTURED_OUTPUT"
+                if isinstance(error, ValidationError)
+                else str(getattr(error, "code", None) or type(error).__name__.upper())
             )
             record.error = SensitiveRedactor.redact_text(str(error))[:1000]
             record.finished_at = utc_now().isoformat()

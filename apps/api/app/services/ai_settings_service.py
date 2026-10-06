@@ -199,6 +199,9 @@ class AISettingsService:
         if config.provider == "fake":
             health = await FakeAIProvider(model=config.model).check_health()
         else:
+            # DeepSeek V4 enables thinking by default. Keep the tiny health probes
+            # focused on final text so their token budget is not consumed by reasoning.
+            probe_thinking_mode = "disabled" if config.model.casefold().startswith("deepseek-") else None
             provider = OpenAICompatibleProvider(
                 api_key=config.api_key,
                 model=config.model,
@@ -223,6 +226,7 @@ class AISettingsService:
                             prompt_id="provider_connection",
                             prompt_version="v1.0",
                             max_tokens=16,
+                            thinking_mode=probe_thinking_mode,
                         )
                     ):
                         text += chunk.content_delta
@@ -230,7 +234,10 @@ class AISettingsService:
                     health.message = "Model returned a real streaming response to a synthetic probe."
                 except Exception as error:
                     health.status = ProviderHealth.UNAVAILABLE
-                    health.message = f"Model streaming probe failed ({type(error).__name__})."
+                    code = getattr(error, "code", None) or type(error).__name__
+                    safe_message = getattr(error, "safe_message", None)
+                    detail = f": {safe_message}" if isinstance(safe_message, str) else ""
+                    health.message = f"Model streaming probe failed ({code}){detail}."
             if verify_structured_output and config.provider != "fake" and health.status == ProviderHealth.AVAILABLE:
                 try:
                     response = await guarded.complete(
@@ -240,6 +247,7 @@ class AISettingsService:
                             prompt_id="provider_structured_output_probe",
                             prompt_version="v1.0",
                             max_tokens=32,
+                            thinking_mode=probe_thinking_mode,
                             response_schema=_StructuredOutputProbe,
                         )
                     )
@@ -251,7 +259,10 @@ class AISettingsService:
                     health.message = "Model returned valid structured JSON to a synthetic completion probe."
                 except Exception as error:
                     structured_output_supported = False
-                    health.message = f"Model structured JSON probe failed ({type(error).__name__})."
+                    code = getattr(error, "code", None) or type(error).__name__
+                    safe_message = getattr(error, "safe_message", None)
+                    detail = f": {safe_message}" if isinstance(safe_message, str) else ""
+                    health.message = f"Model structured JSON probe failed ({code}){detail}."
         return AIProviderConnectionResult(
             connected=health.status in (ProviderHealth.AVAILABLE, ProviderHealth.FALLBACK_ONLY),
             provider=health.provider,

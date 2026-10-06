@@ -1,6 +1,7 @@
 import logging
 from typing import AsyncGenerator
 
+import anyio
 from app.settings import settings
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -69,13 +70,23 @@ get_session = async_session_factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
+    session = async_session_factory()
+    try:
         try:
             yield session
             await session.commit()
-        except Exception:
-            await session.rollback()
+        except BaseException:
+            with anyio.CancelScope(shield=True):
+                try:
+                    await session.rollback()
+                except BaseException:
+                    # Keep the request's original failure visible if cleanup also fails.
+                    logger.exception("Database rollback failed while handling a request error")
             raise
+    finally:
+        # Request cancellation must not interrupt SQLAlchemy's async connection return.
+        with anyio.CancelScope(shield=True):
+            await session.close()
 
 
 async def init_db() -> None:

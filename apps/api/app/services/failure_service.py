@@ -25,7 +25,7 @@ from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 from sqlalchemy import select, update
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.persistence.models import BrowserSessionORM, FailureRecordORM, utc_now
+from app.persistence.models import BrowserSessionORM, FailureAnalysisORM, FailureRecordORM, utc_now
 from app.repositories.ai_repo import AIRepository
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
@@ -141,6 +141,7 @@ class FailureService:
         on_event: Callable[[AITraceEvent], Awaitable[None]] | None = None,
         *,
         extra_context: str = "",
+        response_language: str = "en",
     ) -> FailureAnalysisResponse:
         orm = await self.run_repo.get_failure_by_id(failure_id)
         if not failure_id or not orm:
@@ -271,6 +272,7 @@ class FailureService:
             + "\nFailure evidence bundle:\n"
             + evidence.model_copy(update={"error": "", "traceback": "", "assertion": ""}).render(limit=14000),
             on_progress=report_model_progress if on_event is not None else None,
+            response_language=response_language,
         )
         observed, _, _ = FailureClassifier.classify(safe_error, safe_stack)
         if observed != FailureCategory.UNKNOWN:
@@ -393,71 +395,58 @@ class FailureService:
             raise ValueError(f"Failure record not found: {failure_id}")
 
         failing_loc = self._require_locator_failure(orm)
-        diagnosis = await self.diagnose_failure_ai(failure_id)
-        trace = list(diagnosis.execution_trace)
+        stored_analysis = await self._latest_trusted_failure_analysis(failure_id)
+        if stored_analysis:
+            diagnosis = stored_analysis["diagnosis"]
+            diagnosis_root_cause = str(diagnosis.get("root_cause") or "")
+            trace = self._analysis_trace(stored_analysis.get("events") or [])
+        else:
+            diagnosis_response = await self.diagnose_failure_ai(failure_id)
+            diagnosis_root_cause = diagnosis_response.root_cause
+            trace = list(diagnosis_response.execution_trace)
         browser_session, page_evidence = await self._browser_evidence(orm.execution_id)
         candidate_selection = None
-        verification_reason = "page_evidence_unavailable"
-        if browser_session and page_evidence and browser_session.current_url:
-            controls = page_evidence.get("controls") or []
-            candidates = []
-            seen: set[tuple[str, str, str | None]] = set()
-            for control in controls:
-                ignored = {
-                    "button",
-                    "input",
-                    "div",
-                    "span",
-                    "locator",
-                    "get",
-                    "by",
-                    "role",
-                    "name",
-                    "test",
-                    "data",
-                    "id",
-                    "css",
-                    "xpath",
-                }
-                target_tokens = {word.lower() for word in re.findall(r"[\w]+", failing_loc) if len(word) > 2} - ignored
-                control_text = " ".join(
-                    [
-                        str(control.get("name") or ""),
-                        *[str(item.get("value") or "") for item in control.get("candidates") or []],
-                    ]
-                )
-                control_tokens = {
-                    word.lower() for word in re.findall(r"[\w]+", control_text) if len(word) > 2
-                } - ignored
-                if not target_tokens.intersection(control_tokens):
-                    continue
-                for candidate in control.get("candidates") or []:
-                    key = (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
-                    if key not in seen:
-                        seen.add(key)
-                        candidates.append(
-                            {
-                                **candidate,
-                                "evidence": {
-                                    **(candidate.get("evidence") or {}),
-                                    "dom_depth": control.get("dom_depth"),
-                                },
-                            }
-                        )
-            target_match = re.search(r"name\s*=\s*(['\"])(.*?)\1", failing_loc)
-            failed_name = target_match.group(2)[:180] if target_match else ""
-            event = {
-                "tag": "element",
-                "role": "",
-                "name": failed_name,
-                "url": browser_session.current_url,
-                "action": "click",
-                "failed_locator": failing_loc[:500],
-                "failure_type": orm.exception_type[:100],
-                "error_excerpt": SensitiveRedactor.redact_text(orm.error_message or "")[:500],
-                "candidates": candidates,
-            }
-            ranked = LocatorDecisionService.generate_candidates(event)
+        verification_reason = "page_evidence_unavailable" if not page_evidence else "no_playwright_candidate"
+        candidates = []
+        seen: set[tuple[str, str, str | None]] = set()
+        for control in (page_evidence or {}).get("controls") or []:
+            for candidate in control.get("candidates") or []:
+                key = (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(
+                        {
+                            **candidate,
+                            "evidence": {
+                                **(candidate.get("evidence") or {}),
+                                "dom_depth": control.get("dom_depth"),
+                            },
+                        }
+                    )
+        for candidate in self._candidates_from_analysis(stored_analysis):
+            key = (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
+            if key not in seen:
+                seen.add(key)
+                candidates.append(candidate)
+        candidates = LocatorDecisionService.prioritize_candidates_for_failure(failing_loc, candidates)
+        target_match = re.search(r"name\s*=\s*(['\"])(.*?)\1", failing_loc)
+        failed_name = target_match.group(2)[:180] if target_match else ""
+        current_url = str(
+            (browser_session.current_url if browser_session else "") or (page_evidence or {}).get("url") or ""
+        )
+        event = {
+            "tag": "element",
+            "role": "",
+            "name": failed_name,
+            "url": current_url,
+            "action": "click",
+            "failed_locator": failing_loc[:500],
+            "failure_type": orm.exception_type[:100],
+            "error_excerpt": SensitiveRedactor.redact_text(orm.error_message or "")[:500],
+            "candidates": candidates,
+        }
+        ranked = LocatorDecisionService.generate_candidates(event)
+        if ranked and current_url:
             try:
                 from playwright.async_api import async_playwright
 
@@ -468,7 +457,7 @@ class FailureService:
                     browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
                     try:
                         page = await browser.new_page()
-                        await page.goto(browser_session.current_url, wait_until="domcontentloaded", timeout=12000)
+                        await page.goto(current_url, wait_until="domcontentloaded", timeout=12000)
                         candidate_selection = await LocatorDecisionService().decide(
                             run_id=orm.run_id,
                             event=event,
@@ -481,6 +470,8 @@ class FailureService:
                         await browser.close()
             except Exception as error:
                 verification_reason = type(error).__name__
+        elif ranked:
+            verification_reason = "failed_page_url_unavailable"
 
         if candidate_selection:
             trace.extend(candidate_selection["trace"])
@@ -497,20 +488,48 @@ class FailureService:
                     f"Playwright verified this candidate against the observed failure page. Decision engine: {summary['engine']}"
                 ),
                 file_path=orm.test_nodeid.split("::")[0],
-                explanation=diagnosis.root_cause,
+                explanation=diagnosis_root_cause,
                 execution_trace=trace,
             )
         else:
-            try:
-                proposal = self.orchestrator.propose_locator_repair(
-                    failing_locator=failing_loc,
-                    error_message=SensitiveRedactor.redact_text(orm.error_message or ""),
+            unverified_candidate = (candidate_selection or {}).get("selected_candidate") or next(iter(ranked), None)
+            if unverified_candidate:
+                score = unverified_candidate.get("static_score")
+                confidence = min(0.75, max(0.4, float(score))) if isinstance(score, (int, float)) else 0.65
+                proposal = LocatorRepairProposal(
+                    old_locator=failing_loc,
+                    proposed_locator=str(unverified_candidate.get("locator") or ""),
+                    confidence=confidence,
+                    strategy=str(unverified_candidate.get("strategy") or "observed_candidate"),
+                    reason=(
+                        "该定位器来自失败页面已捕获的候选证据；当前 Playwright 复验未通过或未能运行，"
+                        "需要人工检查后再应用并重新运行测试。"
+                    ),
                     file_path=orm.test_nodeid.split("::")[0],
+                    explanation=diagnosis_root_cause,
                 )
-            except NoLocatorCandidateError as error:
-                raise LocatorRepairNotApplicableError(
-                    "没有取得可用的替代定位器证据，不生成修复提案。请先采集当前页面与 DOM。"
-                ) from error
+            else:
+                try:
+                    proposal = self.orchestrator.propose_locator_repair(
+                        failing_locator=failing_loc,
+                        dom_snapshot=str(
+                            (page_evidence or {}).get("dom_snapshot")
+                            or (page_evidence or {}).get("html_snapshot")
+                            or ""
+                        ),
+                        error_message=SensitiveRedactor.redact_text(orm.error_message or ""),
+                        file_path=orm.test_nodeid.split("::")[0],
+                    )
+                except NoLocatorCandidateError as error:
+                    raise LocatorRepairNotApplicableError(
+                        "没有找到与失效定位器匹配的页面候选；请重新采集失败页面证据后再生成提案。"
+                    ) from error
+            safe_proposed_locator = SensitiveRedactor.redact_text(proposal.proposed_locator)
+            verification_detail = {
+                "page_evidence_unavailable": "未保存可用于复验的失败页面证据",
+                "failed_page_url_unavailable": "失败页面没有可重新打开的 URL",
+                "no_playwright_candidate": "已采集证据中没有可供 Playwright 复验的候选",
+            }.get(verification_reason, verification_reason.replace("_", " "))
             proposal.execution_trace = _validated_trace_events(
                 trace
                 + [
@@ -533,14 +552,25 @@ class FailureService:
                         "repair_suggested",
                         stage="repair",
                         title="Unverified repair suggestion created",
-                        message="Review the proposal manually; the current page did not yield a verified candidate.",
+                        message=(
+                            f"本次修复提案选择：{safe_proposed_locator}（{proposal.strategy}）。"
+                            f"Playwright 复验未通过或未能运行（{verification_detail}）；尚未改写代码。"
+                        ),
                         case_execution_id=orm.execution_id,
                         status="UNVERIFIED",
-                        metadata={"failure_id": failure_id, "verified": False},
+                        metadata={
+                            "failure_id": failure_id,
+                            "verified": False,
+                            "proposed_locator": proposal.proposed_locator,
+                            "strategy": proposal.strategy,
+                            "confidence": proposal.confidence,
+                            "verification_reason": verification_reason,
+                        },
                     ),
                 ]
             )
         if selected and verification.get("verified"):
+            safe_proposed_locator = SensitiveRedactor.redact_text(proposal.proposed_locator)
             proposal.execution_trace = _validated_trace_events(
                 trace
                 + [
@@ -549,7 +579,7 @@ class FailureService:
                         "repair_suggested",
                         stage="repair",
                         title="Verified repair suggestion created",
-                        message=proposal.proposed_locator,
+                        message=f"本次修复提案选择：{safe_proposed_locator}。Playwright 已验证通过。",
                         case_execution_id=orm.execution_id,
                         metadata={"failure_id": failure_id, "verified": True},
                     ),
@@ -582,6 +612,53 @@ class FailureService:
         orm.repair_proposal = proposal.model_dump(mode="json")
         await self.run_repo.session.flush()
         return proposal
+
+    async def _latest_trusted_failure_analysis(self, failure_id: str) -> dict | None:
+        rows = (
+            await self.run_repo.session.execute(
+                select(FailureAnalysisORM)
+                .where(
+                    FailureAnalysisORM.failure_id == failure_id,
+                    FailureAnalysisORM.status == "COMPLETED",
+                )
+                .order_by(FailureAnalysisORM.created_at.desc())
+                .limit(10)
+            )
+        ).scalars()
+        for row in rows:
+            result = row.result or {}
+            diagnosis = result.get("diagnosis")
+            if not isinstance(diagnosis, dict):
+                continue
+            provider = str(diagnosis.get("provider") or "").strip().lower()
+            if provider and provider != "fake" and diagnosis.get("fallback_used") is not True:
+                return {"diagnosis": diagnosis, "events": row.events or [], "result": result}
+        return None
+
+    @staticmethod
+    def _analysis_trace(events: list[dict]) -> list[AITraceEvent]:
+        trace: list[AITraceEvent] = []
+        for event in events:
+            try:
+                trace.append(AITraceEvent.model_validate(event))
+            except Exception:
+                continue
+        return trace
+
+    @staticmethod
+    def _candidates_from_analysis(analysis: dict | None) -> list[dict]:
+        if not analysis:
+            return []
+        candidates: list[dict] = []
+        seen: set[tuple[str, str, str | None]] = set()
+        for event in analysis.get("events") or []:
+            metadata = event.get("metadata") or {}
+            for candidate in metadata.get("candidates") or []:
+                key = (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(candidate)
+        return candidates
 
     @staticmethod
     def _require_locator_failure(orm: FailureRecordORM) -> str:

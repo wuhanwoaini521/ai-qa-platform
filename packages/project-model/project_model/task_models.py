@@ -213,8 +213,3 @@ class TaskDetail(Task):
 class TaskApprovalRequest(BaseModel):
     approved: bool
     comment: str = Field(default="", max_length=2000)
-
-
-class TaskCancelResponse(BaseModel):
-    task_id: str
-    status: TaskStatus

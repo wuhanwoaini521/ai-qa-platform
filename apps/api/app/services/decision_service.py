@@ -64,11 +64,13 @@ class DecisionService:
         self.provider_registry = provider_registry or default_provider_registry()
         self.ai_repo = ai_repo or AIRepository()
 
-    def _fallback(self, request: DecisionRequest, reason: str) -> DecisionResult:
+    def _fallback(
+        self, request: DecisionRequest, reason: str, *, confidence: float | None = None
+    ) -> DecisionResult:
         choice = next((option.key for option in request.options if option.key.lower() == "unknown"), None)
         return DecisionResult(
             choice=choice,
-            confidence=None,
+            confidence=confidence,
             probabilities={},
             provider="fallback",
             fallback_used=True,
@@ -222,7 +224,11 @@ class DecisionService:
             logger.warning("Decision provider failed name=%s error_type=%s", request.name, type(error).__name__)
 
         duration = (time.perf_counter() - started) * 1000
-        result = self._fallback(request, error_code or "unknown_error")
+        result = self._fallback(
+            request,
+            error_code or "unknown_error",
+            confidence=remote_result.confidence if remote_result else None,
+        )
         await self._record(
             decision_name=request.name,
             provider=config.provider,

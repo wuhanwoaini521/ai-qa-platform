@@ -4,10 +4,11 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from qa_core.ai.correlation import request_id_context
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException
 
 from app.api import (
@@ -53,6 +54,42 @@ from app.services.metrics_service import metrics_service
 from app.settings import settings
 
 logger = logging.getLogger("app.startup")
+
+
+class RequestMetricsMiddleware:
+    """Track request IDs and metrics without BaseHTTPMiddleware task cancellation."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        started_at = time.time()
+        request_id = uuid4().hex
+        scope.setdefault("state", {})["request_id"] = request_id
+        token = request_id_context.set(request_id)
+        status_code = 500
+
+        async def send_with_request_id(message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        finally:
+            request_id_context.reset(token)
+            metrics_service.record_request(
+                method=scope.get("method", ""),
+                path=scope.get("path", ""),
+                status_code=status_code,
+                duration_seconds=time.time() - started_at,
+            )
 
 
 async def _recover_stale_runs() -> list[str]:
@@ -132,24 +169,7 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def track_metrics_middleware(request: Request, call_next):
-    start = time.time()
-    request.state.request_id = uuid4().hex
-    token = request_id_context.set(request.state.request_id)
-    try:
-        response = await call_next(request)
-    finally:
-        request_id_context.reset(token)
-    response.headers["X-Request-ID"] = request.state.request_id
-    duration = time.time() - start
-    metrics_service.record_request(
-        method=request.method,
-        path=request.url.path,
-        status_code=response.status_code,
-        duration_seconds=duration,
-    )
-    return response
+app.add_middleware(RequestMetricsMiddleware)
 
 
 # Include API Routers

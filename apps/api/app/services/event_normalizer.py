@@ -32,6 +32,15 @@ PUBLIC_METADATA = frozenset(
         "output_tokens",
         "token_source",
         "retry_count",
+        "provider_error",
+        "planner_mode",
+        "upstream_provider",
+        "upstream_model",
+        "actions_already_executed",
+        "current_url",
+        "interactive_session_available",
+        "manual_resume_available",
+        "verification_artifact_id",
         "generated_chars",
         "key",
         "tool",
@@ -182,7 +191,7 @@ def normalize_event(
         title, summary = _text(trace.title), _text(trace.message)
         status, duration, step_id = trace.status, _duration(trace.duration_ms), trace.step_id or step_id
         metadata = public_metadata(trace.metadata)
-    elif source == "task":
+    elif source == "task" and original != "BROWSER_TELEMETRY":
         title = _text(payload.get("title") or title)
         summary = _text(payload.get("summary") or summary)
         if original == "step.progress" and str(payload.get("type", "")).startswith("child_run."):
@@ -191,8 +200,57 @@ def normalize_event(
         child_id = payload.get("run_id")
         if isinstance(child_id, str):
             test_run_id = child_id
+    elif source == "browser" or original == "BROWSER_TELEMETRY":
+        browser_payload = payload
+        if original == "BROWSER_TELEMETRY":
+            test_run_id = test_run_id or (str(raw["run_id"]) if raw.get("run_id") else None)
+            entry = payload.get("entry")
+            browser_payload = entry if isinstance(entry, dict) else payload
+            channel = str(payload.get("channel") or "").lower()
+            original = {
+                "step": "browser.recent_steps",
+                "network": "browser.network_logs",
+                "console": "browser.console_logs",
+            }.get(channel, "browser.telemetry")
+            event_type = original
+        if original == "browser.recent_steps":
+            action = _text(browser_payload.get("action") or "操作")
+            locator = _text(browser_payload.get("locator") or "")
+            title = "Browser action"
+            summary = " · ".join(part for part in (action, locator) if part)
+            status = browser_payload.get("status") if isinstance(browser_payload.get("status"), str) else None
+            duration = _duration(browser_payload.get("duration_ms")) or duration
+            metadata = public_metadata(browser_payload)
+        elif original == "browser.network_logs":
+            method = _text(browser_payload.get("method") or "HTTP")
+            url = SensitiveRedactor.redact_url(str(browser_payload.get("url") or ""))
+            status_code = browser_payload.get("status")
+            if isinstance(status_code, int) and not isinstance(status_code, bool):
+                metadata["status_code"] = status_code
+                status = "FAILED" if status_code >= 400 else "COMPLETED"
+            failure = _text(browser_payload.get("failure") or "")
+            title = "Network request"
+            summary = " · ".join(part for part in (method, url, str(status_code) if status_code else failure) if part)
+            duration = _duration(browser_payload.get("duration_ms")) or duration
+            metadata = {**metadata, **public_metadata(browser_payload)}
+        elif original == "browser.console_logs":
+            level = _text(browser_payload.get("level") or "log")
+            message = _text(browser_payload.get("text") or browser_payload.get("message") or "")
+            title = "Console message"
+            summary = " · ".join(part for part in (level, message) if part)
+            metadata = public_metadata(browser_payload)
+        else:
+            title = "Browser telemetry"
+            summary = _text(browser_payload.get("message") or browser_payload.get("status") or "")
+            metadata = public_metadata(browser_payload)
     elif source == "run":
         test_run_id = test_run_id or (str(raw["run_id"]) if raw.get("run_id") else None)
+        if original == "TEST_FINISHED":
+            run_status = payload.get("status") if isinstance(payload.get("status"), str) else None
+            event_type = "test.failed" if run_status and run_status.upper() in {"FAILED", "ERROR"} else "test.completed"
+            title = _text(payload.get("nodeid") or payload.get("case_name") or "Test")
+            status = run_status
+            summary = _text(payload.get("summary") or "")
     if event_type.startswith(("decision", "verification")) or event_type == "candidates_generated":
         category = "decision"
     elif event_type.startswith("workflow."):

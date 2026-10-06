@@ -22,6 +22,21 @@ _METHODS = {
     "placeholder": "get_by_placeholder",
     "text": "get_by_text",
 }
+_LOCATOR_NOISE = {
+    "button",
+    "element",
+    "locator",
+    "get",
+    "by",
+    "role",
+    "name",
+    "test",
+    "data",
+    "id",
+    "css",
+    "xpath",
+    "old",
+}
 
 
 class LocatorDecisionService:
@@ -60,6 +75,36 @@ class LocatorDecisionService:
             )
             result.append(item)
         return result
+
+    @staticmethod
+    def prioritize_candidates_for_failure(failing_locator: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep only candidates that match the most specific words in the failed locator."""
+        target_tokens = {
+            token.lower()
+            for token in re.findall(r"[\w]+", failing_locator)
+            if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
+        }
+        if not target_tokens:
+            return []
+
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for candidate in candidates:
+            description = " ".join(
+                str(candidate.get(key) or "") for key in ("kind", "value", "name", "locator", "strategy")
+            )
+            candidate_tokens = {
+                token.lower()
+                for token in re.findall(r"[\w]+", description)
+                if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
+            }
+            overlap = len(target_tokens & candidate_tokens)
+            if overlap:
+                scored.append((overlap, candidate))
+
+        if not scored:
+            return []
+        strongest_match = max(score for score, _ in scored)
+        return [candidate for score, candidate in scored if score == strongest_match]
 
     @staticmethod
     def format_locator(candidate: dict[str, Any]) -> str:
@@ -382,7 +427,7 @@ class LocatorDecisionService:
                 "hover",
             }
             enabled = count > 0 and await target.is_enabled() if interactive else None
-            editable = count > 0 and await target.is_editable() if event.get("action") == "fill" else None
+            editable = count > 0 and await target.is_editable() if event.get("action") in {"fill", "press"} else None
             clickable = None
             if event.get("action") in {"click", "double_click"}:
                 clickable = bool(

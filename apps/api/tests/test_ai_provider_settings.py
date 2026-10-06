@@ -6,8 +6,8 @@ import pytest
 from app.persistence.models import AIProviderConfigORM
 from app.services.ai_settings_service import AISettingsService
 from project_model.models import AIProviderConnectionResult
-from qa_core.ai.models import AIStreamChunk, ProviderHealth, ProviderHealthStatus
-from qa_core.ai.provider import FallbackAIProvider, OpenAICompatibleProvider
+from qa_core.ai.models import AICompletionResponse, AIStreamChunk, ProviderHealth, ProviderHealthStatus
+from qa_core.ai.provider import AIProviderError, FallbackAIProvider, OpenAICompatibleProvider
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
 
@@ -98,13 +98,26 @@ async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(clien
 
     async def streaming(self, request):
         assert request.prompt_id == "provider_connection"
+        assert request.thinking_mode == "disabled"
         yield AIStreamChunk(content_delta="OK", provider=self.provider_name, model=self.model)
 
+    async def complete(self, request):
+        assert request.prompt_id == "provider_structured_output_probe"
+        assert request.thinking_mode == "disabled"
+        return AICompletionResponse(
+            content='{"json_mode":true}',
+            structured_data={"json_mode": True},
+            provider=self.provider_name,
+            model=self.model,
+        )
+
     monkeypatch.setattr(OpenAICompatibleProvider, "stream_complete", streaming)
-    tested = await client.post("/api/ai/test-connection", json=payload())
+    monkeypatch.setattr(OpenAICompatibleProvider, "complete", complete)
+    tested = await client.post("/api/ai/test-connection", json=payload(model="deepseek-flash"))
     assert tested.status_code == 200, tested.text
     assert tested.json()["connected"] is True
     assert tested.json()["streaming"] is True
+    assert tested.json()["structured_output_supported"] is True
 
     saved = await client.get("/api/ai/settings")
     assert saved.status_code == 200
@@ -113,3 +126,30 @@ async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(clien
     async with role_client("QA_ENGINEER") as engineer:
         denied = await engineer.put("/api/ai/settings", json=payload())
         assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ai_connection_reports_safe_provider_probe_error(client, monkeypatch):
+    async def healthy(self):
+        return ProviderHealthStatus(
+            provider="openai-compatible",
+            status=ProviderHealth.AVAILABLE,
+            message="stub connection passed",
+            model=self.model,
+            base_url=self.base_url,
+        )
+
+    async def streaming(self, _request):
+        if False:
+            yield AIStreamChunk()
+        raise AIProviderError("output_limit", "Probe output reached the configured token limit.")
+
+    monkeypatch.setattr(OpenAICompatibleProvider, "check_health", healthy)
+    monkeypatch.setattr(OpenAICompatibleProvider, "stream_complete", streaming)
+
+    tested = await client.post("/api/ai/test-connection", json=payload(model="deepseek-flash"))
+
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["connected"] is False
+    assert "output_limit" in tested.json()["message"]
+    assert "configured token limit" in tested.json()["message"]

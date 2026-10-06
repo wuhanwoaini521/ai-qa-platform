@@ -101,7 +101,7 @@ class FailureWorkflowService:
                         )
         return await self.history.list(failure_id)
 
-    async def stream(self, failure_id: str) -> AsyncGenerator[AITraceEvent, None]:
+    async def stream(self, failure_id: str, *, response_language: str = "en") -> AsyncGenerator[AITraceEvent, None]:
         failure = await self.failures.run_repo.get_failure_by_id(failure_id)
         if failure is None:
             raise ValueError("Failure record not found")
@@ -229,19 +229,7 @@ class FailureWorkflowService:
                         "context": {"failed_locator": failed_locator, "error_excerpt": failure.error_message[:500]},
                     }
                     candidates = self.decisions.generate_candidates(event)
-                    ignored = {"old", "button", "element", "locator", "get", "by", "role", "name", "test", "id"}
-                    tokens = set(re.findall(r"[a-z0-9]+", failed_locator.lower())) - ignored
-                    eligible_candidates = [
-                        item
-                        for item in candidates
-                        if tokens
-                        & set(
-                            re.findall(
-                                r"[a-z0-9]+",
-                                f"{item.get('value', '')} {item.get('name', '')}".lower(),
-                            )
-                        )
-                    ]
+                    eligible_candidates = self.decisions.prioritize_candidates_for_failure(failed_locator, candidates)
                     await step(
                         "inspection",
                         "COMPLETED" if page_evidence else "BLOCKED",
@@ -278,6 +266,7 @@ class FailureWorkflowService:
                 diagnosis = await self.failures.diagnose_failure_ai(
                     failure_id,
                     on_event=publish,
+                    response_language=response_language,
                     extra_context=json.dumps(
                         {
                             "domain": domain,

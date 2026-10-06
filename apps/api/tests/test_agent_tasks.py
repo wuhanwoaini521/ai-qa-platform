@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,12 +12,53 @@ from app.api.runs import open_run_service
 from app.api.tasks import task_runtime_service
 from app.persistence.models import TaskORM, TaskStepORM
 from app.repositories.task_repo import TaskRepository
-from app.services.task_runtime_service import TaskBlocked
+from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
 from app.services.task_workflows import build_plan, build_qa_goal_plan, parse_qa_goal
 from app.settings import settings
 from project_model.task_models import TaskStatus, TaskStepStatus, TaskType
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+async def test_agent_goal_child_run_preserves_browser_environment_and_worker_configuration(monkeypatch):
+    captured = []
+
+    class CapturedRun(Exception):
+        pass
+
+    class RunService:
+        async def create_and_execute_run(self, run_data, **_kwargs):
+            captured.append(run_data)
+            raise CapturedRun
+
+    @asynccontextmanager
+    async def open_service():
+        yield RunService()
+
+    monkeypatch.setattr('app.api.runs.open_run_service', open_service)
+    task = SimpleNamespace(
+        id='task-context',
+        project_id='project-context',
+        workspace_id='project-context',
+        owner_id='qa-engineer',
+        type=TaskType.QA_GOAL.value,
+        max_duration_seconds=60,
+        inputs={
+            'browser': 'firefox',
+            'environment': {'QA_ENVIRONMENT': 'production'},
+            'region': 'EU',
+            'parallel_workers': 3,
+        },
+    )
+
+    with pytest.raises(CapturedRun):
+        await TaskRuntimeService()._execute_pytest(task, ['tests/test_checkout.py::test_checkout'])
+
+    assert len(captured) == 1
+    assert captured[0].browser == 'firefox'
+    assert captured[0].environment == {'QA_ENVIRONMENT': 'production', 'QA_REGION': 'EU'}
+    assert captured[0].parallel_workers == 3
 
 
 @pytest.mark.parametrize("task_type", [item for item in TaskType if item != TaskType.QA_GOAL])
@@ -468,6 +510,20 @@ async def test_goal_preview_uses_selected_context_and_duplicate_start_is_idempot
     assert preview.json()["constraints"] == ["不修改源码", "不运行测试"]
     assert preview.json()["approval_required"] is False
     assert preview.json()["steps"]
+
+    full_preview = await client.post(
+        "/api/tasks/preview",
+        json={
+            **payload,
+            "goal": "帮我把这个需求测试完整。可以自动完成低风险步骤；需要修改代码时让我确认。",
+            "idempotency_key": "complete-requirement-preview",
+        },
+    )
+    assert full_preview.status_code == 200, full_preview.text
+    assert full_preview.json()["approval_required"] is True
+    assert "创建缺失的 Test Design / Test Case 记录" in full_preview.json()["effects"]
+    assert "生成自动化测试草案" in full_preview.json()["effects"]
+    assert "运行目标 pytest 用例" in full_preview.json()["effects"]
 
     raised_budget = await client.post(
         "/api/tasks",

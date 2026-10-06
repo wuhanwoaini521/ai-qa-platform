@@ -14,6 +14,7 @@ from qa_core.ai.models import (
     ProviderHealthStatus,
 )
 from qa_core.ai.provider import (
+    AIProviderError,
     FakeAIProvider,
     FallbackAIProvider,
     OpenAICompatibleProvider,
@@ -63,6 +64,91 @@ async def test_orchestrator_repairs_invalid_streamed_schema_within_the_same_time
     assert orchestrator.budget_guard.requests_count == 2
     assert orchestrator.budget_guard.input_tokens_count == 7
     assert orchestrator.budget_guard.output_tokens_count == 3
+
+
+@pytest.mark.asyncio
+async def test_stream_output_limit_is_not_retried_as_schema_repair():
+    class Summary(BaseModel):
+        summary: str
+
+    class TruncatedProvider:
+        provider_name = "test"
+        model = "test-model"
+
+        def __init__(self):
+            self.complete_calls = 0
+
+        async def stream_complete(self, _request):
+            yield AIStreamChunk(content_delta='{"summary":"partial', provider=self.provider_name)
+            yield AIStreamChunk(
+                usage={"completion_tokens": 2800},
+                finish_reason="length",
+                provider=self.provider_name,
+            )
+
+        async def complete(self, _request):
+            self.complete_calls += 1
+            raise AssertionError("a truncated stream must not trigger a second, non-stream request")
+
+    provider = TruncatedProvider()
+    orchestrator = ProductionQAOrchestrator(ai_provider=provider)
+    with pytest.raises(AIProviderError, match="输出长度上限") as caught:
+        await orchestrator.complete_streaming(
+            AICompletionRequest(prompt="analyze", response_schema=Summary, max_tokens=6000),
+            timeout_seconds=2,
+        )
+
+    assert caught.value.code == "output_limit"
+    assert "2,800 tokens" in caught.value.safe_message
+    assert "6,000 tokens" in caught.value.safe_message
+    assert provider.complete_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_uses_configured_fallback_and_reports_when_unrecovered():
+    class EmptyProvider:
+        provider_name = "empty"
+
+        async def stream_complete(self, _request):
+            yield AIStreamChunk(finish_reason="stop", provider=self.provider_name)
+
+    request = AICompletionRequest(
+        prompt="diagnose the following test failure: timeout",
+        prompt_id="failure_diagnosis",
+    )
+    recovered = ProductionQAOrchestrator(ai_provider=FallbackAIProvider(EmptyProvider(), [FakeAIProvider()]))
+    result = await recovered.complete_streaming(request, timeout_seconds=2)
+    assert result.content
+    assert result.fallback_used is True
+
+    unrecovered = ProductionQAOrchestrator(ai_provider=FallbackAIProvider(EmptyProvider()))
+    with pytest.raises(AIProviderError) as caught:
+        await unrecovered.complete_streaming(request, timeout_seconds=2)
+    assert caught.value.code == "empty_stream"
+    assert "没有返回可用文本" in caught.value.safe_message
+
+
+@pytest.mark.asyncio
+async def test_non_streaming_output_limit_has_a_distinct_provider_error(monkeypatch):
+    def handler(_request):
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "partial"}, "finish_reason": "length"}],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 2800},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr("qa_core.ai.provider.httpx.AsyncClient", lambda *args, **kwargs: original_client(transport=transport))
+    provider = OpenAICompatibleProvider(api_key="test-secret", base_url="https://mock-ai.local/v1", max_retries=0)
+
+    with pytest.raises(AIProviderError) as caught:
+        await provider.complete(AICompletionRequest(prompt="analyze", max_tokens=6000))
+
+    assert caught.value.code == "output_limit"
+    assert "2,800 tokens" in caught.value.safe_message
 
 
 @pytest.mark.asyncio
@@ -118,6 +204,20 @@ async def test_real_provider_outage_does_not_create_simulated_success(fallbacks)
         _ = [chunk async for chunk in provider.stream_complete(AICompletionRequest(prompt="diagnose"))]
 
 
+@pytest.mark.asyncio
+async def test_complete_does_not_return_success_shaped_response_when_all_providers_fail():
+    class Unavailable:
+        async def complete(self, _):
+            raise RuntimeError("connection_error")
+
+    provider = FallbackAIProvider(Unavailable(), [Unavailable()])
+    with pytest.raises(AIProviderError) as caught:
+        await provider.complete(AICompletionRequest(prompt="diagnose"))
+
+    assert caught.value.code == "provider_unavailable"
+    assert "分析未完成" in caught.value.safe_message
+
+
 def test_real_provider_registry_has_no_implicit_fake_fallback():
     AIProviderRegistry.reset()
     try:
@@ -137,6 +237,7 @@ async def test_openai_compatible_provider_streams_sse_chunks(monkeypatch):
 
     class Response:
         status_code = 200
+        headers = {"content-type": "text/event-stream"}
 
         async def __aenter__(self):
             return self
@@ -167,14 +268,66 @@ async def test_openai_compatible_provider_streams_sse_chunks(monkeypatch):
 
     monkeypatch.setattr("qa_core.ai.provider.httpx.AsyncClient", Client)
     provider = OpenAICompatibleProvider(api_key="test-secret", model="stream-model", max_retries=0)
-    chunks = [chunk async for chunk in provider.stream_complete(AICompletionRequest(prompt="say hello"))]
+    chunks = [
+        chunk
+        async for chunk in provider.stream_complete(
+            AICompletionRequest(prompt="say hello", thinking_mode="disabled")
+        )
+    ]
 
     assert captured["json"]["stream"] is True
+    assert captured["json"]["thinking"] == {"type": "disabled"}
     assert captured["method"] == "POST"
     assert "Authorization" in captured["headers"]
     assert "".join(chunk.content_delta for chunk in chunks) == "hello world"
     assert chunks[-1].usage == {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6}
     assert any(chunk.finish_reason == "stop" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_accepts_non_streaming_json_response(monkeypatch):
+    class Response:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def aread(self):
+            return json.dumps(
+                {
+                    "model": "json-model",
+                    "choices": [{"message": {"content": "recovered"}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+                }
+            ).encode()
+
+    class Client:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def stream(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr("qa_core.ai.provider.httpx.AsyncClient", Client)
+    provider = OpenAICompatibleProvider(api_key="test-secret", model="configured-model", max_retries=0)
+
+    chunks = [chunk async for chunk in provider.stream_complete(AICompletionRequest(prompt="diagnose"))]
+
+    assert len(chunks) == 1
+    assert chunks[0].content_delta == "recovered"
+    assert chunks[0].model == "json-model"
+    assert chunks[0].finish_reason == "stop"
+    assert chunks[0].usage == {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6}
 
 
 @pytest.mark.asyncio

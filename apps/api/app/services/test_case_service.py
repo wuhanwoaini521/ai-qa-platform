@@ -56,11 +56,11 @@ class TestCaseService:
             return None
         return self._to_dto(orm)
 
-    async def create_test_case(self, data: TestCaseCreate) -> TestCase:
+    async def create_test_case(self, data: TestCaseCreate, *, case_id: str | None = None) -> TestCase:
         from app.services.lifecycle_validation import validate_case_model
 
         data = await validate_case_model(self.test_case_repo.session, data)
-        orm = await self.test_case_repo.create(data)
+        orm = await self.test_case_repo.create(data, case_id=case_id)
         return self._to_dto(orm)
 
     async def update_test_case(self, case_id: str, data: TestCaseUpdate) -> TestCase | None:

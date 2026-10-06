@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from app.services.browser_proxy import launch_chromium
 from app.services.locator_decision_service import LocatorDecisionService
 from project_model.models import DecisionResult
 
@@ -82,7 +83,7 @@ async def test_jev_verification_failure_keeps_attempt_and_explicit_local_fallbac
             return DecisionResult(provider="jev", model="test-only", choice="candidate_1", confidence=0.9)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await launch_chromium(p, headless=True)
         try:
             page = await browser.new_page()
             await page.set_content('<button>Save</button><button id="help">Help</button>')

@@ -11,7 +11,7 @@ from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.event_stream import event_frame
+from app.event_stream import event_frame
 from app.persistence.database import get_db
 from app.repositories.ai_repo import AIRepository
 from app.repositories.run_history_repo import RunHistoryRepository
@@ -93,13 +93,17 @@ async def link_analysis_verification(
 
 @router.post("/{failure_id}/analyze/stream")
 async def stream_failure_workflow(
-    failure_id: str, request: Request, service: FailureService = Depends(get_failure_service)
+    failure_id: str,
+    request: Request,
+    service: FailureService = Depends(get_failure_service),
+    language: str = Query(default="en"),
 ):
     if await service.get_failure(failure_id) is None:
         raise HTTPException(status_code=404, detail="Failure record not found")
 
     async def events():
-        stream = FailureWorkflowService(service).stream(failure_id)
+        response_language = "zh-CN" if language.lower().startswith("zh") else "en"
+        stream = FailureWorkflowService(service).stream(failure_id, response_language=response_language)
         try:
             async for event in stream:
                 if await request.is_disconnected():

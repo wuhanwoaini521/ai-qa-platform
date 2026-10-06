@@ -32,6 +32,7 @@ from qa_core.failure.traceback_frames import last_user_code_frame
 from qa_core.onboarding.contract import venv_interpreter
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.persistence.models import (
     BreakpointORM,
@@ -292,8 +293,30 @@ class TestRunService:
             failure = await self.run_repo.get_failure_by_id(data.origin_failure_id)
             if not failure or failure.run_id != data.parent_run_id:
                 raise ValueError("Origin failure must belong to the retry parent")
+        if data.idempotency_key:
+            existing = await self.run_repo.get_by_id(
+                TestRunRepository.id_for_idempotency(data.project_id, data.idempotency_key)
+            )
+            if existing:
+                self._ensure_same_run_request(existing, data, task_id)
+                self._schedule_local_run_if_queued(existing.id, existing.status, data, execution_deadline)
+                return self._to_run_dto(existing)
+
         # 1. Create Run in DB
-        orm = await self.run_repo.create_run(data, task_id=task_id)
+        try:
+            orm = await self.run_repo.create_run(data, task_id=task_id)
+        except IntegrityError:
+            if not data.idempotency_key:
+                raise
+            await self.run_repo.session.rollback()
+            existing = await self.run_repo.get_by_id(
+                TestRunRepository.id_for_idempotency(data.project_id, data.idempotency_key)
+            )
+            if not existing:
+                raise
+            self._ensure_same_run_request(existing, data, task_id)
+            self._schedule_local_run_if_queued(existing.id, existing.status, data, execution_deadline)
+            return self._to_run_dto(existing)
         run_id = orm.id
         # The execution task opens its own database session. Persist the queued run before scheduling
         # it so the new session cannot race this request's dependency-managed transaction and see no row.
@@ -318,13 +341,51 @@ class TestRunService:
             )
             await self.run_repo.session.commit()
         else:
-            worker = asyncio.create_task(
-                self._run_worker_task(run_id, data, execution_deadline=execution_deadline), name=f"test-run-{run_id}"
-            )
-            _RUN_WORKER_TASKS[run_id] = worker
-            worker.add_done_callback(lambda done, rid=run_id: _RUN_WORKER_TASKS.pop(rid, None))
+            self._schedule_local_run(run_id, data, execution_deadline)
 
         return self._to_run_dto(orm)
+
+    @staticmethod
+    def _ensure_same_run_request(existing: TestRunORM, data: TestRunCreate, task_id: str | None) -> None:
+        fields = (
+            ("task_id", existing.task_id, task_id),
+            ("project_id", existing.project_id, data.project_id),
+            ("workspace_id", existing.workspace_id, data.workspace_id),
+            ("parent_run_id", existing.parent_run_id, data.parent_run_id),
+            ("origin_failure_id", existing.origin_failure_id, data.origin_failure_id),
+            ("requested_by", existing.requested_by, data.requested_by),
+            ("runner_type", existing.runner_type, data.runner_type),
+            ("runner_profile_id", existing.runner_profile_id, data.runner_profile_id),
+            ("nodeids", existing.nodeids or [], data.nodeids),
+            ("markers", existing.markers or [], data.markers),
+            ("environment", existing.environment or {}, data.environment),
+            ("browser", existing.browser, data.browser),
+            ("parallel_workers", existing.parallel_workers, data.parallel_workers),
+        )
+        if any(stored != requested for _, stored, requested in fields):
+            raise ValueError("Idempotency key is already used for a different Run request")
+
+    def _schedule_local_run(self, run_id: str, data: TestRunCreate, execution_deadline: float | None) -> None:
+        worker = asyncio.create_task(
+            self._run_worker_task(run_id, data, execution_deadline=execution_deadline),
+            name=f"test-run-{run_id}",
+        )
+        _RUN_WORKER_TASKS[run_id] = worker
+
+        def clear_worker(done: asyncio.Task, *, scheduled_run_id: str = run_id) -> None:
+            if _RUN_WORKER_TASKS.get(scheduled_run_id) is done:
+                _RUN_WORKER_TASKS.pop(scheduled_run_id, None)
+
+        worker.add_done_callback(clear_worker)
+
+    def _schedule_local_run_if_queued(
+        self, run_id: str, status: str, data: TestRunCreate, execution_deadline: float | None
+    ) -> None:
+        if status != RunStatus.QUEUED.value:
+            return
+        worker = _RUN_WORKER_TASKS.get(run_id)
+        if worker is None or worker.done():
+            self._schedule_local_run(run_id, data, execution_deadline)
 
     async def _run_worker_task(
         self, run_id: str, data: TestRunCreate, *, execution_deadline: float | None = None

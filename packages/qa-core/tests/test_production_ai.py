@@ -172,12 +172,15 @@ async def test_openai_provider_requests_json_mode_and_retries_invalid_schema(mon
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: orig_client(transport=transport))
 
     provider = OpenAICompatibleProvider(api_key="sk-test-mock-key-12345", base_url="https://mock-ai.local/v1")
-    response = await provider.complete(AICompletionRequest(prompt="Analyze requirement", response_schema=Summary))
+    response = await provider.complete(
+        AICompletionRequest(prompt="Analyze requirement", response_schema=Summary, thinking_mode="disabled")
+    )
 
     assert response.structured_data == {"summary": "Grounded finding"}
     assert response.retry_count == 1
     assert len(bodies) == 2
     assert all(body["response_format"] == {"type": "json_object"} for body in bodies)
+    assert all(body["thinking"] == {"type": "disabled"} for body in bodies)
     assert "previous response did not match" in bodies[1]["messages"][-1]["content"]
 
 

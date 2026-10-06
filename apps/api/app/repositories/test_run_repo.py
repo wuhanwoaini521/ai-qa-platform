@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -23,6 +24,11 @@ class TestRunRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    @staticmethod
+    def id_for_idempotency(project_id: str, idempotency_key: str) -> str:
+        digest = hashlib.sha256(f"{project_id}\0{idempotency_key}".encode()).hexdigest()[:32]
+        return f"run_{digest}"
 
     async def list_runs(self, project_id: str | None = None, limit: int = 50) -> list[TestRunORM]:
         query = (
@@ -56,7 +62,10 @@ class TestRunRepository:
         return result.scalar_one_or_none()
 
     async def create_run(self, data: TestRunCreate, *, task_id: str | None = None) -> TestRunORM:
-        run_id = f"run_{uuid.uuid4().hex[:12]}"
+        if data.idempotency_key:
+            run_id = self.id_for_idempotency(data.project_id, data.idempotency_key)
+        else:
+            run_id = f"run_{uuid.uuid4().hex[:12]}"
         now = utc_now()
         orm = TestRunORM(
             id=run_id,

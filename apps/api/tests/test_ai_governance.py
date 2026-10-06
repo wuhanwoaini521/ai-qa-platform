@@ -8,6 +8,7 @@ from app.repositories.ai_repo import AIRepository
 from app.services.ai_execution_service import AIExecutionService
 from qa_core.ai.budget import BudgetExceededError
 from qa_core.ai.models import AICompletionRequest, AICompletionResponse, AIStreamChunk, CodeAssistantResponse
+from qa_core.ai.provider import AIProviderError
 from sqlalchemy import select
 
 
@@ -110,6 +111,36 @@ async def test_empty_stream_is_failed(test_db_session):
         async def stream_complete(self, _):
             yield AIStreamChunk(content_delta="", provider=self.provider_name, model=self.model)
 
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(AIProviderError) as caught:
         _ = [chunk async for chunk in AIExecutionService(Empty()).stream_complete(AICompletionRequest(prompt="probe"))]
-    assert (await AIRepository().get_usage_summary()).failed_requests == 1
+    assert caught.value.code == "empty_stream"
+    summary = await AIRepository().get_usage_summary()
+    assert summary.failed_requests == 1
+    assert summary.invocations[0].error_type == "empty_stream"
+
+
+@pytest.mark.asyncio
+async def test_output_limit_is_classified_in_invocation_record(test_db_session):
+    class Truncated(Provider):
+        async def stream_complete(self, _):
+            yield AIStreamChunk(
+                usage={"completion_tokens": 2800},
+                finish_reason="length",
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    with pytest.raises(AIProviderError) as caught:
+        _ = [
+            chunk
+            async for chunk in AIExecutionService(Truncated()).stream_complete(
+                AICompletionRequest(prompt="probe", max_tokens=6000)
+            )
+        ]
+
+    assert caught.value.code == "output_limit"
+    assert "2,800 tokens" in caught.value.safe_message
+    assert "6,000 tokens" in caught.value.safe_message
+    summary = await AIRepository().get_usage_summary()
+    assert summary.failed_requests == 1
+    assert summary.invocations[0].error_type == "output_limit"

@@ -42,6 +42,7 @@ class AICompletionRequest(BaseModel):
     max_tokens: int = Field(default=2000, ge=1, le=32000)
     max_retries: int | None = Field(default=None, ge=0, le=10)
     timeout_seconds: float | None = Field(default=None, gt=0, le=120)
+    thinking_mode: Literal["enabled", "disabled"] | None = None
     response_schema: type[BaseModel] | None = None
     prompt_id: str | None = None
     prompt_version: str | None = None
@@ -164,6 +165,7 @@ class BrowserActionCandidate(BaseModel):
         "navigate",
         "click",
         "fill",
+        "press_key",
         "select",
         "scroll",
         "hover",

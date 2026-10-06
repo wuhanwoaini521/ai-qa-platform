@@ -27,11 +27,11 @@ async def test_health_is_cached_and_component_failure_does_not_hide_other_result
     service = PlatformHealthService()
     calls = []
 
-    async def good():
+    async def good(**_kwargs):
         calls.append(True)
         return {"status": "ok", "message": "checked"}
 
-    async def broken():
+    async def broken(**_kwargs):
         raise RuntimeError("secret upstream text")
 
     for name in ("_database", "_ai", "_jev", "_browser", "_worker", "_test_runtime", "_filesystem", "_lsp"):
@@ -47,9 +47,10 @@ async def test_health_is_cached_and_component_failure_does_not_hide_other_result
 
 
 @pytest.mark.asyncio
-async def test_missing_worker_is_a_real_warning(test_db_session):
+async def test_missing_remote_worker_uses_local_execution_health(test_db_session):
     result = await PlatformHealthService()._worker()
-    assert result["status"] == "warning"
+    assert result["status"] == "ok"
+    assert result["operational_state"] == "LOCAL_EXECUTION_AVAILABLE"
 
 
 @pytest.mark.asyncio
@@ -57,7 +58,7 @@ async def test_ai_health_uses_shared_status(monkeypatch):
     from app.services.ai_settings_service import AISettingsService
     from project_model.models import AIStatusResponse
 
-    async def status(_self):
+    async def status(_self, refresh=False):
         return AIStatusResponse(
             provider="fake",
             status="SIMULATION",
@@ -85,5 +86,5 @@ async def test_health_coroutines_run_independently(monkeypatch):
         return {"status": "ok", "message": name}
 
     for name in ("_database", "_ai", "_jev", "_browser", "_worker", "_test_runtime", "_filesystem", "_lsp"):
-        monkeypatch.setattr(service, name, lambda name=name: probe(name))
+        monkeypatch.setattr(service, name, lambda name=name, **_kwargs: probe(name))
     assert (await service.check())["status"] == "healthy"

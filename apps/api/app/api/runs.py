@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from project_model.models import TestRun, TestRunCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.event_stream import event_frame
+from app.event_stream import event_frame
 from app.persistence.database import async_session_factory, get_db
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository

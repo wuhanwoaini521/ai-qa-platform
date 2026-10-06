@@ -9,6 +9,7 @@ from app.api.failures import get_failure_service
 from app.persistence.models import (
     BreakpointORM,
     BrowserSessionORM,
+    FailureAnalysisORM,
     FailureRecordORM,
     RunnerProfileORM,
     TaskORM,
@@ -824,7 +825,7 @@ async def test_generated_repair_proposal_persists_without_closing_request_sessio
             def last_invocation_metadata(self):
                 return {"provider": "fake", "model": "fake-qa-model", "fallback_used": True}
 
-            def propose_locator_repair(self, *, failing_locator, error_message, file_path):
+            def propose_locator_repair(self, *, failing_locator, dom_snapshot, error_message, file_path):
                 return LocatorRepairProposal(
                     old_locator=failing_locator,
                     proposed_locator='[data-testid="cart-submit"]',
@@ -849,6 +850,93 @@ async def test_generated_repair_proposal_persists_without_closing_request_sessio
         assert stored is not None
         assert stored.repair_proposal["proposed_locator"] == '[data-testid="cart-submit"]'
         assert stored.repair_proposal["execution_trace"]
+
+
+@pytest.mark.integration
+async def test_repair_proposal_reuses_saved_diagnosis_and_returns_unverified_observed_candidate(
+    client: AsyncClient, test_db_session
+):
+    locator = '[data-testid="legacy-add-cart"]'
+    project_id, failure_id = await _seed_locator_failure(
+        client,
+        test_db_session,
+        "tests/test_known_locator.py",
+        'def test_x(page):\n    page.locator("[data-testid=\\\"legacy-add-cart\\\"]").click()\n',
+        locator,
+    )
+    candidates = [
+        {"kind": "role", "value": "button", "name": "Cart (0)", "exact": True},
+        {"kind": "role", "value": "button", "name": "Add to cart", "exact": True},
+        {"kind": "test_id", "value": "add-to-cart"},
+    ]
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id="analysis-repair-proposal",
+                failure_id=failure_id,
+                status="COMPLETED",
+                events=[
+                    {
+                        "event_id": "inspection-evidence",
+                        "type": "workflow.step",
+                        "stage": "inspection",
+                        "status": "COMPLETED",
+                        "metadata": {"candidates": candidates},
+                    }
+                ],
+                result={
+                    "diagnosis": {
+                        "classification": "LOCATOR_CHANGED",
+                        "root_cause": "The old test id no longer matches the Add to cart button.",
+                        "provider": "openai-compatible",
+                        "fallback_used": False,
+                    },
+                    "verified": False,
+                },
+            )
+        )
+        await session.commit()
+
+    response = await client.post(f"/api/failures/{failure_id}/repair-proposal")
+    assert response.status_code == 200, response.text
+    assert response.json()["proposed_locator"] == 'get_by_role("button", name="Add to cart")'
+
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+
+        class StubOrchestrator:
+            async def diagnose_failure_ai(self, **_kwargs):
+                raise AssertionError("A saved trusted diagnosis must be reused")
+
+            def propose_locator_repair(self, **_kwargs):
+                raise AssertionError("Captured candidates should be used before empty-DOM fallback")
+
+        service.orchestrator = StubOrchestrator()
+        proposal = await service.generate_repair_proposal(failure_id)
+
+        assert session.is_active
+        assert proposal.proposed_locator == 'get_by_role("button", name="Add to cart")'
+        assert proposal.confidence is not None and proposal.confidence <= 0.75
+        assert "Playwright 复验未通过或未能运行" in proposal.reason
+        repair_event = next(event for event in proposal.execution_trace if event.type == "repair_suggested")
+        assert repair_event.metadata["verified"] is False
+        assert repair_event.metadata["proposed_locator"] == proposal.proposed_locator
+        assert repair_event.metadata["strategy"] == proposal.strategy
+        assert proposal.proposed_locator in repair_event.message
+        assert "尚未改写代码" in repair_event.message
+        assert "失败页面没有可重新打开的 URL" in repair_event.message
+        assert "failed_page_url_unavailable" not in repair_event.message
+        assert repair_event.metadata["verification_reason"]
+        await session.commit()
+
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        assert failure is not None
+        assert failure.repair_proposal["proposed_locator"] == 'get_by_role("button", name="Add to cart")'
+        assert failure.repair_proposal["applied"] is False
+        assert failure.repair_proposal["execution_trace"]
+        unchanged = (await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_known_locator.py"})).json()
+        assert "legacy-add-cart" in unchanged["content"]
 
 
 @pytest.mark.integration

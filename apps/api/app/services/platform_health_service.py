@@ -21,6 +21,12 @@ from app.settings import settings
 
 
 class PlatformHealthService:
+    _probe_timeouts = {
+        "ai": 15,
+        "jev": 20,
+        "browser": 15,
+    }
+
     def __init__(self):
         self._cached = None
         self._expires = 0.0
@@ -35,8 +41,15 @@ class PlatformHealthService:
 
             async def probe(name, callback):
                 started = time.perf_counter()
+                timeout = self._probe_timeouts.get(name, 6)
                 try:
-                    value = await asyncio.wait_for(callback(), timeout=6)
+                    value = await asyncio.wait_for(callback(), timeout=timeout)
+                except TimeoutError:
+                    value = {
+                        "status": "warning",
+                        "message": f"Health probe did not finish within {timeout}s; availability was not confirmed.",
+                        "operational_state": "PROBE_TIMEOUT",
+                    }
                 except Exception as error:
                     value = {"status": "error", "message": type(error).__name__}
                 return {"component": name, **value, "duration_ms": round((time.perf_counter() - started) * 1000, 1)}
@@ -44,7 +57,7 @@ class PlatformHealthService:
             components = await asyncio.gather(
                 *[
                     probe("database", self._database),
-                    probe("ai", self._ai),
+                    probe("ai", lambda: self._ai(refresh=refresh)),
                     probe("jev", self._jev),
                     probe("browser", self._browser),
                     probe("worker", self._worker),
@@ -79,10 +92,10 @@ class PlatformHealthService:
             "head_revision": head_revision,
         }
 
-    async def _ai(self):
+    async def _ai(self, refresh=False):
         from app.services.ai_settings_service import AISettingsService
 
-        status = await AISettingsService().get_status()
+        status = await AISettingsService().get_status(refresh=refresh)
         real_available = status.real_model_available
         return {
             "status": "ok" if real_available else "warning",
@@ -101,24 +114,39 @@ class PlatformHealthService:
                 "message": "Jev is disabled or its key is missing; local strategy remains available.",
                 "operational_state": "UNAVAILABLE",
             }
-        # A synthetic decision tests the actual endpoint without sending project content.
+        # Probe transport and response validity directly. Decision confidence/fallback
+        # policy belongs to user decisions and must not turn a reachable Jev endpoint red.
         from project_model.models import DecisionOption, DecisionRequest
 
-        from app.services.decision_service import DecisionService
+        from app.services.jev_provider import DecisionProviderError, JevDecisionProvider
 
-        result = await DecisionService().choose(
-            DecisionRequest(
-                name="readiness_check",
-                state={"probe": True},
-                options=[DecisionOption(key="ok", description="Confirm service readiness")],
-            ),
+        provider = JevDecisionProvider(
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            timeout=config.timeout,
         )
-        available = result.provider == "jev" and not result.fallback_used and result.choice == "ok"
+        request = DecisionRequest(
+            name="readiness_check",
+            state={"probe": True},
+            options=[
+                DecisionOption(key="ok", description="Confirm service readiness"),
+                DecisionOption(key="unavailable", description="Report an unavailable service"),
+            ],
+        )
+        try:
+            result = await provider.choose(request)
+        except DecisionProviderError as error:
+            return {
+                "status": "warning",
+                "message": f"Jev endpoint probe failed ({error.code}).",
+                "operational_state": error.code.upper(),
+            }
         return {
-            "status": "ok" if available else "warning",
-            "message": "Jev decision endpoint checked." if available else result.reason or "Decision unavailable.",
+            "status": "ok",
+            "message": f"Jev returned a valid decision response ({result.choice}).",
             "model": result.model,
-            "operational_state": "REAL_AVAILABLE" if available else "UNAVAILABLE",
+            "operational_state": "REAL_AVAILABLE",
         }
 
     async def _browser(self):
@@ -128,7 +156,12 @@ class PlatformHealthService:
 
         proxy = browser_proxy_options()
         async with async_playwright() as playwright:
-            browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
+            browser = await launch_chromium(
+                playwright,
+                headless=True,
+                timeout=12_000,
+                **({"proxy": proxy} if proxy else {}),
+            )
             version = browser.version
             await browser.close()
         return {
@@ -151,8 +184,14 @@ class PlatformHealthService:
                 .all()
             )
         return {
-            "status": "ok" if rows else "warning",
-            "message": f"{len(rows)} worker(s) with recent heartbeat; local task execution is independent.",
+            "status": "ok",
+            "message": (
+                f"{len(rows)} remote worker(s) with recent heartbeat."
+                if rows
+                else "No remote workers are registered; API-local task execution remains available."
+            ),
+            "operational_state": "REMOTE_WORKERS_AVAILABLE" if rows else "LOCAL_EXECUTION_AVAILABLE",
+            "remote_workers": len(rows),
         }
 
     async def _test_runtime(self):

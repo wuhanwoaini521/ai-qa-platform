@@ -16,16 +16,16 @@ from app.services.requirement_service import RequirementService
 from project_model.lifecycle import RequirementDocument
 from project_model.models import DecisionResult, RequirementUpdate
 from qa_core.ai.models import AICompletionResponse
-from qa_core.ai.provider import FakeAIProvider
+from qa_core.ai.provider import AIProviderError, FakeAIProvider
 from sqlalchemy import select
 
 
 class TestOrchestrator:
     __test__ = False
-    ai_provider = SimpleNamespace(provider_name="unit_fixture", model="schema_fixture")
+    ai_provider = SimpleNamespace(provider_name="unit_fixture", model="schema_fixture", timeout=30)
 
     async def complete_streaming(self, request, *, timeout_seconds):
-        assert timeout_seconds == 45
+        assert timeout_seconds == requirement_lifecycle_service.MIN_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS
         self.streaming_calls = getattr(self, "streaming_calls", 0) + 1
         return await self.complete(request)
 
@@ -253,6 +253,30 @@ async def test_invalid_provider_output_is_explicitly_failed_before_jev(client):
     assert latest["stages"][-1]["source"] == "fixture_gateway"
     assert "Jev 尚未运行" in latest["stages"][-1]["summary"]
     assert saved["analysis"]["summary"] == demo_document().analysis.summary
+
+
+@pytest.mark.asyncio
+async def test_provider_output_limit_code_is_preserved_in_requirement_history(client):
+    await client.post("/api/projects/golden-demo/seed")
+
+    class OutputLimitedOrchestrator(TestOrchestrator):
+        async def complete_streaming(self, _request, *, timeout_seconds):
+            raise AIProviderError(
+                "output_limit",
+                "AI Provider 因输出长度上限提前终止；结果不完整，未作为有效分析返回。",
+            )
+
+    workflow = RequirementLifecycleService(OutputLimitedOrchestrator(), TestDecisions())
+    events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
+    saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
+    latest = saved["history"][-1]
+
+    assert events[-1].type == "run.failed"
+    assert latest["status"] == "FAILED"
+    assert latest["error_code"] == "output_limit"
+    assert latest["decisions"] == []
+    assert latest["stages"][-1]["status"] == "failed"
+    assert "输出长度上限" in latest["stages"][-1]["summary"]
 
 
 @pytest.mark.asyncio

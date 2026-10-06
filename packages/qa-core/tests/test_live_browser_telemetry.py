@@ -7,6 +7,25 @@ from qa_core.execution.live_browser_plugin import LIVE_BROWSER_PLUGIN_NAME, LIVE
 from qa_core.execution.pytest_runner import PytestRunner
 
 
+def _write_test_browser_support(tmp_path: Path) -> None:
+    (tmp_path / "browser_support.py").write_text(
+        "def launch_test_browser(playwright):\n"
+        "    try:\n"
+        "        return playwright.chromium.launch()\n"
+        "    except Exception as error:\n"
+        "        message = str(error).lower()\n"
+        "        if not any(marker in message for marker in ('spawn eperm', 'winerror 5', 'permission denied', 'access is denied', \"executable doesn't exist\")):\n"
+        "            raise\n"
+        "        for channel in ('msedge', 'chrome'):\n"
+        "            try:\n"
+        "                return playwright.chromium.launch(channel=channel)\n"
+        "            except Exception:\n"
+        "                pass\n"
+        "        raise error\n",
+        encoding="utf-8",
+    )
+
+
 def test_generated_live_browser_plugin_source_compiles():
     compile(LIVE_BROWSER_PLUGIN_SOURCE, "qa_platform_live_browser_plugin.py", "exec")
 
@@ -27,12 +46,13 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}/"
+    _write_test_browser_support(tmp_path)
     (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
     (tmp_path / "test_short.py").write_text(
-        "import os\nfrom playwright.sync_api import sync_playwright\n"
+        "import os\nfrom playwright.sync_api import sync_playwright\nfrom browser_support import launch_test_browser\n"
         "def test_navigate_and_close():\n"
         "    with sync_playwright() as p:\n"
-        "        browser = p.chromium.launch()\n"
+        "        browser = launch_test_browser(p)\n"
         "        page = browser.new_page()\n"
         "        page.goto(os.environ['WEBSITE_URL'])\n"
         "        assert page.get_by_role('heading').inner_text() == 'Product catalog'\n"
@@ -83,14 +103,16 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
 
 @pytest.mark.asyncio
 async def test_real_browser_created_inside_test_and_fixture_both_emit_frames_and_evidence(tmp_path):
+    _write_test_browser_support(tmp_path)
     (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
     (tmp_path / "conftest.py").write_text(
-        "import pytest\nfrom playwright.sync_api import sync_playwright\n"
-        "@pytest.fixture\ndef page():\n    with sync_playwright() as p:\n        browser = p.chromium.launch()\n        yield browser.new_page()\n        browser.close()\n",
+        "import pytest\nfrom playwright.sync_api import sync_playwright\nfrom browser_support import launch_test_browser\n"
+        "@pytest.fixture\ndef page():\n    with sync_playwright() as p:\n        browser = launch_test_browser(p)\n        yield browser.new_page()\n        browser.close()\n",
         encoding="utf-8",
     )
     (tmp_path / "test_browser.py").write_text(
         """from playwright.sync_api import sync_playwright
+from browser_support import launch_test_browser
 HTML = '<button>Help</button><p id="result"></p>'
 def exercise(page):
     page.set_content(HTML)
@@ -100,7 +122,7 @@ def exercise(page):
     assert page.locator("#result").inner_text() == "ready"
 def test_inline_browser():
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = launch_test_browser(p)
         exercise(browser.new_page())
         browser.close()
 def test_fixture_browser(page):
@@ -163,13 +185,15 @@ async def test_network_body_is_bounded_redacted_and_has_real_duration(tmp_path):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    _write_test_browser_support(tmp_path)
     (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
     (tmp_path / "test_network.py").write_text(
         "from playwright.sync_api import sync_playwright\n"
+        "from browser_support import launch_test_browser\n"
         "import os\n"
         "def test_json():\n"
         "    with sync_playwright() as p:\n"
-        "        browser=p.chromium.launch()\n"
+        "        browser=launch_test_browser(p)\n"
         "        page=browser.new_page()\n"
         "        page.goto(os.environ['WEBSITE_URL'])\n"
         "        assert page.locator('body').inner_text().find('Everyday Tee') >= 0\n"

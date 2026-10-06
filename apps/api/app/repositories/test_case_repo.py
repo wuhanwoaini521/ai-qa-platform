@@ -44,8 +44,8 @@ class TestCaseRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, data: TestCaseCreate) -> TestCaseORM:
-        case_id = f"tc_{uuid.uuid4().hex[:12]}"
+    async def create(self, data: TestCaseCreate, *, case_id: str | None = None) -> TestCaseORM:
+        case_id = case_id or f"tc_{uuid.uuid4().hex[:12]}"
         now = utc_now()
         orm = TestCaseORM(
             id=case_id,

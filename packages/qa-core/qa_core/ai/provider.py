@@ -32,6 +32,56 @@ logger = logging.getLogger("qa_core.ai")
 AI_QA_USER_AGENT = "ai-qa-platform"
 
 
+class AIProviderError(RuntimeError):
+    """A safe provider failure that keeps its diagnosis separate from upstream text."""
+
+    def __init__(self, code: str, safe_message: str, retry_count: int = 0) -> None:
+        self.code = code
+        self.safe_message = safe_message
+        self.retry_count = retry_count
+        super().__init__(safe_message)
+
+
+def is_output_limit_finish_reason(finish_reason: str | None) -> bool:
+    return (finish_reason or "").strip().lower() in {"length", "max_tokens", "max_output_tokens"}
+
+
+def output_limit_error(*, max_tokens: int, output_tokens: int | None = None) -> AIProviderError:
+    generated = f"本次已生成 {output_tokens:,} tokens；" if output_tokens is not None else ""
+    return AIProviderError(
+        "output_limit",
+        f"AI Provider 因输出长度上限提前终止。{generated}请求上限为 {max_tokens:,} tokens，结果不完整，未作为有效分析返回。"
+        "请检查模型或网关的实际输出上限，或缩短上下文后重试。",
+    )
+
+
+def empty_response_error(*, streamed: bool) -> AIProviderError:
+    kind = "流式响应" if streamed else "响应"
+    code = "empty_stream" if streamed else "empty_response"
+    return AIProviderError(
+        code,
+        f"AI Provider 已结束{kind}，但没有返回可用文本；本次未生成分析结果，也不会据此继续执行浏览操作。"
+        "请检查模型与网关的流式/JSON 兼容性后重试。",
+    )
+
+
+class AIProviderRequestRejected(ValueError):
+    """A rejected provider request, preserving the legacy ValueError contract."""
+
+    def __init__(self, status_code: int, upstream_message: str) -> None:
+        self.code = {
+            400: "request_rejected",
+            401: "authentication_failed",
+            403: "permission_denied",
+        }.get(status_code, "request_rejected")
+        self.safe_message = {
+            400: "AI Provider 拒绝了请求（HTTP 400），请检查模型和请求格式。",
+            401: "AI Provider 认证失败（HTTP 401），请检查 API Key。",
+            403: "AI Provider 拒绝了访问（HTTP 403），请检查账号权限。",
+        }.get(status_code, f"AI Provider 拒绝了请求（HTTP {status_code}）。")
+        super().__init__(f"OpenAI API error {status_code}: {upstream_message}")
+
+
 def _fake_failure_analysis(prompt: str) -> FailureAnalysisResponse:
     """Build a conservative offline diagnosis from the supplied failure text only."""
     context = re.search(
@@ -118,10 +168,6 @@ def clean_json_text(text: str) -> str:
 class AIProvider(Protocol):
     async def complete(self, request: AICompletionRequest) -> AICompletionResponse: ...
     async def check_health(self) -> ProviderHealthStatus: ...
-
-
-class StreamingAIProvider(Protocol):
-    async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]: ...
 
 
 async def stream_provider_completion(
@@ -406,6 +452,8 @@ class OpenAICompatibleProvider:
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
+        if request.thinking_mode is not None:
+            payload["thinking"] = {"type": request.thinking_mode}
         if request.response_schema:
             # OpenAI-compatible gateways may ignore JSON-only prompt instructions. Ask the
             # endpoint to constrain the response format as well; schema validation below is
@@ -439,7 +487,7 @@ class OpenAICompatibleProvider:
                     # 401, 403, 400: Never retry
                     if resp.status_code in (401, 403, 400):
                         err_text = SensitiveRedactor.redact_text(resp.text)
-                        raise ValueError(f"OpenAI API error {resp.status_code}: {err_text}")
+                        raise AIProviderRequestRejected(resp.status_code, err_text)
 
                     # 429, 5xx: Retry with bounded exponential backoff
                     if resp.status_code in (429, 500, 502, 503, 504):
@@ -462,10 +510,18 @@ class OpenAICompatibleProvider:
                     resp.raise_for_status()
                     data = resp.json()
 
-                    raw_content = data["choices"][0]["message"]["content"] or ""
+                    choice = data["choices"][0]
+                    raw_content = choice["message"].get("content") or ""
+                    if not isinstance(raw_content, str):
+                        raw_content = ""
                     usage = data.get("usage", {})
                     input_tokens = usage.get("prompt_tokens")
                     output_tokens = usage.get("completion_tokens")
+
+                    if is_output_limit_finish_reason(choice.get("finish_reason")):
+                        raise output_limit_error(max_tokens=request.max_tokens, output_tokens=output_tokens)
+                    if not raw_content.strip():
+                        raise empty_response_error(streamed=False)
 
                     # Attempt structured parse if schema was requested
                     structured: dict[str, Any] | None = None
@@ -493,6 +549,8 @@ class OpenAICompatibleProvider:
                         prompt_version=request.prompt_version,
                     )
 
+            except AIProviderError:
+                raise
             except ValidationError as error:
                 last_exception = error
                 if structured_retry_count < 1:
@@ -539,10 +597,40 @@ class OpenAICompatibleProvider:
                 break
 
         duration = (time.perf_counter() - start) * 1000.0
+        if isinstance(last_exception, AIProviderRequestRejected):
+            raise last_exception
+        if isinstance(last_exception, ValidationError):
+            raise AIProviderError(
+                "invalid_structured_output",
+                "AI Provider 返回内容不符合浏览动作数据格式。",
+                retry_count,
+            ) from None
+        if isinstance(last_exception, httpx.TimeoutException):
+            raise AIProviderError(
+                "timeout",
+                f"AI Provider 在 {timeout:g} 秒内未返回结果（已重试 {network_retry_count} 次）。",
+                retry_count,
+            ) from None
+        if isinstance(last_exception, httpx.NetworkError):
+            raise AIProviderError(
+                "network_error",
+                f"无法连接 AI Provider，请检查服务地址和网络（已重试 {network_retry_count} 次）。",
+                retry_count,
+            ) from None
+        if isinstance(last_exception, httpx.HTTPStatusError):
+            status_code = last_exception.response.status_code
+            raise AIProviderError(
+                "upstream_error",
+                f"AI Provider 返回 HTTP {status_code}（已重试 {network_retry_count} 次）。",
+                retry_count,
+            ) from None
         if isinstance(last_exception, ValueError):
             raise last_exception
-        redacted_err = SensitiveRedactor.redact_text(str(last_exception))
-        raise RuntimeError(f"OpenAI completion failed after {retry_count} retries: {redacted_err}")
+        raise AIProviderError(
+            "completion_failed",
+            "AI Provider 返回了无法处理的响应。",
+            retry_count,
+        ) from None
 
     async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]:
         if not self.api_key:
@@ -565,6 +653,8 @@ class OpenAICompatibleProvider:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if request.thinking_mode is not None:
+            payload["thinking"] = {"type": request.thinking_mode}
         if request.response_schema:
             payload["response_format"] = {"type": "json_object"}
             payload["messages"][0]["content"] += "\nReturn JSON matching this schema:\n" + json.dumps(
@@ -598,6 +688,39 @@ class OpenAICompatibleProvider:
                             continue
                         if response.status_code >= 400:
                             raise RuntimeError(f"AI provider http_{response.status_code}")
+
+                        content_type = response.headers.get("content-type", "").lower()
+                        if "application/json" in content_type or "+json" in content_type:
+                            try:
+                                data = json.loads(await response.aread())
+                                choice = data["choices"][0]
+                                message = choice["message"]
+                                content = message.get("content", "") if isinstance(message, dict) else ""
+                                if not isinstance(content, str):
+                                    content = ""
+                            except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+                                raise RuntimeError("AI provider invalid_response") from None
+
+                            usage = data.get("usage")
+                            normalized_usage = (
+                                {
+                                    "prompt_tokens": usage.get("prompt_tokens"),
+                                    "completion_tokens": usage.get("completion_tokens"),
+                                    "total_tokens": usage.get("total_tokens"),
+                                }
+                                if isinstance(usage, dict)
+                                else None
+                            )
+                            if content or normalized_usage or choice.get("finish_reason"):
+                                emitted_content = bool(content)
+                                yield AIStreamChunk(
+                                    content_delta=content,
+                                    usage=normalized_usage,
+                                    finish_reason=choice.get("finish_reason"),
+                                    provider=self.provider_name,
+                                    model=data.get("model") if isinstance(data.get("model"), str) else self.model,
+                                )
+                            return
 
                         async for line in response.aiter_lines():
                             if not line or line.startswith(":") or not line.startswith("data:"):
@@ -667,9 +790,11 @@ class FallbackAIProvider:
         return primary_health
 
     async def complete(self, request: AICompletionRequest) -> AICompletionResponse:
+        last_error: Exception | None = None
         try:
             return await self.primary.complete(request)
         except Exception as e:
+            last_error = e
             if not self.fallbacks:
                 raise
             logger.warning(
@@ -682,39 +807,49 @@ class FallbackAIProvider:
                     res.fallback_used = True
                     return res
                 except Exception as fb_err:
+                    last_error = fb_err
                     logger.warning(
                         "Fallback provider failed: %s",
                         SensitiveRedactor.redact_text(str(fb_err)),
                     )
-            # If all fallbacks fail, return safe empty response without crashing test execution
-            return AICompletionResponse(
-                content="AI Analysis Unavailable (Provider unreachable).",
-                structured_data=None,
-                input_tokens=None,
-                output_tokens=None,
-                model="unavailable",
-                provider="disabled",
-                duration_ms=0.0,
-                fallback_used=True,
-                retry_count=0,
-                prompt_version=request.prompt_version,
-            )
+        if isinstance(last_error, AIProviderError):
+            raise last_error
+        raise AIProviderError(
+            "provider_unavailable",
+            "真实 AI Provider 与已配置的备用 Provider 均未能返回结果，分析未完成。请检查运行详情中的 Provider 错误后重试。",
+        ) from None
 
     async def stream_complete(self, request: AICompletionRequest) -> AsyncIterator[AIStreamChunk]:
         providers = [self.primary, *self.fallbacks]
+        saw_empty_stream = False
+        empty_finish_reason: str | None = None
+        empty_output_tokens: int | None = None
         for index, provider in enumerate(providers):
             emitted_content = False
             stream = stream_provider_completion(provider, request)
             try:
                 try:
                     async for chunk in stream:
-                        emitted_content = emitted_content or bool(chunk.content_delta)
+                        emitted_content = emitted_content or bool(chunk.content_delta.strip())
+                        if chunk.finish_reason:
+                            empty_finish_reason = chunk.finish_reason
+                        if chunk.usage:
+                            usage_tokens = chunk.usage.get("completion_tokens", chunk.usage.get("output_tokens"))
+                            if isinstance(usage_tokens, int):
+                                empty_output_tokens = usage_tokens
                         if index > 0:
                             chunk.fallback_used = True
                         yield chunk
                 finally:
                     await stream.aclose()
-                return
+                if emitted_content:
+                    return
+                saw_empty_stream = True
+                logger.warning(
+                    "AI stream provider returned no content provider=%s finish_reason=%s",
+                    getattr(provider, "provider_name", "unknown"),
+                    empty_finish_reason,
+                )
             except Exception as error:
                 logger.warning(
                     "AI stream provider failed provider=%s error_type=%s",
@@ -725,4 +860,8 @@ class FallbackAIProvider:
                 # different answers together. Preserve the partial answer and report failure.
                 if emitted_content:
                     raise
+        if saw_empty_stream and is_output_limit_finish_reason(empty_finish_reason):
+            raise output_limit_error(max_tokens=request.max_tokens, output_tokens=empty_output_tokens)
+        if saw_empty_stream:
+            raise empty_response_error(streamed=True)
         raise RuntimeError("AI provider unavailable")

@@ -257,6 +257,27 @@ async def test_ui_candidates_stream_the_actual_decision_engine_without_claiming_
         assert not any(event.type == "verification_completed" for event in events)
 
 
+def test_locator_candidates_prioritize_the_most_specific_failed_target_match():
+    candidates = LocatorDecisionService.generate_candidates(
+        {
+            "candidates": [
+                {"kind": "role", "value": "button", "name": "Cart (0)", "exact": True},
+                {"kind": "role", "value": "button", "name": "Add to cart", "exact": True},
+                {"kind": "test_id", "value": "add-to-cart"},
+            ]
+        }
+    )
+
+    relevant = LocatorDecisionService.prioritize_candidates_for_failure(
+        '[data-testid="legacy-add-cart"]', candidates
+    )
+
+    assert [candidate["name"] if candidate.get("name") else candidate["value"] for candidate in relevant] == [
+        "Add to cart",
+        "add-to-cart",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_unrelated_page_elements_do_not_become_a_locator_repair(client, test_db_session):
     _, failure_id, _ = await seed(
