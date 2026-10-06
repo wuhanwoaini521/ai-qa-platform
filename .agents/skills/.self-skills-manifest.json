@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "deployment_id": "ce24f41d-0a94-412c-b2eb-a4e3354ec244",
+  "target": "codex",
+  "destination": ".",
+  "skills": {
+    "full-project-validation": {
+      "version": "0.1.0",
+      "fingerprint": "cb18aa0fe1137314618aa861ca434e8f4e286db8ac2a912aec14a0d5b7b71b4c",
+      "mode": "copy",
+      "source": "skills/full-project-validation"
+    },
+    "project-delivery": {
+      "version": "0.2.0",
+      "fingerprint": "134308e649aef4310fb5adfa4953650e913dc5bc28ae47a6f314b9613782c96b",
+      "mode": "copy",
+      "source": "skills/project-delivery"
+    },
+    "ui-ux-review": {
+      "version": "0.1.0",
+      "fingerprint": "e086ec558847df8f7725940ca63e86e37941145af7035d24d82b5e27967efa02",
+      "mode": "copy",
+      "source": "skills/ui-ux-review"
+    }
+  }
+}

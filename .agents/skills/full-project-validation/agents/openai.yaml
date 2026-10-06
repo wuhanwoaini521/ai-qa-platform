@@ -1,0 +1,6 @@
+interface:
+  display_name: "Full Project Validation"
+  short_description: "Audit project health, runtime, and critical user journeys."
+  default_prompt: "Use $full-project-validation to audit the project's health and critical user journeys."
+policy:
+  allow_implicit_invocation: true
