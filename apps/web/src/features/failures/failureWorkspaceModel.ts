@@ -2,6 +2,7 @@ import type {
   AIFailureDiagnosisResponse,
   FailureAnalysisRun,
   FailureRecord,
+  LocatorRepairProposal,
 } from '../../types';
 
 export type DiagnosisState =
@@ -44,11 +45,28 @@ function hasEvidence(value: unknown): boolean {
 
 export function normalizeFailureClassification(value?: string | null): string {
   const normalized = (value ?? 'UNKNOWN').trim().toUpperCase();
+  if (normalized === 'LOCATOR_ERROR') return 'LOCATOR_CHANGED';
   if (normalized === 'ENVIRONMENT_ERROR') return 'ENVIRONMENT';
   if (normalized === 'TIMING_ISSUE') return 'TIMING';
   if (normalized === 'NETWORK_ERROR') return 'NETWORK';
   if (normalized === 'TEST_DATA_ISSUE') return 'TEST_DATA';
   return normalized || 'UNKNOWN';
+}
+
+export function failedLocatorFromFailure(failure: FailureRecord): string {
+  const recorded = failure.failing_locator?.trim();
+  if (recorded) return recorded;
+
+  const combined = `${failure.error_message}\n${failure.stack_trace}`;
+  // Playwright embeds quoted selectors inside locator("..."). Greedy matching is
+  // needed so escaped quotes inside the selector don't look like the outer close.
+  const match = combined.match(/locator\((["'])(.*)\1\)/i);
+  if (!match) return '';
+  try {
+    return match[1] === '"' ? JSON.parse(`"${match[2]}"`) : match[2].replace(/\\'/g, "'");
+  } catch {
+    return match[2].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
 }
 
 export function displayedFailureClassification(
@@ -136,7 +154,7 @@ export function deriveDiagnosisState(input: {
   if (input.repairApplied) return 'REPAIR_APPLIED';
   if (input.repairProposed) return 'REPAIR_PROPOSED';
   if (input.diagnosing || input.analysis?.status === 'RUNNING') return 'ANALYZING';
-  if (input.diagnosis) return 'DIAGNOSED';
+  if (input.diagnosis || input.analysis?.status === 'COMPLETED') return 'DIAGNOSED';
   if (
     input.error ||
     ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(input.analysis?.status ?? '')
@@ -207,22 +225,51 @@ export function availableEvidenceTabs(
 export function repairEligibility(input: {
   diagnosis: AIFailureDiagnosisResponse | null;
   failure: FailureRecord;
+  trustedAnalysis?: boolean;
 }): { eligible: boolean; reason: string } {
   const classification = normalizeFailureClassification(
-    input.diagnosis?.classification ?? input.failure.classification,
+    input.diagnosis?.classification ??
+      input.failure.failure_kind ??
+      input.failure.classification,
   );
   if (classification !== 'LOCATOR_CHANGED') {
     return { eligible: false, reason: 'classification' };
   }
-  if (!input.failure.failing_locator?.trim()) {
+  if (!failedLocatorFromFailure(input.failure)) {
     return { eligible: false, reason: 'missing-locator' };
   }
   if (!input.failure.error_message.trim() && !input.failure.stack_trace.trim()) {
     return { eligible: false, reason: 'missing-evidence' };
   }
-  if (!input.diagnosis) return { eligible: false, reason: 'not-diagnosed' };
-  if (input.diagnosis.provider === 'fake' || input.diagnosis.fallback_used) {
+  if (!input.diagnosis && !input.trustedAnalysis) {
+    return { eligible: false, reason: 'not-diagnosed' };
+  }
+  if (
+    input.diagnosis &&
+    (input.diagnosis.provider === 'fake' || input.diagnosis.fallback_used)
+  ) {
     return { eligible: false, reason: 'untrusted-diagnosis' };
   }
   return { eligible: true, reason: 'eligible' };
+}
+
+export function storedRepairProposal(
+  value?: Partial<LocatorRepairProposal> | null,
+): LocatorRepairProposal | null {
+  const oldLocator = value?.old_locator?.trim();
+  const proposedLocator = value?.proposed_locator?.trim();
+  if (!oldLocator || !proposedLocator || oldLocator === proposedLocator || !value?.strategy) {
+    return null;
+  }
+  return {
+    old_locator: oldLocator,
+    proposed_locator: proposedLocator,
+    confidence: typeof value.confidence === 'number' ? value.confidence : null,
+    strategy: value.strategy,
+    reason: value.reason ?? '',
+    code_diff: value.code_diff ?? '',
+    file_path: value.file_path ?? null,
+    applied: value.applied === true,
+    execution_trace: value.execution_trace ?? [],
+  };
 }

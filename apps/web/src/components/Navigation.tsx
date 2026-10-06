@@ -3,7 +3,6 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
-  Code2,
   PanelsTopLeft,
   GitBranch,
   BookOpen,
@@ -63,13 +62,7 @@ export const Navigation: React.FC = () => {
   const navItems: NavItem[] = [
     { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, to: '/', end: true },
     { id: 'workspace', labelKey: 'workspace', icon: PanelsTopLeft, to: projectBase ? `/workspace/${selectedProjectId}` : '/workspace' },
-    {
-      id: 'automation',
-      labelKey: 'automation',
-      icon: Code2,
-      to: projectBase ? `${projectBase}/studio` : '/projects',
-    },
-    { id: 'workflow', labelKey: 'workflow', icon: GitBranch, to: '/workflow' },
+    { id: 'runs', labelKey: 'runs', icon: GitBranch, to: '/runs' },
     { id: 'library', labelKey: 'library', icon: BookOpen, to: '/library' },
     { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
   ];

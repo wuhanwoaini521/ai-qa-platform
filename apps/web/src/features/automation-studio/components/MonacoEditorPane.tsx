@@ -214,7 +214,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
           theme={theme === 'dark' || (theme === 'system' && systemDark) ? 'vs-dark' : 'light'}
           onMount={handleEditorDidMount}
           options={{
-            fontSize: 13,
+            fontSize: 15,
             fontFamily: "'JetBrains Mono', Consolas, Menlo, monospace",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,

@@ -567,9 +567,10 @@ export const api = {
     id: string,
     onEvent: (event: AITraceEvent) => void,
     signal: AbortSignal,
+    language = 'en',
   ) =>
     streamAITraceRequest(
-      `/failures/${encodeURIComponent(id)}/analyze/stream`,
+      `/failures/${encodeURIComponent(id)}/analyze/stream?language=${encodeURIComponent(language)}`,
       undefined,
       onEvent,
       signal,
@@ -701,6 +702,14 @@ export const api = {
       navigation_error: string | null;
       steps: RecorderStep[];
     }>(`/recorder/sessions/${encodeURIComponent(sessionId)}`),
+  saveRecorderCase: (
+    sessionId: string,
+    payload: { test_case: TestCaseCreate; file_path: string; test_name: string },
+  ) =>
+    request<{ test_case: TestCase; binding: AutomationBinding; nodeid: string; reused: boolean }>(
+      `/recorder/sessions/${encodeURIComponent(sessionId)}/save-case`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
   generateRecorderCode: (
     sessionId: string,
     payload: {

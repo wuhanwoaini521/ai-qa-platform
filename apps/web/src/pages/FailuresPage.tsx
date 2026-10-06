@@ -23,11 +23,13 @@ import { FailureOverview } from '../features/failures/FailureOverview';
 import {
   displayedFailureClassification,
   deriveDiagnosisState,
+  failedLocatorFromFailure,
   normalizeFailureClassification,
   primaryActionFor,
   relatedFailures,
   repairEligibility,
   summarizeFailureError,
+  storedRepairProposal,
 } from '../features/failures/failureWorkspaceModel';
 import {
   AlertTriangle,
@@ -70,7 +72,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   onNavigateToRuns,
   workspaceMode = false,
 }) => {
-  const { t } = useTranslation('failures');
+  const { t, i18n } = useTranslation('failures');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [failures, setFailures] = useState<FailureRecord[]>([]);
@@ -124,6 +126,18 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const selectedAnalysis = analysisHistory.find(
     (item) => item.id === selectedAnalysisId,
+  );
+  const trustedCompletedAnalysis = Boolean(
+    selectedAnalysis?.status === 'COMPLETED' &&
+      selectedAnalysis.events.some((event) => {
+        const provider = event.metadata.provider;
+        return (
+          event.type === 'model.completed' &&
+          typeof provider === 'string' &&
+          provider !== 'fake' &&
+          event.metadata.fallback_used !== true
+        );
+      }),
   );
   const verificationRunStatus = verificationRun?.status ??
     selectedAnalysis?.result.verification_run_status;
@@ -191,11 +205,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     ),
   );
   const repairCheck = selectedFailure
-    ? repairEligibility({ failure: selectedFailure, diagnosis: aiDiagnosis })
+    ? repairEligibility({
+        failure: selectedFailure,
+        diagnosis: aiDiagnosis,
+        trustedAnalysis: trustedCompletedAnalysis,
+      })
     : { eligible: false, reason: 'missing-evidence' };
   const locatorRepairApplicable = repairCheck.eligible;
   const storedClassification = normalizeFailureClassification(
-    selectedFailure?.classification,
+    selectedFailure?.failure_kind ?? selectedFailure?.classification,
   );
   const locatorRepairReason =
     repairCheck.reason === 'not-diagnosed' && storedClassification !== 'LOCATOR_CHANGED'
@@ -237,9 +255,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const primaryAction = selectedFailure
     ? primaryActionFor({
         state: diagnosisState,
-        classification: selectedFailure.classification,
+        classification: selectedFailure.failure_kind ?? selectedFailure.classification,
         diagnosedClassification,
-        hasFailedLocator: Boolean(selectedFailure.failing_locator?.trim()),
+        hasFailedLocator: Boolean(failedLocatorFromFailure(selectedFailure)),
       })
     : 'BLOCKED';
   const sharedFailures = selectedFailure
@@ -261,6 +279,23 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const [rerunning, setRerunning] = useState<boolean>(false);
   const [rerunMessage, setRerunMessage] = useState<string | null>(null);
+  const primaryActionDisabled =
+    ['ANALYZING', 'VERIFYING', 'VERIFIED', 'BLOCKED'].includes(primaryAction) ||
+    (primaryAction === 'GENERATE_LOCATOR_REPAIR' && !locatorRepairApplicable) ||
+    generatingProposal || rerunning || generatingJiraDraft;
+  const showFailurePrimaryAction = !['ANALYZING', 'VERIFYING', 'VERIFIED'].includes(primaryAction);
+  const primaryActionReason =
+    primaryAction === 'GENERATE_LOCATOR_REPAIR' && !locatorRepairApplicable
+      ? locatorRepairReason
+      : primaryAction === 'BLOCKED'
+    ? diagnosisState === 'DIAGNOSED' &&
+        normalizeFailureClassification(aiDiagnosis?.classification) === 'AUTOMATION_DEFECT'
+      ? t('primaryReasons.automationRepairUnavailable')
+      : diagnosisState === 'DIAGNOSED' &&
+          normalizeFailureClassification(aiDiagnosis?.classification) === 'LOCATOR_CHANGED'
+        ? t('primaryReasons.locatorUnavailable')
+        : t('primaryReasons.repairUnavailable')
+    : undefined;
   const handleOpenFailureInStudio = async (startDebug = false) => {
     if (!selectedFailure || !onOpenInStudio) return;
     const filePath = selectedFailure.test_nodeid.split('::')[0];
@@ -340,6 +375,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   }, [verificationRun?.id, verificationRun?.status]);
 
   const handleSelectFailure = (f: FailureRecord) => {
+    const savedRepair = storedRepairProposal(f.repair_proposal);
     diagnosisController.current?.abort();
     diagnosisController.current = null;
     setDiagnosing(false);
@@ -349,11 +385,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     setSourceRun(null);
     setVerificationRun(null);
     setAiDiagnosis(null);
-    setRepairProposal(null);
+    setRepairProposal(savedRepair);
     setRepairError('');
-    setSelectedCandidate('');
+    setSelectedCandidate(savedRepair?.proposed_locator ?? '');
     setSemanticReview(null);
-    setRepairApplied(false);
+    setRepairApplied(savedRepair?.applied ?? false);
     setRerunMessage(null);
     fetchRecurrence(f.id);
   };
@@ -407,6 +443,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           }
         },
         controller.signal,
+        i18n.resolvedLanguage ?? i18n.language,
       );
       if (!terminal && !controller.signal.aborted)
         throw new Error(t('diagnosisStreamIncomplete'));
@@ -639,6 +676,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
+  const handlePrimaryAction = () => {
+    if (primaryAction === 'RUN_DIAGNOSIS') void handleDiagnoseAI();
+    else if (primaryAction === 'GENERATE_LOCATOR_REPAIR') void handleGenerateProposal();
+    else if (primaryAction === 'RETRY' || primaryAction === 'VERIFY_FIX') void handleRerunTest();
+    else if (primaryAction === 'CREATE_ISSUE_DRAFT') void handleOpenJiraBugModal();
+    else if (primaryAction === 'REVIEW_REPAIR') document.getElementById('failure-repair-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const getCategoryBadge = (cat?: FailureCategory | string) => {
     const classification = normalizeFailureClassification(cat);
     const style =
@@ -771,28 +816,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 diagnosis={aiDiagnosis}
                 state={diagnosisState}
                 primaryAction={primaryAction}
-                primaryDisabled={
-                  ['ANALYZING', 'VERIFYING', 'VERIFIED', 'BLOCKED'].includes(primaryAction) ||
-                  (primaryAction === 'GENERATE_LOCATOR_REPAIR' && !locatorRepairApplicable)
-                }
-                primaryReason={
-                  primaryAction !== 'BLOCKED'
-                    ? undefined
-                    : diagnosisState === 'DIAGNOSED' &&
-                        normalizeFailureClassification(aiDiagnosis?.classification) === 'AUTOMATION_DEFECT'
-                      ? t('primaryReasons.automationRepairUnavailable')
-                      : diagnosisState === 'DIAGNOSED' &&
-                          normalizeFailureClassification(aiDiagnosis?.classification) === 'LOCATOR_CHANGED'
-                        ? t('primaryReasons.locatorUnavailable')
-                        : t('primaryReasons.repairUnavailable')
-                }
-                onPrimaryAction={() => {
-                  if (primaryAction === 'RUN_DIAGNOSIS') void handleDiagnoseAI();
-                  else if (primaryAction === 'GENERATE_LOCATOR_REPAIR') void handleGenerateProposal();
-                  else if (primaryAction === 'RETRY' || primaryAction === 'VERIFY_FIX') void handleRerunTest();
-                  else if (primaryAction === 'CREATE_ISSUE_DRAFT') void handleOpenJiraBugModal();
-                  else if (primaryAction === 'REVIEW_REPAIR') document.getElementById('failure-repair-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
+                primaryDisabled={primaryActionDisabled}
+                showPrimaryAction={showFailurePrimaryAction}
+                primaryReason={primaryActionReason}
+                onPrimaryAction={handlePrimaryAction}
                 canRetry={canRetry}
                 rerunning={rerunning}
                 onRetry={() => void handleRerunTest()}
@@ -1105,7 +1132,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   <div className="card-body">
                     <strong>{locatorRepairApplicable ? t('repairProposalNotCreated') : t('repairNotRecommended')}</strong>
                     {!locatorRepairApplicable && <p>{locatorRepairReason}</p>}
-                    <p>{aiDiagnosis ? t('autoRepairNotSupported') : t('repairUnavailableUntilDiagnosis')}</p>
+                    {locatorRepairApplicable && <p>{t('proposalFlowHint')}</p>}
                   </div>
                 </section>
               )}
@@ -1117,8 +1144,17 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   history={analysisHistory}
                   selectedId={selectedAnalysisId}
                   failureCreatedAt={selectedFailure.created_at}
+                  failure={selectedFailure}
                   classification={selectedFailure.failure_kind ?? selectedFailure.classification}
                   error={diagnosisError}
+                  primaryAction={primaryAction}
+                  primaryActionDisabled={primaryActionDisabled}
+                  primaryActionReason={primaryActionReason}
+                  primaryActionPending={generatingProposal}
+                  showPrimaryAction={!aiDiagnosis || primaryAction === 'BLOCKED'}
+                  onPrimaryAction={handlePrimaryAction}
+                  onOpenStudio={onOpenInStudio ? () => void handleOpenFailureInStudio() : undefined}
+                  onDebug={onOpenInStudio ? () => void handleOpenFailureInStudio(true) : undefined}
                   onCancel={handleCancelDiagnosis}
                   onSelect={(id) => {
                     const analysis = analysisHistory.find((item) => item.id === id);

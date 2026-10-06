@@ -39,7 +39,8 @@
     "status_SIMULATION": "Simulation mode",
     "status_UNAVAILABLE": "AI unavailable",
     "fallbackActive": "A fallback provider is active; no real model is serving this status.",
-    "realProviderStatus": "The configured real provider passed its health check."
+    "realProviderStatus": "The configured real provider passed its health check.",
+    "providerProbeFailed": "The real provider probe failed; fallback use has not been confirmed."
   },
   "jev": {
     "title": "Jev decision provider",
@@ -104,6 +105,24 @@
       "test_runtime": "Python test runtime",
       "filesystem": "Workspace storage",
       "python_lsp": "Python language server"
+    },
+    "states": {
+      "LOCAL_EXECUTION_AVAILABLE": "Local task execution is available (no remote Worker connected)",
+      "REMOTE_WORKERS_AVAILABLE": "Remote Workers online",
+      "PROBE_TIMEOUT": "Probe timed out; state is unconfirmed",
+      "REAL_AVAILABLE": "Real service available",
+      "UNAVAILABLE": "Service unavailable",
+      "AUTH_ERROR": "Authentication failed",
+      "DISABLED": "Service disabled",
+      "NETWORK_ERROR": "Network connection failed",
+      "TIMEOUT": "Request timed out",
+      "MISSING_API_KEY": "API Key missing",
+      "INVALID_API_KEY": "API Key invalid",
+      "UNSUPPORTED_MODEL": "Unsupported model or endpoint",
+      "RATE_LIMITED": "Rate limited",
+      "UPSTREAM_ERROR": "Upstream service error",
+      "INVALID_RESPONSE": "Invalid response format",
+      "INVALID_REQUEST": "Invalid request"
     },
     "dismiss": "Dismiss"
   },

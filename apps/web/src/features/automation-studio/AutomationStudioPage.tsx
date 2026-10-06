@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bug, CheckCircle2, Play, Save } from 'lucide-react';
+import { Bug, CheckCircle2, ChevronDown, FileCode2, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play, Save } from 'lucide-react';
 import { api } from '../../api/client';
 import { Breakpoint, Project, TestCase } from '../../types';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -39,16 +39,23 @@ import { FileOpModal } from './components/FileOpModal';
 import { BranchModal } from './components/BranchModal';
 import { PullRequestModal } from './components/PullRequestModal';
 import { DebugPanel } from './components/DebugPanel';
-import { buildWorkflowHref, buildWorkspaceHref, readWorkspaceContext } from '../../app/workspaceContext';
+import { buildWorkspaceHref, readWorkspaceContext } from '../../app/workspaceContext';
 
 export interface AutomationStudioPageProps {
   projects: Project[];
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
+  onRunCreated?: (runId: string) => void;
+  embedded?: boolean;
+  workspaceView?: 'code' | 'debug';
   initialOpenFilePath?: string | null;
   initialOpenLineNumber?: number | null;
   initialDebugNodeId?: string | null;
+  workspaceAutomationSetup?: 'no-case' | 'unbound' | null;
+  workspaceAutomationSetupKey?: string;
+  onStartRecording?: () => void;
+  onSelectCases?: () => void;
 }
 
 export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
@@ -56,32 +63,47 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   selectedProjectId,
   onSelectProject,
   onNavigateToRuns,
+  onRunCreated,
+  embedded = false,
+  workspaceView,
   initialOpenFilePath,
   initialOpenLineNumber,
   initialDebugNodeId,
+  workspaceAutomationSetup,
+  workspaceAutomationSetupKey,
+  onStartRecording,
+  onSelectCases,
 }) => {
   const { t } = useTranslation('studioShell');
   const { t: lc } = useTranslation('lifecycle');
   const [query,setQuery] = useSearchParams();
   const [showBrowser,setShowBrowser]=useState(false);
   const [showAssistant,setShowAssistant]=useState(false);
-  const [showContext,setShowContext]=useState(true);
+  const [showContext,setShowContext]=useState(!initialDebugNodeId);
   const [showFiles,setShowFiles]=useState(true);
   const [showCommands,setShowCommands]=useState(false);
   const [showKnowledge,setShowKnowledge]=useState(false);
-  const browserToggleRef=useRef<HTMLButtonElement>(null);
   const browserDrawerRef=useRef<HTMLElement>(null);
+  const toolsMenuRef=useRef<HTMLDetailsElement>(null);
+  const toolsMenuTriggerRef=useRef<HTMLElement>(null);
   const [projectCases,setProjectCases]=useState<TestCase[]>([]);
-  const preset=query.get('preset')??'code';
+  const queryPreset = query.get('preset');
+  const preset = embedded && workspaceView
+    ? queryPreset === 'review' && workspaceView === 'code' ? 'review' : workspaceView
+    : queryPreset ?? 'code';
+  const closeToolsMenu = () => {
+    if (toolsMenuRef.current) toolsMenuRef.current.open = false;
+  };
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
   useEffect(()=>{let disposed=false;setProjectCases([]);if(currentProjectId)api.getTestCases(currentProjectId).then(items=>{if(!disposed)setProjectCases(items);}).catch(()=>{});return()=>{disposed=true;};},[currentProjectId]);
-  useEffect(()=>{setShowBrowser(preset==='record');setShowAssistant(preset==='review');setShowContext(true);setShowFiles(preset!=='debug');},[preset,currentProjectId]);
+  useEffect(()=>{setShowBrowser(preset==='record');setShowAssistant(preset==='review');setShowContext(!initialDebugNodeId);setShowFiles(preset!=='debug');},[preset,currentProjectId,initialDebugNodeId]);
   const generateTask = useContextTask(currentProjectId, 'studio', currentProjectId);
 
   // Cross-panel UI state (read/written by more than one panel)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('files');
   const [fileOpModal, setFileOpModal] = useState<FileOpModalState | null>(null);
   const [opInputText, setOpInputText] = useState<string>('');
+  const [setupCaseId, setSetupCaseId] = useState<string | null>(null);
   const [showQuickOpen, setShowQuickOpen] = useState<boolean>(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState<string>('');
   const [quickOpenSelectedIndex, setQuickOpenSelectedIndex] = useState<number>(0);
@@ -92,7 +114,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   useEffect(() => { setLanguageIssues({}); }, [currentProjectId]);
   const [executionLocation, setExecutionLocation] = useState<{ path: string; line: number } | null>(null);
 
-  const closeBrowserDrawer=()=>{setShowBrowser(false);browserToggleRef.current?.focus();};
+  const closeBrowserDrawer=()=>{setShowBrowser(false);toolsMenuTriggerRef.current?.focus();};
   const handleBrowserDrawerKeyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{
     if(event.key==='Escape'){
       event.preventDefault();
@@ -153,6 +175,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       await problems.refreshIssues();
     },
   });
+  const openStudioFile = (path: string) => {
+    if (workspaceAutomationSetup && workspaceAutomationSetupKey) setSetupCaseId(workspaceAutomationSetupKey);
+    return editor.openFile(path);
+  };
+  const openStudioFileRef = useRef(openStudioFile);
+  openStudioFileRef.current = openStudioFile;
+  const showAutomationSetup = Boolean(workspaceAutomationSetup && setupCaseId !== workspaceAutomationSetupKey);
   const assistant = useQAAssistant({
     projectId: currentProjectId,
     activeTab: editor.activeTab,
@@ -163,7 +192,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const failureId = query.get('failureId');
   const parentRunId = query.get('parentRunId');
   const studioContext = readWorkspaceContext(query, currentProjectId);
-  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
+  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns, onRunCreated, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
   const hasRunRuntime = Boolean(run.activeRunId || (!studioContext.taskId && studioContext.runId));
   const runtimeId = run.activeRunId ?? studioContext.taskId ?? studioContext.runId ?? '';
   const runtimeKind = hasRunRuntime ? 'run' : 'task';
@@ -176,7 +205,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const debug = useDebugSession({
     projectId: currentProjectId,
     breakpoints,
-    onOpenFile: editor.openFile,
+    onOpenFile: openStudioFile,
     onExecutionLine: setExecutionLocation,
     onBreakpoints: (sessionBreakpoints) => {
       setBreakpoints((items) => [
@@ -205,7 +234,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   ) ? activeFilePath : null;
 
   fetchFilesRef.current = workspace.fetchFiles;
-  openFileRef.current = editor.openFile;
+  openFileRef.current = openStudioFile;
 
   useEffect(() => {
     workspace.fetchFiles();
@@ -249,7 +278,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
   useEffect(() => {
     if (initialOpenFilePath) {
-      editor.openFile(initialOpenFilePath);
+      openStudioFileRef.current(initialOpenFilePath);
     }
   }, [initialOpenFilePath]);
 
@@ -324,7 +353,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       if (fileOpModal.type === 'create_file') {
         await workspace.createWorkspaceFile(input);
         await workspace.fetchFiles();
-        editor.openFile(input);
+        openStudioFile(input);
       } else if (fileOpModal.type === 'create_folder') {
         await workspace.createWorkspaceDirectory(input);
         await workspace.fetchFiles();
@@ -375,27 +404,45 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     ? buildWorkspaceHref({ ...studioContext, projectId: currentProjectId })
     : null;
   const returnHref = failureReturnHref ?? workspaceReturnHref;
-  const workflowHref = buildWorkflowHref({
-    ...studioContext,
-    projectId: currentProjectId,
-    file: editor.activeTab?.path ?? studioContext.file,
-    runId: run.activeRunId ?? studioContext.runId,
-    taskId: run.activeRunId ? undefined : studioContext.taskId,
-  });
-
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
-      <div className="lc-preset-bar"><Link to={`/projects/${currentProjectId}`}>{projects.find(p=>p.id===currentProjectId)?.name}</Link><span>/ Studio</span>{returnHref && <Link className="btn btn-secondary btn-sm" to={returnHref}>{failureReturnHref ? lc('returnToFailureContext') : lc('returnToWorkspace')}</Link>}<Link className="btn btn-secondary btn-sm" to={workflowHref}>{lc('openWorkflow')}</Link>{linkedCase&&<Link to={`/projects/${currentProjectId}/test-cases/${linkedCase.id}`}>{linkedCase.test_model?.display_id||linkedCase.title}</Link>}
-        <span className="lc-muted">{lc('preset')}</span>{['code','debug','review'].map(view=><button key={view} className={`btn btn-sm ${preset===view?'btn-primary':'btn-secondary'}`} onClick={()=>setQuery({...Object.fromEntries(query),preset:view})}>{view==='code'?'Code':view==='debug'?'Debug':'Review'}</button>)}
-        <button className="btn btn-secondary btn-sm" onClick={()=>setShowFiles(v=>!v)} aria-pressed={showFiles}>{lc('sourceDocument')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowContext(v=>!v)} aria-pressed={showContext}>{lc('context')}</button><button ref={browserToggleRef} className="btn btn-secondary btn-sm" onClick={()=>showBrowser?closeBrowserDrawer():setShowBrowser(true)} aria-label={showBrowser?lc('closeRunDrawer'):lc('showBrowser')} aria-haspopup="dialog" aria-expanded={showBrowser}>{lc('browser')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowAssistant(v=>!v)} aria-pressed={showAssistant}>{lc('assistant')}</button><button className="btn btn-secondary btn-sm" onClick={()=>setShowCommands(true)}>{lc('commands')} ⌃K</button>
+      <div className="lc-preset-bar lc-studio-toolbar">
+        {!embedded && <div className="lc-studio-breadcrumb">
+          <Link to={`/projects/${currentProjectId}`}>{projects.find(p=>p.id===currentProjectId)?.name}</Link>
+          <span>/ Studio</span>
+          {returnHref && <Link className="btn btn-secondary btn-sm" to={returnHref}>{failureReturnHref ? lc('returnToFailureContext') : lc('returnToWorkspace')}</Link>}
+        </div>}
+        {embedded && <button type="button" className="btn btn-secondary btn-sm lc-studio-files-toggle" aria-pressed={showFiles} aria-controls="studio-workspace-files" onClick={() => setShowFiles((visible) => !visible)} title={lc('workspaceFiles')}>
+          {showFiles ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
+          <span>{lc('workspaceFiles')}</span>
+        </button>}
+        <details className="lc-studio-tools" ref={toolsMenuRef} onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+            event.currentTarget.open = false;
+          }
+        }}>
+          <summary ref={toolsMenuTriggerRef} className="btn btn-secondary btn-sm" aria-label={lc('panelTools')}>
+            <MoreHorizontal size={15} aria-hidden="true" />
+            <span>{lc('panelTools')}</span>
+            <ChevronDown size={13} aria-hidden="true" />
+          </summary>
+          <div className="lc-studio-tools-menu" aria-label={lc('panelTools')}>
+            {!embedded && <button type="button" aria-pressed={showFiles} onClick={() => { setShowFiles(value => !value); closeToolsMenu(); }}>{lc('workspaceFiles')}</button>}
+            <button type="button" aria-pressed={showContext} onClick={() => { setShowContext(value => !value); closeToolsMenu(); }}>{lc('context')}</button>
+            <button type="button" aria-pressed={showBrowser} onClick={() => { showBrowser ? setShowBrowser(false) : setShowBrowser(true); closeToolsMenu(); }}>{lc('showBrowser')}</button>
+            <button type="button" aria-pressed={showAssistant} onClick={() => { setShowAssistant(value => !value); closeToolsMenu(); }}>{lc('assistant')}</button>
+            <button type="button" onClick={() => { setShowCommands(true); closeToolsMenu(); }}>{lc('commands')} <span>⌃K</span></button>
+          </div>
+        </details>
       </div>
-      {runtimeId && studioRuntime.snapshot && <RuntimeMiniBar
+      {!embedded && runtimeId && studioRuntime.snapshot && <RuntimeMiniBar
         context={{ ...studioContext, projectId: currentProjectId, runId: runtimeKind === 'run' ? runtimeId : undefined, taskId: runtimeKind === 'task' ? runtimeId : undefined }}
         projectId={currentProjectId}
         snapshot={studioRuntime.snapshot}
         onOpenDetails={run.activeRunId ? () => setShowBrowser(true) : undefined}
       />}
-      {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void editor.openFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void editor.openFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}</div>}
+      {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void openStudioFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void openStudioFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}</div>}
       {showCommands&&<CommandPalette onClose={()=>setShowCommands(false)} commands={[{label:lc('runCurrent'),hint:'Ctrl+Enter',run:()=>{void saveAndRun();}},{label:lc('sourceDocument'),hint:'Ctrl+P',run:()=>setShowQuickOpen(true)},{label:lc('showBrowser'),run:()=>setShowBrowser(true)},{label:lc('showAssistant'),run:()=>setShowAssistant(true)},...(linkedCase?[{label:lc('inspectKnowledge'),run:()=>setShowKnowledge(true)}]:[])]}/>}
       {showKnowledge&&linkedCase&&<KnowledgeDrawer projectId={currentProjectId} entityId={linkedCase.id} onClose={()=>setShowKnowledge(false)}/>}
     <div className="studio-container" style={{flex:1,height:'auto',minHeight:0}}>
@@ -408,7 +455,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           onQueryChange={setQuickOpenQuery}
           onSelectedIndexChange={setQuickOpenSelectedIndex}
           onSelect={(path) => {
-            editor.openFile(path);
+            openStudioFile(path);
             setShowQuickOpen(false);
           }}
           onClose={() => setShowQuickOpen(false)}
@@ -454,7 +501,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       )}
 
       {/* Left Sidebar: File Explorer & Test Explorer */}
-      <div className="studio-sidebar" style={showFiles?undefined:{display:'none'}}>
+      <div id="studio-workspace-files" className="studio-sidebar" style={showFiles?undefined:{display:'none'}}>
         {/* Project Selector inside studio */}
         <ProjectSelector
           projects={projects}
@@ -500,9 +547,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             <FileTree
               files={workspace.files}
               expandedFolders={workspace.expandedFolders}
-              activeTabPath={editor.activeTabPath}
+              activeTabPath={showAutomationSetup ? null : editor.activeTabPath}
               onToggleFolder={workspace.toggleFolder}
-              onOpenFile={editor.openFile}
+              onOpenFile={openStudioFile}
               onCreateFileInside={(dirPath) => {
                 setFileOpModal({ type: 'create_file', targetPath: dirPath });
                 setOpInputText(`${dirPath}/new_file.py`);
@@ -521,7 +568,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               tests={tests.collectedTests}
               loading={tests.loadingTests}
               runningTest={run.runningTest}
-              onOpenFile={editor.openFile}
+              onOpenFile={openStudioFile}
               onRunTest={(nodeid)=>{void saveAndRun(nodeid);}}
               onDebugTest={(nodeid) => { void startDebug(nodeid); }}
             />
@@ -545,7 +592,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 git.setShowBranchModal(true);
               }}
               onToggleDiffView={() => git.setShowDiffView(!git.showDiffView)}
-              onOpenFile={editor.openFile}
+              onOpenFile={openStudioFile}
               onCommitMessageChange={git.setCommitMessage}
               onSuggestCommit={git.handleSuggestCommitMessage}
               onCommit={git.handleCommitChanges}
@@ -574,21 +621,21 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       <div className="studio-editor-pane">
         <div className="studio-editor-tabs">
           <EditorTabs
-            tabs={editor.tabs}
-            activeTabPath={editor.activeTabPath}
-            showDiffView={git.showDiffView}
+            tabs={showAutomationSetup ? [] : editor.tabs}
+            activeTabPath={showAutomationSetup ? null : editor.activeTabPath}
+            showDiffView={!showAutomationSetup && git.showDiffView}
             onSelectTab={editor.selectTab}
             onCloseTab={editor.closeTab}
           />
 
           <div className="studio-toolbar-group no-chrome">
-            {editor.activeTab && (
+            {!showAutomationSetup && editor.activeTab && (
               <button className="studio-tool" disabled={!editor.activeTab.isDirty || editor.saving} onClick={editor.saveActiveTab} title={t('editor.saveCurrentFile')}>
                 <Save size={14} />
                 {editor.saving ? t('editor.saving') : t('common:save')}
               </button>
             )}
-            <button
+            {!showAutomationSetup && <button
               className="studio-tool"
               onClick={problems.validateWorkspace}
               disabled={problems.validating}
@@ -599,8 +646,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               <span className={`studio-tool-count ${problems.validationIssues.length > 0 ? 'has-issues' : ''}`}>
                 {problems.validationIssues.length + Object.values(languageIssues).flat().length}
               </span>
-            </button>
-            {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
+            </button>}
+            {!embedded && editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
               <button
                 className="studio-tool is-primary"
                 disabled={run.runningTest}
@@ -611,7 +658,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 {run.runningTest ? t('editor.running') : t('editor.runTest')}
               </button>
             )}
-            <button
+            {!showAutomationSetup && <button
               className="studio-tool"
               disabled={!debugTargetNodeId || run.runningTest || debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'}
               onClick={async () => {
@@ -622,7 +669,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             >
               <Bug size={14} />
               {debug.state === 'starting' ? t('debug.starting') : t('editor.debugTest')}
-            </button>
+            </button>}
             {(debug.state === 'running' || debug.state === 'paused') && (
               <div className="studio-toolbar-group no-chrome" aria-label={t('debug.controls')}>
                 {debug.state === 'paused' ? (
@@ -643,9 +690,22 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
         {/* Editor or Diff View Area */}
         <div className="studio-editor-surface">
-        <MonacoEditorPane
+        {showAutomationSetup ? <section className="workspace-automation-empty">
+          <FileCode2 size={36} aria-hidden="true" />
+          <strong>{t(workspaceAutomationSetup === 'no-case' ? 'editor.noCaseTitle' : 'editor.unboundTitle')}</strong>
+          <p>{t(workspaceAutomationSetup === 'no-case' ? 'editor.noCaseHint' : 'editor.unboundHint')}</p>
+          <div>
+            {workspaceAutomationSetup === 'no-case' ? <button type="button" className="btn btn-primary btn-sm" onClick={onSelectCases}>{t('editor.openCases')}</button> : <>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                setFileOpModal({ type: 'create_file' });
+                setOpInputText(`tests/test_${workspaceAutomationSetupKey?.replace(/[^a-zA-Z0-9_-]/g, '_')}.py`);
+              }}>{t('editor.createScript')}</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={onStartRecording}>{t('editor.recordScript')}</button>
+            </>}
+          </div>
+        </section> : <MonacoEditorPane
           projectId={currentProjectId}
-          onNavigateToSource={async (path, line) => { await editor.openFile(path); setSourceFocus({ path, line }); }}
+          onNavigateToSource={async (path, line) => { await openStudioFile(path); setSourceFocus({ path, line }); }}
           onAIAction={(action) => { void assistant.sendMessage(t(`lsp.requests.${action}`)); }}
           onLanguageDiagnostics={(uri, diagnostics) => {
             const path = decodeURIComponent(new URL(uri).pathname).replace(/^\//, '');
@@ -664,11 +724,11 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           onToggleBreakpoint={toggleBreakpoint}
           initialFocusLineNumber={sourceFocus && sourceFocus.path === editor.activeTab?.path ? sourceFocus.line : initialOpenLineNumber ?? undefined}
           executionLocation={executionLocation}
-        />
+        />}
 
         </div>
 
-        {(debug.state !== 'idle' || initialDebugNodeId || debugPreparationError) && (
+        {(preset === 'debug' || debug.state !== 'idle' || initialDebugNodeId || debugPreparationError) && (
           <DebugPanel
             state={debugPreparationError ? 'error' : debug.state}
             nodeid={debug.targetNodeid}
@@ -701,8 +761,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           validating={problems.validating}
           runningTest={run.runningTest}
           saving={editor.saving}
-          activeFileName={editor.activeTab?.path ?? null}
-          language={editor.activeTab ? (editor.activeTab.path.split('.').pop() ?? null) : null}
+          activeFileName={showAutomationSetup ? null : editor.activeTab?.path ?? null}
+          language={!showAutomationSetup && editor.activeTab ? (editor.activeTab.path.split('.').pop() ?? null) : null}
         />
       </div>
 
@@ -710,7 +770,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       {showBrowser&&<div className="lc-studio-run-overlay" onKeyDownCapture={handleBrowserDrawerKeyDown}>
         <button type="button" className="lc-studio-run-backdrop" tabIndex={-1} aria-label={lc('closeRunDrawer')} onClick={closeBrowserDrawer}/>
         <aside ref={browserDrawerRef} className="lc-studio-run-drawer" id="studio-run-drawer" role="dialog" aria-modal="true" aria-label={lc('runtimeDrawer')} tabIndex={-1}>
-          <StudioRunPanel key={currentProjectId} runId={run.activeRunId} projectId={currentProjectId} context={{...studioContext,file:editor.activeTab?.path??studioContext.file}} onClose={closeBrowserDrawer} onStep={async(path,line)=>{await editor.openFile(path);setSourceFocus({path,line});}}/>
+          <StudioRunPanel key={currentProjectId} runId={run.activeRunId} projectId={currentProjectId} context={{...studioContext,file:editor.activeTab?.path??studioContext.file}} onClose={closeBrowserDrawer} onStep={async(path,line)=>{await openStudioFile(path);setSourceFocus({path,line});}}/>
         </aside>
       </div>}
       {showAssistant&&<QAAssistantPanel

@@ -201,8 +201,9 @@ export const SettingsPage: React.FC = () => {
           {aiStatus && <div className={`ai-runtime-status is-${aiStatus.status.toLowerCase()}`} role="status">
             <strong>{t(`aiConfig.status_${aiStatus.status}`)}</strong>
             <span>{aiStatus.provider} · {aiStatus.model}</span>
+            {aiStatus.message && <span>{aiStatus.message}</span>}
             {aiStatus.failure_reason && <code>{aiStatus.failure_reason}</code>}
-            <small>{aiStatus.operational_state} · {aiStatus.real_model_available ? t('aiConfig.realProviderStatus') : t('aiConfig.fallbackActive')}</small>
+            <small>{t(`health.states.${aiStatus.operational_state}`, { defaultValue: aiStatus.operational_state })} · {aiStatus.fallback_active ? t('aiConfig.fallbackActive') : aiStatus.real_model_available ? t('aiConfig.realProviderStatus') : t('aiConfig.providerProbeFailed')}</small>
             <small>{Math.round(aiStatus.latency_ms ?? 0)} ms · {new Date(aiStatus.checked_at).toLocaleString()}</small>
           </div>}
           {loadingAI ? <p>{t('aiConfig.loading')}</p> : <>
@@ -252,7 +253,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      <AIHealthPanel />
+      <AIHealthPanel onAIStatusChange={setAiStatus} />
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <div className="card-header">

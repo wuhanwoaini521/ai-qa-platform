@@ -12,6 +12,7 @@ interface AutomationBindingPanelProps {
   savingDraft: boolean;
   runningCase: boolean;
   generating: boolean;
+  hideRunAction?: boolean;
   progressEvents: AITraceEvent[];
   progressError: string;
   runMessage: string | null;
@@ -28,6 +29,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
   savingDraft,
   runningCase,
   generating,
+  hideRunAction = false,
   progressEvents,
   progressError,
   runMessage,
@@ -133,14 +135,14 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
               >
                 <ExternalLink size={13} /> {t('common:openInStudio')}
               </button>
-              <button
+              {!hideRunAction && <button
                 className="btn btn-primary btn-sm"
                 disabled={runningCase}
                 onClick={onRunTestCase}
               >
                 <Play size={13} />{' '}
                 {runningCase ? t('bindingRunning') : t('bindingRunNow')}
-              </button>
+              </button>}
               <button
                 className="btn btn-secondary btn-sm"
                 disabled={generating}

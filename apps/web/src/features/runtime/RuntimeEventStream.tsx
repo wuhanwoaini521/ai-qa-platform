@@ -102,6 +102,25 @@ export function RuntimeEventStream({
             {recent.slice(range.start, range.end).map((event, index) => {
               const Icon =
                 icons[event.category as keyof typeof icons] ?? Activity;
+              const labelKey = eventLabelKey(event.type);
+              const label = labelKey ? t(labelKey) : event.title || event.type;
+              let summary = event.summary;
+              if (event.type === 'browser.recent_steps') {
+                const action = typeof event.metadata.action === 'string' ? event.metadata.action : '';
+                const locator = typeof event.metadata.locator === 'string' ? event.metadata.locator : '';
+                const actionLabel = action
+                  ? t(`browserActions.${action.toLowerCase()}`, { defaultValue: action })
+                  : '';
+                const status = event.status
+                  ? t(event.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : event.status.toLowerCase(), { defaultValue: event.status })
+                  : '';
+                summary = [actionLabel, locator, status].filter(Boolean).join(' · ') || summary;
+              }
+              const statusLabel = event.status
+                ? t(event.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : event.status.toLowerCase(), { defaultValue: event.status })
+                : '';
+              const timingLabel = event.duration_ms == null ? '' : durationLabel(event.duration_ms);
+              const statusAndTiming = [statusLabel, timingLabel].filter(Boolean).join(' · ') || '—';
               return (
                 <div
                   role="listitem"
@@ -124,17 +143,15 @@ export function RuntimeEventStream({
                   <button
                     disabled={!event.step_id}
                     onClick={() => event.step_id && onSelect(event.step_id)}
-                    title={`${event.title}${event.summary ? ' · ' + event.summary : ''}`}
+                    title={`${event.title}${summary ? ' · ' + summary : ''}`}
                   >
-                    {t(eventLabelKey(event.type))}
-                    {event.summary && ` · ${event.summary}`}
+                    {label}
+                    {summary && ` · ${summary}`}
                   </button>
                   <code
                     className={event.status === 'FAILED' ? 'status-failed' : ''}
                   >
-                    {event.duration_ms == null
-                    ? (event.status ? t(event.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : event.status.toLowerCase(), { defaultValue: event.status }) : '—')
-                      : durationLabel(event.duration_ms)}
+                    {statusAndTiming}
                   </code>
                 </div>
               );

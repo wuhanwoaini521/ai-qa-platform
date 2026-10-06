@@ -29,8 +29,10 @@ export function RuntimeOverview({
   const relatedAi = snapshot.ai_invocations.filter((call) => call.step_id === blocker?.step_id);
   const testState = snapshot.runs.length ? 'started' : snapshot.status === 'BLOCKED' ? 'notReached' : 'notStarted';
   const agentProgress = [...snapshot.events].reverse().find((event) => event.type === 'browser.agent_progress');
-  const agentAction = [...snapshot.events].reverse().find((event) => event.type === 'browser.action_started');
-  const agentResult = [...snapshot.events].reverse().find((event) => event.type === 'browser.action_completed');
+  const actionLifecycle = snapshot.events.filter((event) => ['browser.action_started', 'browser.action_completed', 'browser.action_blocked'].includes(event.type));
+  const lastActionEvent = actionLifecycle[actionLifecycle.length - 1];
+  const agentAction = lastActionEvent?.type === 'browser.action_started' ? lastActionEvent : undefined;
+  const agentResult = [...snapshot.events].reverse().find((event) => ['browser.action_completed', 'browser.action_blocked'].includes(event.type));
   const summaryLines = [
     facts.counts.completed > 0 && facts.counts.failed > 0,
     snapshot.status === 'BLOCKED' && blocker?.failure_type === 'AI_OUTPUT_INVALID',

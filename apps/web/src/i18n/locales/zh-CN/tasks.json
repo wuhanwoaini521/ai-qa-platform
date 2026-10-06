@@ -112,5 +112,6 @@
   "type_RUN_REGRESSION": "运行回归",
   "type_REVIEW_TEST": "审查测试代码",
   "type_ANALYZE_REQUIREMENT": "分析需求",
-  "caseCopilot": "AI Copilot · 生成、审阅并验证此用例"
+  "caseCopilot": "AI Copilot · 生成、审阅并验证此用例",
+  "caseCopilotShort": "AI Copilot"
 }

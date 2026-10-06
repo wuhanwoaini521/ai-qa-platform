@@ -22,14 +22,14 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
     case 'test_cases':
       return '/test-cases';
     case 'automation':
-      return projectId ? `/projects/${projectId}/studio` : '/projects';
+      return projectId ? `/workspace/${projectId}?view=code` : '/projects';
     case 'runs':
       return '/runs';
     case 'tasks':
       return '/runs/tasks';
     case 'recorder':
       return projectId
-        ? `/projects/${projectId}/studio?mode=recorder`
+        ? `/workspace/${projectId}?view=browser`
         : '/projects';
     case 'flaky':
       return '/flaky';
@@ -95,9 +95,10 @@ export function useAppNavigation(): AppNavigation {
         navigate('/projects');
         return;
       }
-      const base = `/projects/${selectedProjectId}/studio`;
-      // Encode once here: react-router decodes route params before the page reads them.
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        view: failureContext || debugNodeId ? 'debug' : 'code',
+      });
+      if (filePath) params.set('file', filePath);
       if (lineNumber && lineNumber > 0)
         params.set('line', String(Math.floor(lineNumber)));
       if (debugNodeId) params.set('nodeid', debugNodeId);
@@ -105,12 +106,7 @@ export function useAppNavigation(): AppNavigation {
         params.set('failureId', failureContext.failureId);
         params.set('parentRunId', failureContext.runId);
       }
-      const query = params.size ? '?' + params.toString() : '';
-      navigate(
-        filePath
-          ? base + '/file/' + encodeURIComponent(filePath) + query
-          : base + query,
-      );
+      navigate(`/workspace/${selectedProjectId}?${params.toString()}`);
     },
     [navigate, selectedProjectId],
   );

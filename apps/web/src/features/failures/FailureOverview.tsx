@@ -15,6 +15,7 @@ import type {
 } from '../../types';
 import {
   displayedFailureClassification,
+  failedLocatorFromFailure,
   summarizeFailureError,
   type DiagnosisState,
   type PrimaryAction,
@@ -51,6 +52,7 @@ export const FailureOverview: React.FC<{
   state: DiagnosisState;
   primaryAction: PrimaryAction;
   primaryDisabled: boolean;
+  showPrimaryAction?: boolean;
   primaryReason?: string;
   onPrimaryAction: () => void;
   canRetry: boolean;
@@ -74,6 +76,7 @@ export const FailureOverview: React.FC<{
   state,
   primaryAction,
   primaryDisabled,
+  showPrimaryAction = true,
   primaryReason,
   onPrimaryAction,
   canRetry,
@@ -94,7 +97,17 @@ export const FailureOverview: React.FC<{
     /(^|_)(os|platform|operating_system)(_|$)/i.test(key),
   )?.[1];
   const summaryKind = summarizeFailureError(failure.error_message);
-  const classification = displayedFailureClassification(failure.classification, diagnosis);
+  const isChinese = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('zh');
+  const locatorTimeout = /TimeoutError|Locator\.\w+: Timeout/i.test(failure.error_message);
+  const failedLocator = failedLocatorFromFailure(failure) || '未知定位器';
+  const timeoutMs = failure.error_message.match(/Timeout\s+(\d+)\s*ms/i)?.[1] ?? '?';
+  const rootCause = diagnosis?.root_cause && locatorTimeout && isChinese
+    ? t('workflow.locatorTimeoutConclusion', { locator: failedLocator, duration: timeoutMs })
+    : diagnosis?.root_cause;
+  const classification = displayedFailureClassification(
+    failure.failure_kind ?? failure.classification,
+    diagnosis,
+  );
   const heuristicHint = summaryKind === 'browserLaunchEperm' && classification === 'UNKNOWN';
   const primaryIcon =
     primaryAction === 'RETRY' || primaryAction === 'VERIFY_FIX'
@@ -170,8 +183,8 @@ export const FailureOverview: React.FC<{
                     ? t('summary.assertion')
                     : t('summary.generic', { detail: summarizeFailureError(failure.error_message) })}
             </p>
-            {diagnosis?.root_cause && (
-              <p id="failure-root-cause" className="failure-root-cause"><b>{t('rootCause')}</b> {diagnosis.root_cause}</p>
+            {rootCause && (
+              <p id="failure-root-cause" className="failure-root-cause"><b>{t('rootCause')}</b> {rootCause}</p>
             )}
             {heuristicHint && <span className="failure-heuristic-badge">{t('heuristicUnconfirmed')}</span>}
           </div>
@@ -180,18 +193,31 @@ export const FailureOverview: React.FC<{
               <span className={`failure-state-dot is-${state.toLowerCase().replaceAll('_', '-')}`} aria-hidden="true" />
               <span>{t('diagnosisState')}: <strong>{t(`diagnosisStateLabels.${state}`)}</strong></span>
             </div>
-            <span className="failure-section-label">{t('primaryAction')}</span>
-            <button
-              type="button"
-              className="btn btn-primary failure-primary-action"
-              onClick={onPrimaryAction}
-              disabled={primaryDisabled}
-            >
-              {primaryIcon}
-              {t(`primaryActions.${primaryAction}`)}
-            </button>
-            {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
-            {state === 'NOT_ANALYZED' && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
+            {showPrimaryAction && (
+              <>
+                <span className="failure-section-label">{t('primaryAction')}</span>
+                {primaryAction === 'BLOCKED' ? (
+                  <div className="failure-manual-next-step">
+                    {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
+                    <p className="failure-manual-next-step-copy">{t('manualNextStepOverview')}</p>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-primary failure-primary-action"
+                      onClick={onPrimaryAction}
+                      disabled={primaryDisabled}
+                    >
+                      {primaryIcon}
+                      {t(`primaryActions.${primaryAction}`)}
+                    </button>
+                    {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
+                  </>
+                )}
+                {state === 'NOT_ANALYZED' && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
+              </>
+            )}
           </div>
         </div>
 
@@ -242,13 +268,15 @@ export const FailureOverview: React.FC<{
         )}
 
         <div className="failure-secondary-actions">
-          <details>
-            <summary>{t('developerActions')}</summary>
-            <div className="failure-secondary-buttons">
-              {onOpenStudio && <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openInStudio')}</button>}
-              {onDebug && <button type="button" className="btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
-            </div>
-          </details>
+          {primaryAction !== 'BLOCKED' && (onOpenStudio || onDebug) && (
+            <details>
+              <summary>{t('developerActions')}</summary>
+              <div className="failure-secondary-buttons">
+                {onOpenStudio && <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openInStudio')}</button>}
+                {onDebug && <button type="button" className="btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
+              </div>
+            </details>
+          )}
           {(canRetry || canCreateJiraDraft) && (
             <details>
               <summary>{t('externalActions')}</summary>

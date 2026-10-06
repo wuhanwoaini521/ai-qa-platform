@@ -33,6 +33,8 @@ export interface RecorderStep {
   id: string;
   action:
     | 'navigate'
+    | 'back'
+    | 'scroll'
     | 'click'
     | 'double_click'
     | 'fill'
@@ -377,6 +379,8 @@ export interface DebugSessionBootstrap {
 }
 
 export interface TestRunCreate {
+  /** Reuse the same local Run when a request is retried after a lost response. */
+  idempotency_key?: string;
   parent_run_id?: string | null;
   origin_failure_id?: string | null;
   project_id: string;
@@ -436,7 +440,7 @@ export interface FailureRecord {
   dom_snapshot_path?: string | null;
   console_logs: string[];
   suggested_action?: string | null;
-  repair_proposal?: Record<string, unknown> | null;
+  repair_proposal?: Partial<LocatorRepairProposal> | null;
   created_at: string;
 }
 

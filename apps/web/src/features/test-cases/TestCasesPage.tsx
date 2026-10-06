@@ -28,6 +28,8 @@ interface TestCasesPageProps {
   onTaskStarted?: (taskId: string) => void;
   workspaceMode?: boolean;
   focusAutomation?: boolean;
+  hideRunAction?: boolean;
+  onCaseCreated?: (testCase: TestCase) => void;
 }
 
 export const TestCasesPage: React.FC<TestCasesPageProps> = ({
@@ -40,6 +42,8 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   onTaskStarted,
   workspaceMode = false,
   focusAutomation = false,
+  hideRunAction = false,
+  onCaseCreated,
 }) => {
   const { t } = useTranslation('testCases');
   const form = useTestCaseFormModal(
@@ -129,11 +133,39 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     form.close();
     form.reset();
     binding.fetchBinding(created.id);
+    if (onCaseCreated) onCaseCreated(created);
+    else onSelectTestCase?.(created.id);
   };
+
+  const automationBindingPanel = <AutomationBindingPanel
+    progressEvents={binding.progress.events}
+    progressError={binding.progress.error}
+    selectedBinding={binding.selectedBinding}
+    generatedDraft={binding.generatedDraft}
+    savingDraft={binding.savingDraft}
+    runningCase={binding.runningCase}
+    generating={binding.generating}
+    hideRunAction={hideRunAction}
+    runMessage={binding.runMessage}
+    onNavigateToStudio={onNavigateToStudio}
+    onOpenBindingModal={binding.openBindingModal}
+    onRunTestCase={binding.handleRunTestCase}
+    onGenerateAutomation={binding.handleGenerateAutomation}
+    onSaveDraftToWorkspace={binding.handleSaveDraftToWorkspace}
+  />;
 
   return (
     <div className={`page-container test-cases-page${workspaceMode ? ' workspace-cases-embedded' : ''}${focusAutomation ? ' is-automation-focus' : ''}`}>
-      {!workspaceMode && <div className="page-header">
+      {workspaceMode ? <div className="workspace-case-toolbar">
+        <span>{t('pageTitle')}</span>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={projects.length === 0}
+          onClick={() => form.open(selectedProjectId || projects[0]?.id || '')}
+        >
+          <Plus size={14} /> {t('newTestCase')}
+        </button>
+      </div> : <div className="page-header">
         <div>
           <h2>{t('pageTitle')}</h2>
           <p className="subtitle">{t('pageSubtitle')}</p>
@@ -177,35 +209,17 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
                 aiDisabled={!binding.selectedBinding || caseTask.busy}
                 onOptimize={() => startCaseTask('OPTIMIZE_TEST')}
                 onReview={() => startCaseTask('REVIEW_TEST')}
+                onCopilot={() => startCaseTask('CREATE_TEST')}
+                copilotDisabled={caseTask.busy}
               />
               <ContextTaskProgress
                 task={caseTask.task}
                 error={caseTask.error}
               />
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={caseTask.busy}
-                onClick={() => startCaseTask('CREATE_TEST')}
-              >
-                {t('tasks:caseCopilot')}
-              </button>
-
-              <AutomationBindingPanel
-                progressEvents={binding.progress.events}
-                progressError={binding.progress.error}
-                selectedBinding={binding.selectedBinding}
-                generatedDraft={binding.generatedDraft}
-                savingDraft={binding.savingDraft}
-                runningCase={binding.runningCase}
-                generating={binding.generating}
-                runMessage={binding.runMessage}
-                onNavigateToStudio={onNavigateToStudio}
-                onOpenBindingModal={binding.openBindingModal}
-                onRunTestCase={binding.handleRunTestCase}
-                onGenerateAutomation={binding.handleGenerateAutomation}
-                onSaveDraftToWorkspace={binding.handleSaveDraftToWorkspace}
-              />
+              {workspaceMode ? <details className="workspace-case-automation" open={binding.generating || Boolean(binding.progress.error || binding.generatedDraft)}>
+                <summary><span>{t('bindingTitle')}</span><small>{binding.selectedBinding?.file_path ?? t('bindingConfigure')}</small></summary>
+                {automationBindingPanel}
+              </details> : automationBindingPanel}
 
               {binding.selectedBinding && (
                 <CaseExecutionHistoryPanel

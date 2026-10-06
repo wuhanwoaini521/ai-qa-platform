@@ -20,6 +20,13 @@
     "loadingFile": "正在加载文件内容...",
     "emptySelectFile": "从资源管理器中选择文件，或按",
     "emptyHint": "编写 Playwright 测试套件、页面对象（Page Object）和测试夹具。",
+    "unboundTitle": "此用例尚未关联自动化脚本",
+    "unboundHint": "可以手动新建 Python 测试脚本并在用例页绑定，或通过浏览器录制生成脚本。",
+    "createScript": "手动新建脚本",
+    "recordScript": "开始浏览器录制",
+    "noCaseTitle": "当前需求还没有关联用例",
+    "noCaseHint": "先创建或选择测试用例，再添加或录制对应的自动化脚本。",
+    "openCases": "前往用例",
     "problemsShort": "问题"
   },
   "debug": {

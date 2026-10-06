@@ -9,7 +9,9 @@ interface TestCaseDetailProps {
   onUpdateStatus: (caseId: string, automationStatus: AutomationStatus) => void;
   onOptimize?: () => void;
   onReview?: () => void;
+  onCopilot?: () => void;
   aiDisabled?: boolean;
+  copilotDisabled?: boolean;
 }
 
 export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
@@ -17,7 +19,9 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
   onUpdateStatus,
   onOptimize,
   onReview,
+  onCopilot,
   aiDisabled,
+  copilotDisabled,
 }) => {
   const { t } = useTranslation('testCases');
   return (
@@ -37,9 +41,12 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
             </a>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onOptimize}><Sparkles size={13} /> {t('tasks:optimizeAction')}</button>
-          <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onReview}><Sparkles size={13} /> {t('tasks:reviewAction')}</button>
+        <div className="test-case-detail-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="test-case-ai-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {onCopilot && <button className="btn btn-secondary btn-sm" type="button" disabled={copilotDisabled} title={t('tasks:caseCopilot')} aria-label={t('tasks:caseCopilot')} onClick={onCopilot}><Sparkles size={13} /> {t('tasks:caseCopilotShort')}</button>}
+            <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onOptimize}><Sparkles size={13} /> {t('tasks:optimizeAction')}</button>
+            <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onReview}><Sparkles size={13} /> {t('tasks:reviewAction')}</button>
+          </div>
           <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>
             {selectedCase.priority}
           </span>
@@ -70,7 +77,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
           </div>
         )}
 
-        <div style={{ marginBottom: '14px' }}>
+        {!selectedCase.test_model && <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
             {t('testSteps', { total: selectedCase.steps.length })}
           </div>
@@ -85,7 +92,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
           ) : (
             <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('noSteps')}</div>
           )}
-        </div>
+        </div>}
 
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>

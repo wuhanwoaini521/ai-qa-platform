@@ -11,6 +11,7 @@ import {
   relatedFailures,
   repairEligibility,
   summarizeFailureError,
+  storedRepairProposal,
 } from '../src/features/failures/failureWorkspaceModel.ts';
 
 const failure = (overrides = {}) => ({
@@ -77,6 +78,20 @@ test('Locator repair requires a confirmed non-fallback locator diagnosis and evi
   assert.equal(repairEligibility({ failure: record, diagnosis: diagnosis('LOCATOR_CHANGED', { provider: 'fake' }) }).eligible, false);
   assert.equal(repairEligibility({ failure: record, diagnosis: diagnosis('LOCATOR_CHANGED') }).eligible, true);
   assert.equal(repairEligibility({ failure: failure({ classification: 'UNKNOWN', failing_locator: 'text=Save' }), diagnosis: diagnosis('UNKNOWN') }).eligible, false);
+});
+
+test('Stored repair proposals survive failure selection and invalid patches are ignored', () => {
+  const proposal = storedRepairProposal({
+    old_locator: 'page.locator("#old")',
+    proposed_locator: 'page.get_by_role("button", name="Save")',
+    strategy: 'role-and-name',
+    applied: true,
+    execution_trace: [],
+  });
+  assert.equal(proposal?.proposed_locator, 'page.get_by_role("button", name="Save")');
+  assert.equal(proposal?.applied, true);
+  assert.equal(storedRepairProposal({ old_locator: 'text=Save', proposed_locator: 'text=Save', strategy: 'text' }), null);
+  assert.equal(storedRepairProposal({ old_locator: 'text=Save', proposed_locator: 'text=Save' }), null);
 });
 
 test('Raw error and stack are summarized into actionable labels and relevant frames', () => {

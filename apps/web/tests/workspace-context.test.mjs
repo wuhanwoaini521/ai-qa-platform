@@ -30,19 +30,26 @@ test('reads legacy case and parent run params into the shared context', () => {
 });
 
 test('context updates preserve unrelated view state and replace stale entity IDs', () => {
-  const params = writeWorkspaceContext('?tab=coverage&caseId=old&line=2', {
+  const search = '?tab=coverage&caseId=old&line=2&stage=automation&view=code';
+  const current = readWorkspaceContext(search, 'project-a');
+  const params = writeWorkspaceContext(search, {
+    ...current,
     projectId: 'project-a',
-    requirementId: 'req-a',
-    testCaseId: 'case-a',
-    stage: 'cases',
+    requirementId: 'req-b',
+    testCaseId: 'case-b',
+    file: 'tests/test_case_b.py',
+    lineNumber: undefined,
   });
   assert.equal(params.get('tab'), 'coverage');
-  assert.equal(params.get('requirementId'), 'req-a');
-  assert.equal(params.get('caseId'), 'case-a');
+  assert.equal(params.get('requirementId'), 'req-b');
+  assert.equal(params.get('caseId'), 'case-b');
+  assert.equal(params.get('stage'), 'automation');
+  assert.equal(params.get('view'), 'code');
+  assert.equal(params.get('file'), 'tests/test_case_b.py');
   assert.equal(params.get('line'), null);
 });
 
-test('builds deep links for Workspace, Workflow and Studio with one context', () => {
+test('keeps Studio deep links inside Workspace with the same context', () => {
   const context = {
     projectId: 'project-a',
     requirementId: 'req-a',
@@ -56,8 +63,9 @@ test('builds deep links for Workspace, Workflow and Studio with one context', ()
     returnTo: 'workspace',
   };
   assert.match(buildWorkspaceHref(context), /^\/workspace\/project-a\?/);
-  assert.match(buildWorkflowHref(context), /^\/workflow\?/);
-  assert.match(buildStudioHref(context), /^\/projects\/project-a\/studio\/file\/tests%2Ftest_login.py\?/);
+  assert.match(buildWorkflowHref(context), /^\/workspace\/project-a\?/);
+  assert.equal(new URLSearchParams(buildWorkflowHref(context).split('?')[1]).get('panel'), 'runtime');
+  assert.match(buildStudioHref(context), /^\/workspace\/project-a\?/);
   for (const href of [buildWorkspaceHref(context), buildWorkflowHref(context), buildStudioHref(context)]) {
     const query = new URLSearchParams(href.slice(href.indexOf('?') + 1));
     assert.equal(query.get('requirementId'), 'req-a');
@@ -65,4 +73,17 @@ test('builds deep links for Workspace, Workflow and Studio with one context', ()
     assert.equal(query.get('failureId'), 'failure-a');
     assert.equal(query.get('line'), '28');
   }
+  const studioContext = new URLSearchParams(buildStudioHref(context).split('?')[1]);
+  assert.equal(studioContext.get('view'), 'debug');
+  assert.equal(studioContext.get('file'), 'tests/test_login.py');
+});
+
+test('opens run progress in the Workspace drawer instead of navigating to a second runtime page', () => {
+  const href = buildWorkflowHref({ projectId: 'project-a', taskId: 'task-a' });
+  assert.match(href, /^\/workspace\/project-a\?/);
+  const params = new URLSearchParams(href.split('?')[1]);
+  assert.equal(params.get('taskId'), 'task-a');
+  assert.equal(params.get('view'), 'results');
+  assert.equal(params.get('panel'), 'runtime');
+  assert.equal(buildWorkflowHref({ projectId: 'project-a' }), '/runs/tasks?projectId=project-a');
 });

@@ -59,6 +59,7 @@ export function eventLabelKey(type: string) {
     'step.started': 'eventStepStarted', 'step.completed': 'eventStepCompleted', 'step.failed': 'eventStepFailed',
     'evidence.created': 'eventEvidenceCreated', 'decision.created': 'eventDecisionCreated',
     'run.started': 'eventRunStarted', 'run.completed': 'eventRunCompleted', 'run.failed': 'eventRunFailed',
+    'test.completed': 'eventTestCompleted', 'test.failed': 'eventTestFailed',
     'model.started': 'eventModelStarted', 'model.completed': 'eventModelCompleted', 'validation.failed': 'eventValidationFailed',
     'analysis_started': 'eventAgentUnderstanding', 'candidates_generated': 'eventAgentCandidates',
     'decision_started': 'eventAgentDecision', 'decision_completed': 'eventAgentDecision',
@@ -68,6 +69,9 @@ export function eventLabelKey(type: string) {
     'browser.agent_paused': 'eventBrowserAgentPaused', 'browser.human_takeover': 'eventBrowserHumanTakeover',
     'browser.goal_completed': 'eventBrowserGoalCompleted', 'browser.goal_blocked': 'eventBrowserGoalBlocked',
     'browser.action_blocked': 'eventBrowserActionBlocked', 'browser.loop_detected': 'eventBrowserLoopDetected',
+    'browser.recent_steps': 'eventBrowserStep', 'browser.network_logs': 'eventBrowserNetwork',
+    'browser.console_logs': 'eventBrowserConsole', 'browser.telemetry': 'eventBrowserTelemetry',
+    'browser.session': 'eventBrowserSession',
   };
-  return labels[type] ?? 'unknownEvent';
+  return labels[type] ?? null;
 }

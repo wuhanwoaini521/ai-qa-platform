@@ -3,7 +3,23 @@
   "eyebrow": "Unified Workspace",
   "subtitle": "Analyze requirements, shape cases, automate, run, and recover failures in one project context.",
   "chooseProject": "No project selected",
-  "openWorkflow": "Run details",
+  "openWorkflow": "View progress",
+  "tabs": {
+    "label": "Workspace views",
+    "requirement": "Requirement",
+    "cases": "Cases",
+    "code": "Code",
+    "browser": "Browser",
+    "debug": "Debug",
+    "results": "Results"
+  },
+  "automationViews": {
+    "label": "Automation tools",
+    "code": "Code",
+    "browser": "Browser",
+    "debug": "Debug"
+  },
+  "journey": { "requirement": "Requirement", "cases": "Cases", "automation": "Automation", "result": "Results" },
   "stages": "Workspace stages",
   "stage": {
     "requirement": "Requirement",
@@ -43,6 +59,8 @@
   "retry": "Retry loading",
   "context": {
     "title": "Current context",
+    "hidePanel": "Hide context",
+    "showPanel": "Show context",
     "requirements": "Requirements",
     "cases": "Related cases",
     "automation": "Automation binding",
@@ -60,9 +78,69 @@
     "noRuns": "There are no runs yet.",
     "noFiles": "No workspace files to show."
   },
+  "dock": {
+    "title": "Run Dock",
+    "openControls": "Run controls",
+    "closeControls": "Close run controls",
+    "noCase": "No case selected",
+    "chooseCase": "Choose a case to run",
+    "contextHint": "{{environment}} · {{region}} · {{browser}}",
+    "passed": "passed",
+    "failed": "failed",
+    "failedCount": "{{count}} failed",
+    "progress": "{{completed}} / {{total}} finished",
+    "lastRun": "Latest run",
+    "aiPlanRunning": "AI is planning",
+    "preparing": "Preparing execution",
+    "workers": "{{count}} workers",
+    "workersLabel": "Parallel workers",
+    "environment": "Environment",
+    "region": "Region",
+    "browser": "Browser",
+    "config": "Run config",
+    "aiIndependent": "AI Run previews a plan to analyze requirements, add cases, generate automation, or run tests. Source writes require approval. Regular Run executes existing automation only.",
+    "run": "Run",
+    "aiRun": "AI Run",
+    "aiRunRequirement": "QA Agent: test requirement",
+    "aiGenerateAutomation": "Generate automation",
+    "chooseRequirement": "Choose a requirement",
+    "starting": "Starting…",
+    "open": "View progress",
+    "stop": "Stop",
+    "viewFailure": "View failure",
+    "debug": "Debug",
+    "rerun": "Rerun",
+    "viewResult": "View result",
+    "viewTask": "View task details",
+    "addAutomation": "Set up automation",
+    "runDetails": "Run details",
+    "status": {
+      "idle": "Ready",
+      "preparing": "Preparing",
+      "running": "Running",
+      "failed": "Needs attention",
+      "passed": "Passed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "aiRun": {
+    "title": "AI Run",
+    "description": "AI plans from the selected requirement or case and previews what it will analyze, add, or run. Source writes require approval; execution reuses the platform services.",
+    "close": "Close AI Run panel",
+    "reviewPlan": "Create and review plan",
+    "sharedExecutor": "After approval, a QA task is created and uses the TestRun executor.",
+    "capabilities": {
+      "context": "Uses the selected case, binding, and run config",
+      "plan": "Shows steps and risks before starting",
+      "execute": "Runs the actual bound automation case",
+      "diagnose": "Results, failures, and reruns stay in this Workspace"
+    }
+  },
   "main": {
     "title": "Workspace content",
     "currentStage": "Current stage",
+    "loadingEditor": "Loading code workspace…",
+    "loadingBrowser": "Loading browser recorder…",
     "openCode": "Edit in Studio",
     "manageCases": "Manage cases",
     "noCaseTitle": "No case is linked to this requirement",
@@ -92,6 +170,7 @@
     "risk": {"low": "Low risk", "medium": "Medium risk", "high": "Approval"}
   },
   "inspector": {
+    "tabs": { "context": "Context", "ai": "AI plan", "run": "Run" },
     "title": "Inspector",
     "liveContext": "Live context",
     "requirement": "Requirement analysis",
@@ -123,6 +202,13 @@
     "unbound": "Unbound",
     "openStudio": "Open automation code",
     "resolveFailure": "Resolve this failure in context",
+    "runConfig": "Run config",
+    "browser": "Browser",
+    "artifacts": "View {{count}} artifacts",
+    "decisionTrace": "View AI decision trace",
+    "advancedTrace": "Open full task trace",
+    "aiIdle": "Run AI Run to see its plan and decisions here.",
+    "noRun": "There is no TestRun in this context yet.",
     "nextActionHint": "Start with a requirement or choose an existing case on the left."
   },
   "runtime": {
@@ -141,7 +227,7 @@
     "nextObserve": "Observe the run",
     "noProgress": "Waiting for a task or run",
     "waitingDiscovery": "Waiting for pytest collection",
-    "openWorkflow": "View run details"
+    "openWorkflow": "View execution details"
   },
   "result": {
     "taskSummary": "{{completed}} of {{total}} real steps completed.",

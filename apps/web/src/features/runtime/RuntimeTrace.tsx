@@ -56,7 +56,7 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
               {step?.error && <p className="rt-trace-error">{step.error}</p>}
               {step?.validation_error && <p className="rt-trace-error">{step.validation_error}</p>}
               {provider.length > 0 && <p className="rt-trace-summary-line">{provider.join(' → ')}</p>}
-              <details className="rt-trace-raw-events"><summary>{group.events.length} {t('events')}</summary><ul>{group.events.map((event) => <li key={event.id}><time>{event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '—'}</time><span>{t(eventLabelKey(event.type))}</span><code>{event.type}</code>{event.summary && <small>{event.summary}</small>}</li>)}</ul></details>
+              <details className="rt-trace-raw-events"><summary>{group.events.length} {t('events')}</summary><ul>{group.events.map((event) => { const labelKey = eventLabelKey(event.type); return <li key={event.id}><time>{event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '—'}</time><span>{labelKey ? t(labelKey) : event.title || event.type}</span><code>{event.type}</code>{event.summary && <small>{event.summary}</small>}</li>; })}</ul></details>
             </li>;
           })}
           {invocations.map((call) => <li key={`ai:${call.id}`} className={`rt-trace-group status-${call.status.toLowerCase()}${call.step_id === selectedStepId ? ' is-selected' : ''}`}>

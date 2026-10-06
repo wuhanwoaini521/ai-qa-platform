@@ -6,19 +6,35 @@ import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import { MonacoEditorPane, MonacoEditorInstance } from '../features/automation-studio/components/MonacoEditorPane';
 import { EditorTab } from '../features/automation-studio/types';
-import { AITraceEvent, GitDiffResult, Project, RecorderStep, TestCasePriority } from '../types';
+import { AITraceEvent, GitDiffResult, Project, RecorderStep, TestCasePriority, TestRunCreate } from '../types';
+import { flowStartUrl, isNavigationFrameFresh, normalizeTrustedDomains } from './browserGoalModel';
+import { recorderStepsFromAgent } from './recorderAgentModel';
+import {
+  clearRecorderRunIdempotencyKey,
+  recorderRunConfigFields,
+  recorderRunIdempotencyKey,
+  type RecorderRunConfig,
+} from './recorderRunModel';
 
 type StepAction = RecorderStep['action'];
 type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][]; selection?: { selected_candidate?: RecorderStep['locator']; summary?: RecorderStep['locator_decision'] } | null } | null; message?: string };
+type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; waitingForNavigation: boolean; trustedDomains: string[]; minimumFrameRevision?: number };
 
-const actions: StepAction[] = ['navigate','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
-const labels: Record<StepAction, string> = { navigate:'打开页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
+const actions: StepAction[] = ['navigate','back','scroll','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
+const labels: Record<StepAction, string> = { navigate:'打开页面', back:'返回上一页', scroll:'滚动页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
 const blankDiff: GitDiffResult = { diff: '', changed_files: [] };
 const normalizeBrowserUrl = (value: string): string => {
   const target = value.trim() || 'about:blank';
   return /^(https?:|about:)/i.test(target) ? target : `https://${target}`;
 };
-
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+const normalizedHttpUrl = (value: string): string | null => {
+  try {
+    const parsed = new URL(normalizeBrowserUrl(value));
+    return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password ? parsed.href : null;
+  } catch { return null; }
+};
 const recorderErrorMessage = (error: unknown, targetUrl?: string): string => {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes('ERR_NETWORK_ACCESS_DENIED')) {
@@ -28,7 +44,13 @@ const recorderErrorMessage = (error: unknown, targetUrl?: string): string => {
   return message;
 };
 
-export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: string | null }> = ({ projects, selectedProjectId }) => {
+export const RecorderPage: React.FC<{
+  projects: Project[];
+  selectedProjectId: string | null;
+  embedded?: boolean;
+  onNavigateToRuns?: (runId: string) => void;
+  runConfig?: RecorderRunConfig;
+}> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, runConfig }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedSessionId = searchParams.get('session_id');
@@ -47,6 +69,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const [error, setError] = useState('');
   const [caseName, setCaseName] = useState('录制的浏览器用例');
   const [requirement, setRequirement] = useState('');
+  const [trustedDomainsText, setTrustedDomainsText] = useState('');
   const [filePath, setFilePath] = useState('tests/test_recorded_case.py');
   const [testName, setTestName] = useState('test_recorded_case');
   const [suiteName, setSuiteName] = useState('录制用例');
@@ -56,12 +79,15 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const [scriptGeneration, setScriptGeneration] = useState(0);
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
+  const [pendingAgentGoal, setPendingAgentGoal] = useState<PendingAgentGoal | null>(null);
+  const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number } | null>(null);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
   const [locatorTraceEvents, setLocatorTraceEvents] = useState<AITraceEvent[]>([]);
   const pickTargetStepRef = useRef<string | null>(null);
   const [priority, setPriority] = useState<TestCasePriority>('P2');
   const aiTask = useContextTask(projectId, 'recorder', sessionId);
   const wsRef = useRef<WebSocket | null>(null);
+  const frameRevisionRef = useRef(0);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUrlRef = useRef<string | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
@@ -152,8 +178,10 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
       ws.onclose = (event) => { setSocketState(event.code === 1000 ? '已关闭' : `连接中断 (${event.code})`); };
       ws.onerror = () => setSocketState('连接错误');
       ws.onmessage = (event) => {
+      if (!active) return;
       const data = JSON.parse(event.data) as Frame;
       if (data.type === 'frame') {
+        frameRevisionRef.current += 1;
         setFrame(data);
         if (data.steps) setSteps(data.steps);
         if (data.locator_trace?.length) {
@@ -175,12 +203,18 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
         }
         if (data.url && !pendingUrlRef.current && document.activeElement !== urlInputRef.current) setUrl(data.url);
         if (data.state) setRecording(data.state === 'RECORDING');
+      } else if (data.type === 'navigating') {
+        if (data.url && !pendingUrlRef.current && document.activeElement !== urlInputRef.current) setUrl(data.url);
       } else if (data.type === 'command_success' && data.action === 'navigate') {
         pendingUrlRef.current = null;
         if (data.url) setUrl(data.url);
         setError('');
+        setPendingAgentGoal((pending) => pending?.sessionId === sessionId && pending.waitingForNavigation
+          ? { ...pending, waitingForNavigation: false, minimumFrameRevision: frameRevisionRef.current + 1 }
+          : pending);
       } else if (data.type === 'error' || data.type === 'command_error') {
         if (data.type === 'command_error' && data.url) pendingUrlRef.current = data.url;
+        setPendingAgentGoal((pending) => pending?.sessionId === sessionId ? null : pending);
         setError(recorderErrorMessage(data.message || '浏览器操作失败', data.url));
       }
       };
@@ -191,6 +225,8 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   }, [sessionId]);
 
   useEffect(() => {
+    frameRevisionRef.current = 0;
+    setFrame(null);
     setLocatorTraceEvents([]);
   }, [sessionId]);
 
@@ -245,6 +281,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
     const normalized = normalizeBrowserUrl(target);
     pendingUrlRef.current = normalized;
     setError('');
+    setFrame(null);
     setUrl(normalized); send('navigate', { url: normalized });
   };
 
@@ -290,6 +327,36 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
     finally { setBusy(false); }
   };
 
+  const generateFromAgent = async () => {
+    const task = aiTask.task;
+    const output = browserAgentOutput;
+    if (!sessionId || !task || !output || !canGenerateAgentScript || busy) return;
+    const startUrl = normalizedHttpUrl(String(task.inputs.url ?? ''));
+    if (!startUrl) { setError('Agent 任务缺少有效的起始网址，不能生成脚本。'); return; }
+    const generated = recorderStepsFromAgent(output, startUrl);
+    if (!generated || generated.actionCount === 0) { setError('这次 Agent 执行没有可复用的成功动作，未生成脚本。'); return; }
+
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api.generateRecorderCode(sessionId, {
+        case_name: caseName,
+        file_path: filePath,
+        test_name: testName,
+        steps: generated.steps,
+      });
+      send('replace_steps', { steps: generated.steps });
+      setSteps(generated.steps);
+      setCode(result.code);
+      setOptimization(null);
+      setPreviewMode('raw');
+      setAgentScriptSource({ taskId: task.id, actionCount: generated.actionCount, jevCount: generated.jevCount, assertionCount: generated.assertionCount });
+      setScriptGeneration((current) => current + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  };
+
   const optimize = async () => {
     if (!sessionId || busy || !steps.length) return;
     setBusy(true); setError('');
@@ -310,7 +377,7 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   };
 
   const startAiTask = (type: 'CREATE_TEST' | 'EXPLORE_PAGE') => {
-    if (!projectId || !sessionId) return;
+    if (!projectId || !sessionId || agentTaskRunning) return;
     void aiTask.start({
       type,
       goal: type === 'CREATE_TEST' ? (requirement.trim() || `根据录制步骤生成并验证测试：${caseName}`) : `探索并总结页面：${url}`,
@@ -324,6 +391,45 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
     });
   };
 
+  const startNaturalLanguageFlow = async () => {
+    const goal = requirement.trim();
+    const trustedDomains = normalizeTrustedDomains(trustedDomainsText);
+    if (!projectId) { setError('请先创建或选择项目'); return; }
+    if (goal.length < 8) { setError('请用自然语言描述完整操作流程'); return; }
+    const currentPageUrl = frame?.url && frame.url !== 'about:blank' ? frame.url : url;
+    const startUrl = flowStartUrl(goal, currentPageUrl);
+    if (!startUrl) { setError('请在操作描述中写入起始网址，例如 uniqlo.com'); return; }
+
+    setBusy(true);
+    setError('');
+    setPendingAgentGoal(null);
+    setAgentScriptSource(null);
+    try {
+      if (!sessionId) {
+        setSocketState('连接中');
+        const created = await api.createRecorderSession(projectId, startUrl, steps);
+        setSessionId(created.id);
+        setFrame(null);
+        setUrl(created.url || startUrl);
+        setRecording(false);
+        if (created.navigation_error) {
+          setError(recorderErrorMessage(created.navigation_error, created.requested_url));
+          return;
+        }
+        setPendingAgentGoal({ goal, sessionId: created.id, startUrl, waitingForNavigation: false, trustedDomains });
+        return;
+      }
+      if (!isConnected) throw new Error('浏览器连接尚未就绪，请稍后重试。');
+      const currentUrl = normalizedHttpUrl(currentPageUrl);
+      const needsNavigation = currentUrl !== startUrl;
+      setPendingAgentGoal({ goal, sessionId, startUrl, waitingForNavigation: needsNavigation, trustedDomains });
+      if (needsNavigation) navigateBrowser(startUrl);
+    } catch (cause) {
+      setPendingAgentGoal(null);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  };
+
   const saveAndRun = async () => {
     if (!projectId || !sessionId) return;
     if (!code.trim()) { await generate(); return; }
@@ -333,30 +439,60 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
       if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
       await api.writeWorkspaceFile(projectId, normalizedPath, code);
       const tags = [...new Set([...tagsText.split(',').map((tag)=>tag.trim()).filter(Boolean), ...(suiteName.trim() ? [`suite:${suiteName.trim()}`] : [])])];
-      const createdCase = await api.createTestCase({ project_id: projectId, title: caseName, steps: steps.map((step) => step.description || labels[step.action]), expected_result: '所有录制步骤及断言执行通过', priority, automation_status: 'AUTOMATED', tags });
       const normalizedTestName = testName.replace(/\W+/g, '_').replace(/^_+|_+$/g, '') || 'test_recorded_case';
       const safeTestName = normalizedTestName.startsWith('test_') ? normalizedTestName : `test_${normalizedTestName}`;
-      const nodeid = `${normalizedPath}::${safeTestName}`;
-      await api.saveAutomationBinding(createdCase.id, { test_case_id: createdCase.id, workspace_id: projectId, nodeid, file_path: normalizedPath, framework: 'playwright_python', status: 'ACTIVE' });
+      const savedCase = await api.saveRecorderCase(sessionId, {
+        test_case: {
+          project_id: projectId,
+          title: caseName,
+          steps: steps.map((step) => step.description || labels[step.action]),
+          expected_result: '所有录制步骤及断言执行通过',
+          priority,
+          automation_status: 'AUTOMATED',
+          tags,
+        },
+        file_path: normalizedPath,
+        test_name: safeTestName,
+      });
       const markers = markersText.split(',').map((marker)=>marker.trim()).filter(Boolean);
-      const run = await api.createTestRun({ project_id: projectId, workspace_id: projectId, nodeids: [nodeid], markers, runner_type: 'LOCAL' });
-      navigate(`/runs/${run.id}`);
+      const runRequest: Omit<TestRunCreate, 'idempotency_key'> = {
+        project_id: projectId,
+        workspace_id: projectId,
+        nodeids: [savedCase.nodeid],
+        markers,
+        runner_type: 'LOCAL',
+        requested_by: `Recorder · ${caseName}`,
+        ...recorderRunConfigFields(runConfig),
+      };
+      const idempotencyScope = `${projectId}:${savedCase.nodeid}`;
+      const idempotencyKey = recorderRunIdempotencyKey(idempotencyScope, runRequest);
+      const run = await api.createTestRun({ ...runRequest, idempotency_key: idempotencyKey });
+      clearRecorderRunIdempotencyKey(idempotencyScope);
+      if (onNavigateToRuns) onNavigateToRuns(run.id);
+      else navigate(`/runs/${run.id}`);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
 
   const actionInputs = (step: RecorderStep, index: number) => {
-    const locatorRequired = !['navigate','wait','assert_url','assert_title'].includes(step.action);
+    const locatorRequired = !['navigate','back','scroll','wait','assert_url','assert_title'].includes(step.action);
     const locatorValue = step.locator?.value ?? '';
     const parameter = step.action === 'navigate' ? step.url ?? '' : step.action === 'press' ? step.key ?? '' : step.value ?? '';
     return <>
       <input className="recorder-step-field recorder-step-locator" aria-label="步骤定位器" value={locatorValue} placeholder={locatorRequired ? '定位器' : '无定位器'} disabled={!locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
-      <input className="recorder-step-field recorder-step-parameter" aria-label="步骤参数" value={parameter} placeholder={step.action==='wait'?'毫秒':step.action==='assert_count'?'数量':'参数 / 断言值'} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
+      <input className="recorder-step-field recorder-step-parameter" aria-label="步骤参数" value={parameter} placeholder={step.action==='wait'?'毫秒':step.action==='scroll'?'方向（up/down）':step.action==='assert_count'?'数量':'参数 / 断言值'} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
     </>;
   };
 
   const projectName = projects.find((project) => project.id === projectId)?.name;
   const isConnected = socketState === '已连接';
+  const browserAgentOutput = asRecord(aiTask.task?.plan.find((step) => step.key === 'browser_agent')?.outputs);
+  const canGenerateAgentScript = aiTask.task?.type === 'EXPLORE_PAGE'
+    && aiTask.task.status === 'COMPLETED'
+    && browserAgentOutput?.verified === true
+    && browserAgentOutput.kind === 'ai_jev_browser_agent'
+    && Array.isArray(browserAgentOutput.actions);
+  const agentTaskRunning = Boolean(aiTask.task && !['COMPLETED','FAILED','BLOCKED','CANCELLED'].includes(aiTask.task.status));
   const locatorDecisionMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'decision_completed')?.metadata ?? {};
   const locatorVerificationMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'verification_completed')?.metadata ?? {};
   const verificationFacts = (['unique', 'visible', 'enabled', 'editable', 'clickable'] as const)
@@ -366,8 +502,30 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
   const locatorModel = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.model === 'string' ? locatorDecisionMetadata.model : '';
   const locatorLatency = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.latency_ms === 'number' ? `${locatorDecisionMetadata.latency_ms.toFixed(1)} ms` : '';
 
+  useEffect(() => {
+    const pending = pendingAgentGoal;
+    if (!pending || pending.sessionId !== sessionId || pending.waitingForNavigation || !isNavigationFrameFresh(frameRevisionRef.current, pending.minimumFrameRevision) || socketState !== '已连接' || !projectId || aiTask.busy || frame?.type !== 'frame') return;
+    if (!/^https?:\/\//i.test(frame.url || '')) {
+      setPendingAgentGoal(null);
+      setError(`浏览器已连接，但没有加载出可操作的网页（${frame.url || '空白页面'}）。请检查目标网址和 API 主机的网络/代理后重试。`);
+      return;
+    }
+    setPendingAgentGoal(null);
+    void aiTask.start({
+      type: 'EXPLORE_PAGE',
+      goal: pending.goal,
+      project_id: projectId,
+      inputs: {
+        url: pending.startUrl,
+        recorder_session_id: pending.sessionId,
+        require_jev_decisions: true,
+        ...(pending.trustedDomains.length ? { trusted_domains: pending.trustedDomains } : {}),
+      },
+    });
+  }, [pendingAgentGoal, sessionId, socketState, projectId, aiTask.busy, aiTask.start, frame]);
+
   return (
-    <div className="recorder-page">
+    <div className={`recorder-page${embedded ? ' is-embedded' : ''}`}>
       <header className="recorder-page-header">
         <div className="recorder-page-heading">
           <h2><MousePointer2 size={20} aria-hidden="true" /> 浏览器录制器</h2>
@@ -382,25 +540,25 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
           <button
             type="button"
             className={`btn ${recording ? 'btn-secondary' : 'btn-primary'}`}
-            disabled={busy || !sessionId}
+            disabled={busy || agentTaskRunning || !sessionId}
             onClick={() => { const next = !recording; setRecording(next); send(recording ? 'pause' : 'start'); }}
           >
             {recording ? <CirclePause size={16} /> : <CirclePlay size={16} />}
             {recording ? '暂停录制' : '开始录制'}
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!sessionId} onClick={() => { send('stop'); setRecording(false); }}>
+          <button type="button" className="btn btn-secondary" disabled={!sessionId || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
             <Square size={15} /> 停止
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!sessionId || busy} onClick={generate}>
+          <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || agentTaskRunning} onClick={generate}>
             <Code2 size={16} /> {busy ? '正在处理…' : code ? '重新生成脚本' : '生成脚本'}
           </button>
-          <button className="btn btn-primary" disabled={!sessionId || !steps.length || busy || aiTask.busy} onClick={() => startAiTask('CREATE_TEST')}>
-            <Code2 size={16} /> 生成自动化测试
+          <button className="btn btn-primary" disabled={!sessionId || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('CREATE_TEST')}>
+            <Code2 size={16} /> 录制步骤生成并验证测试
           </button>
-          <button className="btn btn-secondary" disabled={!sessionId || busy || aiTask.busy} onClick={() => startAiTask('EXPLORE_PAGE')}>
+          <button className="btn btn-secondary" disabled={!sessionId || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('EXPLORE_PAGE')}>
             AI 探索当前页
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || !code} onClick={saveAndRun}>
+          <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
             <Save size={16} /> 保存为 Case 并运行
           </button>
         </div>
@@ -431,12 +589,52 @@ export const RecorderPage: React.FC<{ projects: Project[]; selectedProjectId: st
         </section>
       )}
 
-      {sessionId && (
-        <label className="recorder-requirement">
-          <span>测试目标 / Requirement</span>
-          <input value={requirement} onChange={(event) => setRequirement(event.target.value)} placeholder="可选；留空时使用用例名称" />
-        </label>
-      )}
+      <section className="recorder-natural-flow" aria-labelledby="recorder-natural-flow-title">
+        <div className="recorder-natural-flow-prompt">
+          <label id="recorder-natural-flow-title" htmlFor="recorder-natural-flow-input">自然语言操作流程</label>
+          <textarea
+            id="recorder-natural-flow-input"
+            value={requirement}
+            onChange={(event) => setRequirement(event.target.value)}
+            placeholder="例如：打开浏览器并访问 uniqlo.com，选择裤子分类，进入第一个商品详情页，然后加入购物车。"
+            rows={3}
+          />
+          <details className="recorder-trusted-domains">
+            <summary>官网验证域名（可选）</summary>
+            <input
+              aria-label="官网验证域名"
+              value={trustedDomainsText}
+              onChange={(event) => setTrustedDomainsText(event.target.value)}
+              placeholder="例如 selenium.dev；多个域名用逗号分隔"
+            />
+            <small>用于确认“官网”目标。留空时 Agent 不会把搜索结果中的品牌词当作官网证明。</small>
+          </details>
+        </div>
+        <div className="recorder-natural-flow-actions">
+          <p>AI 根据实时页面提出候选；多个安全动作由 Jev 选择，唯一安全候选直接执行。脚本只收录已执行且可复用的操作，页面动作必须有验证过的定位器，并附加页面证据断言。</p>
+          <div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!projectId || !requirement.trim() || busy || aiTask.busy || agentTaskRunning || !!pendingAgentGoal || (!sessionId && restoreCheckedProjectId !== projectId) || (!!sessionId && !isConnected)}
+              onClick={() => void startNaturalLanguageFlow()}
+            >
+              <CirclePlay size={15} aria-hidden="true" />
+              {pendingAgentGoal || aiTask.busy || agentTaskRunning ? 'AI + Jev 正在执行…' : 'AI + Jev 执行流程'}
+            </button>
+            {canGenerateAgentScript && (
+              <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void generateFromAgent()}>
+                <Code2 size={15} aria-hidden="true" /> {busy ? '正在生成脚本…' : '从已验证过程生成脚本'}
+              </button>
+            )}
+          </div>
+          {agentScriptSource && (
+            <small role="status">
+              脚本来源：{agentScriptSource.actionCount} 个成功操作 · {agentScriptSource.jevCount} 次 Jev 决策 · {agentScriptSource.assertionCount} 条页面断言。保存后仍需运行验证。
+            </small>
+          )}
+        </div>
+      </section>
 
       <ContextTaskProgress task={aiTask.task} error={aiTask.error} />
 

@@ -2966,6 +2966,12 @@ button, input, select, textarea {
 .failure-primary-action { display: flex; width: 100%; justify-content: center; gap: 8px; margin-top: 6px; min-height: 40px; }
 .failure-action-reason, .failure-analysis-hint { margin: 7px 0 0; color: var(--ink-muted); font-size: 11px; line-height: 1.45; }
 .failure-action-reason { color: var(--accent-amber); }
+.failure-manual-next-step { display: grid; gap: 8px; margin-top: 6px; }
+.failure-manual-next-step > p { margin: 0; font-size: 11px; line-height: 1.45; }
+.failure-manual-next-step > .failure-action-reason { color: var(--accent-amber); }
+.failure-manual-next-step-copy { color: var(--ink-muted); }
+.failure-manual-next-step-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.failure-manual-next-step-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; }
 .failure-verification { margin-top: 14px; }
 .failure-verification h3 { margin: 0 0 7px; color: var(--ink-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .failure-verification ol { display: grid; grid-template-columns: repeat(6, minmax(118px, 1fr)); gap: 14px; overflow-x: auto; list-style: none; margin: 0; padding: 0 0 5px; }
@@ -3029,6 +3035,24 @@ button, input, select, textarea {
 .failure-analysis-timeline button span { font-size: 11px; }
 .failure-workflow-live-events { margin: 10px 0; font-size: 11px; }
 .failure-workflow-live-events > summary { cursor: pointer; color: var(--ui-primary-strong); }
+.failure-workflow-result { margin-top: 12px; padding: 12px; border: 1px solid var(--ui-line); border-radius: var(--ui-r-sm); background: var(--ui-surface); }
+.failure-workflow-result-heading, .failure-workflow-result-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.failure-workflow-result-heading strong { color: var(--ui-ink); font-size: 13px; }
+.failure-workflow-result-heading > span { color: var(--ui-ink-muted); font-size: 11px; }
+.failure-workflow-result-heading > span.is-complete { color: var(--accent-green); }
+.failure-workflow-result-heading > span.is-running { color: var(--accent-blue); }
+.failure-workflow-result-block { margin-top: 10px; color: var(--ui-ink); font-size: 12px; line-height: 1.55; }
+.failure-workflow-result-block > span { color: var(--ui-ink-muted); font-size: 11px; font-weight: 600; }
+.failure-workflow-result-block p { margin: 4px 0; overflow-wrap: anywhere; }
+.failure-workflow-result-block ol { margin: 5px 0 0; padding-left: 20px; }
+.failure-workflow-result-block li + li { margin-top: 4px; }
+.failure-workflow-observed-locator { color: var(--accent-green); }
+.failure-workflow-current-stage, .failure-workflow-fallback-note { margin: 8px 0 0; color: var(--ui-ink-muted); font-size: 11px; }
+.failure-workflow-result-status { justify-content: flex-start; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ui-line); color: var(--ui-ink-muted); font-size: 11px; }
+.failure-workflow-original-diagnosis { margin-top: 9px; color: var(--ui-ink-muted); font-size: 11px; }
+.failure-workflow-original-diagnosis > summary { cursor: pointer; }
+.failure-workflow-original-diagnosis p { overflow-wrap: anywhere; line-height: 1.5; }
+.failure-workflow-original-diagnosis ol { padding-left: 20px; line-height: 1.5; }
 .failure-diagnosis-card .card-header { align-items: center; }
 .failure-diagnosis-confidence { color: var(--accent-blue); font-size: 11px; font-weight: 700; }
 .failure-diagnosis-warning { margin: 0 0 10px; padding: 8px 10px; border-radius: var(--r-xs); background: var(--accent-amber-soft); color: var(--accent-amber); font-size: 11px; }
@@ -3039,6 +3063,11 @@ button, input, select, textarea {
 .failure-diagnosis-grid dt { margin-bottom: 5px; color: var(--ink-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .failure-diagnosis-grid dd { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .failure-diagnosis-grid ul { margin: 0; padding-left: 16px; }
+.failure-diagnosis-next-step { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--r-xs); background: var(--surface-inset); }
+.failure-diagnosis-next-step > div { flex: 1 1 280px; min-width: 0; }
+.failure-diagnosis-next-step strong { color: var(--ink); font-size: 12px; }
+.failure-diagnosis-next-step p, .failure-diagnosis-next-step small { display: block; margin: 4px 0 0; color: var(--ink-muted); font-size: 11px; line-height: 1.5; }
+.failure-diagnosis-next-step button { min-height: 38px; }
 .failure-diagnosis-provider { margin: 10px 0 0; color: var(--ink-muted); font-size: 10px; }
 .failure-repair-unavailable .card-body { color: var(--ink-muted); font-size: 11px; line-height: 1.5; }
 .failure-repair-unavailable .card-body strong { color: var(--ink); }
@@ -3127,21 +3156,52 @@ button, input, select, textarea {
 
 .recorder-actions .btn { min-height: 34px; padding: 6px 10px; font-size: 12px; }
 
-.recorder-requirement {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 9px 12px;
+.recorder-natural-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--ui-line);
   border-radius: var(--ui-r-sm);
   background: var(--ui-surface-raised);
-  color: var(--ui-ink-soft);
+  color: var(--ui-ink);
+}
+
+.recorder-natural-flow-prompt {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
 }
 
-.recorder-requirement input { flex: 1 1 280px; }
+.recorder-natural-flow-prompt textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.recorder-trusted-domains { display: grid; gap: 6px; color: var(--ui-ink-soft); font-size: 11px; font-weight: 500; }
+.recorder-trusted-domains input { width: 100%; min-height: 32px; }
+.recorder-trusted-domains small { line-height: 1.45; }
+
+.recorder-natural-flow-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--ui-ink-soft);
+  font-size: 11px;
+}
+
+.recorder-natural-flow-actions p,
+.recorder-natural-flow-actions small { margin: 0; line-height: 1.5; }
+.recorder-natural-flow-actions > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.recorder-natural-flow-actions small { color: var(--ui-success-strong, var(--ui-primary-strong)); }
 
 .recorder-urlbar {
   display: flex;
@@ -3357,7 +3417,7 @@ button, input, select, textarea {
   gap: 6px;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
 }
 
 .recorder-step-row {
@@ -3518,6 +3578,7 @@ button, input, select, textarea {
   .recorder-page { gap: 10px; }
   .recorder-actions { gap: 6px; }
   .recorder-actions .btn { flex: 1 1 auto; }
+  .recorder-natural-flow { grid-template-columns: minmax(0, 1fr); }
   .recorder-urlbar { flex-wrap: wrap; }
   .recorder-urlbar .recorder-url-input { flex-basis: 100%; }
   .recorder-urlbar > button:last-child { flex: 1 1 auto; }
@@ -4267,3 +4328,21 @@ button, input, select, textarea {
 }
 .sidebar-platform summary { cursor: pointer; padding: 10px 12px; margin: 0; }
 .sidebar-platform summary:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+
+.lc-studio-toolbar { justify-content: space-between; gap: 12px; }
+.lc-studio-breadcrumb { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text-muted); }
+.lc-studio-breadcrumb a:not(.btn) { color: inherit; text-decoration: none; }
+.lc-studio-tools { position: relative; margin-left: auto; }
+.lc-studio-tools > summary { display: inline-flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; }
+.lc-studio-tools > summary::-webkit-details-marker { display: none; }
+.lc-studio-tools > summary:focus-visible { outline: 2px solid var(--ui-indigo); outline-offset: 2px; }
+.lc-studio-tools-menu { position: absolute; z-index: 45; top: calc(100% + 6px); right: 0; display: grid; width: max-content; min-width: 230px; gap: 3px; padding: 6px; border: 1px solid var(--ui-line); border-radius: var(--r-sm); background: var(--ui-surface-raised); box-shadow: 0 12px 32px #10182d24; }
+.lc-studio-tools-menu button { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; min-height: 36px; padding: 7px 9px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-main); text-align: left; font: inherit; cursor: pointer; }
+.lc-studio-tools-menu button:hover, .lc-studio-tools-menu button:focus-visible { background: var(--ui-surface-soft); outline: none; }
+.lc-studio-tools-menu button[aria-pressed='true'] { color: var(--ui-indigo-strong); background: var(--ui-indigo-soft); }
+.lc-studio-tools-menu button span { color: var(--text-muted); font-size: 11px; }
+@media (max-width: 640px) {
+  .lc-studio-toolbar { padding: 8px 10px; }
+  .lc-studio-breadcrumb { gap: 6px; font-size: 12px; }
+  .lc-studio-tools-menu { position: fixed; top: auto; right: 10px; width: min(280px, calc(100vw - 20px)); }
+}

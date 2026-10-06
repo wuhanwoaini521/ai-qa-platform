@@ -1,61 +1,92 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, ArrowUpRight, FileCode2, GitBranch, Play, Plus, Sparkles, Workflow } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Sparkles, Workflow, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useProjectScope, useRouteProjectScope } from '../../app/ProjectScope';
 import {
-  buildStudioHref,
   buildWorkspaceHref,
-  buildWorkflowHref,
   readWorkspaceContext,
   writeWorkspaceContext,
   type WorkspaceContext,
   type WorkspaceStage,
+  type WorkspaceView,
 } from '../../app/workspaceContext';
 import { RequirementsPage } from '../requirements/RequirementsPage';
 import { TestCasesPage } from '../test-cases/TestCasesPage';
 import { FailuresPage } from '../../pages/FailuresPage';
 import { useRunStore } from '../runs/useRunStore';
-import { RuntimeMiniBar } from '../runtime/RuntimeMiniBar';
 import { useRuntimeSnapshot } from '../runtime/useRuntimeSnapshot';
-import type { AgentGoalPreview, AgentTask, FailureRecord, FileNode, Project, Requirement, TestCase, TestRun } from '../../types';
-import type { RuntimeEvent } from '../../types/runtime';
+import { RuntimeDetail } from '../runtime/RuntimeDetail';
+import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
+import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget } from './workspaceRunModel';
+import type { AgentGoalPreview, AgentTask, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
 import { runtimeActive } from '../runtime/runtimeModel';
-import { RuntimeTaskActions } from '../runtime/RuntimeTaskActions';
 import './workspace.css';
 
-const stages: WorkspaceStage[] = ['requirement', 'cases', 'automation', 'result', 'failure'];
+const AutomationStudioPage = lazy(() => import('../automation-studio/AutomationStudioPage').then((module) => ({ default: module.AutomationStudioPage })));
+const RecorderPage = lazy(() => import('../../pages/RecorderPage').then((module) => ({ default: module.RecorderPage })));
 
-function flattenFiles(nodes: FileNode[], output: FileNode[] = []): FileNode[] {
-  for (const node of nodes) {
-    if (node.type === 'file') output.push(node);
-    if (node.children?.length) flattenFiles(node.children, output);
-  }
-  return output;
-}
+const workspaceStages: { stage: WorkspaceStage; view: WorkspaceView }[] = [
+  { stage: 'requirement', view: 'requirement' },
+  { stage: 'cases', view: 'cases' },
+  { stage: 'automation', view: 'code' },
+  { stage: 'result', view: 'results' },
+];
+const automationViews: WorkspaceView[] = ['code', 'browser', 'debug'];
+const stageForView: Record<WorkspaceView, WorkspaceStage> = {
+  requirement: 'requirement',
+  cases: 'cases',
+  code: 'automation',
+  browser: 'automation',
+  debug: 'automation',
+  results: 'result',
+};
 
 export function WorkspacePage() {
   const { t } = useTranslation('workspace');
   const { projectId: routeProjectId } = useParams();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
   useRouteProjectScope(routeProjectId);
   const projectId = routeProjectId ?? searchParams.get('projectId') ?? selectedProjectId ?? '';
   const context = readWorkspaceContext(searchParams, projectId);
-  const stage = context.stage ?? 'requirement';
-  const runLive = useRunStore(context.runId ?? null);
+  const fallbackStage = context.stage ?? 'requirement';
+  const view = context.view ?? (fallbackStage === 'automation' ? 'code' : fallbackStage === 'result' || fallbackStage === 'failure' ? 'results' : fallbackStage);
+  const stage = context.stage ?? stageForView[view];
   const runtimeKind = context.taskId ? 'task' : 'run';
   const runtimeId = context.taskId ?? context.runId ?? '';
   const runtime = useRuntimeSnapshot(runtimeKind, runtimeId);
+  const taskRunId = runtime.snapshot?.kind === 'task'
+    ? [...runtime.snapshot.runs].reverse().find((item) => item.task_id === context.taskId)?.id ?? null
+    : null;
+  const activeRunId = context.runId ?? taskRunId;
+  const runLive = useRunStore(activeRunId);
+  const [runConfig, setRunConfig] = useState<WorkspaceRunConfig>({
+    environment: 'staging',
+    region: 'JP',
+    browser: 'chromium',
+    workers: 1,
+  });
+  const [runBusy, setRunBusy] = useState(false);
+  const [runError, setRunError] = useState('');
+  const [aiRunOpen, setAiRunOpen] = useState(false);
+  const [showRunPanel, setShowRunPanel] = useState(false);
+  const [runtimePanelKind, setRuntimePanelKind] = useState<'task' | 'run'>('run');
+  const [showInspector, setShowInspector] = useState(false);
+  const [showWorkspaceContext, setShowWorkspaceContext] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<'context' | 'ai' | 'run'>('context');
+  const inspectorTriggerRef = useRef<HTMLButtonElement>(null);
+  const inspectorDrawerRef = useRef<HTMLElement>(null);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [cases, setCases] = useState<TestCase[]>([]);
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [failures, setFailures] = useState<FailureRecord[]>([]);
-  const [files, setFiles] = useState<FileNode[]>([]);
-  const [binding, setBinding] = useState<Awaited<ReturnType<typeof api.getAutomationBinding>>>(null);
+  const [bindingRecord, setBindingRecord] = useState<{
+    caseId: string;
+    binding: Awaited<ReturnType<typeof api.getAutomationBinding>>;
+  } | null>(null);
   const [task, setTask] = useState<AgentTask | null>(null);
   const [loadError, setLoadError] = useState('');
   const [contextDataLoaded, setContextDataLoaded] = useState(false);
@@ -67,14 +98,58 @@ export function WorkspacePage() {
   const [goalBusy, setGoalBusy] = useState(false);
   const [goalError, setGoalError] = useState('');
   const goalKey = useRef('');
+  const binding = bindingForSelectedCase(bindingRecord, context.testCaseId);
 
   const isAnalysisTask = runtime.snapshot?.task?.type === 'ANALYZE_REQUIREMENT';
-  const analysisProgressEvent: RuntimeEvent | null = isAnalysisTask
-    ? runtime.snapshot?.events.filter((event) => event.type === 'workflow.step').at(-1) ?? null
-    : null;
   const analysisRunning = analysisStarting || Boolean(
     isAnalysisTask && runtime.snapshot && runtimeActive(runtime.snapshot.status),
   );
+
+  useEffect(() => {
+    if (!showInspector) return;
+    const drawer = inspectorDrawerRef.current;
+    const focusable = () => drawer?.querySelectorAll<HTMLElement>(
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? [];
+    const first = focusable()[0];
+    first?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowInspector(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        return;
+      }
+      const active = document.activeElement;
+      if (event.shiftKey && (active === items[0] || !drawer?.contains(active))) {
+        event.preventDefault();
+        items[items.length - 1].focus();
+      } else if (!event.shiftKey && (active === items[items.length - 1] || !drawer?.contains(active))) {
+        event.preventDefault();
+        items[0].focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      inspectorTriggerRef.current?.focus();
+    };
+  }, [showInspector]);
+
+  useEffect(() => {
+    if (searchParams.get('panel') !== 'runtime' || (!context.taskId && !context.runId)) return;
+    setRuntimePanelKind(context.taskId ? 'task' : 'run');
+    setShowRunPanel(true);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('panel');
+      return next;
+    }, { replace: true });
+  }, [context.taskId, context.runId, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (projectId && selectedProjectId !== projectId) selectProject(projectId);
@@ -95,14 +170,12 @@ export function WorkspacePage() {
       api.getTestCases(projectId),
       api.getTestRuns(projectId, 8),
       api.getFailures(projectId, 8),
-      api.getWorkspaceFiles(projectId),
-    ]).then(([nextRequirements, nextCases, nextRuns, nextFailures, nextFiles]) => {
+    ]).then(([nextRequirements, nextCases, nextRuns, nextFailures]) => {
       if (!active) return;
       setRequirements(nextRequirements);
       setCases(nextCases);
       setRuns(nextRuns);
       setFailures(nextFailures);
-      setFiles(nextFiles);
       setContextDataLoaded(true);
     }).catch((reason: unknown) => {
       if (active) setLoadError(reason instanceof Error ? reason.message : String(reason));
@@ -121,13 +194,13 @@ export function WorkspacePage() {
   useEffect(() => {
     const selectedCase = context.testCaseId;
     if (!selectedCase) {
-      setBinding(null);
+      setBindingRecord(null);
       return;
     }
     let active = true;
     void api.getAutomationBinding(selectedCase).then((value) => {
-      if (active) setBinding(value);
-    }).catch(() => { if (active) setBinding(null); });
+      if (active) setBindingRecord({ caseId: selectedCase, binding: value });
+    }).catch(() => { if (active) setBindingRecord({ caseId: selectedCase, binding: null }); });
     return () => { active = false; };
   }, [context.testCaseId]);
 
@@ -154,30 +227,38 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (!projectId || !contextDataLoaded) return;
-    const requirementId = requirements.some((item) => item.id === context.requirementId)
-      ? context.requirementId
-      : requirements[0]?.id;
-    const selectedCaseExists = cases.some((item) => item.id === context.testCaseId);
     const selectedCase = cases.find((item) => item.id === context.testCaseId);
-    const relatedCase = selectedCaseExists
+    const selectedCaseRequirementId = selectedCase?.requirement_id;
+    const requirementId = selectedCaseRequirementId && requirements.some((item) => item.id === selectedCaseRequirementId)
+      ? selectedCaseRequirementId
+      : requirements.some((item) => item.id === context.requirementId)
+        ? context.requirementId
+        : requirements[0]?.id;
+    const relatedCase = selectedCase
       ? undefined
       : cases.find((item) => item.requirement_id === requirementId);
     const nextCase = selectedCase ?? relatedCase;
     if (
       requirementId !== context.requirementId ||
       relatedCase ||
-      (context.testCaseId && !selectedCaseExists) ||
-      context.testDesignId !== (nextCase?.test_design_id ?? undefined)
+      context.testCaseId !== nextCase?.id ||
+      context.testDesignId !== (nextCase?.test_design_id ?? undefined) ||
+      context.automationBindingId !== (nextCase?.binding?.id ?? undefined) ||
+      context.nodeId !== (nextCase?.binding?.nodeid ?? undefined)
     ) {
       updateContext({
         requirementId,
         testCaseId: nextCase?.id,
         testDesignId: nextCase?.test_design_id ?? undefined,
+        automationBindingId: nextCase?.binding?.id,
+        file: nextCase?.binding?.file_path,
+        lineNumber: undefined,
+        nodeId: nextCase?.binding?.nodeid,
         stage: context.stage ?? 'requirement',
       }, true);
     }
     // URL remains the source of truth after the first actual data load.
-  }, [projectId, contextDataLoaded, requirements, cases, context.requirementId, context.testCaseId]);
+  }, [projectId, contextDataLoaded, requirements, cases, context.requirementId, context.testCaseId, context.testDesignId, context.automationBindingId, context.nodeId, context.stage]);
 
   function updateContext(patch: Partial<WorkspaceContext>, replace = false) {
     setSearchParams((current) => writeWorkspaceContext(current, {
@@ -187,23 +268,56 @@ export function WorkspacePage() {
     }), { replace });
   }
 
+  const setView = (next: WorkspaceView) => {
+    setSearchParams((current) => {
+      const params = writeWorkspaceContext(current, {
+        ...readWorkspaceContext(current, projectId),
+        projectId: projectId || undefined,
+        view: next,
+        stage: stageForView[next],
+      });
+      if (next === 'code' || next === 'debug') params.delete('preset');
+      return params;
+    });
+  };
+
   const selectedRequirement = requirements.find((item) => item.id === context.requirementId) ?? null;
   const relatedCases = useMemo(
     () => cases.filter((item) => !context.requirementId || item.requirement_id === context.requirementId),
     [cases, context.requirementId],
   );
   const selectedCase = cases.find((item) => item.id === context.testCaseId) ?? null;
-  const selectedCaseOnly = ['cases', 'automation'].includes(stage)
-    && Boolean(context.testCaseId)
-    && !/(需求|requirement)/i.test(goalText);
-  const goalInputs: Record<string, unknown> = {
-    ...(context.failureId ? { failure_id: context.failureId } : {}),
-    ...(!context.failureId && selectedCaseOnly && context.testCaseId ? { test_case_id: context.testCaseId } : {}),
-    ...(!context.failureId && !selectedCaseOnly && context.requirementId ? { requirement_id: context.requirementId } : {}),
-    ...(!context.failureId && !context.requirementId && context.testCaseId ? { test_case_id: context.testCaseId } : {}),
-    ...(context.nodeId ? { nodeids: [context.nodeId] } : selectedCase?.binding?.nodeid ? { nodeids: [selectedCase.binding.nodeid] } : {}),
-    ...(context.runId ? { run_id: context.runId } : {}),
-    ...(context.file ?? binding?.file_path ? { file_path: context.file ?? binding?.file_path } : {}),
+  const automationFilePath = binding?.file_path ?? selectedCase?.binding?.file_path ?? null;
+  const automationSetup = view === 'code' && stage === 'automation'
+    ? selectedCase ? automationFilePath ? null : 'unbound' : context.requirementId ? 'no-case' : null
+    : null;
+  const automationSetupKey = automationSetup === 'unbound' ? selectedCase?.id
+    : automationSetup === 'no-case' ? context.requirementId
+      : undefined;
+  const goalTarget = workspaceGoalTarget(goalText, context);
+  const goalInputs: Record<string, unknown> = aiRunOpen && goalTarget === 'case' && selectedCase && binding?.status === 'ACTIVE' && binding.nodeid
+    ? {
+      test_case_id: selectedCase.id,
+      nodeids: [binding.nodeid],
+      browser: runConfig.browser,
+      region: runConfig.region,
+      environment: { QA_ENVIRONMENT: runConfig.environment, QA_REGION: runConfig.region },
+      parallel_workers: runConfig.workers,
+      file_path: binding.file_path,
+    }
+    : {
+    ...(goalTarget === 'failure' && context.failureId ? { failure_id: context.failureId } : {}),
+    ...(goalTarget === 'requirement' && context.requirementId ? { requirement_id: context.requirementId } : {}),
+    ...(goalTarget === 'case' && context.testCaseId ? { test_case_id: context.testCaseId } : {}),
+    ...(goalTarget === 'case' && context.nodeId ? { nodeids: [context.nodeId] } : goalTarget === 'case' && selectedCase?.binding?.nodeid ? { nodeids: [selectedCase.binding.nodeid] } : {}),
+    ...(goalTarget !== 'project' && context.runId ? { run_id: context.runId } : {}),
+    ...(goalTarget === 'case' || goalTarget === 'failure' ? (context.file ?? binding?.file_path ? { file_path: context.file ?? binding?.file_path } : {}) : {}),
+    ...(goalTarget !== 'failure' ? {
+      browser: runConfig.browser,
+      region: runConfig.region,
+      environment: { QA_ENVIRONMENT: runConfig.environment, QA_REGION: runConfig.region },
+      parallel_workers: runConfig.workers,
+    } : {}),
   };
   const goalRequest = {
     type: 'QA_GOAL' as const,
@@ -223,65 +337,42 @@ export function WorkspacePage() {
     setGoalPreviewKey('');
     setGoalError('');
     goalKey.current = '';
-    if (context.failureId) setGoalText('分析并修复这个失败');
-    else if (['cases', 'automation'].includes(stage) && context.testCaseId) setGoalText('生成并验证当前用例自动化');
-    else if (context.requirementId) setGoalText('帮我把这个需求测试完整。可以自动完成低风险步骤；需要修改代码时让我确认。');
-    else setGoalText('检查这个项目目前还有什么明显测试问题');
-  }, [projectId, context.failureId, context.requirementId, context.testCaseId, context.nodeId, context.runId, context.file, binding?.file_path, selectedCase?.binding?.nodeid, stage]);
+    setGoalText(defaultWorkspaceGoal({
+      failureId: context.failureId,
+      requirementId: context.requirementId,
+      testCaseId: context.testCaseId,
+      stage,
+      hasAutomation: binding?.status === 'ACTIVE' && Boolean(binding.nodeid),
+    }));
+  }, [projectId, context.failureId, context.requirementId, context.testCaseId, context.nodeId, context.runId, context.file, binding?.file_path, binding?.nodeid, binding?.status, selectedCase?.binding?.nodeid, stage]);
   const requirementAnalysis = analysisRunning ? null : selectedRequirement?.qa_model?.analysis;
   const latestAnalysisRecord = selectedRequirement?.qa_model?.history.at(-1);
-  const latestAnalysisStage = latestAnalysisRecord?.stages.at(-1);
-  const analysisEvidence = isAnalysisTask
-    ? runtime.snapshot?.evidence.filter((item) => item.type === 'Analysis').at(-1) ?? null
-    : null;
-  const currentFailure = failures.find((item) => item.id === context.failureId)
-    ?? failures.find((item) => item.run_id === context.runId)
+  const currentFailure = failures.find((item) => item.run_id === activeRunId)
+    ?? failures.find((item) => item.id === context.failureId)
     ?? null;
-  const currentRun = runLive.run ?? runs.find((item) => item.id === context.runId) ?? null;
+  const currentRun = runLive.run ?? runs.find((item) => item.id === activeRunId) ?? null;
+
+  useEffect(() => {
+    if (!projectId || !currentRun || !['FAILED', 'ERROR'].includes(currentRun.status)) return;
+    let active = true;
+    void api.getFailures(projectId, 50).then((items) => {
+      if (active) setFailures(items);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [projectId, currentRun?.id, currentRun?.status]);
+  const progressTaskId = context.taskId ?? (runtime.snapshot?.kind === 'task' ? runtime.snapshot.id : task?.id ?? null);
+  const runtimePanelId = runtimePanelKind === 'task' ? progressTaskId : activeRunId;
+  const runtimePanelTitle = runtimePanelKind === 'task' ? t('inspector.task') : t('dock.runDetails');
+  const runtimePanelHeading = runtimePanelKind === 'task'
+    ? task?.id === progressTaskId ? task.goal : progressTaskId
+    : currentRun?.requested_by ?? activeRunId;
   const analysisFailed = !analysisRunning && ['FAILED', 'BLOCKED'].includes(latestAnalysisRecord?.status ?? '');
   const project = projects.find((item: Project) => item.id === projectId);
-  const flatFiles = useMemo(() => flattenFiles(files).slice(0, 8), [files]);
   const completedGoalResult = stage === 'result'
     && task?.type === 'QA_GOAL'
     && !runtimeActive(runtime.snapshot?.status ?? task.status);
-  const boundCaseCount = relatedCases.filter((item) => Boolean(item.binding)).length;
   const resultFailed = Boolean(currentRun && ['FAILED', 'ERROR'].includes(currentRun.status))
     || Boolean(task && ['FAILED', 'BLOCKED'].includes(runtime.snapshot?.status ?? task.status));
-  const resultPassed = currentRun?.status === 'PASSED'
-    || Boolean(task && ['COMPLETED', 'SUCCEEDED'].includes(runtime.snapshot?.status ?? task.status));
-  const flowLoadState = t(loadError ? 'flow.unavailable' : 'flow.loading');
-  const flowSummaries: Record<WorkspaceStage, string> = {
-    requirement: !contextDataLoaded ? flowLoadState : selectedRequirement
-      ? analysisFailed ? t('flow.analysisFailed') : analysisRunning ? t('flow.analysisRunning') : requirementAnalysis ? t('flow.analysisComplete') : t('flow.analysisPending')
-      : t('flow.requirementCount', { count: requirements.length }),
-    cases: contextDataLoaded ? t('flow.caseCount', { count: relatedCases.length }) : flowLoadState,
-    automation: contextDataLoaded ? t('flow.automationCount', { ready: boundCaseCount, total: relatedCases.length }) : flowLoadState,
-    result: currentRun
-      ? t('flow.runSummary', { status: currentRun.status, finished: currentRun.executions.filter((item) => item.finished_at).length, total: currentRun.executions.length })
-      : task ? t('flow.taskSummary', { status: runtime.snapshot?.status ?? task.status })
-        : contextDataLoaded ? t('flow.noRun') : flowLoadState,
-    failure: !contextDataLoaded ? flowLoadState : currentFailure
-      ? t('flow.failureSelected')
-      : failures.length
-        ? t('flow.failureCount', { count: failures.length })
-        : resultFailed ? t('flow.failurePendingEvidence') : t('flow.noFailures'),
-  };
-  const flowComplete: Record<WorkspaceStage, boolean> = {
-    requirement: Boolean(requirementAnalysis),
-    cases: relatedCases.length > 0,
-    automation: boundCaseCount > 0,
-    result: Boolean(currentRun && !['QUEUED', 'RUNNING'].includes(currentRun.status))
-      || Boolean(task && !runtimeActive(runtime.snapshot?.status ?? task.status)),
-    failure: resultPassed && failures.length === 0,
-  };
-  const flowState = (item: WorkspaceStage) => {
-    if ((item === 'requirement' && analysisFailed)
-      || (item === 'result' && resultFailed)
-      || (item === 'failure' && (resultFailed || failures.length > 0))) return 'failed';
-    if (item === stage) return 'current';
-    return flowComplete[item] ? 'complete' : 'pending';
-  };
-  const flowStateLabel = (item: WorkspaceStage) => t(`flow.state.${flowState(item)}`);
 
   useEffect(() => {
     if (!contextDataLoaded || !['result', 'failure'].includes(stage)) return;
@@ -300,20 +391,16 @@ export function WorkspacePage() {
     }, true);
   }, [contextDataLoaded, stage, currentFailure?.test_nodeid, currentRun?.id, currentRun?.nodeids, cases, context.testCaseId, context.requirementId]);
 
-  const openStudio = (filePath?: string, lineNumber?: number) => {
-    const href = buildStudioHref({
-      ...context,
-      projectId,
-      testCaseId: selectedCase?.id ?? context.testCaseId,
-      automationBindingId: binding?.id,
-      file: filePath ?? context.file ?? binding?.file_path,
-      lineNumber,
-      nodeId: binding?.nodeid ?? context.nodeId,
-      returnTo: 'workspace',
-      stage: currentFailure ? 'failure' : stage,
-    });
-    navigate(href);
-  };
+  const openStudio = (filePath?: string, lineNumber?: number) => updateContext({
+    testCaseId: selectedCase?.id ?? context.testCaseId,
+    automationBindingId: binding?.id ?? context.automationBindingId,
+    file: filePath ?? context.file ?? binding?.file_path,
+    lineNumber,
+    nodeId: binding?.nodeid ?? context.nodeId,
+    returnTo: 'workspace',
+    stage: 'automation',
+    view: 'code',
+  });
 
   const selectRequirement = (id: string) => {
     const relatedCase = cases.find((item) => item.requirement_id === id);
@@ -331,7 +418,6 @@ export function WorkspacePage() {
       lineNumber: undefined,
       nodeId: undefined,
       stepId: undefined,
-      stage: 'requirement',
     });
   };
 
@@ -351,18 +437,110 @@ export function WorkspacePage() {
       nodeId: item.binding?.nodeid,
       stepId: undefined,
       stage: nextStage,
+      view: nextStage === 'automation' ? 'code' : nextStage === 'result' || nextStage === 'failure' ? 'results' : nextStage,
     });
   };
 
-  const setStage = (next: WorkspaceStage) => updateContext({ stage: next });
-
-  const onRunStarted = (runId?: string) => {
+  const onRunStarted = (runId?: string, preserveFailureContext = false) => {
     if (!runId) return;
-    updateContext({ runId, taskId: undefined, failureId: undefined, parentRunId: undefined, stage: 'result' });
+    updateContext({
+      runId,
+      taskId: undefined,
+      failureId: preserveFailureContext ? context.failureId : undefined,
+      parentRunId: preserveFailureContext ? currentRun?.id ?? context.parentRunId : undefined,
+    });
+    setRuntimePanelKind('run');
+    setShowRunPanel(true);
+    void api.getTestCases(projectId).then(setCases).catch(() => undefined);
+    setAiRunOpen(false);
+    setRunError('');
   };
 
-  const onTaskStarted = (taskId: string) => {
-    updateContext({ taskId, runId: undefined, parentRunId: undefined, failureId: undefined });
+  const onTaskStarted = (taskId: string, preserveFailureContext = false) => {
+    updateContext({
+      taskId,
+      runId: undefined,
+      parentRunId: preserveFailureContext ? context.parentRunId : undefined,
+      failureId: preserveFailureContext ? context.failureId : undefined,
+    });
+    setRuntimePanelKind('task');
+    setShowRunPanel(true);
+  };
+
+  const runSelectedCase = async (rerun = false) => {
+    if (!projectId || !selectedCase || binding?.status !== 'ACTIVE' || !binding.nodeid || runBusy) return;
+    setRunBusy(true);
+    setRunError('');
+    try {
+      const selectedRunConfig = rerun && currentRun ? configForRerun(currentRun, runConfig) : runConfig;
+      const run = await api.createTestRun({
+        project_id: projectId,
+        workspace_id: projectId,
+        nodeids: [binding.nodeid],
+        requested_by: `Workspace · ${selectedCase.title}`,
+        browser: selectedRunConfig.browser,
+        environment: {
+          QA_ENVIRONMENT: selectedRunConfig.environment,
+          QA_REGION: selectedRunConfig.region,
+        },
+        parallel_workers: selectedRunConfig.workers,
+        ...(rerun && currentRun ? { parent_run_id: currentRun.id } : {}),
+        ...(rerun && (currentFailure?.id ?? context.failureId) ? { origin_failure_id: currentFailure?.id ?? context.failureId } : {}),
+      });
+      setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)]);
+      onRunStarted(run.id, rerun);
+    } catch (reason) {
+      setRunError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setRunBusy(false);
+    }
+  };
+
+  const stopActiveRun = async () => {
+    try {
+      const taskId = context.taskId;
+      if (taskId && runtimeActive(runtime.snapshot?.status ?? '')) {
+        await api.cancelTask(taskId);
+        await runtime.refresh();
+      } else if (activeRunId) {
+        const updated = await api.cancelTestRun(activeRunId);
+        setRuns((items) => items.map((item) => item.id === updated.id ? updated : item));
+        await runLive.refresh();
+      }
+    } catch (reason) {
+      setRunError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const diagnoseCurrentRun = async () => {
+    let failureId = currentFailure?.id ?? context.failureId;
+    if (!failureId && activeRunId) {
+      try {
+        const latestFailures = await api.getFailures(projectId, 50);
+        setFailures(latestFailures);
+        failureId = latestFailures.find((item) => item.run_id === activeRunId)?.id;
+      } catch {
+        // The failure view can still show the project's recent records if this refresh fails.
+      }
+    }
+    updateContext({ failureId, stage: 'failure', view: 'results' });
+  };
+
+  const openRunDetails = (extra: Partial<WorkspaceContext> = {}) => {
+    const taskId = extra.taskId ?? (!extra.runId ? progressTaskId : undefined);
+    const runId = extra.runId ?? activeRunId;
+    if (taskId) {
+      setRuntimePanelKind('task');
+      if (extra.taskId && extra.taskId !== context.taskId) {
+        updateContext({ taskId: extra.taskId, runId: undefined });
+      }
+    } else if (runId) {
+      setRuntimePanelKind('run');
+      if (extra.runId && extra.runId !== context.runId) {
+        updateContext({ runId: extra.runId, taskId: undefined });
+      }
+    }
+    if (taskId || runId) setShowRunPanel(true);
   };
 
   const startRequirementAnalysis = async (requirement: Requirement) => {
@@ -387,9 +565,6 @@ export function WorkspacePage() {
       ? items.map((item) => item.id === requirement.id ? requirement : item)
       : [...items, requirement]);
   }, []);
-
-  const openWorkflow = (extra: Partial<WorkspaceContext> = {}) =>
-    navigate(buildWorkflowHref({ ...context, projectId, ...extra }));
 
   const editGoal = (value: string) => {
     setGoalText(value);
@@ -430,7 +605,9 @@ export function WorkspacePage() {
       goalKey.current = '';
       setGoalPreview(null);
       setGoalPreviewKey('');
-      updateContext({ taskId: created.id, runId: undefined, failureId: undefined, parentRunId: undefined, stage: 'result' });
+      setTask(created);
+      setAiRunOpen(false);
+      onTaskStarted(created.id, Boolean(context.failureId || context.runId || context.parentRunId));
     } catch (reason) {
       setGoalError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -448,29 +625,28 @@ export function WorkspacePage() {
         </div>
         <div className="workspace-heading-actions">
           {selectedRequirement && <span className="workspace-context-chip"><GitBranch size={14} aria-hidden="true" />{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
-          {completedGoalResult && <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateContext({ taskId: undefined, runId: undefined, stage: 'requirement' })}>{t('goal.new')}</button>}
-          {(context.taskId || context.runId) && <Link className="btn btn-secondary btn-sm" to={buildWorkflowHref({ ...context, projectId })}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</Link>}
+          {projectId && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
+            {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
+            <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
+          </button>}
+          {projectId && <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>}
+          {completedGoalResult && <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateContext({ taskId: undefined, runId: undefined, stage: 'requirement', view: 'requirement' })}>{t('goal.new')}</button>}
+          {(context.taskId || context.runId) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails()}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button>}
         </div>
       </header>
 
-      {projectId && <nav className="workspace-stage-nav" aria-label={t('flow.board')}>
-        {stages.map((item, index) => {
-          const disabled = item === 'failure' && !currentFailure && !failures.length && !resultFailed && stage !== 'failure';
-          const state = flowState(item);
-          return <button
-            key={item}
-            type="button"
-            className={`workspace-flow-node is-${state}${stage === item ? ' is-current' : ''}`}
-            aria-current={stage === item ? 'step' : undefined}
-            aria-label={`${t(`stage.${item}`)} · ${flowSummaries[item]} · ${flowStateLabel(item)}`}
-            disabled={disabled}
-            onClick={() => setStage(item)}
-          >
-            <span className="workspace-flow-number">{index + 1}</span>
-            <span className="workspace-flow-label"><strong>{t(`stage.${item}`)}</strong><small>{flowSummaries[item]}</small></span>
-            <small className="workspace-flow-state">{flowStateLabel(item)}</small>
-          </button>;
-        })}
+      {projectId && <nav className="workspace-stage-nav" role="tablist" aria-label={t('tabs.label')}>
+        {workspaceStages.map((item) => <button
+          key={item.stage}
+          type="button"
+          role="tab"
+          aria-selected={stage === item.stage}
+          className={`workspace-view-tab${stage === item.stage ? ' is-current' : ''}${item.stage === 'result' && resultFailed ? ' has-failure' : ''}`}
+          onClick={() => setView(item.view)}
+        >
+          {t(`journey.${item.stage}`)}
+          {item.stage === 'result' && activeRunId && <span className={`workspace-tab-status is-${(currentRun?.status ?? runtime.snapshot?.status ?? 'idle').toLowerCase()}`} aria-hidden="true" />}
+        </button>)}
       </nav>}
 
       {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
@@ -481,11 +657,12 @@ export function WorkspacePage() {
           <Link className="btn btn-primary" to="/projects">{t('openProjects')}</Link>
         </section>
       ) : (
-        <div className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}`}>
-          <aside className="workspace-context-panel" aria-label={t('context.title')}>
+        <>
+        <div className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${view === 'debug' ? ' is-debug-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}`}>
+          <aside id="workspace-context-panel" className="workspace-context-panel" aria-label={t('context.title')}>
             <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{project?.name ?? projectId}</small></div>
             <section className="workspace-context-group">
-              <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3><Link to={`/projects/${projectId}/requirements`} aria-label={t('context.manageRequirements')} title={t('context.manageRequirements')}><ArrowUpRight size={14} aria-hidden="true" /></Link></div>
+              <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3></div>
               <div className="workspace-context-list">
                 {requirements.slice(0, 12).map((item) => <button key={item.id} type="button" className={item.id === context.requirementId ? 'is-selected' : ''} aria-pressed={item.id === context.requirementId} onClick={() => selectRequirement(item.id)}>
                   <span>{item.qa_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong>
@@ -494,7 +671,7 @@ export function WorkspacePage() {
               </div>
             </section>
             <section className="workspace-context-group">
-              <div className="workspace-group-heading"><h3>{t('context.cases')}</h3><Link to={`/projects/${projectId}/test-cases`} aria-label={t('context.manageCases')} title={t('context.manageCases')}><Plus size={14} aria-hidden="true" /></Link></div>
+              <div className="workspace-group-heading"><h3>{t('context.cases')}</h3></div>
               <div className="workspace-context-list">
                 {relatedCases.slice(0, 10).map((item) => <button key={item.id} type="button" className={item.id === context.testCaseId ? 'is-selected' : ''} aria-pressed={item.id === context.testCaseId} onClick={() => selectCase(item)}>
                   <span>{item.test_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong><small>{item.automation_status}</small>
@@ -506,95 +683,48 @@ export function WorkspacePage() {
               <div className="workspace-group-heading"><h3>{t('context.automation')}</h3><span className={`workspace-binding-status is-${binding.status.toLowerCase()}`}>{binding.status}</span></div>
               <button type="button" onClick={() => openStudio(binding.file_path)}><FileCode2 size={14} aria-hidden="true" /><span>{binding.file_path}</span></button>
             </section>}
-            <section className="workspace-context-group">
-              <div className="workspace-group-heading"><h3>{t('context.recentRuns')}</h3><Link to="/runs" aria-label={t('context.runHistory')} title={t('context.runHistory')}><ArrowUpRight size={14} aria-hidden="true" /></Link></div>
-              <div className="workspace-context-list workspace-run-list">
-                {runs.slice(0, 5).map((item) => <button key={item.id} type="button" className={item.id === context.runId ? 'is-selected' : ''} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'result' })}>
-                  <span className={`workspace-status-mark is-${item.status.toLowerCase()}`} aria-hidden="true" />
-                  <strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.status} · {item.passed}/{item.total || '—'}</small>
-                </button>)}
-                {!contextDataLoaded ? <p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p> : !runs.length && <p className="workspace-muted">{t('context.noRuns')}</p>}
-              </div>
-            </section>
-            <section className="workspace-context-group">
-              <div className="workspace-group-heading"><h3>{t('context.files')}</h3><Link to={`/projects/${projectId}/studio`} aria-label={t('context.openStudio')} title={t('context.openStudio')}><ArrowUpRight size={14} aria-hidden="true" /></Link></div>
-              <div className="workspace-context-list workspace-file-list">
-                {flatFiles.map((item) => <button key={item.path} type="button" onClick={() => openStudio(item.path)}><FileCode2 size={13} aria-hidden="true" /><span>{item.path}</span></button>)}
-                {!contextDataLoaded ? <p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p> : !flatFiles.length && <p className="workspace-muted">{t('context.noFiles')}</p>}
-              </div>
-            </section>
           </aside>
 
           <section className="workspace-main-panel" aria-label={t('main.title')}>
             <div className="workspace-main-heading">
-              <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{t(`stage.${stage}`)}</h2></div>
-              {stage === 'automation' && selectedCase?.binding && <button type="button" className="btn btn-primary btn-sm" onClick={() => openStudio(selectedCase.binding!.file_path)}><FileCode2 size={14} aria-hidden="true" />{t('main.openCode')}</button>}
-              {stage === 'cases' && <Link className="btn btn-secondary btn-sm" to={`/projects/${projectId}/test-cases`}><Plus size={14} aria-hidden="true" />{t('main.manageCases')}</Link>}
+              <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{t(`tabs.${view}`)}</h2></div>
+              {stage === 'automation' && <nav className="workspace-tool-nav" role="tablist" aria-label={t('automationViews.label')}>
+                {automationViews.map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`automationViews.${item}`)}</button>)}
+              </nav>}
             </div>
             <div className="workspace-main-scroll">
-              {!completedGoalResult && <section className="workspace-goal-surface" aria-label={t('goal.title')}>
-                <div className="workspace-goal-heading">
-                  <div><Sparkles size={16} aria-hidden="true" /><div><strong>{t('goal.title')}</strong><small>{selectedRequirement?.qa_model?.display_id ?? selectedCase?.title ?? currentFailure?.test_name ?? project?.name ?? t('goal.projectContext')}</small></div></div>
-                  {task?.type === 'QA_GOAL' && <span className={`workspace-status-badge is-${(runtime.snapshot?.status ?? task.status).toLowerCase()}`}>{t(`result.taskStatus.${runtime.snapshot?.status ?? task.status}`, { defaultValue: runtime.snapshot?.status ?? task.status })}</span>}
+              {aiRunOpen && <section className="workspace-ai-run-panel" aria-label={t('aiRun.title')}>
+                <div className="workspace-ai-run-heading">
+                  <div><Sparkles size={16} aria-hidden="true" /><div><strong>{t('aiRun.title')}</strong><small>{goalTarget === 'requirement' ? selectedRequirement?.title ?? t('dock.chooseRequirement') : selectedCase?.test_model?.display_id ?? selectedCase?.title ?? t('dock.chooseCase')}</small></div></div>
+                  <button type="button" className="btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setAiRunOpen(false)}><X size={14} /></button>
                 </div>
-                {task?.type === 'QA_GOAL' && runtimeActive(runtime.snapshot?.status ?? task.status) ? (
-                  <div className="workspace-goal-active">
-                    <strong>{task.goal}</strong>
-                    <p>{t('goal.progress', {
-                      completed: (runtime.snapshot?.steps ?? task.steps ?? task.plan).filter((item) => item.status === 'COMPLETED' || item.status === 'SKIPPED').length,
-                      total: (runtime.snapshot?.steps ?? task.steps ?? task.plan).length,
-                      current: runtime.snapshot?.steps.find((item) => item.status === 'RUNNING')?.title
-                        ?? task.steps?.find((item) => item.status === 'RUNNING' || item.status === 'WAITING_FOR_APPROVAL')?.name
-                        ?? t('goal.waiting'),
-                    })}</p>
-                    {runtime.snapshot?.kind === 'task' && <RuntimeTaskActions
-                      snapshot={runtime.snapshot}
-                      onChanged={runtime.refresh}
-                      onInspect={(stepId) => openWorkflow({ taskId: task.id, stepId })}
-                      onOpenStudio={() => openStudio(binding?.file_path)}
-                    />}
-                  </div>
-                ) : (
-                  <>
-                    <label className="workspace-goal-input-label" htmlFor="workspace-qa-goal">{t('goal.promptLabel')}</label>
-                    <textarea
-                      id="workspace-qa-goal"
-                      value={goalText}
-                      onChange={(event) => editGoal(event.target.value)}
-                      rows={2}
-                      maxLength={4000}
-                      placeholder={t('goal.placeholder')}
-                      disabled={!contextDataLoaded || goalBusy}
-                    />
-                    <div className="workspace-goal-actions">
-                      <div className="workspace-goal-quick">
-                        {context.requirementId && <button type="button" disabled={goalBusy} onClick={() => editGoal('只检查覆盖，不要生成代码')}>{t('goal.quickCoverage')}</button>}
-                        {context.requirementId && <button type="button" disabled={goalBusy} onClick={() => editGoal('帮我把这个需求测试完整。可以自动完成低风险步骤；需要修改代码时让我确认。')}>{t('goal.quickComplete')}</button>}
-                        {context.failureId && <button type="button" disabled={goalBusy} onClick={() => editGoal('只分析，不要修改')}>{t('goal.quickAnalyze')}</button>}
-                      </div>
-                      <button type="button" className="btn btn-primary btn-sm" disabled={!contextDataLoaded || goalBusy || !goalText.trim()} onClick={() => void previewGoal()}>
-                        {goalBusy ? t('goal.planning') : t('goal.preview')} <ArrowRight size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                    {goalPreview && goalPreviewKey === goalRequestKey && <div className="workspace-goal-preview">
-                      <div className="workspace-goal-preview-heading"><strong>{t('goal.planTitle')}</strong><span>{goalPreview.context}</span></div>
-                      <ol>{goalPreview.steps.map((step, index) => <li key={`${step.title}-${index}`}>
-                        <span>{index + 1}</span><strong>{step.title}</strong>
-                        {step.conditional && <small>{t('goal.conditional')}</small>}
-                        <em className={`is-${step.risk.toLowerCase()}`}>{t(`goal.risk.${step.risk.toLowerCase()}`)}</em>
-                      </li>)}</ol>
-                      {goalPreview.effects.length > 0 && <p><b>{t('goal.effects')}</b> {goalPreview.effects.join(' · ')}</p>}
-                      {goalPreview.constraints.length > 0 && <p><b>{t('goal.constraints')}</b> {goalPreview.constraints.join(' · ')}</p>}
-                      {goalPreview.approval_required && <p className="workspace-goal-approval">{t('goal.approvalNotice')}</p>}
-                      <button type="button" className="btn btn-primary btn-sm" disabled={goalBusy || Boolean(task?.type === 'QA_GOAL' && runtimeActive(task.status))} onClick={() => void startGoal()}>
-                        {goalBusy ? t('goal.starting') : t('goal.start')} <ArrowRight size={14} aria-hidden="true" />
-                      </button>
-                    </div>}
-                    {goalError && <p className="workspace-goal-error" role="alert">{goalError}</p>}
-                  </>
-                )}
+                <p>{t('aiRun.description')}</p>
+                <ul className="workspace-ai-capabilities">
+                  <li>{t('aiRun.capabilities.context')}</li>
+                  <li>{t('aiRun.capabilities.plan')}</li>
+                  <li>{t('aiRun.capabilities.execute')}</li>
+                  <li>{t('aiRun.capabilities.diagnose')}</li>
+                </ul>
+                {goalPreview && goalPreviewKey === goalRequestKey ? <div className="workspace-goal-preview">
+                  <div className="workspace-goal-preview-heading"><strong>{t('goal.planTitle')}</strong><span>{goalPreview.context}</span></div>
+                  <ol>{goalPreview.steps.map((step, index) => <li key={`${step.title}-${index}`}>
+                    <span>{index + 1}</span><strong>{step.title}</strong>
+                    {step.conditional && <small>{t('goal.conditional')}</small>}
+                    <em className={`is-${step.risk.toLowerCase()}`}>{t(`goal.risk.${step.risk.toLowerCase()}`)}</em>
+                  </li>)}</ol>
+                  {goalPreview.effects.length > 0 && <p><b>{t('goal.effects')}</b> {goalPreview.effects.join(' · ')}</p>}
+                  {goalPreview.constraints.length > 0 && <p><b>{t('goal.constraints')}</b> {goalPreview.constraints.join(' · ')}</p>}
+                  <button type="button" className="btn btn-primary btn-sm" disabled={goalBusy} onClick={() => void startGoal()}>
+                    {goalBusy ? t('goal.starting') : t('goal.start')} <ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </div> : <button type="button" className="btn btn-secondary btn-sm" disabled={!contextDataLoaded || goalBusy} onClick={() => void previewGoal()}>
+                  {goalBusy ? t('goal.planning') : t('aiRun.reviewPlan')} <ArrowRight size={14} aria-hidden="true" />
+                </button>}
+                {goalError && <p className="workspace-goal-error" role="alert">{goalError}</p>}
+                <small className="workspace-ai-run-note">{t('aiRun.sharedExecutor')}</small>
               </section>}
-              {stage === 'requirement' && <RequirementsPage
+
+              {view === 'requirement' && <RequirementsPage
                 projects={projects}
                 selectedProjectId={projectId}
                 initialRequirementId={context.requirementId}
@@ -604,132 +734,168 @@ export function WorkspacePage() {
                 analysisRefreshVersion={isAnalysisTask ? runtime.snapshot?.event_cursor : null}
                 onRequirementChanged={handleRequirementChanged}
                 onCaseCreated={(id, testDesignId) => {
-                  updateContext({
-                    testCaseId: id,
-                    testDesignId,
-                    automationBindingId: undefined,
-                    taskId: undefined,
-                    runId: undefined,
-                    parentRunId: undefined,
-                    failureId: undefined,
-                    browserSessionId: undefined,
-                    file: undefined,
-                    lineNumber: undefined,
-                    nodeId: undefined,
-                    stepId: undefined,
-                    stage: 'cases',
-                  });
+                  updateContext({ testCaseId: id, testDesignId, automationBindingId: undefined, taskId: undefined, runId: undefined, parentRunId: undefined, failureId: undefined, browserSessionId: undefined, file: undefined, lineNumber: undefined, nodeId: undefined, stepId: undefined, stage: 'cases', view: 'cases' });
                   void api.getTestCases(projectId).then(setCases).catch(() => undefined);
                 }}
                 workspaceMode
               />}
-              {(stage === 'cases' || stage === 'automation') && selectedCase && <TestCasesPage
+              {view === 'cases' && <TestCasesPage
                 projects={projects}
                 selectedProjectId={projectId}
                 initialTestCaseId={context.testCaseId}
-                onSelectTestCase={(id) => updateContext({ testCaseId: id })}
+                onSelectTestCase={(id) => updateContext({ testCaseId: id, view: 'cases', stage: 'cases' })}
+                onCaseCreated={(createdCase) => {
+                  setCases((items) => [...items.filter((item) => item.id !== createdCase.id), createdCase]);
+                  updateContext({ requirementId: createdCase.requirement_id ?? context.requirementId, testCaseId: createdCase.id, view: 'cases', stage: 'cases' });
+                }}
                 onNavigateToStudio={(filePath) => openStudio(filePath)}
                 onNavigateToRuns={onRunStarted}
                 onTaskStarted={onTaskStarted}
                 workspaceMode
-                focusAutomation={stage === 'automation'}
+                hideRunAction
               />}
-              {(stage === 'cases' || stage === 'automation') && !selectedCase && <section className="workspace-empty workspace-no-case">
-                <h3>{t('main.noCaseTitle')}</h3>
-                <p>{t('main.noCaseDescription')}</p>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStage('requirement')}>{t('main.backToRequirement')}</button>
-              </section>}
-              {stage === 'result' && <RunResultSurface
+              {(view === 'code' || view === 'debug') && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingEditor')}</div>}><AutomationStudioPage
+                key={projectId}
+                projects={projects}
+                selectedProjectId={projectId}
+                onSelectProject={selectProject}
+                onNavigateToRuns={onRunStarted}
+                onRunCreated={onRunStarted}
+                workspaceView={view === 'debug' ? 'debug' : 'code'}
+                initialOpenFilePath={automationSetup ? null : view === 'debug' || !selectedCase ? context.file ?? automationFilePath : automationFilePath}
+                workspaceAutomationSetup={automationSetup}
+                workspaceAutomationSetupKey={automationSetupKey}
+                onStartRecording={() => setView('browser')}
+                onSelectCases={() => setView('cases')}
+                initialOpenLineNumber={context.lineNumber ?? null}
+                initialDebugNodeId={view === 'debug' && context.failureId ? context.nodeId ?? null : null}
+                embedded
+              /></Suspense>}
+              {view === 'browser' && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingBrowser')}</div>}><RecorderPage
+                projects={projects}
+                selectedProjectId={projectId}
+                embedded
+                runConfig={runConfig}
+                onNavigateToRuns={onRunStarted}
+              /></Suspense>}
+              {view === 'results' && stage !== 'failure' && <RunResultSurface
                 context={context}
                 run={currentRun}
                 task={task}
                 projectId={projectId}
-                onOpenFailure={(failureId) => updateContext({ failureId, stage: 'failure' })}
+                onOpenFailure={(failureId) => updateContext({ failureId, stage: 'failure', view: 'results' })}
                 onOpenCode={(filePath) => openStudio(filePath)}
-                onOpenWorkflow={() => openWorkflow()}
+                onOpenDetails={() => openRunDetails()}
               />}
-              {stage === 'failure' && <FailuresPage
+              {view === 'results' && stage === 'failure' && <FailuresPage
                 projects={projects}
                 selectedProjectId={projectId}
                 initialFailureId={context.failureId}
                 onSelectFailure={(failureId) => updateContext({ failureId })}
-                onOpenInStudio={(filePath, lineNumber, nodeId, failureContext) => navigate(buildStudioHref({
-                  ...context,
-                  projectId,
+                onOpenInStudio={(filePath, lineNumber, nodeId, failureContext) => updateContext({
                   file: filePath,
                   lineNumber,
                   nodeId,
-                  failureId: failureContext?.failureId,
-                  runId: failureContext?.runId,
-                  parentRunId: failureContext?.runId,
-                  returnTo: 'workspace',
-                  stage: 'failure',
-                }))}
-                onNavigateToRuns={(runId) => updateContext({
-                  runId,
-                  parentRunId: currentFailure?.run_id,
-                  stage: 'failure',
+                  failureId: failureContext?.failureId ?? context.failureId,
+                  runId: failureContext?.runId ?? context.runId,
+                  parentRunId: failureContext?.runId ?? context.parentRunId,
+                  stage: 'automation',
+                  view: 'debug',
                 })}
+                onNavigateToRuns={(runId) => updateContext({ runId, parentRunId: currentFailure?.run_id, stage: 'failure', view: 'results' })}
                 workspaceMode
               />}
             </div>
           </section>
 
-          <aside className="workspace-inspector" aria-label={t('inspector.title')}>
-            <div className="workspace-panel-heading"><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div>
-            {selectedRequirement ? <section className="workspace-inspector-section">
-              <span>{t('inspector.requirement')}</span><strong>{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</strong>
-              <p>{requirementAnalysis?.summary ?? t('inspector.pending')}</p>
-              <div className="workspace-inspector-fact"><span>{t('inspector.businessRules')}</span><strong>{selectedRequirement.qa_model?.rules.length ?? t('inspector.pending')}</strong></div>
-              <div className="workspace-inspector-fact"><span>{t('inspector.risks')}</span><strong>{requirementAnalysis?.risks.length ?? t('inspector.pending')}</strong></div>
-              <div className="workspace-inspector-fact"><span>{t('inspector.ambiguities')}</span><strong>{requirementAnalysis?.ambiguities.length ?? t('inspector.pending')}</strong></div>
-              <div className="workspace-inspector-fact"><span>{t('inspector.coverageGaps')}</span><strong>{requirementAnalysis?.coverage_gaps.length ?? t('inspector.pending')}</strong></div>
-              <div className="workspace-inspector-fact"><span>{t('inspector.evidence')}</span><strong>{analysisEvidence ? t('inspector.evidenceAvailable') : t('inspector.pending')}</strong></div>
-              {analysisEvidence && <p>{analysisEvidence.summary}</p>}
-              <div className="workspace-inspector-fact"><span>{t('inspector.latestFinding')}</span><strong>{analysisProgressEvent?.title ?? latestAnalysisStage?.title ?? t('inspector.pending')}</strong></div>
-              <p>{analysisRunning
-                ? analysisProgressEvent?.summary ?? latestAnalysisStage?.summary ?? t('inspector.pending')
-                : analysisFailed
-                  ? t('inspector.analysisFailed')
-                  : analysisProgressEvent?.summary ?? latestAnalysisStage?.summary ?? t('inspector.pending')}</p>
-              <div className="workspace-inspector-fact"><span>{t('inspector.recommendedNextAction')}</span><strong>{analysisRunning
-                ? t('inspector.analysisRunning')
-                : analysisFailed
-                  ? t('inspector.retryAnalysisNext')
-                : !requirementAnalysis
-                  ? t('inspector.analyzeNext')
-                  : !selectedCase
-                    ? t('inspector.designNext')
-                    : !binding
-                      ? t('inspector.automationNext')
-                      : !currentRun
-                        ? t('inspector.runNext')
-                        : currentFailure
-                          ? t('inspector.failureNext')
-                          : t('inspector.verifyNext')}</strong></div>
-              {requirementAnalysis?.risks.slice(0, 3).map((risk) => <div className="workspace-risk" key={risk.id}><b>{risk.severity}</b><span>{risk.title}</span></div>)}
-            </section> : <p className="workspace-muted">{t('inspector.chooseRequirement')}</p>}
-            {selectedCase && <section className="workspace-inspector-section">
-              <span>{t('inspector.case')}</span><strong>{selectedCase.test_model?.display_id ?? selectedCase.title}</strong>
-              <p>{selectedCase.expected_result || t('inspector.noExpectedResult')}</p>
-              <div className="workspace-inspector-fact"><span>{t('inspector.automation')}</span><strong>{binding?.status ?? t('inspector.unbound')}</strong></div>
-              {binding && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openStudio(binding.file_path)}><FileCode2 size={13} aria-hidden="true" />{t('inspector.openStudio')}</button>}
-            </section>}
-            {currentRun && <section className="workspace-inspector-section">
-              <span>{t('inspector.run')}</span><strong>{currentRun.status}</strong>
-              <p>{currentRun.passed} / {currentRun.total || '—'} {t('runtime.tests')}</p>
-              {currentFailure && <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateContext({ failureId: currentFailure.id, stage: 'failure' })}>{t('inspector.resolveFailure')}</button>}
-            </section>}
-            {task && <section className="workspace-inspector-section">
-              <span>{t('inspector.task')}</span><strong>{runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status}</strong><p>{task.goal}</p>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openWorkflow({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('openWorkflow')}</button>
-            </section>}
-            {!selectedCase && <p className="workspace-inspector-hint">{t('inspector.nextActionHint')}</p>}
+        </div>
+        <div className="workspace-inspector-overlay" hidden={!showInspector} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInspector(false); }}>
+          <aside id="workspace-inspector-drawer" ref={inspectorDrawerRef} className="workspace-inspector workspace-inspector-drawer" role="dialog" aria-modal={showInspector} aria-label={t('inspector.title')}>
+            <div className="workspace-panel-heading"><div><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setShowInspector(false)}><X size={15} /></button></div>
+            <div className="workspace-inspector-tabs" role="tablist" aria-label={t('inspector.title')}>
+              {(['context', 'ai', 'run'] as const).map((item) => <button key={item} type="button" role="tab" aria-selected={inspectorTab === item} className={inspectorTab === item ? 'is-selected' : ''} onClick={() => setInspectorTab(item)}>{t(`inspector.tabs.${item}`)}</button>)}
+            </div>
+            {inspectorTab === 'context' && <div className="workspace-inspector-content">
+              {selectedRequirement ? <section className="workspace-inspector-section">
+                <span>{t('inspector.requirement')}</span><strong>{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</strong>
+                <p>{requirementAnalysis?.summary ?? (analysisFailed ? t('inspector.analysisFailed') : t('inspector.pending'))}</p>
+                {requirementAnalysis?.risks.slice(0, 2).map((risk) => <div className="workspace-risk" key={risk.id}><b>{risk.severity}</b><span>{risk.title}</span></div>)}
+              </section> : <p className="workspace-muted">{t('inspector.chooseRequirement')}</p>}
+              {selectedCase && <section className="workspace-inspector-section">
+                <span>{t('inspector.case')}</span><strong>{selectedCase.test_model?.display_id ?? selectedCase.title}</strong>
+                <p>{selectedCase.expected_result || t('inspector.noExpectedResult')}</p>
+                <div className="workspace-inspector-fact"><span>{t('inspector.automation')}</span><strong>{binding?.status ?? t('inspector.unbound')}</strong></div>
+                {binding && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openStudio(binding.file_path)}><FileCode2 size={13} aria-hidden="true" />{t('inspector.openStudio')}</button>}
+              </section>}
+              <section className="workspace-inspector-section">
+                <span>{t('inspector.runConfig')}</span>
+                <div className="workspace-inspector-fact"><span>{t('dock.environment')}</span><strong>{runConfig.environment}</strong></div>
+                <div className="workspace-inspector-fact"><span>{t('dock.region')}</span><strong>{runConfig.region}</strong></div>
+                <div className="workspace-inspector-fact"><span>{t('dock.browser')}</span><strong>{runConfig.browser}</strong></div>
+              </section>
+              {!selectedCase && <p className="workspace-inspector-hint">{t('inspector.nextActionHint')}</p>}
+            </div>}
+            {inspectorTab === 'ai' && <div className="workspace-inspector-content">
+              {task ? <section className="workspace-inspector-section">
+                <span>{t('inspector.task')}</span><strong>{runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status}</strong><p>{task.goal}</p>
+                {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{step.status}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
+                {!!runtime.snapshot?.decisions.length && <details className="workspace-decision-trace"><summary>{t('inspector.decisionTrace')}</summary>{runtime.snapshot.decisions.map((decision) => <p key={decision.id}><strong>{decision.selected}</strong> · {decision.name}</p>)}</details>}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('inspector.advancedTrace')}</button>
+              </section> : <p className="workspace-muted">{t('inspector.aiIdle')}</p>}
+              {goalError && <p className="workspace-goal-error" role="alert">{goalError}</p>}
+            </div>}
+            {inspectorTab === 'run' && <div className="workspace-inspector-content">
+              {currentRun ? <section className="workspace-inspector-section">
+                <span>{t('inspector.run')}</span><strong>{currentRun.status}</strong>
+                <p>{currentRun.passed} / {currentRun.total || '—'} {t('runtime.tests')} · {currentRun.failed} {t('dock.failed')}</p>
+                <div className="workspace-inspector-fact"><span>{t('inspector.browser')}</span><strong>{currentRun.browser}</strong></div>
+                {currentRun.log_output && <pre className="workspace-inspector-log">{currentRun.log_output.slice(-900)}</pre>}
+                {!!currentRun.external_artifacts?.length && <details><summary>{t('inspector.artifacts', { count: currentRun.external_artifacts.length })}</summary>{currentRun.external_artifacts.map((item) => <p key={item.id}>{item.name}</p>)}</details>}
+                {currentFailure && <button type="button" className="btn btn-primary btn-sm" onClick={() => updateContext({ failureId: currentFailure.id, stage: 'failure', view: 'results' })}>{t('inspector.resolveFailure')}</button>}
+              </section> : <p className="workspace-muted">{t('inspector.noRun')}</p>}
+            </div>}
           </aside>
         </div>
+        </>
       )}
 
-      {runtimeId && runtime.snapshot && <RuntimeMiniBar context={context} projectId={projectId} snapshot={runtime.snapshot} />}
+      {projectId && <WorkspaceRunDock
+        caseLabel={selectedCase?.test_model?.display_id ?? (selectedCase?.id ? selectedCase.id.slice(-6).toUpperCase() : '')}
+        caseTitle={selectedCase?.title ?? ''}
+        hasAutomation={binding?.status === 'ACTIVE' && Boolean(binding.nodeid)}
+        aiRunLabel={goalTarget === 'requirement' ? t('dock.aiRunRequirement') : context.testCaseId && !binding ? t('dock.aiGenerateAutomation') : undefined}
+        run={currentRun}
+        taskStatus={runtime.snapshot?.kind === 'task' ? runtime.snapshot.status : task?.status ?? null}
+        taskStep={runtime.snapshot?.steps.find((item) => item.status === 'RUNNING')?.title ?? null}
+        busy={runBusy}
+        error={runError}
+        config={runConfig}
+        onConfigChange={setRunConfig}
+        onRun={() => void runSelectedCase()}
+        onAiRun={() => {
+          editGoal(defaultWorkspaceGoal({
+            failureId: context.failureId,
+            requirementId: context.requirementId,
+            testCaseId: context.testCaseId,
+            stage,
+            hasAutomation: binding?.status === 'ACTIVE' && Boolean(binding.nodeid),
+          }));
+          setAiRunOpen(true);
+        }}
+        onStop={() => void stopActiveRun()}
+        onOpen={openRunDetails}
+        onViewResult={() => { setShowRunPanel(false); setView('results'); }}
+        onViewFailure={() => void diagnoseCurrentRun()}
+        onDebug={() => updateContext({ file: currentFailure?.test_nodeid ? selectedCase?.binding?.file_path ?? context.file : context.file, nodeId: currentFailure?.test_nodeid ?? binding?.nodeid ?? context.nodeId, failureId: currentFailure?.id ?? context.failureId, stage: 'automation', view: 'debug' })}
+        onRerun={() => void runSelectedCase(true)}
+        onOpenCode={() => setView('code')}
+      />}
+      {showRunPanel && runtimePanelId && <div className="workspace-run-panel-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRunPanel(false); }}>
+        <section className="workspace-run-panel" role="dialog" aria-modal="true" aria-label={runtimePanelTitle}>
+          <header><div><span className="workspace-eyebrow">{runtimePanelTitle}</span><strong>{runtimePanelHeading}</strong></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setShowRunPanel(false)}><X size={15} /></button></header>
+          <div className="workspace-run-panel-body"><RuntimeDetail kind={runtimePanelKind} id={runtimePanelId} projectId={projectId} onOpenStudio={() => openStudio(binding?.file_path)} /></div>
+        </section>
+      </div>}
     </main>
   );
 }
@@ -741,7 +907,7 @@ function RunResultSurface({
   projectId,
   onOpenFailure,
   onOpenCode,
-  onOpenWorkflow,
+  onOpenDetails,
 }: {
   context: WorkspaceContext;
   run: TestRun | null;
@@ -749,7 +915,7 @@ function RunResultSurface({
   projectId: string;
   onOpenFailure: (failureId: string) => void;
   onOpenCode: (filePath: string) => void;
-  onOpenWorkflow: () => void;
+  onOpenDetails: () => void;
 }) {
   const { t } = useTranslation('workspace');
   const [failures, setFailures] = useState<FailureRecord[]>([]);
@@ -793,7 +959,7 @@ function RunResultSurface({
       ? value
       : String(value.description ?? value.root_cause ?? value.message ?? value.reason ?? JSON.stringify(value));
     if (goalSummary) return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.taskStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.taskStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenWorkflow}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.taskStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.taskStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <div className="workspace-goal-result">
         {goalSummary.tests && goalSummary.runs?.length ? <dl className="workspace-result-metrics"><div><dt>{t('result.total')}</dt><dd>{goalSummary.tests.total ?? 0}</dd></div><div><dt>{t('result.passed')}</dt><dd>{goalSummary.tests.passed ?? 0}</dd></div><div><dt>{t('result.failed')}</dt><dd>{goalSummary.tests.failed ?? 0}</dd></div><div><dt>{t('result.skipped')}</dt><dd>{goalSummary.tests.skipped ?? 0}</dd></div></dl> : <p className="workspace-muted">{t('result.testsNotRun')}</p>}
         {goalSummary.work_completed?.length ? <section><h4>{t('result.workCompleted')}</h4><ul>{goalSummary.work_completed.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section> : null}
@@ -802,8 +968,8 @@ function RunResultSurface({
           ? <button type="button" key={`${item.file_path}-${index}`} onClick={() => onOpenCode(item.file_path!)}>{item.file_path}</button>
           : <span key={index}>{item.kind}</span>)}</div></section> : null}
         <section><h4>{t('result.evidence')}</h4><div className="workspace-goal-links">
-          {(goalSummary.runs ?? []).map((id) => <Link key={id} to={`/runs/${encodeURIComponent(id)}`}>{t('result.viewRun')} · {id.slice(0, 8)}</Link>)}
-          {(goalSummary.cases ?? []).map((id) => <Link key={id} to={`/projects/${encodeURIComponent(projectId)}/test-cases/${encodeURIComponent(id)}`}>{t('result.viewCase')} · {id.slice(0, 8)}</Link>)}
+          {(goalSummary.runs ?? []).map((id) => <Link key={id} to={buildWorkspaceHref({ ...context, projectId, taskId: undefined, runId: id, stage: 'result', view: 'results' })}>{t('result.viewRun')} · {id.slice(0, 8)}</Link>)}
+          {(goalSummary.cases ?? []).map((id) => <Link key={id} to={buildWorkspaceHref({ ...context, projectId, taskId: undefined, testCaseId: id, stage: 'cases', view: 'cases' })}>{t('result.viewCase')} · {id.slice(0, 8)}</Link>)}
           {goalSummary.findings?.flatMap((item, index) => {
             const failureId = typeof item === 'object' && item ? item.failure_id : undefined;
             return typeof failureId === 'string' ? [<Link key={`${failureId}-${index}`} to={buildWorkspaceHref({ ...context, projectId, failureId, stage: 'failure' })}>{t('result.viewFailure')} · {failureId.slice(0, 8)}</Link>] : [];
@@ -817,12 +983,12 @@ function RunResultSurface({
       </div>
     </section>;
     if (task.type === 'QA_GOAL') return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenWorkflow}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       {task.failure_reason && <p role="status">{task.failure_reason}</p>}
       <details className="workspace-goal-activity" open><summary>{t('result.stepActivity')} · {steps.length}</summary><ol className="workspace-step-list">{steps.map((item) => <li key={item.id}><span>{item.status}</span><strong>{item.name}</strong>{item.error && <small>{item.error}</small>}</li>)}</ol></details>
     </section>;
     return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenWorkflow}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <p>{t('result.taskSummary', { completed: steps.filter((item) => item.status === 'COMPLETED').length, total: steps.length })}</p>
       <ol className="workspace-step-list">{steps.map((item) => <li key={item.id} className={`is-${item.status.toLowerCase()}`}><span>{item.status}</span><strong>{item.name}</strong><small>{item.error ?? (Object.keys(item.outputs).length ? JSON.stringify(item.outputs) : '')}</small></li>)}</ol>
     </section>;
@@ -830,11 +996,11 @@ function RunResultSurface({
   if (!run) return <section className="workspace-result-card workspace-empty"><Play size={20} aria-hidden="true" /><h3>{t('result.noRun')}</h3><p>{t('result.noRunDescription')}</p></section>;
 
   return <section className="workspace-result-card">
-    <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${run.status.toLowerCase()}`}>{run.status}</span><h3>{run.requested_by || t('result.runTitle')}</h3><code>{run.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenWorkflow}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+    <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${run.status.toLowerCase()}`}>{run.status}</span><h3>{run.requested_by || t('result.runTitle')}</h3><code>{run.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
     <dl className="workspace-result-metrics"><div><dt>{t('result.total')}</dt><dd>{run.total || '—'}</dd></div><div><dt>{t('result.passed')}</dt><dd>{run.passed}</dd></div><div><dt>{t('result.failed')}</dt><dd>{run.failed}</dd></div><div><dt>{t('result.duration')}</dt><dd>{run.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)} s` : '—'}</dd></div></dl>
     {failures.length > 0 && <section className="workspace-failure-list"><h4>{t('result.failures')}</h4>{failures.map((failure) => <button key={failure.id} type="button" onClick={() => onOpenFailure(failure.id)}><span className="workspace-status-mark is-failed" aria-hidden="true" /><span><strong>{failure.test_name || failure.test_nodeid}</strong><small>{failure.classification} · {failure.error_message}</small></span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</section>}
     {run.executions.length > 0 && <ol className="workspace-execution-list">{run.executions.map((execution) => <li key={execution.id}><span className={`workspace-status-mark is-${execution.status.toLowerCase()}`} aria-hidden="true" /><strong>{execution.nodeid}</strong><span>{execution.status}</span><small>{execution.duration_ms ? `${(execution.duration_ms / 1000).toFixed(2)} s` : '—'}</small></li>)}</ol>}
     {!failures.length && ['FAILED', 'ERROR'].includes(run.status) && <p className="workspace-muted">{t('result.failureLoading')}</p>}
-    {context.testCaseId && <Link className="workspace-result-back" to={`/projects/${projectId}/test-cases/${context.testCaseId}`}>{t('result.openCase')}</Link>}
+    {context.testCaseId && <Link className="workspace-result-back" to={buildWorkspaceHref({ ...context, projectId, stage: 'cases', view: 'cases' })}>{t('result.openCase')}</Link>}
   </section>;
 }

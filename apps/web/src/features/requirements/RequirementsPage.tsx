@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { Project, Requirement } from '../../types';
 import { useRequirements } from './hooks/useRequirements';
 import { useTestDesigns } from './hooks/useTestDesigns';
@@ -50,6 +51,8 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   workspaceMode = false,
 }) => {
   const { t } = useTranslation('requirements');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [analysisStartError, setAnalysisStartError] = React.useState('');
   const reqForm = useRequirementFormModal(
     selectedProjectId || (projects[0]?.id ?? ''),
   );
@@ -73,6 +76,17 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   });
 
   const { selectedReq } = reqs;
+
+  const handleWorkspaceAnalysis = async () => {
+    if (!selectedReq || !onStartAnalysis || analysisRunning) return;
+    setAnalysisStartError('');
+    setSearchParams({ ...Object.fromEntries(searchParams), tab: 'analysis' });
+    try {
+      await onStartAnalysis(selectedReq);
+    } catch (reason) {
+      setAnalysisStartError(String(reason));
+    }
+  };
 
   React.useEffect(() => {
     if (!workspaceMode || analysisRefreshVersion == null || analysisRefreshVersion <= 0 || !selectedReq) return;
@@ -113,13 +127,18 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
 
   return (
     <div className={workspaceMode ? 'workspace-requirement-embedded' : undefined}>
-      {!workspaceMode && <RequirementToolbar
-        projects={projects}
-        onOpenJira={jira.handleOpenJiraModal}
-        onNewRequirement={() =>
-          reqForm.open(selectedProjectId || projects[0]?.id || '')
-        }
-      />}
+      <div className={workspaceMode ? 'workspace-requirement-toolbar' : undefined}>
+        <RequirementToolbar
+          projects={projects}
+          onOpenJira={jira.handleOpenJiraModal}
+          onNewRequirement={() =>
+            reqForm.open(selectedProjectId || projects[0]?.id || '')
+          }
+          onAnalyze={workspaceMode && selectedReq ? handleWorkspaceAnalysis : undefined}
+          analysisRunning={analysisRunning}
+        />
+      </div>
+      {analysisStartError && <div className="workspace-error" role="alert">{analysisStartError}</div>}
 
       {projects.length === 0 ? (
         <div className="card">
@@ -144,6 +163,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                 onCaseCreated={onCaseCreated}
                 onStartAnalysis={workspaceMode ? () => onStartAnalysis?.(selectedReq) ?? Promise.resolve() : undefined}
                 analysisRunning={analysisRunning}
+                showAnalyzeAction={!workspaceMode}
                 showJourney={false}
               />
             </div>

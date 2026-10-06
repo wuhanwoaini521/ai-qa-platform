@@ -9,6 +9,7 @@ interface UseRunExecutionOptions {
   /** Falls back to the active file when no explicit test nodeid is given. */
   activeTabPath: string | null;
   onNavigateToRuns?: (runId?: string) => void;
+  onRunCreated?: (runId: string) => void;
   retryContext?: { failureId: string; runId: string };
 }
 
@@ -16,6 +17,7 @@ export const useRunExecution = ({
   projectId,
   activeTabPath,
   onNavigateToRuns,
+  onRunCreated,
   retryContext,
 }: UseRunExecutionOptions) => {
   // Execution from Studio
@@ -69,6 +71,7 @@ export const useRunExecution = ({
         `Run #${run.id.slice(0, 8)} started with status: ${run.status}`,
       );
       setActiveRunId(run.id);
+      onRunCreated?.(run.id);
     } catch (err) {
       setLastRunResult(`Execution error: ${errorText(err)}`);
     } finally {

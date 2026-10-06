@@ -7,7 +7,7 @@
   "requirements": "Requirements",
   "testCases": "Test Cases",
   "automation": "Automation Studio",
-  "runs": "Runs & Runners",
+  "runs": "Runs",
   "tasks": "Task Center",
   "recorder": "Browser Recorder",
   "workers": "Distributed Workers",

@@ -112,5 +112,6 @@
   "type_RUN_REGRESSION": "Run regression",
   "type_REVIEW_TEST": "Review test code",
   "type_ANALYZE_REQUIREMENT": "Analyze requirement",
-  "caseCopilot": "AI Copilot · generate, review and validate this case"
+  "caseCopilot": "AI Copilot · generate, review and validate this case",
+  "caseCopilotShort": "AI Copilot"
 }

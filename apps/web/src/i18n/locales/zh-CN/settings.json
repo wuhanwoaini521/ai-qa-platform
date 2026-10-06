@@ -39,7 +39,8 @@
     "status_SIMULATION": "模拟模式",
     "status_UNAVAILABLE": "AI 不可用",
     "fallbackActive": "当前由回退 Provider 响应；真实模型未通过状态检查。",
-    "realProviderStatus": "已配置的真实 Provider 通过健康检查。"
+    "realProviderStatus": "已配置的真实 Provider 通过健康检查。",
+    "providerProbeFailed": "真实 Provider 探测未通过；当前未确认回退正在使用。"
   },
   "jev": {
     "title": "Jev 决策提供方",
@@ -104,6 +105,24 @@
       "test_runtime": "Python 测试环境",
       "filesystem": "工作区读写",
       "python_lsp": "Python 语言服务"
+    },
+    "states": {
+      "LOCAL_EXECUTION_AVAILABLE": "本地任务执行可用（未连接远程 Worker）",
+      "REMOTE_WORKERS_AVAILABLE": "远程 Worker 在线",
+      "PROBE_TIMEOUT": "检查超时，暂不能确认状态",
+      "REAL_AVAILABLE": "真实服务可用",
+      "UNAVAILABLE": "服务不可用",
+      "AUTH_ERROR": "认证失败",
+      "DISABLED": "服务已停用",
+      "NETWORK_ERROR": "网络连接失败",
+      "TIMEOUT": "请求超时",
+      "MISSING_API_KEY": "缺少 API Key",
+      "INVALID_API_KEY": "API Key 无效",
+      "UNSUPPORTED_MODEL": "模型或地址不受支持",
+      "RATE_LIMITED": "请求频率受限",
+      "UPSTREAM_ERROR": "上游服务错误",
+      "INVALID_RESPONSE": "响应格式无效",
+      "INVALID_REQUEST": "请求无效"
     },
     "dismiss": "隐藏本次提示"
   },

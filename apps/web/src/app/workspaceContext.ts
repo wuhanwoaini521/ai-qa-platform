@@ -5,6 +5,8 @@ export type WorkspaceStage =
   | 'result'
   | 'failure';
 
+export type WorkspaceView = 'requirement' | 'cases' | 'code' | 'browser' | 'debug' | 'results';
+
 /**
  * Shared cross-surface context. Entity IDs in the URL remain the source of truth;
  * this object is only a typed projection for links and page composition.
@@ -25,6 +27,7 @@ export interface WorkspaceContext {
   nodeId?: string;
   stepId?: string;
   stage?: WorkspaceStage;
+  view?: WorkspaceView;
   returnTo?: 'workspace';
 }
 
@@ -41,6 +44,7 @@ const PARAMS: ReadonlyArray<[keyof WorkspaceContext, string]> = [
   ['nodeId', 'nodeid'],
   ['stepId', 'step'],
   ['stage', 'stage'],
+  ['view', 'view'],
   ['returnTo', 'returnTo'],
 ];
 
@@ -85,9 +89,6 @@ export function readWorkspaceContext(
     returnTo: params.get('returnTo') === 'workspace' ? 'workspace' : undefined,
   };
 
-  const rawLine = Number(params.get('line'));
-  if (Number.isSafeInteger(rawLine) && rawLine > 0) context.lineNumber = rawLine;
-
   const stage = params.get('stage');
   if (
     stage === 'requirement' ||
@@ -98,6 +99,28 @@ export function readWorkspaceContext(
   ) {
     context.stage = stage;
   }
+
+  const view = params.get('view');
+  if (
+    view === 'requirement' ||
+    view === 'cases' ||
+    view === 'code' ||
+    view === 'browser' ||
+    view === 'debug' ||
+    view === 'results'
+  ) {
+    context.view = view;
+  } else if (context.stage) {
+    context.view = context.stage === 'automation'
+      ? 'code'
+      : context.stage === 'result' || context.stage === 'failure'
+        ? 'results'
+        : context.stage;
+  }
+
+  const rawLine = Number(params.get('line'));
+  if (Number.isSafeInteger(rawLine) && rawLine > 0) context.lineNumber = rawLine;
+
   return context;
 }
 
@@ -134,16 +157,20 @@ export function buildWorkspaceHref(context: WorkspaceContext): string {
 }
 
 export function buildWorkflowHref(context: WorkspaceContext): string {
-  return `/workflow${queryFor(context)}`;
+  if (!context.taskId && !context.runId) return `/runs/tasks${queryFor(context)}`;
+
+  const workspace = buildWorkspaceHref({
+    ...context,
+    stage: context.stage ?? (context.failureId ? 'failure' : 'result'),
+    view: context.view ?? 'results',
+  });
+  return `${workspace}${workspace.includes('?') ? '&' : '?'}panel=runtime`;
 }
 
 export function buildStudioHref(context: WorkspaceContext): string {
-  if (!context.projectId) return '/projects';
-  const file = context.file?.replaceAll('\\', '/').replace(/^\/+/, '');
-  const path = `/projects/${encodeURIComponent(context.projectId)}/studio${file ? `/file/${encodeURIComponent(file)}` : ''}`;
-  const params = writeWorkspaceContext('', context);
-  params.delete('projectId');
-  params.delete('file');
-  const query = params.toString();
-  return `${path}${query ? `?${query}` : ''}`;
+  return buildWorkspaceHref({
+    ...context,
+    stage: 'automation',
+    view: context.failureId ? 'debug' : 'code',
+  });
 }

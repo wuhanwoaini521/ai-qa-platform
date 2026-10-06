@@ -20,6 +20,13 @@
     "loadingFile": "Loading file content...",
     "emptySelectFile": "Select a file from the explorer or press",
     "emptyHint": "Write Playwright test suites, Page Objects, and test fixtures.",
+    "unboundTitle": "No automation script is linked to this case",
+    "unboundHint": "Create a Python test script and bind it on the case page, or record browser steps to generate one.",
+    "createScript": "Create script",
+    "recordScript": "Start browser recording",
+    "noCaseTitle": "No test case is linked to this requirement",
+    "noCaseHint": "Create or select a test case first, then add or record its automation script.",
+    "openCases": "Go to cases",
     "problemsShort": "Problems"
   },
   "debug": {
