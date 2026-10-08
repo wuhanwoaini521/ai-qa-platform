@@ -399,6 +399,38 @@ button, input, select, textarea {
   display: none;
 }
 
+.tooltip-trigger {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.tooltip-popover {
+  position: fixed;
+  z-index: 60;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: min(320px, calc(100vw - 84px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+@media (min-width: 1151px) {
+  .tooltip-popover--sidebar {
+    display: none;
+  }
+}
+
 .nav-item {
   position: relative;
   width: 100%;
@@ -627,6 +659,10 @@ button, input, select, textarea {
   .app-sidebar {
     padding: 16px 10px;
     align-items: center;
+  }
+
+  .sidebar-nav {
+    align-self: stretch;
   }
 
   .sidebar-header,

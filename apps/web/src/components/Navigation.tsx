@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
+import { Tooltip } from './Tooltip';
 
 export type NavTab =
   | 'dashboard'
@@ -39,7 +40,11 @@ export type NavTab =
 interface NavItem {
   id: NavTab;
   labelKey: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{
+    size?: number;
+    strokeWidth?: number;
+    'aria-hidden'?: boolean;
+  }>;
   to: string;
   end?: boolean;
 }
@@ -85,16 +90,17 @@ export const Navigation: React.FC = () => {
     const Icon = item.icon;
     const label = t(item.labelKey);
     return (
-      <NavLink
-        key={item.id}
-        to={item.to}
-        end={item.end}
-        title={label}
-        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-      >
-        <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
-        <span>{label}</span>
-      </NavLink>
+      <Tooltip key={item.id} label={label}>
+        <NavLink
+          to={item.to}
+          end={item.end}
+          aria-label={label}
+          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+        >
+          <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
+          <span>{label}</span>
+        </NavLink>
+      </Tooltip>
     );
   };
 
