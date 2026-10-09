@@ -70,6 +70,10 @@ export const FailureOverview: React.FC<{
   relatedTests: string[];
   repairProposed: boolean;
   repairApplied: boolean;
+  showCodeRepairAction?: boolean;
+  codeRepairPending?: boolean;
+  hasRepairTask?: boolean;
+  onPrepareCodeRepair?: () => void;
   rerunMessage?: string | null;
 }> = ({
   failure,
@@ -98,6 +102,10 @@ export const FailureOverview: React.FC<{
   relatedTests,
   repairProposed,
   repairApplied,
+  showCodeRepairAction = false,
+  codeRepairPending = false,
+  hasRepairTask = false,
+  onPrepareCodeRepair,
   rerunMessage,
 }) => {
   const { t, i18n } = useTranslation('failures');
@@ -244,6 +252,20 @@ export const FailureOverview: React.FC<{
             )}
             {reanalysisBlockedReason && (
               <p className="failure-action-reason" role="status">{reanalysisBlockedReason}</p>
+            )}
+            {showCodeRepairAction && onPrepareCodeRepair && (
+              <div className="failure-code-repair-action">
+                <p>{t('codeRepairReviewHint')}</p>
+                <button
+                  type="button"
+                  className="btn btn-secondary failure-reanalyze-action"
+                  onClick={onPrepareCodeRepair}
+                  disabled={codeRepairPending}
+                >
+                  <Code2 size={16} aria-hidden="true" />
+                  {t(codeRepairPending ? 'preparingCodeRepair' : hasRepairTask ? 'openCodeRepairTask' : 'prepareCodeRepair')}
+                </button>
+              </div>
             )}
           </div>
         </div>

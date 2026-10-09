@@ -795,7 +795,7 @@ export function WorkspacePage() {
                 projects={projects}
                 selectedProjectId={projectId}
                 initialFailureId={context.failureId}
-                onSelectFailure={(failureId) => updateContext({ failureId })}
+                onSelectFailure={(failureId) => updateContext({ failureId, taskId: undefined })}
                 onOpenInStudio={(filePath, lineNumber, nodeId, failureContext) => updateContext({
                   file: filePath,
                   lineNumber,
@@ -807,6 +807,7 @@ export function WorkspacePage() {
                   view: 'debug',
                 })}
                 onNavigateToRuns={(runId) => updateContext({ runId, parentRunId: currentFailure?.run_id, stage: 'failure', view: 'results' })}
+                onTaskStarted={onTaskStarted}
                 workspaceMode
               />}
             </div>

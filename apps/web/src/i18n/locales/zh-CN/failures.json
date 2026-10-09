@@ -243,8 +243,14 @@
     "locatorRepairBlocked": "该 Locator 修复未通过 Jev 决策或页面验证门槛，因此没有修改代码。请检查下方决策与页面证据。",
     "repairUnavailable": "该分类没有安全且受支持的自动修复路径。"
   }
-  ,"manualNextStep": "在调试视图检查失败行和定位器；手动修改后，点击底部“运行”验证。系统不会自动改写代码。"
-  ,"manualNextStepOverview": "当前没有可安全自动执行的修复。请在下方 AI 执行结果卡片中打开失败代码或从失败处启动调试。"
+  ,"manualNextStep": "可以打开失败代码手动检查，或生成修复方案审阅差异。只有点击批准并应用后才会写入脚本，之后再验证失败用例。"
+  ,"manualNextStepOverview": "当前没有通过定位器安全校验的自动修复。诊断建议不会修改脚本；你可以生成脚本修复方案并审阅差异，批准后才会写入。"
+  ,"codeRepairReviewHint": "诊断建议只是参考，不会改代码。生成修复方案后先检查脚本差异；点击批准并应用后才会写回并验证。"
+  ,"prepareCodeRepair": "生成修复方案并审阅"
+  ,"preparingCodeRepair": "正在准备修复方案…"
+  ,"openCodeRepairTask": "打开修复方案审阅"
+  ,"codeRepairTaskGoal": "请根据失败证据为用例 {{nodeid}} 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。"
+  ,"codeRepairTaskFailed": "无法启动修复任务：{{error}}"
   ,"openFailureCode": "在调试视图检查代码"
   ,"classification": "分类"
   ,"run": "运行"

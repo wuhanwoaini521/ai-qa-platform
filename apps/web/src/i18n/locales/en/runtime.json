@@ -131,6 +131,8 @@
   "replanPreviewText": "Keeps the existing step plan and retries the failed step with these instructions; it does not add or remove steps.",
   "approvalRequired": "Approval required",
   "approve": "Approve",
+  "approveRepair": "Approve and apply repair",
+  "repairApprovalHint": "Review the script diff below. Approval writes it to the workspace, then continues with the failed test verification.",
   "reject": "Reject",
   "comment": "Approval comment",
   "copy": "Copy",

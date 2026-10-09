@@ -75,6 +75,7 @@ export function RuntimeTaskActions({
       {approval && (
         <div className="rt-approval-panel">
           <div className="rt-action-heading"><strong>{t('approvalRequired')}</strong><span className="rt-status status-waiting">{t('waitingApproval')}</span></div>
+          {snapshot.task?.type === 'FIX_FAILURE' && <p>{t('repairApprovalHint')}</p>}
           <p><code>{typeof summary.file_path === 'string' ? summary.file_path : t('unknown')}</code>{typeof summary.change_kind === 'string' ? ` · ${summary.change_kind}` : ''}</p>
           {typeof summary.preview === 'string' && <pre>{summary.preview.slice(0, 20000)}</pre>}
           {summary.preview_truncated === true && <p className="rt-notice">{t('previewTruncated')}</p>}
@@ -82,7 +83,7 @@ export function RuntimeTaskActions({
           {detail && !reviewable && <p className="rt-notice">{t('approvalPreviewMissing')}</p>}
           <label className="rt-action-comment">{t('comment')}<input value={comment} onChange={(event) => setComment(event.target.value)} /></label>
           <div className="rt-action-buttons">
-            <button className="btn btn-primary btn-sm" disabled={busy || !detail || !reviewable} onClick={() => void command(() => api.decideTaskApproval(taskId, true, comment))}>{t('approve')}</button>
+            <button className="btn btn-primary btn-sm" disabled={busy || !detail || !reviewable} onClick={() => void command(() => api.decideTaskApproval(taskId, true, comment))}>{t(snapshot.task?.type === 'FIX_FAILURE' ? 'approveRepair' : 'approve')}</button>
             <button className="btn btn-secondary btn-sm" disabled={busy || !detail} onClick={() => void command(() => api.decideTaskApproval(taskId, false, comment))}>{t('reject')}</button>
           </div>
         </div>

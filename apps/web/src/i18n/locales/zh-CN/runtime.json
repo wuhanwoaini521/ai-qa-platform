@@ -131,6 +131,8 @@
   "replanPreviewText": "保留现有步骤计划，并按这些说明重试失败步骤；此操作不会新增或删除步骤。",
   "approvalRequired": "需要审批",
   "approve": "批准",
+  "approveRepair": "批准并应用修复",
+  "repairApprovalHint": "下方是将要写入脚本的差异。批准后才会更新工作区，并继续验证失败用例。",
   "reject": "拒绝",
   "comment": "审批备注",
   "copy": "复制",

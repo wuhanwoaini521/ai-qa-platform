@@ -58,6 +58,8 @@ interface FailuresPageProps {
     failureContext?: { failureId: string; runId: string },
   ) => void;
   onNavigateToRuns?: (runId?: string) => void;
+  /** Opens the task runtime while preserving the selected failure context. */
+  onTaskStarted: (taskId: string, preserveFailureContext: boolean) => void;
   /** Reuses the repair lifecycle inside Workspace while the parent owns context navigation. */
   workspaceMode?: boolean;
 }
@@ -69,6 +71,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   onSelectFailure,
   onOpenInStudio,
   onNavigateToRuns,
+  onTaskStarted,
   workspaceMode = false,
 }) => {
   const { t, i18n } = useTranslation('failures');
@@ -198,6 +201,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     useState<JiraCreateBugResponse | null>(null);
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
+  const [startingCodeRepair, setStartingCodeRepair] = useState<boolean>(false);
+  const [repairTaskId, setRepairTaskId] = useState<string | null>(null);
   const [rollingBackRepair, setRollingBackRepair] = useState<boolean>(false);
   const repairApplied = repairWorkflow?.repair_proposal?.applied === true;
   const repairVerified = repairWorkflow?.verified === true;
@@ -212,6 +217,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     : workflowActions.includes('START_ANALYSIS')
       ? t('repairUnavailableUntilDiagnosis')
       : t('repairNotRecommended');
+  const canPrepareCodeRepair = Boolean(
+    selectedFailure &&
+      currentProjectId &&
+      !repairApplied &&
+      !repairReady &&
+      !['ANALYZING', 'DECIDING', 'VERIFYING_CANDIDATE', 'APPLYING', 'VERIFYING_FIX'].includes(diagnosisState),
+  );
   const selectedDecision = selectedAnalysis?.result.selection ?? {};
   const decisionBlockReason = String(selectedDecision.fallback_reason ?? '');
   const resolvedClassification = normalizeFailureClassification(
@@ -309,6 +321,27 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   }, [selectedFailure?.run_id]);
 
   useEffect(() => {
+    const failureId = selectedFailure?.id;
+    if (!currentProjectId || !failureId) {
+      setRepairTaskId(null);
+      return;
+    }
+    let active = true;
+    void api.getTasks(currentProjectId).then((tasks) => {
+      if (!active) return;
+      const existing = tasks.find((task) =>
+        task.type === 'FIX_FAILURE' &&
+        task.inputs.failure_id === failureId &&
+        !['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED'].includes(task.status),
+      );
+      setRepairTaskId(existing?.id ?? null);
+    }).catch(() => {
+      if (active) setRepairTaskId(null);
+    });
+    return () => { active = false; };
+  }, [currentProjectId, selectedFailure?.id]);
+
+  useEffect(() => {
     const verificationRunId = selectedAnalysis?.result.verification_run_id;
     if (!verificationRunId) return;
     let active = true;
@@ -337,6 +370,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     setDiagnosisEvents([]);
     setDiagnosisError('');
     setSelectedFailure(f);
+    setRepairTaskId(null);
     setSourceRun(null);
     setVerificationRun(null);
     setAiDiagnosis(null);
@@ -522,6 +556,37 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       alert(t('alertApplyRepairFailed', { error: err.message || err }));
     } finally {
       setApplyingRepair(false);
+    }
+  };
+
+  const handlePrepareCodeRepair = async () => {
+    if (!selectedFailure || !currentProjectId || startingCodeRepair) return;
+    if (repairTaskId) {
+      onTaskStarted(repairTaskId, true);
+      return;
+    }
+    try {
+      setStartingCodeRepair(true);
+      setRepairError('');
+      const task = await api.createTask({
+        type: 'FIX_FAILURE',
+        goal: t('codeRepairTaskGoal', { nodeid: selectedFailure.test_nodeid }),
+        project_id: currentProjectId,
+        workspace_id: sourceRun?.workspace_id ?? currentProjectId,
+        inputs: {
+          failure_id: selectedFailure.id,
+          origin: 'failure',
+          origin_id: selectedFailure.id,
+        },
+      });
+      setRepairTaskId(task.id);
+      onTaskStarted(task.id, true);
+    } catch (error) {
+      setRepairError(t('codeRepairTaskFailed', {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setStartingCodeRepair(false);
     }
   };
 
@@ -785,6 +850,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 repairProposed={Boolean(repairProposal)}
                 repairApplied={repairApplied}
                 rerunMessage={rerunMessage}
+                showCodeRepairAction={canPrepareCodeRepair}
+                codeRepairPending={startingCodeRepair}
+                hasRepairTask={Boolean(repairTaskId)}
+                onPrepareCodeRepair={() => void handlePrepareCodeRepair()}
               />
               {repairError && <div className="alert alert-error" role="alert">{repairError}</div>}
 
