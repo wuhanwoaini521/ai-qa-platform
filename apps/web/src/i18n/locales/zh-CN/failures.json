@@ -45,9 +45,24 @@
   "reviewing": "正在审查...",
   "repairApplied": "✓ 修复已应用",
   "applyRepair": "将修复提案应用到代码（需人工确认）",
+  "applyAndVerify": "应用并复测原用例",
+  "applyRepair": "应用修复",
+  "verifyRepair": "验证修复",
+  "decisionEngine": "决策引擎",
+  "decisionConfidence": "Jev 置信度 / 延迟",
+  "localFallback": "本地回退（未使用 Jev）",
+  "aiDiagnosisProvider": "AI 诊断 Provider",
+  "rollbackRepair": "回滚补丁",
+  "rollingBack": "正在回滚…",
+  "patchAppliedRerunBlocked": "补丁已写入，但复测未能启动；当前不能标记为已验证。",
+  "patchAppliedStatus": "补丁已应用到工作区。",
+  "patchRolledBack": "已回滚 {{file}}。",
+  "rollbackFailed": "回滚失败：{{error}}",
   "ignoreProposal": "忽略",
   "unrated": "未评级",
-  "repairNotVerified": "Playwright 尚未验证替代定位器。请检查证据并手动编辑代码后再应用修复。",
+  "repairNotVerified": "当前提案未满足应用条件；补丁不可应用。",
+  "repairCandidateVerifiedFromEvidence": "候选定位器匹配失败时捕获的唯一、可见且启用控件。补丁尚未应用，仍需重跑原用例确认修复。",
+  "repairCandidateVerifiedByPlaywright": "候选定位器已通过 Playwright 验证。补丁尚未应用，仍需重跑原用例确认修复。",
   "viewEvidence": "查看执行证据",
   "caseExecution": "用例执行",
   "applying": "正在应用...",
@@ -140,7 +155,7 @@
     "fallback": "已回退 · 初步建议",
     "evidence": "查看这一步的证据与来源",
     "recordedAt": "记录时间",
-    "verificationBoundary": "建议不是验证结论。应用代码需确认，只有实际复测通过后才能判定修复成功。",
+    "verificationBoundary": "建议不是验证结论。系统只会自动应用通过候选与页面检查的补丁；只有原失败用例实际复测通过，才算修复成功。",
     "history": "分析记录",
     "current": "本次分析进行中",
     "noHistory": "暂无已保存的分析",
@@ -156,6 +171,10 @@
     "verified": "实际复测已通过",
     "verifying": "正在复测 · 等待真实结果",
     "verificationFailed": "实际复测未通过 · 修复尚未验证",
+    "rolledBackHeading": "复测未通过 · 修复已回滚",
+    "rolledBack": "已回滚，原代码已恢复",
+    "autoRolledBack": "原失败用例未通过，系统已自动回滚补丁，原文件内容已恢复。",
+    "rolledBackDetail": "修复补丁已回滚，原文件内容已恢复。",
     "liveEvents": "查看已发生的分析阶段",
     "resultTitle": "分析结论与处理状态",
     "rootCause": "失败原因",
@@ -171,7 +190,9 @@
     "locatorRepairAdvice": "将失败定位器更新为当前页面定位：{{locator}}。",
     "locatorRetestAdvice": "重跑该测试，并确认加入购物车及金额断言都通过。",
     "originalDiagnosis": "展开 AI 原始分析与建议",
-    "localDecisionFallback": "Jev 没有提供可采纳决策，本次使用本地规则生成建议；这不是 AI 决策或修复验证。"
+    "localDecisionFallback": "Jev 本次未成功采用（原因：{{reason}}），系统使用本地规则选择候选；仍以原失败用例复测结果为准。",
+    "localDecisionLowConfidence": "Jev 本次置信度为 {{confidence}}，低于配置的最低阈值",
+    "localEvidenceDecision": "Jev 未提供可采纳决策；本地规则选择了失败时捕获的控件，定位器已通过可见性、可用性和唯一性检查。最终修复仍需原用例复测通过。"
   },
   "patchAwaitingVerification": "补丁已应用 · 待复测",
   "evidenceBundle": "失败证据包（来源与缺失项）"
@@ -183,14 +204,19 @@
   ,"time": "时间"
   ,"diagnosisState": "诊断状态"
   ,"diagnosisStateLabels": {
-    "NOT_ANALYZED": "尚未诊断",
+    "CREATED": "等待分析",
     "ANALYZING": "正在分析",
-    "DIAGNOSED": "已诊断",
-    "REPAIR_PROPOSED": "已提出修复建议",
-    "REPAIR_APPLIED": "修复已应用",
-    "VERIFYING": "正在验证",
+    "DECIDING": "正在决策",
+    "VERIFYING_CANDIDATE": "正在验证候选定位器",
+    "PATCH_READY": "补丁已就绪",
+    "APPLYING": "正在应用补丁",
+    "PATCH_APPLIED": "补丁已应用",
+    "VERIFYING_FIX": "正在验证修复",
     "VERIFIED": "验证通过",
-    "BLOCKED": "流程受阻"
+    "FAILED": "修复验证失败",
+    "BLOCKED": "流程受阻",
+    "NOT_APPLICABLE": "不适用",
+    "ROLLED_BACK": "已回滚"
   }
   ,"primaryAction": "推荐下一步"
   ,"primaryActions": {
@@ -205,10 +231,16 @@
     "VERIFIED": "验证已通过",
     "BLOCKED": "没有安全的自动操作"
   }
+  ,"reanalyzeAIJev": "重新分析（AI + Jev）"
+  ,"reanalyzingAIJev": "正在重新分析（AI + Jev）…"
+  ,"rollbackBeforeReanalysis": "已应用的补丁复测失败。请先回滚，再重新分析，避免覆盖回滚快照。"
   ,"primaryReasons": {
     "automationRepairUnavailable": "当前后端没有受控的代码修复提案与差异审阅契约；为避免自动改写测试，代码修复暂不可用。",
     "locatorUnavailable": "定位器修复只适用于已确认的 LOCATOR_CHANGED，且需要记录失败定位器和真实诊断结果。",
     "diagnosisRequired": "先完成真实 AI 诊断，再决定是否适合修复。",
+    "jevConfidenceTooLow": "Jev 没有给出达到置信度门槛的可信选择，因此未修改代码。请检查候选和决策记录，再手动修复并重跑原失败用例。",
+    "candidateNotVerified": "Jev 候选没有通过 Playwright 页面验证，因此未修改代码。请检查页面证据，再手动修复并重跑原失败用例。",
+    "locatorRepairBlocked": "该 Locator 修复未通过 Jev 决策或页面验证门槛，因此没有修改代码。请检查下方决策与页面证据。",
     "repairUnavailable": "该分类没有安全且受支持的自动修复路径。"
   }
   ,"manualNextStep": "在调试视图检查失败行和定位器；手动修改后，点击底部“运行”验证。系统不会自动改写代码。"
@@ -231,6 +263,7 @@
   ,"summary": {
     "browserLaunch": "浏览器进程无法启动。Playwright 在启动 Chromium 时收到 EPERM。",
     "browserLaunchWithPlatform": "浏览器进程无法启动。{{platform}} 环境下 Playwright 在启动 Chromium 时收到 EPERM。",
+    "locatorTimeout": "定位器 {{locator}} 未能在页面中找到目标元素。",
     "timeout": "测试执行超时。",
     "assertion": "测试断言未通过。",
     "generic": "失败摘要：{{detail}}",
@@ -243,6 +276,9 @@
   ,"viewRawError": "查看原始错误"
   ,"failedLocatorRecorded": "已记录失败定位器"
   ,"pageUrl": "页面 URL"
+  ,"pageTitle": "页面标题"
+  ,"detectedControls": "页面可见控件与候选定位器"
+  ,"latestBrowserFrame": "最近浏览器画面证据 ID"
   ,"screenshot": "截图"
   ,"domSnapshot": "DOM 快照"
   ,"repairEligibility": "自动修复适用性"
@@ -286,10 +322,10 @@
   ,"repairEligible": "适合生成定位器提案；仍需审阅与验证"
   ,"nextAction": "下一步操作"
   ,"nextActionDescriptions": {
-    "RUN_DIAGNOSIS": "先运行 AI 根因诊断，读取失败日志和页面证据。",
+    "RUN_DIAGNOSIS": "使用 AI + Jev 修复：诊断失败、从页面观测候选中决策、由 Playwright 验证并生成补丁。",
     "ANALYZING": "AI 正在分析当前失败证据。",
     "GENERATE_LOCATOR_REPAIR": "生成定位器修复提案并检查差异；代码不会自动修改，需你审阅后再应用。",
-    "REVIEW_REPAIR": "修复提案已生成。查看候选定位器和差异，完成语义审查后再应用。",
+    "REVIEW_REPAIR": "候选和补丁已生成。检查差异后点击“应用并复测原用例”。",
     "VERIFY_FIX": "修复已应用。重新运行失败用例，确认实际验证结果。",
     "RETRY": "重新运行失败用例，确认问题是否由暂时性的环境、网络或时序造成。",
     "CREATE_ISSUE_DRAFT": "根因指向产品问题。生成 Jira 草稿并确认内容。",

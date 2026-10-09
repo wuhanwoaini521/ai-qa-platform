@@ -7,15 +7,22 @@ from collections.abc import AsyncGenerator
 from uuid import uuid4
 
 from project_model.models import QAChatRequest, QAChatResponse
-from qa_core.ai.budget import AIBudgetGuard
+from qa_core.ai.budget import AIBudgetGuard, BudgetExceededError
 from qa_core.ai.models import AICompletionRequest
-from qa_core.ai.provider import stream_provider_completion
+from qa_core.ai.provider import (
+    AIProviderError,
+    is_output_limit_finish_reason,
+    output_limit_error,
+    stream_provider_completion,
+)
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
 from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.repositories.ai_repo import AIRepository
 from app.services.lifecycle_context_service import lifecycle_context
+from app.services.ai_runtime import build_ai_orchestrator
 
 logger = logging.getLogger("app.ai")
 
@@ -25,9 +32,11 @@ class QAAssistantService:
         self,
         orchestrator: ProductionQAOrchestrator | None = None,
         ai_repo: AIRepository | None = None,
+        repository_scope: RepositoryScopeFactory | None = None,
     ) -> None:
-        self.orchestrator = orchestrator or ProductionQAOrchestrator()
+        self.orchestrator = orchestrator or build_ai_orchestrator()
         self.ai_repo = ai_repo or AIRepository()
+        self.repository_scope = repository_scope
         self.budget_guard = getattr(self.orchestrator, "budget_guard", None) or AIBudgetGuard()
 
     async def handle_request(self, req: QAChatRequest) -> QAChatResponse:
@@ -47,7 +56,11 @@ class QAAssistantService:
         bundle = ContextSelector().select(
             WorkspaceService().get_workspace_dir(ctx.project_id), test_nodeid=ctx.current_file, query=req.message
         )
-        semantic_context = await lifecycle_context(ctx.project_id, ctx.test_case_id, ctx.requirement_id)
+        semantic_context = (
+            await lifecycle_context(self.repository_scope, ctx.project_id, ctx.test_case_id, ctx.requirement_id)
+            if self.repository_scope
+            else ""
+        )
 
         res = await self.orchestrator.assist_code_chat(
             action=action,
@@ -105,6 +118,8 @@ class QAAssistantService:
         fallback_used = configured_provider == "fake"
         usage: dict[str, int | float | None] = {}
         answer = ""
+        finish_reason = None
+        tokens_recorded = False
         run_status = "FAILED"
         safe_error = "provider_unavailable"
 
@@ -151,7 +166,11 @@ class QAAssistantService:
                 WorkspaceService().get_workspace_dir(ctx.project_id),
                 test_nodeid=ctx.current_file,
             )
-            semantic_context = await lifecycle_context(ctx.project_id, ctx.test_case_id, ctx.requirement_id)
+            semantic_context = (
+                await lifecycle_context(self.repository_scope, ctx.project_id, ctx.test_case_id, ctx.requirement_id)
+                if self.repository_scope
+                else ""
+            )
             if semantic_context:
                 yield make_trace_event(
                     run_id,
@@ -186,7 +205,7 @@ class QAAssistantService:
                 prompt_id=ASSISTANT_STREAM_PROMPT.prompt_id,
                 prompt_version=ASSISTANT_STREAM_PROMPT.version,
                 temperature=0.2,
-                max_tokens=2000,
+                max_tokens=6000,
             )
             self.budget_guard.check_and_record_request()
             yield make_trace_event(
@@ -214,6 +233,8 @@ class QAAssistantService:
                 final_provider = chunk.provider or final_provider
                 final_model = chunk.model or final_model
                 fallback_used = fallback_used or chunk.fallback_used or final_provider == "fake"
+                if chunk.finish_reason:
+                    finish_reason = chunk.finish_reason
                 if chunk.usage:
                     usage.update({key: value for key, value in chunk.usage.items() if value is not None})
                 if chunk.content_delta:
@@ -226,9 +247,16 @@ class QAAssistantService:
                         content=chunk.content_delta,
                     )
 
-            self.budget_guard.record_tokens(
-                _usage_count(usage, "prompt_tokens", None), _usage_count(usage, "completion_tokens", None)
-            )
+            input_tokens = _usage_count(usage, "prompt_tokens", _usage_count(usage, "input_tokens", None))
+            output_tokens = _usage_count(usage, "completion_tokens", _usage_count(usage, "output_tokens", None))
+            self.budget_guard.record_tokens(input_tokens, output_tokens)
+            tokens_recorded = True
+            if is_output_limit_finish_reason(finish_reason):
+                raise output_limit_error(
+                    max_tokens=completion.max_tokens,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
             if not answer.strip():
                 raise RuntimeError("empty_model_response")
 
@@ -294,6 +322,27 @@ class QAAssistantService:
             raise
         except Exception as error:
             error_text = str(error).lower()
+            safe_error_message = safe_error
+            budget_exceeded = False
+            if isinstance(error, BudgetExceededError):
+                safe_error = "budget_exceeded"
+                safe_error_message = str(error)
+                budget_exceeded = True
+            if isinstance(error, AIProviderError) and error.code == "output_limit" and not tokens_recorded:
+                try:
+                    self.budget_guard.record_tokens(
+                        error.input_tokens
+                        if error.input_tokens is not None
+                        else _usage_count(usage, "prompt_tokens", _usage_count(usage, "input_tokens", None)),
+                        error.output_tokens
+                        if error.output_tokens is not None
+                        else _usage_count(usage, "completion_tokens", _usage_count(usage, "output_tokens", None)),
+                    )
+                except BudgetExceededError as budget_error:
+                    safe_error = "budget_exceeded"
+                    safe_error_message = str(budget_error)
+                    budget_exceeded = True
+                tokens_recorded = True
             if "authentication" in error_text or "api key" in error_text:
                 safe_error = "authentication_error"
             elif "rate_limit" in error_text or "429" in error_text:
@@ -304,6 +353,11 @@ class QAAssistantService:
                 safe_error = "connection_error"
             elif "empty_model_response" in error_text:
                 safe_error = "empty_response"
+            if isinstance(error, AIProviderError) and not budget_exceeded:
+                safe_error = error.code
+                safe_error_message = error.safe_message
+            elif not budget_exceeded:
+                safe_error_message = safe_error
             logger.warning(
                 "AI run failed run_id=%s provider=%s model=%s feature=qa_assistant error_type=%s",
                 run_id,
@@ -332,8 +386,11 @@ class QAAssistantService:
                 run_id,
                 "run.failed",
                 stage="run",
-                title="AI Provider 不可用",
-                message=safe_error,
+                title={
+                    "output_limit": "AI 输出不完整",
+                    "budget_exceeded": "AI 用量超出预算",
+                }.get(safe_error, "AI Provider 不可用"),
+                message=safe_error_message,
                 metadata={"provider": final_provider, "model": final_model, "failure_reason": safe_error},
             )
         finally:

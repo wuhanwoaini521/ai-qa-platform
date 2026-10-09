@@ -2,7 +2,7 @@ import logging
 from typing import AsyncGenerator
 
 import anyio
-from app.settings import settings
+from app.settings import get_config
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -28,28 +28,30 @@ def enable_sqlite_foreign_keys(engine: AsyncEngine) -> None:
         cursor.close()
 
 
-def build_engine(database_url: str = settings.database_url) -> AsyncEngine:
+def build_engine(database_url: str | None = None) -> AsyncEngine:
     """Create an engine for ``database_url`` with the backend-specific setup.
 
     Kept as a factory so tests can build an engine with the exact same
     configuration the application uses.
     """
+    config = get_config().database
+    database_url = database_url or config.url
     is_sqlite = "sqlite" in database_url.lower()
 
     engine_kwargs: dict = {}
     if is_sqlite:
         # Concurrent API polling and local pytest result writes can overlap. Give SQLite
         # time to release its single-writer lock instead of failing a healthy request.
-        engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
+        engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": config.sqlite_timeout_seconds}
     else:
         # PostgreSQL pooling parameters
-        engine_kwargs["pool_size"] = 20
-        engine_kwargs["max_overflow"] = 10
+        engine_kwargs["pool_size"] = config.pool_size
+        engine_kwargs["max_overflow"] = config.max_overflow
         engine_kwargs["pool_pre_ping"] = True
 
     engine = create_async_engine(
         database_url,
-        echo=False,
+        echo=config.echo,
         **engine_kwargs,
     )
     if is_sqlite:

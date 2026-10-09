@@ -36,10 +36,11 @@ class AICompletionRequest(BaseModel):
     request_id: str | None = Field(default=None, max_length=128)
     task_id: str | None = Field(default=None, max_length=128)
     run_id: str | None = Field(default=None, max_length=128)
-    prompt: str = Field(max_length=128000)
+    prompt: str
     system_instruction: str = "You are a QA automation assistant."
     temperature: float = 0.2
-    max_tokens: int = Field(default=2000, ge=1, le=32000)
+    # None leaves the output limit to the selected provider/model.
+    max_tokens: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0, le=10)
     timeout_seconds: float | None = Field(default=None, gt=0, le=120)
     thinking_mode: Literal["enabled", "disabled"] | None = None

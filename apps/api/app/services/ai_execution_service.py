@@ -18,12 +18,9 @@ from qa_core.ai.provider import (
     stream_provider_completion,
 )
 from qa_core.failure.redactor import SensitiveRedactor
-from sqlalchemy import update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from app.persistence import database
-from app.persistence.models import AIDailyBudgetORM, AIInvocationORM, utc_now
+from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.repositories.ai_repo import AIRepository
 
 logger = logging.getLogger("app.ai.runtime")
@@ -32,7 +29,15 @@ logger = logging.getLogger("app.ai.runtime")
 class AIExecutionService:
     records_usage = True
 
-    def __init__(self, inner, *, max_request_tokens: int = 16000, max_daily_requests: int = 1000):
+    def __init__(
+        self,
+        inner,
+        *,
+        max_request_tokens: int = 1_000_000,
+        max_daily_requests: int = 1000,
+        budget_enabled: bool = True,
+        repository_scope: RepositoryScopeFactory | None = None,
+    ):
         self.inner = inner
         self.primary = getattr(inner, "primary", inner)
         self.fallbacks = getattr(inner, "fallbacks", [])
@@ -40,31 +45,19 @@ class AIExecutionService:
         self.model = getattr(self.primary, "model", "")
         self.max_request_tokens = max_request_tokens
         self.max_daily_requests = max_daily_requests
+        self.budget_enabled = budget_enabled
+        self.repository_scope = repository_scope
 
     async def check_health(self):
         return await self.inner.check_health()
 
     @staticmethod
-    async def reserve_daily_limit(max_daily_requests: int):
-        async with database.get_session() as session:
+    async def reserve_daily_limit(max_daily_requests: int, repository_scope: RepositoryScopeFactory):
+        async with repository_scope() as repositories:
             day = utc_now().date().isoformat()
-            insert = sqlite_insert if session.bind.dialect.name == "sqlite" else pg_insert
-            await session.execute(
-                insert(AIDailyBudgetORM)
-                .values(day=day, reserved_requests=0)
-                .on_conflict_do_nothing(index_elements=["day"])
-            )
-            reserved = await session.execute(
-                update(AIDailyBudgetORM)
-                .where(
-                    AIDailyBudgetORM.day == day,
-                    AIDailyBudgetORM.reserved_requests < max_daily_requests,
-                )
-                .values(reserved_requests=AIDailyBudgetORM.reserved_requests + 1)
-            )
-            if reserved.rowcount != 1:
+            if not await repositories.ai_budgets.reserve(day, max_daily_requests):
                 raise BudgetExceededError("AI daily request hard limit reached.")
-            await session.commit()
+            await repositories.commit()
 
     async def _begin(self, request: AICompletionRequest):
         request = request.model_copy(
@@ -79,12 +72,16 @@ class AIExecutionService:
 
         schema = json.dumps(request.response_schema.model_json_schema()) if request.response_schema else ""
         try:
-            if (
+            estimated_input_tokens = (
                 len((request.prompt + request.system_instruction + schema).encode("utf-8")) + 2
-            ) // 3 + request.max_tokens > self.max_request_tokens:
+            ) // 3
+            reserved_output_tokens = request.max_tokens or 0
+            if self.budget_enabled and estimated_input_tokens + reserved_output_tokens > self.max_request_tokens:
                 raise BudgetExceededError("AI request size exceeds configured token budget.")
-            if self.provider_name != "fake":
-                await self.reserve_daily_limit(self.max_daily_requests)
+            if self.budget_enabled and self.provider_name != "fake":
+                if self.repository_scope is None:
+                    raise RuntimeError("Real AI execution requires a repository scope")
+                await self.reserve_daily_limit(self.max_daily_requests, self.repository_scope)
         except BudgetExceededError:
             await AIRepository().record_invocation(
                 task=request.prompt_id or "unversioned",
@@ -111,35 +108,26 @@ class AIExecutionService:
         return request, record.id, time.perf_counter()
 
     async def _finish(self, invocation_id: str, started: float, *, response=None, status="SUCCESS", error_type=None):
-        async with database.get_session() as session:
-            row = await session.get(AIInvocationORM, invocation_id)
-            if row is None:
-                return
-            row.status = status
-            row.error_type = error_type
-            row.duration_ms = (time.perf_counter() - started) * 1000
-            if response:
-                row.provider = response.provider
-                row.model = response.model
-                row.fallback_used = response.fallback_used or response.provider == "fake"
-                row.input_tokens = response.input_tokens if response.provider != "fake" else None
-                row.output_tokens = response.output_tokens if response.provider != "fake" else None
-                row.token_source = (
-                    "provider" if row.input_tokens is not None or row.output_tokens is not None else "unknown"
-                )
-                row.retry_count = response.retry_count
-            await session.commit()
-            logger.info(
-                "AI invocation ai_run_id=%s request_id=%s task_id=%s run_id=%s feature=%s provider=%s status=%s error_type=%s",
-                row.id,
-                row.request_id,
-                row.task_id,
-                row.run_id,
-                row.task,
-                row.provider,
-                row.status,
-                row.error_type,
-            )
+        row = await AIRepository().finish_invocation(
+            invocation_id,
+            status=status,
+            error_type=error_type,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            response=response,
+        )
+        if row is None:
+            return
+        logger.info(
+            "AI invocation ai_run_id=%s request_id=%s task_id=%s run_id=%s feature=%s provider=%s status=%s error_type=%s",
+            row.id,
+            row.request_id,
+            row.task_id,
+            row.run_id,
+            row.task,
+            row.provider,
+            row.status,
+            row.error_type,
+        )
 
     async def complete(self, request: AICompletionRequest) -> AICompletionResponse:
         request, invocation_id, started = await self._begin(request)
@@ -195,7 +183,9 @@ class AIExecutionService:
                 yield chunk
             if not response.content.strip():
                 if is_output_limit_finish_reason(finish_reason) or (
-                    response.output_tokens is not None and response.output_tokens >= request.max_tokens
+                    request.max_tokens is not None
+                    and response.output_tokens is not None
+                    and response.output_tokens >= request.max_tokens
                 ):
                     raise output_limit_error(
                         max_tokens=request.max_tokens,

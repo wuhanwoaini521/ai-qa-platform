@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 from typing import Any
 
@@ -18,11 +19,12 @@ class DecisionProviderError(Exception):
 class JevDecisionProvider:
     name = "jev"
 
-    def __init__(self, *, api_key: str, model: str, base_url: str, timeout: float) -> None:
+    def __init__(self, *, api_key: str, model: str, base_url: str, timeout: float, retries: int = 1) -> None:
         self._api_key = api_key
         self._model = model
         self._base_url = self._endpoint(base_url)
         self._timeout = timeout
+        self._retries = retries
 
     @staticmethod
     def _endpoint(value: str) -> str:
@@ -52,20 +54,32 @@ class JevDecisionProvider:
                 }
             },
         }
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=False) as client:
-                response = await client.post(
-                    self._base_url,
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                )
-        except httpx.TimeoutException as error:
-            raise DecisionProviderError("timeout") from error
-        except httpx.RequestError as error:
-            raise DecisionProviderError("network_error") from error
+        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=False) as client:
+            for attempt in range(self._retries + 1):
+                try:
+                    response = await client.post(
+                        self._base_url,
+                        json=payload,
+                        headers={
+                            "Authorization": f"Bearer {self._api_key}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                except httpx.TimeoutException as error:
+                    provider_error = DecisionProviderError("timeout")
+                    if attempt == self._retries:
+                        raise provider_error from error
+                    continue
+                except httpx.RequestError as error:
+                    provider_error = DecisionProviderError("network_error")
+                    if attempt == self._retries:
+                        raise provider_error from error
+                    continue
+                if response.status_code != 429 and response.status_code < 500:
+                    break
+                if attempt == self._retries:
+                    break
+                await asyncio.sleep(0.1 * (attempt + 1))
 
         if response.status_code in (401, 403):
             raise DecisionProviderError("invalid_api_key")

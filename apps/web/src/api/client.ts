@@ -7,6 +7,8 @@ import {
   AIStatusResponse,
   AIProviderSettings,
   AIProviderSettingsUpdate,
+  ConfigReloadResult,
+  EffectiveConfigResponse,
   AIProviderConnectionResult,
   AITraceEvent,
   AIUsageSummary,
@@ -23,6 +25,7 @@ import {
   DashboardStats,
   FailureRecord,
   FailureAnalysisRun,
+  FailureRepairWorkflow,
   FailureRecurrenceItem,
   FileNode,
   FlakyTestItem,
@@ -41,6 +44,7 @@ import {
   JiraImportRequest,
   JevSettings,
   JevSettingsUpdate,
+  JevRuntimeCheckResult,
   JiraIssue,
   LocatorRepairProposal,
   LocatorSemanticReviewResponse,
@@ -1098,13 +1102,30 @@ export const api = {
   },
   getFailureRecurrence: (id: string) =>
     request<FailureRecurrenceItem[]>(`/failures/${id}/recurrence`),
-  applyRepair: (id: string, data: ApplyRepairPayload, workspaceId: string) =>
-    request<{ status: string; file_path: string }>(
-      `/failures/${id}/apply-repair?workspace_id=${encodeURIComponent(workspaceId)}`,
+  startFailureVerification: (failureId: string, analysisId: string) =>
+    request<TestRun>(`/failures/${failureId}/analyses/${analysisId}/verification/run`, {
+      method: 'POST',
+    }),
+  startFailureRetry: (failureId: string, analysisId: string) =>
+    request<TestRun>(`/failures/${failureId}/analyses/${analysisId}/retry/run`, {
+      method: 'POST',
+    }),
+  getFailureRepairWorkflow: (failureId: string, analysisId?: string) =>
+    request<FailureRepairWorkflow>(
+      `/failures/${failureId}/repair-workflow${analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''}`,
+    ),
+  applyRepair: (failureId: string, analysisId: string, data: ApplyRepairPayload) =>
+    request<{ status: string; file_path: string; repair: FailureRepairWorkflow }>(
+      `/failures/${failureId}/analyses/${analysisId}/apply`,
       {
         method: 'POST',
         body: JSON.stringify(data),
       },
+    ),
+  rollbackRepair: (failureId: string, analysisId: string) =>
+    request<{ status: string; file_path: string; repair: FailureRepairWorkflow }>(
+      `/failures/${failureId}/analyses/${analysisId}/rollback`,
+      { method: 'POST' },
     ),
 
   // Flaky Intelligence & History (Phase 6)
@@ -1132,15 +1153,18 @@ export const api = {
   getSystemHealth: (refresh = false) =>
     request<SystemHealth>(`/ai/system-health?refresh=${refresh}`),
   getAIProviderSettings: () => request<AIProviderSettings>('/ai/settings'),
+  getEffectiveConfig: () => request<EffectiveConfigResponse>('/settings/effective'),
+  getConfigSources: () => request<{ config_path: string; sources: Record<string, string> }>('/settings/sources'),
+  reloadConfig: () => request<ConfigReloadResult>('/settings/reload', { method: 'POST' }),
   saveAIProviderSettings: (data: AIProviderSettingsUpdate) =>
     request<AIProviderSettings>('/ai/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  testAIProviderConnection: (data: AIProviderSettingsUpdate) =>
+  testAIProviderConnection: (data?: AIProviderSettingsUpdate) =>
     request<AIProviderConnectionResult>('/ai/test-connection', {
       method: 'POST',
-      body: JSON.stringify(data),
+      ...(data ? { body: JSON.stringify(data) } : {}),
     }),
   getJevSettings: () => request<JevSettings>('/decision/settings'),
   saveJevSettings: (payload: JevSettingsUpdate) =>
@@ -1148,11 +1172,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
-  testJevConnection: (payload: JevSettingsUpdate) =>
+  testJevConnection: (payload?: JevSettingsUpdate) =>
     request<DecisionConnectionResult>('/decision/test-connection', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
     }),
+  checkJevRuntime: () =>
+    request<JevRuntimeCheckResult>('/decision/runtime-check', { method: 'POST' }),
   chooseDecision: (payload: DecisionRequest) =>
     request<DecisionResult>('/decision/choose', {
       method: 'POST',

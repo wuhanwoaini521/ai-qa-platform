@@ -24,6 +24,7 @@ from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.security_audit_repo import SecurityAuditRepository
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
@@ -535,7 +536,7 @@ async def test_identity_workers_jobs_artifacts_and_audits(client: AsyncClient, t
     project = await _create_project(client, "Postgres Distributed Suite")
     run_id = await _create_run(test_db_session, project["id"], ["tests/a.py::test_one"])
 
-    job_service = JobQueueService()
+    job_service = JobQueueService(repository_scope=TaskRepositoryScopeFactory())
     claimed_source = await job_service.enqueue_job(
         run_id=run_id,
         project_id=project["id"],

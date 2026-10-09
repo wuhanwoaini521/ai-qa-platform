@@ -22,6 +22,7 @@ dependencies = [
     "project-model",
     "qa-core",
     "integrations",
+    "platform-config",
     "basedpyright>=1.31,<2",
     "alembic>=1.14,<2",
 ]
@@ -30,6 +31,7 @@ dependencies = [
 project-model = { workspace = true }
 qa-core = { workspace = true }
 integrations = { workspace = true }
+platform-config = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

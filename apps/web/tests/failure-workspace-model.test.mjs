@@ -3,13 +3,12 @@ import assert from 'node:assert/strict';
 import {
   availableEvidenceTabs,
   displayedFailureClassification,
-  deriveDiagnosisState,
   extractRelevantFrames,
+  failureSourceLocation,
   failureFingerprint,
   normalizeFailureClassification,
-  primaryActionFor,
+  primaryActionForWorkflow,
   relatedFailures,
-  repairEligibility,
   summarizeFailureError,
   storedRepairProposal,
 } from '../src/features/failures/failureWorkspaceModel.ts';
@@ -29,55 +28,26 @@ const failure = (overrides = {}) => ({
   ...overrides,
 });
 
-const diagnosis = (classification = 'LOCATOR_CHANGED', overrides = {}) => ({
-  classification,
-  root_cause: 'The recorded locator no longer matches the page.',
-  evidence: ['The failed locator was recorded.'],
-  hypotheses: [],
-  recommended_actions: [],
-  confidence: 0.9,
-  provider: 'provider-a',
-  fallback_used: false,
-  ...overrides,
-});
-
 test('Classification aliases are normalized without changing the stored classification', () => {
   assert.equal(normalizeFailureClassification('ENVIRONMENT_ERROR'), 'ENVIRONMENT');
   assert.equal(normalizeFailureClassification('TIMING_ISSUE'), 'TIMING');
   assert.equal(normalizeFailureClassification('UNKNOWN'), 'UNKNOWN');
 });
 
-test('Header classification follows a trusted diagnosis and ignores simulated fallback labels', () => {
-  assert.equal(displayedFailureClassification('UNKNOWN', diagnosis('PRODUCT_DEFECT')), 'PRODUCT_DEFECT');
-  assert.equal(displayedFailureClassification('UNKNOWN', diagnosis('ENVIRONMENT', { provider: 'fake' })), 'UNKNOWN');
-  assert.equal(displayedFailureClassification('UNKNOWN', diagnosis('ENVIRONMENT', { fallback_used: true })), 'UNKNOWN');
+test('Classification display uses the failure record and does not apply diagnosis trust policy in the client', () => {
+  assert.equal(displayedFailureClassification('UNKNOWN'), 'UNKNOWN');
+  assert.equal(displayedFailureClassification('ENVIRONMENT_ERROR'), 'ENVIRONMENT');
 });
 
-test('Failure state follows actual diagnosis, proposal, application, and verification records', () => {
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: null, repairProposed: false, repairApplied: false }), 'NOT_ANALYZED');
-  assert.equal(deriveDiagnosisState({ diagnosing: true, diagnosis: null, repairProposed: false, repairApplied: false }), 'ANALYZING');
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: diagnosis(), repairProposed: false, repairApplied: false }), 'DIAGNOSED');
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: diagnosis(), repairProposed: true, repairApplied: false }), 'REPAIR_PROPOSED');
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: diagnosis(), repairProposed: true, repairApplied: true }), 'REPAIR_APPLIED');
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: diagnosis(), repairProposed: false, repairApplied: false, verificationStatus: 'RUNNING' }), 'VERIFYING');
-  assert.equal(deriveDiagnosisState({ diagnosing: false, diagnosis: diagnosis(), repairProposed: false, repairApplied: false, verificationStatus: 'PASSED' }), 'VERIFIED');
-});
-
-test('Primary action is classification and workflow aware', () => {
-  assert.equal(primaryActionFor({ state: 'NOT_ANALYZED', classification: 'UNKNOWN', hasFailedLocator: false }), 'RUN_DIAGNOSIS');
-  assert.equal(primaryActionFor({ state: 'DIAGNOSED', classification: 'UNKNOWN', diagnosedClassification: 'LOCATOR_CHANGED', hasFailedLocator: true }), 'GENERATE_LOCATOR_REPAIR');
-  assert.equal(primaryActionFor({ state: 'DIAGNOSED', classification: 'AUTOMATION_DEFECT', hasFailedLocator: false }), 'BLOCKED');
-  assert.equal(primaryActionFor({ state: 'DIAGNOSED', classification: 'ENVIRONMENT', hasFailedLocator: false }), 'RETRY');
-  assert.equal(primaryActionFor({ state: 'DIAGNOSED', classification: 'PRODUCT_DEFECT', hasFailedLocator: false }), 'CREATE_ISSUE_DRAFT');
-  assert.equal(primaryActionFor({ state: 'REPAIR_APPLIED', classification: 'LOCATOR_CHANGED', hasFailedLocator: true }), 'VERIFY_FIX');
-});
-
-test('Locator repair requires a confirmed non-fallback locator diagnosis and evidence', () => {
-  const record = failure({ classification: 'LOCATOR_CHANGED', failing_locator: 'text=Save' });
-  assert.equal(repairEligibility({ failure: record, diagnosis: null }).reason, 'not-diagnosed');
-  assert.equal(repairEligibility({ failure: record, diagnosis: diagnosis('LOCATOR_CHANGED', { provider: 'fake' }) }).eligible, false);
-  assert.equal(repairEligibility({ failure: record, diagnosis: diagnosis('LOCATOR_CHANGED') }).eligible, true);
-  assert.equal(repairEligibility({ failure: failure({ classification: 'UNKNOWN', failing_locator: 'text=Save' }), diagnosis: diagnosis('UNKNOWN') }).eligible, false);
+test('Primary action is a presentation mapping of backend allowed actions', () => {
+  assert.equal(primaryActionForWorkflow('CREATED', ['START_ANALYSIS']), 'RUN_DIAGNOSIS');
+  assert.equal(primaryActionForWorkflow('PATCH_READY', ['APPLY']), 'REVIEW_REPAIR');
+  assert.equal(primaryActionForWorkflow('PATCH_APPLIED', ['VERIFY', 'ROLLBACK']), 'VERIFY_FIX');
+  assert.equal(primaryActionForWorkflow('NOT_APPLICABLE', ['RETRY']), 'RETRY');
+  assert.equal(primaryActionForWorkflow('NOT_APPLICABLE', ['CREATE_ISSUE_DRAFT']), 'CREATE_ISSUE_DRAFT');
+  assert.equal(primaryActionForWorkflow('NOT_APPLICABLE', []), 'BLOCKED');
+  assert.equal(primaryActionForWorkflow('VERIFYING_FIX', []), 'VERIFYING');
+  assert.equal(primaryActionForWorkflow('VERIFIED', []), 'VERIFIED');
 });
 
 test('Stored repair proposals survive failure selection and invalid patches are ignored', () => {
@@ -96,9 +66,28 @@ test('Stored repair proposals survive failure selection and invalid patches are 
 
 test('Raw error and stack are summarized into actionable labels and relevant frames', () => {
   assert.equal(summarizeFailureError('BrowserType.launch: spawn EPERM'), 'browserLaunchEperm');
+  assert.equal(
+    summarizeFailureError('TimeoutError: Locator.click timeout waiting for locator("#purchase-now")', 'LOCATOR_CHANGED'),
+    'locatorTimeout',
+  );
+  assert.equal(summarizeFailureError('TimeoutError: waiting for navigation', 'TIMING_ISSUE'), 'timeout');
   assert.deepEqual(
     extractRelevantFrames('  File "site-packages/playwright/_impl.py", line 4\n  File "C:\\project\\conftest.py", line 38'),
     ['conftest.py:38'],
+  );
+});
+
+test('Failure source location keeps its test file and matches the stack line', () => {
+  assert.deepEqual(
+    failureSourceLocation(failure({
+      test_nodeid: 'tests/test_stable_locator_failure.py::test_purchase_now_locator',
+      stack_trace: '  File "D:\\workspace\\tests\\test_stable_locator_failure.py", line 3, in test_purchase_now_locator',
+    })),
+    { filePath: 'tests/test_stable_locator_failure.py', lineNumber: 3 },
+  );
+  assert.deepEqual(
+    failureSourceLocation(failure({ stack_trace: 'TimeoutError: locator did not resolve' })),
+    { filePath: 'tests/test_shop.py', lineNumber: null },
   );
 });
 
@@ -107,6 +96,14 @@ test('Evidence tabs only include sections backed by captured evidence', () => {
   assert.deepEqual(
     availableEvidenceTabs(failure({ screenshot_path: 'artifacts/page.png', trace_path: 'artifacts/trace.zip', console_logs: ['console error'] })),
     ['SUMMARY', 'STACK', 'BROWSER', 'CONSOLE', 'ARTIFACTS'],
+  );
+  assert.deepEqual(
+    availableEvidenceTabs(failure(), {
+      url: 'http://127.0.0.1/',
+      controls: [{ role: 'button', name: 'Complete order' }],
+      network_logs: [{ method: 'GET', status: 200 }],
+    }),
+    ['SUMMARY', 'STACK', 'BROWSER', 'NETWORK'],
   );
 });
 

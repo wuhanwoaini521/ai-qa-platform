@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 from app.api import artifacts as artifacts_api
-from app.api import jobs as jobs_api
 from app.api import workers as workers_api
+from app.container import get_job_queue_service
+from app.main import app as fastapi_app
 from app.repositories.artifact_repo import ArtifactRepository
 from app.repositories.job_repo import JobRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.runner_profile_repo import RunnerProfileRepository
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.worker_repo import WorkerRepository
 from app.services.artifact_storage_service import ArtifactStorageService
@@ -70,7 +72,9 @@ async def test_worker_and_cluster_status(test_db_session):
 
 @pytest.mark.asyncio
 async def test_job_queue_and_dispatch(test_db_session):
-    job_service = JobQueueService(job_repo=JobRepository(test_db_session))
+    job_service = JobQueueService(
+        repository_scope=TaskRepositoryScopeFactory(), job_repo=JobRepository(test_db_session)
+    )
 
     # Jobs reference a run and a project (FK enforced by the engine), so seed real parents.
     async with test_db_session() as session:
@@ -178,7 +182,9 @@ async def test_distributed_endpoints(client: AsyncClient, test_db_session, tmp_p
         "worker_service",
         WorkerService(worker_repo=WorkerRepository(test_db_session), job_repo=JobRepository(test_db_session)),
     )
-    monkeypatch.setattr(jobs_api, "job_queue_service", JobQueueService(job_repo=JobRepository(test_db_session)))
+    fastapi_app.dependency_overrides[get_job_queue_service] = lambda: JobQueueService(
+        repository_scope=TaskRepositoryScopeFactory(), job_repo=JobRepository(test_db_session)
+    )
     monkeypatch.setattr(
         artifacts_api,
         "artifact_service",

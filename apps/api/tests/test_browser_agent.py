@@ -4,7 +4,7 @@ import pytest
 from app.persistence.models import TaskORM
 from app.repositories.task_repo import TaskRepository
 from app.services.event_normalizer import normalize_event
-from app.services.task_runtime_service import TaskRuntimeService
+from app.services.task_browser_executor import TaskBrowserExecutor
 from project_model.models import DecisionResult
 from project_model.task_models import TaskStatus, TaskStepStatus
 from pydantic import ValidationError
@@ -45,18 +45,18 @@ def test_browser_safety_allows_browsing_and_cart_but_blocks_order_changes():
 
 
 def test_browser_cart_intent_recognizes_common_chinese_request():
-    assert TaskRuntimeService._browser_cart_intent("把黑色裤子添加到购物车")
-    assert TaskRuntimeService._browser_cart_intent("Add the black trousers to my cart")
-    assert not TaskRuntimeService._browser_cart_intent("Find black trousers")
+    assert TaskBrowserExecutor._browser_cart_intent("把黑色裤子添加到购物车")
+    assert TaskBrowserExecutor._browser_cart_intent("Add the black trousers to my cart")
+    assert not TaskBrowserExecutor._browser_cart_intent("Find black trousers")
 
 
 def test_browser_cart_evidence_requires_a_new_observed_confirmation_or_count():
     before = {"count": 1, "confirmation": False}
     after = {"count": 2, "confirmation": False}
-    assert TaskRuntimeService._browser_cart_verified(before, after)
-    assert TaskRuntimeService._browser_cart_verified(before, {"count": None, "confirmation": True})
-    assert not TaskRuntimeService._browser_cart_verified(before, {"count": 1, "confirmation": False})
-    assert TaskRuntimeService._browser_cart_state(
+    assert TaskBrowserExecutor._browser_cart_verified(before, after)
+    assert TaskBrowserExecutor._browser_cart_verified(before, {"count": None, "confirmation": True})
+    assert not TaskBrowserExecutor._browser_cart_verified(before, {"count": 1, "confirmation": False})
+    assert TaskBrowserExecutor._browser_cart_state(
         {"text": "Added to your cart", "elements": [{"name": "Cart (2)"}]}
     ) == {
         "badge_text": "Cart (2)",
@@ -65,7 +65,7 @@ def test_browser_cart_evidence_requires_a_new_observed_confirmation_or_count():
         "confirmation": True,
         "confirmation_text": "Added to your cart",
     }
-    assert TaskRuntimeService._browser_cart_state({"text": "已添加到购物车", "elements": []})["confirmation"]
+    assert TaskBrowserExecutor._browser_cart_state({"text": "已添加到购物车", "elements": []})["confirmation"]
 
 
 def test_browser_goal_completion_needs_page_or_cart_evidence():
@@ -76,10 +76,10 @@ def test_browser_goal_completion_needs_page_or_cart_evidence():
         "text": "Black trousers",
     }
 
-    assert not TaskRuntimeService._browser_goal_verified(
+    assert not TaskBrowserExecutor._browser_goal_verified(
         "Find black trousers", plan, observation, [], ["not present"], cart_intent=True
     )
-    assert TaskRuntimeService._browser_goal_verified(
+    assert TaskBrowserExecutor._browser_goal_verified(
         "Find black trousers",
         plan,
         observation,
@@ -87,7 +87,7 @@ def test_browser_goal_completion_needs_page_or_cart_evidence():
         [],
         cart_intent=False,
     )
-    assert not TaskRuntimeService._browser_goal_verified(
+    assert not TaskBrowserExecutor._browser_goal_verified(
         "Find black trousers",
         plan,
         {"url": "/category/black", "title": "Black collection", "text": "Black collection"},
@@ -95,7 +95,7 @@ def test_browser_goal_completion_needs_page_or_cart_evidence():
         [],
         cart_intent=False,
     )
-    assert TaskRuntimeService._browser_goal_verified(
+    assert TaskBrowserExecutor._browser_goal_verified(
         "Add black trousers to cart",
         plan,
         observation,
@@ -103,7 +103,7 @@ def test_browser_goal_completion_needs_page_or_cart_evidence():
         [],
         cart_intent=True,
     )
-    assert not TaskRuntimeService._browser_goal_verified(
+    assert not TaskBrowserExecutor._browser_goal_verified(
         "Add black trousers to cart",
         plan,
         observation,
@@ -119,17 +119,15 @@ def test_browser_loop_guards_repeated_controls_and_url_bounces():
         {"action": "click", "target_id": "el_2"},
     ]
     candidate = {"action_type": "click", "target_id": "el_2"}
-    assert TaskRuntimeService._browser_repeats_same_target(history, candidate)
-    assert not TaskRuntimeService._browser_repeats_same_target(history, {"action_type": "click", "target_id": "el_4"})
-    assert not TaskRuntimeService._browser_repeats_same_target(history, {"action_type": "scroll", "target_id": "el_2"})
-    assert TaskRuntimeService._browser_url_loop(["/a", "/b", "/a", "/b", "/a"])
-    assert not TaskRuntimeService._browser_url_loop(["/home", "/pants", "/product", "/cart"])
-    assert not TaskRuntimeService._browser_has_safe_back_target([])
-    assert not TaskRuntimeService._browser_has_safe_back_target(["https://shop.example/404"])
-    assert TaskRuntimeService._browser_has_safe_back_target(["https://shop.example/404", "about:blank"])
-    assert TaskRuntimeService._browser_has_safe_back_target(
-        ["https://shop.example/", "https://shop.example/products"]
-    )
+    assert TaskBrowserExecutor._browser_repeats_same_target(history, candidate)
+    assert not TaskBrowserExecutor._browser_repeats_same_target(history, {"action_type": "click", "target_id": "el_4"})
+    assert not TaskBrowserExecutor._browser_repeats_same_target(history, {"action_type": "scroll", "target_id": "el_2"})
+    assert TaskBrowserExecutor._browser_url_loop(["/a", "/b", "/a", "/b", "/a"])
+    assert not TaskBrowserExecutor._browser_url_loop(["/home", "/pants", "/product", "/cart"])
+    assert not TaskBrowserExecutor._browser_has_safe_back_target([])
+    assert not TaskBrowserExecutor._browser_has_safe_back_target(["https://shop.example/404"])
+    assert TaskBrowserExecutor._browser_has_safe_back_target(["https://shop.example/404", "about:blank"])
+    assert TaskBrowserExecutor._browser_has_safe_back_target(["https://shop.example/", "https://shop.example/products"])
 
 
 def test_browser_navigation_failure_keeps_actionable_redacted_cause():
@@ -137,7 +135,7 @@ def test_browser_navigation_failure_keeps_actionable_redacted_cause():
         "Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://shop.example/products?token=private-value"
     )
 
-    blocked = TaskRuntimeService._browser_navigation_failure(
+    blocked = TaskBrowserExecutor._browser_navigation_failure(
         error,
         "https://shop.example/products?token=private-value",
     )
@@ -156,7 +154,7 @@ def test_browser_jev_fallback_is_explicit_and_uses_only_valid_candidate_ids():
         {"candidate_id": "pants", "action_type": "click"},
         {"candidate_id": "help", "action_type": "navigate"},
     ]
-    selected, provider, reason = TaskRuntimeService._choose_browser_candidate(
+    selected, provider, reason = TaskBrowserExecutor._choose_browser_candidate(
         candidates,
         "pants",
         jev_result=DecisionResult(provider="fallback", fallback_used=True, reason="timeout"),
@@ -165,7 +163,7 @@ def test_browser_jev_fallback_is_explicit_and_uses_only_valid_candidate_ids():
     assert provider == "ai-ranking"
     assert reason == "timeout"
 
-    selected, provider, reason = TaskRuntimeService._choose_browser_candidate(
+    selected, provider, reason = TaskBrowserExecutor._choose_browser_candidate(
         candidates[:1],
         "pants",
         jev_result=DecisionResult(
@@ -179,7 +177,7 @@ def test_browser_jev_fallback_is_explicit_and_uses_only_valid_candidate_ids():
     assert provider == "single-candidate"
     assert reason == "below_minimum_confidence"
 
-    selected, provider, reason = TaskRuntimeService._choose_browser_candidate(
+    selected, provider, reason = TaskBrowserExecutor._choose_browser_candidate(
         candidates,
         "missing",
         jev_result=DecisionResult(provider="jev", choice="not_a_candidate", confidence=0.9),
@@ -190,9 +188,9 @@ def test_browser_jev_fallback_is_explicit_and_uses_only_valid_candidate_ids():
 
 
 def test_browser_agent_honors_required_jev_decision_for_a_single_candidate():
-    assert TaskRuntimeService._browser_jev_needed(candidate_count=1, explicitly_required=True)
-    assert TaskRuntimeService._browser_jev_needed(candidate_count=2, explicitly_required=False)
-    assert not TaskRuntimeService._browser_jev_needed(candidate_count=1, explicitly_required=False)
+    assert TaskBrowserExecutor._browser_jev_needed(candidate_count=1, explicitly_required=True)
+    assert TaskBrowserExecutor._browser_jev_needed(candidate_count=2, explicitly_required=False)
+    assert not TaskBrowserExecutor._browser_jev_needed(candidate_count=1, explicitly_required=False)
 
 
 def test_browser_rule_fallback_searches_only_observed_search_controls():
@@ -221,7 +219,7 @@ def test_browser_rule_fallback_searches_only_observed_search_controls():
         ],
     }
 
-    plan = TaskRuntimeService._browser_rule_fallback_plan(goal, observation, [])
+    plan = TaskBrowserExecutor._browser_rule_fallback_plan(goal, observation, [])
 
     assert plan is not None
     assert len(plan.candidates) == 1
@@ -257,7 +255,7 @@ def test_browser_rule_fallback_submits_search_and_opens_observed_official_link()
     }
     history = [{"action": "fill", "value": "Selenium", "status": "success"}]
 
-    submit_plan = TaskRuntimeService._browser_rule_fallback_plan(goal, observation, history)
+    submit_plan = TaskBrowserExecutor._browser_rule_fallback_plan(goal, observation, history)
     assert submit_plan is not None
     assert submit_plan.candidates[0].action_type == "click"
     assert submit_plan.candidates[0].target_id == "el_submit"
@@ -277,7 +275,7 @@ def test_browser_rule_fallback_submits_search_and_opens_observed_official_link()
             }
         ],
     }
-    official_plan = TaskRuntimeService._browser_rule_fallback_plan(
+    official_plan = TaskBrowserExecutor._browser_rule_fallback_plan(
         goal, results, history, trusted_domains=["selenium.dev"]
     )
 
@@ -303,7 +301,7 @@ def test_browser_rule_fallback_does_not_repeat_search_or_invent_controls():
         ],
     }
 
-    waiting = TaskRuntimeService._browser_rule_fallback_plan(
+    waiting = TaskBrowserExecutor._browser_rule_fallback_plan(
         goal,
         observation,
         [{"action": "press_key", "value": "Enter", "status": "success"}],
@@ -312,7 +310,7 @@ def test_browser_rule_fallback_does_not_repeat_search_or_invent_controls():
     assert waiting.candidates[0].action_type == "wait"
     assert waiting.candidates[0].value == "700"
     assert (
-        TaskRuntimeService._browser_rule_fallback_plan(
+        TaskBrowserExecutor._browser_rule_fallback_plan(
             goal,
             observation,
             [
@@ -324,7 +322,7 @@ def test_browser_rule_fallback_does_not_repeat_search_or_invent_controls():
         is None
     )
     assert (
-        TaskRuntimeService._browser_rule_fallback_plan(
+        TaskBrowserExecutor._browser_rule_fallback_plan(
             goal,
             {"url": observation["url"], "elements": []},
             [],
@@ -334,7 +332,7 @@ def test_browser_rule_fallback_does_not_repeat_search_or_invent_controls():
 
 
 def test_browser_rule_fallback_does_not_guess_an_unrelated_single_input():
-    plan = TaskRuntimeService._browser_rule_fallback_plan(
+    plan = TaskBrowserExecutor._browser_rule_fallback_plan(
         "打开百度，搜索 Selenium，然后进入 Selenium 官网",
         {
             "url": "https://www.baidu.com/",
@@ -364,7 +362,7 @@ def test_browser_rule_fallback_does_not_guess_an_unrelated_single_input():
 
 
 def test_browser_rule_fallback_can_identify_one_input_from_its_search_submit_control():
-    plan = TaskRuntimeService._browser_rule_fallback_plan(
+    plan = TaskBrowserExecutor._browser_rule_fallback_plan(
         "打开百度，搜索 Selenium，然后进入 Selenium 官网",
         {
             "url": "https://www.baidu.com/",
@@ -412,67 +410,69 @@ def test_browser_rule_fallback_completes_only_after_verified_official_site_navig
         }
     ]
 
-    assert TaskRuntimeService._browser_rule_fallback_plan(goal, observation, history) is None
+    assert TaskBrowserExecutor._browser_rule_fallback_plan(goal, observation, history) is None
 
-    plan = TaskRuntimeService._browser_rule_fallback_plan(
-        goal, observation, history, trusted_domains=["selenium.dev"]
-    )
+    plan = TaskBrowserExecutor._browser_rule_fallback_plan(goal, observation, history, trusted_domains=["selenium.dev"])
 
     assert plan is not None
     assert plan.goal_status == "completed"
     assert "www.selenium.dev" in plan.completion_evidence
     assert "selenium" in plan.completion_evidence
-    assert not TaskRuntimeService._browser_goal_verified(goal, plan, observation, history, [], False)
-    assert TaskRuntimeService._browser_goal_verified(
+    assert not TaskBrowserExecutor._browser_goal_verified(goal, plan, observation, history, [], False)
+    assert TaskBrowserExecutor._browser_goal_verified(
         goal, plan, observation, history, [], False, trusted_domains=["selenium.dev"]
     )
 
     mismatched_navigation = [{**history[0], "url_after": "https://example.test/"}]
-    assert TaskRuntimeService._browser_rule_fallback_plan(
-        goal, observation, mismatched_navigation, trusted_domains=["selenium.dev"]
-    ) is None
+    assert (
+        TaskBrowserExecutor._browser_rule_fallback_plan(
+            goal, observation, mismatched_navigation, trusted_domains=["selenium.dev"]
+        )
+        is None
+    )
 
 
 def test_browser_official_site_verification_rejects_brand_spoofed_domains():
     goal = "搜索 Selenium，然后进入 Selenium 官网"
-    assert TaskRuntimeService._browser_official_entry_url_allowed("https://www.baidu.com/", [])
-    assert not TaskRuntimeService._browser_official_entry_url_allowed("https://evil.baidu.com/", [])
-    assert not TaskRuntimeService._browser_official_entry_url_allowed("http://www.baidu.com/", [])
-    assert TaskRuntimeService._browser_official_entry_url_allowed(
-        "https://docs.selenium.dev/", ["selenium.dev"]
-    )
-    assert not TaskRuntimeService._browser_official_entry_url_allowed("https://docs.selenium.dev/", [])
+    assert TaskBrowserExecutor._browser_official_entry_url_allowed("https://www.baidu.com/", [])
+    assert not TaskBrowserExecutor._browser_official_entry_url_allowed("https://evil.baidu.com/", [])
+    assert not TaskBrowserExecutor._browser_official_entry_url_allowed("http://www.baidu.com/", [])
+    assert TaskBrowserExecutor._browser_official_entry_url_allowed("https://docs.selenium.dev/", ["selenium.dev"])
+    assert not TaskBrowserExecutor._browser_official_entry_url_allowed("https://docs.selenium.dev/", [])
     fake_results = {
         "url": "https://www.baidu.com/s?wd=Selenium",
-        "elements": [{
-            "id": "fake_official",
-            "tag": "a",
-            "name": "Selenium 官网",
-            "href": "https://selenium.evil.com/",
-            "_href": "https://selenium.evil.com/",
-            "visible": True,
-            "enabled": True,
-        }],
+        "elements": [
+            {
+                "id": "fake_official",
+                "tag": "a",
+                "name": "Selenium 官网",
+                "href": "https://selenium.evil.com/",
+                "_href": "https://selenium.evil.com/",
+                "visible": True,
+                "enabled": True,
+            }
+        ],
     }
-    assert TaskRuntimeService._browser_rule_fallback_plan(
-        goal, fake_results, [], trusted_domains=["selenium.dev"]
-    ) is None
+    assert (
+        TaskBrowserExecutor._browser_rule_fallback_plan(goal, fake_results, [], trusted_domains=["selenium.dev"])
+        is None
+    )
 
     plan = BrowserAgentPlan(goal_status="completed", completion_evidence=["selenium.evil.com", "Selenium"])
     fake_page = {"url": "https://selenium.evil.com/", "title": "Selenium", "text": "Selenium official website"}
     fake_history = [{"action": "navigate", "status": "success", "url_after": fake_page["url"]}]
-    assert not TaskRuntimeService._browser_goal_verified(
+    assert not TaskBrowserExecutor._browser_goal_verified(
         goal, plan, fake_page, fake_history, [], False, trusted_domains=["selenium.dev"]
     )
 
     trusted_subdomain = {**fake_page, "url": "https://docs.selenium.dev/"}
     trusted_history = [{"action": "navigate", "status": "success", "url_after": trusted_subdomain["url"]}]
-    assert TaskRuntimeService._browser_goal_verified(
+    assert TaskBrowserExecutor._browser_goal_verified(
         goal, plan, trusted_subdomain, trusted_history, [], False, trusted_domains=["selenium.dev"]
     )
 
     def rejection(action_type, href):
-        return TaskRuntimeService._browser_navigation_candidate_rejection(
+        return TaskBrowserExecutor._browser_navigation_candidate_rejection(
             goal,
             "https://www.baidu.com/s?wd=Selenium",
             action_type,
@@ -484,92 +484,128 @@ def test_browser_official_site_verification_rejects_brand_spoofed_domains():
     assert rejection("click", "https://selenium.evil.com/") == "navigation_target_not_trusted"
     assert rejection("navigate", "https://selenium.dev/") is None
     assert rejection("click", "https://www.baidu.com/search?q=Selenium") is None
-    assert TaskRuntimeService._browser_navigation_candidate_rejection(
-        goal,
-        "https://www.baidu.com/s?wd=Selenium",
-        "click",
-        {"tag": "a", "href": "https://selenium.dev/", "_href": "https://selenium.dev/"},
-        [],
-    ) == "navigation_target_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://www.baidu.com/s?wd=Selenium",
-        "https://selenium.evil.com/",
-        ["selenium.dev"],
-    ) == "navigation_landed_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://www.baidu.com/s?wd=Selenium",
-        "https://docs.selenium.dev/",
-        ["selenium.dev"],
-    ) is None
-    assert TaskRuntimeService._browser_navigation_candidate_rejection(
-        goal,
-        "https://selenium.dev/",
-        "navigate",
-        {"tag": "a", "href": "http://selenium.dev/", "_href": "http://selenium.dev/"},
-        ["selenium.dev"],
-    ) == "navigation_target_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://selenium.dev/",
-        "http://selenium.dev/",
-        ["selenium.dev"],
-    ) == "navigation_landed_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://www.baidu.com/s?wd=Selenium",
-        "https://www.selenium.dev/",
-        ["selenium.dev"],
-    ) is None
-    assert TaskRuntimeService._browser_navigation_candidate_rejection(
-        goal,
-        "https://selenium.evil.com/",
-        "click",
-        {"tag": "a", "href": "https://selenium.evil.com/next", "_href": "https://selenium.evil.com/next"},
-        ["selenium.dev"],
-    ) == "navigation_target_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://selenium.evil.com/",
-        "https://selenium.evil.com/next",
-        ["selenium.dev"],
-    ) == "navigation_landed_not_trusted"
-    assert TaskRuntimeService._browser_navigation_candidate_rejection(
-        goal,
-        "https://selenium.dev/",
-        "click",
-        {"tag": "a", "href": "https://selenium.dev/next", "_href": "https://selenium.dev/next"},
-        [],
-    ) == "navigation_target_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://selenium.dev/",
-        "https://selenium.dev/next",
-        [],
-    ) == "navigation_landed_not_trusted"
-    assert TaskRuntimeService._browser_navigation_candidate_rejection(
-        goal,
-        "https://evil.baidu.com/s?wd=Selenium",
-        "click",
-        {
-            "tag": "a",
-            "href": "https://evil.baidu.com/next",
-            "_href": "https://evil.baidu.com/next",
-        },
-        [],
-    ) == "navigation_target_not_trusted"
-    assert TaskRuntimeService._browser_navigation_landing_rejection(
-        goal,
-        "https://evil.baidu.com/s?wd=Selenium",
-        "https://evil.baidu.com/next",
-        [],
-    ) == "navigation_landed_not_trusted"
+    assert (
+        TaskBrowserExecutor._browser_navigation_candidate_rejection(
+            goal,
+            "https://www.baidu.com/s?wd=Selenium",
+            "click",
+            {"tag": "a", "href": "https://selenium.dev/", "_href": "https://selenium.dev/"},
+            [],
+        )
+        == "navigation_target_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://www.baidu.com/s?wd=Selenium",
+            "https://selenium.evil.com/",
+            ["selenium.dev"],
+        )
+        == "navigation_landed_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://www.baidu.com/s?wd=Selenium",
+            "https://docs.selenium.dev/",
+            ["selenium.dev"],
+        )
+        is None
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_candidate_rejection(
+            goal,
+            "https://selenium.dev/",
+            "navigate",
+            {"tag": "a", "href": "http://selenium.dev/", "_href": "http://selenium.dev/"},
+            ["selenium.dev"],
+        )
+        == "navigation_target_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://selenium.dev/",
+            "http://selenium.dev/",
+            ["selenium.dev"],
+        )
+        == "navigation_landed_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://www.baidu.com/s?wd=Selenium",
+            "https://www.selenium.dev/",
+            ["selenium.dev"],
+        )
+        is None
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_candidate_rejection(
+            goal,
+            "https://selenium.evil.com/",
+            "click",
+            {"tag": "a", "href": "https://selenium.evil.com/next", "_href": "https://selenium.evil.com/next"},
+            ["selenium.dev"],
+        )
+        == "navigation_target_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://selenium.evil.com/",
+            "https://selenium.evil.com/next",
+            ["selenium.dev"],
+        )
+        == "navigation_landed_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_candidate_rejection(
+            goal,
+            "https://selenium.dev/",
+            "click",
+            {"tag": "a", "href": "https://selenium.dev/next", "_href": "https://selenium.dev/next"},
+            [],
+        )
+        == "navigation_target_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://selenium.dev/",
+            "https://selenium.dev/next",
+            [],
+        )
+        == "navigation_landed_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_candidate_rejection(
+            goal,
+            "https://evil.baidu.com/s?wd=Selenium",
+            "click",
+            {
+                "tag": "a",
+                "href": "https://evil.baidu.com/next",
+                "_href": "https://evil.baidu.com/next",
+            },
+            [],
+        )
+        == "navigation_target_not_trusted"
+    )
+    assert (
+        TaskBrowserExecutor._browser_navigation_landing_rejection(
+            goal,
+            "https://evil.baidu.com/s?wd=Selenium",
+            "https://evil.baidu.com/next",
+            [],
+        )
+        == "navigation_landed_not_trusted"
+    )
 
 
 @pytest.mark.asyncio
 async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(client, test_db_session, monkeypatch):
-    from app.api.tasks import task_runtime_service
+    from app.api.tasks import task_execution_service
     from qa_core.ai.registry import AIProviderRegistry
 
     created = await client.post(
@@ -598,8 +634,8 @@ async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(cl
     async def record_trace(*_args):
         return None
 
-    monkeypatch.setattr(task_runtime_service, "_reserve_ai_call", reserve)
-    monkeypatch.setattr(task_runtime_service, "_record_ai_trace", record_trace)
+    monkeypatch.setattr(task_execution_service.ai_service, "reserve_ai_call", reserve)
+    monkeypatch.setattr(task_execution_service.execution_ports, "record_ai_trace", record_trace)
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: BrokenProvider())
     state = {"metrics": {}, "history": [], "subgoals": []}
     observation = {
@@ -621,7 +657,7 @@ async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(cl
         ],
     }
 
-    plan, ai_info = await task_runtime_service._browser_agent_candidates(task, observation, state)
+    plan, ai_info = await task_execution_service._browser_agent_candidates(task, observation, state)
 
     assert plan.candidates[0].action_type == "fill"
     assert plan.candidates[0].value == "Selenium"
@@ -634,7 +670,7 @@ async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(cl
 async def test_browser_agent_planner_prompt_is_bounded_and_omits_unrelated_input_values(
     client, test_db_session, monkeypatch
 ):
-    from app.api.tasks import task_runtime_service
+    from app.api.tasks import task_execution_service
     from qa_core.ai.registry import AIProviderRegistry
 
     created = await client.post(
@@ -681,8 +717,8 @@ async def test_browser_agent_planner_prompt_is_bounded_and_omits_unrelated_input
     async def record_trace(*_args):
         return None
 
-    monkeypatch.setattr(task_runtime_service, "_reserve_ai_call", reserve)
-    monkeypatch.setattr(task_runtime_service, "_record_ai_trace", record_trace)
+    monkeypatch.setattr(task_execution_service.ai_service, "reserve_ai_call", reserve)
+    monkeypatch.setattr(task_execution_service.execution_ports, "record_ai_trace", record_trace)
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: CapturingProvider())
 
     elements = [
@@ -740,7 +776,7 @@ async def test_browser_agent_planner_prompt_is_bounded_and_omits_unrelated_input
         "state_hash": "state-1",
     }
 
-    plan, _ai_info = await task_runtime_service._browser_agent_candidates(
+    plan, _ai_info = await task_execution_service._browser_agent_candidates(
         task, observation, {"metrics": {}, "history": [], "subgoals": []}
     )
 
@@ -830,7 +866,7 @@ def test_browser_agent_runtime_events_keep_plain_status_and_advanced_decision_da
 async def test_browser_agent_pause_keeps_step_pending_for_fresh_observation_on_resume(
     client, test_db_session, monkeypatch
 ):
-    from app.api.tasks import task_runtime_service
+    from app.api.tasks import task_command_service, task_execution_service, task_scheduler_service
 
     created = await client.post(
         "/api/tasks",
@@ -855,13 +891,13 @@ async def test_browser_agent_pause_keeps_step_pending_for_fresh_observation_on_r
             await session.commit()
         return {"_pause_after_step": True, "current_url": "https://example.test/details"}
 
-    monkeypatch.setattr(task_runtime_service, "_run_step_tool", pause_after_action)
-    monkeypatch.setattr(task_runtime_service, "_workspace_source_snapshot", lambda _workspace_id: {})
+    monkeypatch.setattr(task_execution_service, "_run_step_tool", pause_after_action)
+    monkeypatch.setattr("app.services.task_scheduler_service.workspace_source_snapshot", lambda _workspace_id: {})
 
-    result = await task_runtime_service._execute_step(task, step)
+    result = await task_execution_service._execute_step(task, step)
     assert result == {"deferred_for_pause": True}
-    assert await task_runtime_service._pause_at_boundary(task_id)
-    paused = await task_runtime_service.get(task_id)
+    assert await task_scheduler_service._pause_at_boundary(task_id)
+    paused = await task_command_service.get(task_id)
     assert paused is not None and paused.status == TaskStatus.PAUSED
     assert paused.steps[0].status == TaskStepStatus.PENDING
     assert paused.steps[0].outputs == {}

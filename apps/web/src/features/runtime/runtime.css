@@ -1370,11 +1370,16 @@
 .rt-failure-workspace-heading p { margin: 0; color: var(--danger); font-size: 11px; white-space: pre-wrap; }
 .rt-failure-workspace-actions { display: flex; flex-wrap: wrap; flex: 0 0 auto; gap: 7px; }
 .rt-failure-workspace-old-locator { width: fit-content; max-width: 100%; padding: 4px 7px; border-radius: 5px; background: var(--surface-inset); font: 10px var(--font-mono); overflow-wrap: anywhere; }
-.rt-failure-diagnosis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.rt-failure-diagnosis > div, .rt-failure-decision { min-width: 0; padding: 10px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--surface-subtle); }
-.rt-failure-diagnosis > div > span { color: var(--text-muted); font-size: 10px; }
+.rt-failure-diagnosis { display: grid; gap: 8px; }
+.rt-failure-diagnosis-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rt-failure-diagnosis-primary > div, .rt-failure-decision { min-width: 0; padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--surface-subtle); }
+.rt-failure-diagnosis-primary > div > span, .rt-failure-analysis-details > div > div > span { color: var(--text-muted); font-size: 10px; }
 .rt-failure-diagnosis p, .rt-failure-diagnosis ul { margin: 6px 0 0; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.rt-failure-diagnosis-primary p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .rt-failure-diagnosis ul { padding-left: 17px; }
+.rt-failure-analysis-details { padding: 0 10px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 10px; }
+.rt-failure-analysis-details summary { padding: 8px 0; color: var(--text-muted); cursor: pointer; }
+.rt-failure-analysis-details > div { display: grid; gap: 8px; padding-bottom: 10px; }
 .rt-failure-decision { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 10px; }
 .rt-failure-decision strong { color: var(--primary); }
 .rt-failure-decision code { flex-basis: 100%; padding: 6px; border-radius: 5px; background: var(--surface); font: 11px var(--font-mono); overflow-wrap: anywhere; }
@@ -1406,7 +1411,7 @@
 .rt-picked-candidates button > small { color: var(--text-muted); font-size: 9px; }
 @media (max-width: 760px) {
   .rt-failure-workspace-heading { flex-direction: column; }
-  .rt-failure-diagnosis { grid-template-columns: minmax(0, 1fr); }
+  .rt-failure-diagnosis-primary { grid-template-columns: minmax(0, 1fr); }
   .rt-failure-picker-heading { align-items: flex-start; flex-direction: column; }
   .rt-failure-picker-viewport { min-height: 140px; }
 }

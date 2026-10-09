@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
-from app.services.browser_proxy import launch_chromium
+from app.adapters.playwright.proxy import launch_chromium
 from app.services.locator_decision_service import LocatorDecisionService
 from project_model.models import DecisionResult
 
@@ -48,6 +50,102 @@ def test_candidate_generation_does_not_invent_unobserved_strategies():
     assert len(candidates) == 1
     assert candidates[0]["strategy"] == "test_id"
     assert candidates[0]["candidate_id"] == "candidate_1"
+
+
+def test_semantically_different_observed_candidate_is_not_filtered_by_old_locator_tokens():
+    candidates = LocatorDecisionService.generate_candidates(
+        {
+            "candidates": [
+                {"kind": "role", "value": "button", "name": "Complete order", "exact": True},
+                {"kind": "role", "value": "button", "name": "Cancel order", "exact": True},
+            ]
+        }
+    )
+
+    ranked = LocatorDecisionService.prioritize_candidates_for_failure("#purchase-now", candidates)
+
+    assert [candidate["name"] for candidate in ranked] == ["Complete order", "Cancel order"]
+
+
+def test_local_repair_requires_semantic_overlap_with_the_failed_locator():
+    assert LocatorDecisionService.semantically_matches_failed_locator(
+        '[data-testid="legacy-add-cart"]', 'get_by_test_id("add-to-cart")'
+    )
+    assert not LocatorDecisionService.semantically_matches_failed_locator(
+        '[data-testid="legacy-add-cart"]', 'get_by_role("button", name="Logout")'
+    )
+    assert not LocatorDecisionService.semantically_matches_failed_locator(
+        "#submit-order", 'get_by_role("button", name="Cancel order")'
+    )
+
+
+@pytest.mark.asyncio
+async def test_locator_decision_does_not_cut_off_a_healthy_jev_call_after_three_point_five_seconds():
+    class SlowDecisionService:
+        async def choose(self, _request, **_kwargs):
+            await asyncio.sleep(3.6)
+            return DecisionResult(provider="jev", model="slow-test", choice="candidate_1", confidence=0.95)
+
+    service = LocatorDecisionService(decision_service=SlowDecisionService())
+    candidates = service.generate_candidates({"candidates": [{"kind": "test_id", "value": "add-to-cart"}]})
+    result = await service.decide(
+        run_id="slow-jev-test",
+        event={"failed_locator": '[data-testid="legacy-add-cart"]'},
+        candidates=candidates,
+    )
+
+    assert result["summary"]["provider"] == "jev"
+    assert result["summary"]["model"] == "slow-test"
+    assert result["summary"]["fallback_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_jev_choice_outside_observed_candidates_has_an_explicit_fallback_reason():
+    class InvalidChoiceService:
+        async def choose(self, _request, **_kwargs):
+            return DecisionResult(provider="jev", model="test", choice="invented", confidence=0.95)
+
+    service = LocatorDecisionService(decision_service=InvalidChoiceService())
+    candidates = service.generate_candidates({"candidates": [{"kind": "test_id", "value": "add-to-cart"}]})
+    result = await service.decide(run_id="invalid-choice-test", event={}, candidates=candidates)
+
+    assert result["summary"]["provider"] == "local-strategy"
+    assert result["summary"]["fallback_reason"] == "choice_not_in_candidates"
+    assert result["summary"]["confidence"] == 0.95
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_fallback_preserves_jev_confidence_for_diagnostics():
+    class LowConfidenceDecisionService:
+        async def choose(self, _request, **_kwargs):
+            return DecisionResult(
+                provider="fallback",
+                confidence=0.56,
+                attempted_provider="jev",
+                attempted_model="jev-latest",
+                attempted_choice="candidate_1",
+                minimum_confidence=0.60,
+                fallback_used=True,
+                reason="below_minimum_confidence",
+            )
+
+    service = LocatorDecisionService(decision_service=LowConfidenceDecisionService())
+    candidates = service.generate_candidates(
+        {"candidates": [{"kind": "role", "value": "button", "name": "Cancel order"}]}
+    )
+    result = await service.decide(run_id="low-confidence-test", event={}, candidates=candidates)
+
+    assert result["summary"]["provider"] == "local-strategy"
+    assert result["summary"]["fallback_reason"] == "below_minimum_confidence"
+    assert result["summary"]["confidence"] == 0.56
+    assert result["summary"]["attempted_provider"] == "jev"
+    assert result["summary"]["attempted_model"] == "jev-latest"
+    assert result["summary"]["attempted_choice"] == "candidate_1"
+    assert result["summary"]["minimum_confidence"] == 0.60
+    completed = next(event for event in result["trace"] if event["type"] == "decision_completed")
+    assert completed["metadata"]["confidence"] == 0.56
+    assert completed["metadata"]["attempted_provider"] == "jev"
+    assert completed["metadata"]["minimum_confidence"] == 0.60
 
 
 @pytest.mark.asyncio
@@ -103,6 +201,6 @@ async def test_jev_verification_failure_keeps_attempt_and_explicit_local_fallbac
             )
             fallback = next(event for event in trace if event["type"] == "decision.fallback")
             assert fallback["metadata"]["provider"] == "local-strategy" and fallback["metadata"]["verified"] is True
-            assert result["summary"]["provider"] == "local-strategy" and result["summary"]["confidence"] is None
+            assert result["summary"]["provider"] == "local-strategy" and result["summary"]["confidence"] == 0.9
         finally:
             await browser.close()

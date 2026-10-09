@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from integrations.testrail_adapter import FakeTestRailAdapter, TestManagementAdapter, TestRailAdapter
@@ -14,6 +13,7 @@ from project_model.models import (
 from app.repositories.integration_audit_repo import IntegrationAuditRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_run_repo import TestRunRepository
+from app.settings import get_config
 
 
 class TestRailService:
@@ -32,8 +32,13 @@ class TestRailService:
 
         if adapter is not None:
             self.adapter = adapter
-        elif os.environ.get("TESTRAIL_API_KEY") and os.environ.get("TESTRAIL_BASE_URL"):
-            self.adapter = TestRailAdapter()
+        elif get_config().integrations.testrail.enabled:
+            integration = get_config().integrations.testrail
+            self.adapter = TestRailAdapter(
+                base_url=integration.base_url,
+                email=integration.username,
+                api_key=integration.token.get_secret_value(),
+            )
         else:
             self.adapter = FakeTestRailAdapter()
 

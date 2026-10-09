@@ -33,6 +33,13 @@ class LiveBrowserPlugin:
     def __init__(self, path):
         self.path = path
         self.worker_id = os.environ.get("PYTEST_XDIST_WORKER", "main")
+        self.capture_screenshot = os.environ.get("QA_CAPTURE_SCREENSHOT", "1") == "1"
+        self.capture_dom = os.environ.get("QA_CAPTURE_DOM", "1") == "1"
+        self.capture_console = os.environ.get("QA_CAPTURE_CONSOLE", "1") == "1"
+        self.capture_network = os.environ.get("QA_CAPTURE_NETWORK", "1") == "1"
+        self.max_console_entries = max(0, int(os.environ.get("QA_EVIDENCE_MAX_CONSOLE_ENTRIES", "30")))
+        self.max_network_entries = max(0, int(os.environ.get("QA_EVIDENCE_MAX_NETWORK_ENTRIES", "30")))
+        self.max_dom_chars = max(0, int(os.environ.get("QA_EVIDENCE_MAX_DOM_CHARS", "14000")))
         self.handle = open(f"{path}.{self.worker_id}", "a", encoding="utf-8")
         self.lock = threading.Lock()
         self.active = {}
@@ -64,13 +71,9 @@ class LiveBrowserPlugin:
                     return page
         return None
 
-    @staticmethod
-    def _page_evidence(page):
+    def _page_evidence(self, page):
         try:
-            return {
-                "url": str(getattr(page, "url", ""))[:2048],
-                "title": str(page.title())[:200],
-                "controls": page.locator("button,a[href],input:not([type=hidden]),textarea,select,[role]").evaluate_all("""els => els.slice(0,80).map(el => {
+            controls = page.locator("button,a[href],input:not([type=hidden]),textarea,select,[role]").evaluate_all("""els => els.slice(0,80).map(el => {
                   const tag=el.tagName.toLowerCase(), type=(el.getAttribute('type') || '').toLowerCase();
                   const role=el.getAttribute('role') || (tag==='a'?'link':tag==='button'?'button':(['input','textarea'].includes(tag)?'textbox':tag==='select'?'combobox':null));
                   const name=(el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.getAttribute('title') || '').trim().replaceAll(String.fromCharCode(9),' ').replaceAll(String.fromCharCode(10),' ').replaceAll(String.fromCharCode(13),' ').slice(0,120);
@@ -84,8 +87,22 @@ class LiveBrowserPlugin:
                   if(el.id && !Array.from(el.id).every(ch=>ch>='0'&&ch<='9') && !/[0-9a-f]{8,}/i.test(el.id)) candidates.push({kind:'id',value:el.id});
                   const css=tag+(el.getAttribute('type')?'[type="'+CSS.escape(type)+'"]':''); candidates.push({kind:'css',value:css});
                   return {tag,type,role,name,candidates,visible:!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length),enabled:!el.disabled};
-                })""")
+                })""") if self.capture_dom else []
+            evidence = {
+                "url": str(getattr(page, "url", ""))[:2048],
+                "title": str(page.title())[:200],
+                "controls": controls,
             }
+            remaining = self.max_dom_chars
+            bounded = []
+            for control in controls:
+                size = len(json.dumps(control, ensure_ascii=False))
+                if size > remaining:
+                    break
+                bounded.append(control)
+                remaining -= size
+            evidence["controls"] = bounded
+            return evidence
         except Exception:
             return None
 
@@ -97,8 +114,13 @@ class LiveBrowserPlugin:
         def publish(kind, entry):
             entry.setdefault('timestamp',datetime.now(timezone.utc).isoformat())
             key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[kind]
+            if (kind == "console" and not self.capture_console) or (kind == "network" and not self.capture_network):
+                return
+            limit = self.max_console_entries if kind == "console" else self.max_network_entries if kind == "network" else 100
+            if limit == 0:
+                return
             record[key].append(entry)
-            del record[key][:-100]
+            del record[key][:-limit]
             self.emit({"type": kind, "session_id": record["session_id"], "page_id": record["page_id"],
                 "nodeid": record["nodeid"], "url": getattr(page, "url", ""), "entry": entry})
         def safe_payload(value, depth=0):
@@ -197,6 +219,8 @@ class LiveBrowserPlugin:
         })
 
     def _capture_frame(self, page, record):
+        if not self.capture_screenshot:
+            return
         # Short tests may close before CDP emits a painted frame. Capture their actual page
         # after navigation/actions and before close; never create a substitute browser/page.
         try:

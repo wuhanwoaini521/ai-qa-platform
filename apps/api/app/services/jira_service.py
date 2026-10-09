@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from integrations.jira_adapter import FakeJiraAdapter, JiraAdapter, RequirementManagementAdapter
 from project_model.models import (
     JiraBugDraft,
@@ -17,6 +15,7 @@ from project_model.models import (
 from app.repositories.integration_audit_repo import IntegrationAuditRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.test_run_repo import TestRunRepository
+from app.settings import get_config
 
 
 class JiraService:
@@ -35,8 +34,13 @@ class JiraService:
 
         if adapter is not None:
             self.adapter = adapter
-        elif os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_BASE_URL"):
-            self.adapter = JiraAdapter()
+        elif get_config().integrations.jira.enabled:
+            integration = get_config().integrations.jira
+            self.adapter = JiraAdapter(
+                base_url=integration.base_url,
+                email=integration.username,
+                api_token=integration.token.get_secret_value(),
+            )
         else:
             self.adapter = FakeJiraAdapter()
 

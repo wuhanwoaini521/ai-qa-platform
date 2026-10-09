@@ -129,6 +129,7 @@ Provide a structured JSON output with fields:
 - recommended_actions: list of strings (concrete remediation steps)
 - confidence: float between 0.0 and 1.0
 Keep evidence to at most 5 items, hypotheses to at most 3, and recommended_actions to at most 4. Keep each item concise.
+Keep root_cause to at most two sentences and each list item to one short sentence. Return only the JSON object; do not include analysis or commentary outside it.
 """,
 )
 

@@ -385,6 +385,15 @@ class TestRunRepository:
         result = await self.session.execute(select(FailureRecordORM).where(FailureRecordORM.id == failure_id))
         return result.scalar_one_or_none()
 
+    async def get_task(self, task_id: str):
+        from app.persistence.models import TaskORM
+
+        return await self.session.get(TaskORM, task_id)
+
+    async def list_failures_by_run(self, run_id: str) -> list[FailureRecordORM]:
+        result = await self.session.execute(select(FailureRecordORM).where(FailureRecordORM.run_id == run_id))
+        return list(result.scalars().all())
+
     async def list_executions(self, run_id: str) -> list[TestExecutionORM]:
         result = await self.session.execute(
             select(TestExecutionORM)

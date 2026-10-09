@@ -19,7 +19,7 @@ from project_model.models import (
 from app.repositories.api_key_repo import ApiKeyRepository
 from app.repositories.security_audit_repo import SecurityAuditRepository
 from app.repositories.user_repo import UserRepository
-from app.settings import TOKEN_TTL_SECONDS, settings
+from app.settings import get_config
 
 STREAM_TICKET_TTL_SECONDS = 300
 
@@ -88,7 +88,7 @@ class AuthService:
                 "sub": user.id,
                 "email": user.email,
                 "role": user.role.value,
-                "exp": int(time.time()) + TOKEN_TTL_SECONDS,
+                "exp": int(time.time()) + get_config().app.auth_token_ttl_seconds,
             }
         )
 
@@ -112,7 +112,8 @@ class AuthService:
     def _issue_token(self, payload: dict) -> str:
         """Sign the session token: the payload is base64url-encoded and HMAC-SHA256 signed."""
         body = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
-        signature = hmac.new(settings.app_secret_key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest()
+        secret = get_config().app.secret_key.get_secret_value().encode("utf-8")
+        signature = hmac.new(secret, body.encode("utf-8"), hashlib.sha256).digest()
         return f"{body}.{base64.urlsafe_b64encode(signature).decode('utf-8')}"
 
     def _decode_token(self, token: str) -> dict | None:
@@ -120,7 +121,8 @@ class AuthService:
         body, _, signature = token.partition(".")
         if not body or not signature:
             return None
-        expected = hmac.new(settings.app_secret_key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest()
+        secret = get_config().app.secret_key.get_secret_value().encode("utf-8")
+        expected = hmac.new(secret, body.encode("utf-8"), hashlib.sha256).digest()
         try:
             provided = base64.urlsafe_b64decode(signature.encode("utf-8"))
         except Exception:
@@ -164,7 +166,7 @@ class AuthService:
             # Only reachable when AUTH_REQUIRED=false: development mode impersonates the seeded
             # administrator so a local run works without a login round-trip. In every other
             # configuration a missing header is an unauthenticated request.
-            if settings.auth_required:
+            if get_config().app.auth_required:
                 return None, []
             admin = await self.user_repo.get_by_email("admin@ai-qa.local")
             if admin:

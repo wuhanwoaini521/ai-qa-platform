@@ -97,3 +97,4 @@ async def test_flaky_and_history_api_endpoints(client: AsyncClient):
     assert "flaky_tests_count" in dash
     assert "rerun_recovery_count" in dash
     assert "pass_rate_today" in dash
+    assert dash["pass_rate_today"] is None

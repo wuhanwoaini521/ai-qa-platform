@@ -172,6 +172,7 @@
   "inspector": {
     "tabs": { "context": "上下文", "ai": "AI 计划", "run": "运行信息" },
     "title": "检查器",
+    "close": "关闭检查器",
     "liveContext": "实时上下文",
     "requirement": "需求分析",
     "case": "当前用例",

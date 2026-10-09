@@ -7,26 +7,11 @@ from project_model.models import (
     TestRailPublishRequest,
     TestRailPublishResponse,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.integration_audit_repo import IntegrationAuditRepository
-from app.repositories.test_case_repo import TestCaseRepository
-from app.repositories.test_run_repo import TestRunRepository
+from app.container import get_testrail_service
 from app.services.testrail_service import TestRailService
 
 router = APIRouter(prefix="/testrail", tags=["TestRail Integration"])
-
-
-def get_testrail_service(session: AsyncSession = Depends(get_db)) -> TestRailService:
-    test_run_repo = TestRunRepository(session)
-    test_case_repo = TestCaseRepository(session)
-    audit_repo = IntegrationAuditRepository(session)
-    return TestRailService(
-        test_run_repo=test_run_repo,
-        test_case_repo=test_case_repo,
-        audit_repo=audit_repo,
-    )
 
 
 @router.get("/cases", response_model=list[TestRailCase])

@@ -12,28 +12,31 @@ from project_model.task_models import (
     TaskCreate,
     TaskDetail,
     TaskGoalPreview,
-    TaskStatus,
 )
 
 from app.api.authz import get_current_user
+from app.container import get_task_event_service, get_task_runtime_service
 from app.event_stream import event_frame
-from app.persistence.database import async_session_factory
-from app.repositories.task_repo import TaskRepository
-from app.services.task_runtime_service import TaskRuntimeService
+from app.services.api_read_service import TaskEventService
+from app.services.task_command_service import TaskCommandService
 
 router = APIRouter(prefix="/tasks", tags=["Agent Tasks"])
-task_runtime_service = TaskRuntimeService()
+task_runtime_service = get_task_runtime_service()
+task_command_service = task_runtime_service.commands
+task_execution_service = task_runtime_service.execution
+task_scheduler_service = task_runtime_service.scheduler
 
 
-def get_task_runtime(request: Request) -> TaskRuntimeService:
-    return getattr(request.app.state, "task_runtime", task_runtime_service)
+def get_task_command_service(request: Request) -> TaskCommandService:
+    runtime = getattr(request.app.state, "task_runtime", task_runtime_service)
+    return runtime.commands
 
 
 @router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
 async def create_task(
     data: TaskCreate,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> Task:
     try:
         return await runtime.create(data, str(user.id))
@@ -45,7 +48,7 @@ async def create_task(
 async def preview_task_goal(
     data: TaskCreate,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskGoalPreview:
     try:
         return await runtime.preview_goal(data)
@@ -58,7 +61,7 @@ async def list_tasks(
     project_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> list[Task]:
     return await runtime.list(str(user.id), project_id=project_id, limit=limit)
 
@@ -67,7 +70,7 @@ async def list_tasks(
 async def get_task(
     task_id: str,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskDetail:
     detail = await runtime.get(task_id, str(user.id))
     if detail is None:
@@ -80,7 +83,7 @@ async def decide_task_approval(
     task_id: str,
     request: TaskApprovalRequest,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskDetail:
     detail = await runtime.approve(task_id, str(user.id), request)
     if detail is None:
@@ -92,7 +95,7 @@ async def decide_task_approval(
 async def pause_task(
     task_id: str,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskDetail:
     detail = await runtime.pause(task_id, str(user.id))
     if detail is None:
@@ -104,7 +107,7 @@ async def pause_task(
 async def resume_task(
     task_id: str,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskDetail:
     try:
         detail = await runtime.resume(task_id, str(user.id))
@@ -119,7 +122,7 @@ async def resume_task(
 async def cancel_task(
     task_id: str,
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> Task:
     result = await runtime.cancel(task_id, str(user.id))
     if result is None:
@@ -134,7 +137,7 @@ async def replan_task(
     task_id: str,
     instructions: str = Query(min_length=1, max_length=4000),
     user: User = Depends(get_current_user),
-    runtime: TaskRuntimeService = Depends(get_task_runtime),
+    runtime: TaskCommandService = Depends(get_task_command_service),
 ) -> TaskDetail:
     try:
         detail = await runtime.replan(task_id, str(user.id), instructions)
@@ -149,33 +152,19 @@ async def _task_event_stream(
     task_id: str,
     owner_id: str,
     after_id: int,
-    session_factory,
+    service: TaskEventService,
 ) -> AsyncGenerator[str, None]:
     cursor = after_id
-    terminal = {
-        item.value for item in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED, TaskStatus.CANCELLED)
-    }
     while True:
-        async with session_factory() as session:
-            repo = TaskRepository(session)
-            task = await repo.get(task_id, owner_id)
-            if task is None:
-                return
-            events = await repo.events_after(task_id, cursor)
-            current_status = task.status
-            for event in events:
-                payload = {
-                    "id": event.id,
-                    "task_id": event.task_id,
-                    "type": event.type,
-                    "payload": event.payload,
-                    "created_at": event.created_at.isoformat(),
-                }
-                cursor = event.id
-                yield event_frame("message", payload, event_id=event.id)
-        if current_status in terminal and not events:
+        batch = await service.read_after(task_id, owner_id, cursor)
+        if batch is None:
             return
-        if not events:
+        for payload in batch.events:
+            cursor = payload["id"]
+            yield event_frame("message", payload, event_id=payload["id"])
+        if service.is_terminal(batch.status) and not batch.events:
+            return
+        if not batch.events:
             yield ": keep-alive\n\n"
             await asyncio.sleep(0.5)
 
@@ -186,11 +175,10 @@ async def stream_task_events(
     request: Request,
     after: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
+    service: TaskEventService = Depends(get_task_event_service),
 ) -> StreamingResponse:
-    async with async_session_factory() as session:
-        repo = TaskRepository(session)
-        if await repo.get(task_id, str(user.id)) is None:
-            raise HTTPException(status_code=404, detail="Task not found")
+    if not await service.exists(task_id, str(user.id)):
+        raise HTTPException(status_code=404, detail="Task not found")
     # EventSource reconnects with Last-Event-ID. The query parameter also supports clients
     # that cannot set custom request headers.
     cursor = after
@@ -202,7 +190,7 @@ async def stream_task_events(
         except ValueError:
             raise HTTPException(status_code=400, detail="Last-Event-ID must be an integer")
     return StreamingResponse(
-        _task_event_stream(task_id, str(user.id), cursor, async_session_factory),
+        _task_event_stream(task_id, str(user.id), cursor, service),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

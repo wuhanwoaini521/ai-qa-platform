@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from app.services.browser_proxy import browser_proxy_options, launch_chromium
+from app.adapters.playwright.proxy import browser_proxy_options, launch_chromium
 from app.services.recorder_service import (
     BrowserRecorderService,
     RecorderGenerateRequest,
@@ -47,8 +47,14 @@ def test_generator_preserves_agent_search_submission_keypress() -> None:
     source = generate_python_case(
         RecorderGenerateRequest(
             steps=[
-                RecorderStep(action="fill", locator=RecorderLocator(kind="role", value="textbox", name="Search"), value="Selenium"),
-                RecorderStep(action="press", locator=RecorderLocator(kind="role", value="textbox", name="Search"), key="Enter"),
+                RecorderStep(
+                    action="fill",
+                    locator=RecorderLocator(kind="role", value="textbox", name="Search"),
+                    value="Selenium",
+                ),
+                RecorderStep(
+                    action="press", locator=RecorderLocator(kind="role", value="textbox", name="Search"), key="Enter"
+                ),
             ]
         )
     )
@@ -125,23 +131,7 @@ def test_recorder_step_uses_selected_candidate_and_keeps_decision_metadata():
 
 
 @pytest.mark.asyncio
-async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
-    class LocatorStub:
-        async def count(self):
-            return 1
-
-        async def is_visible(self):
-            return True
-
-        async def is_enabled(self):
-            return True
-
-        async def evaluate(self, _script):
-            return True
-
-        async def click(self, **_kwargs):
-            return None
-
+async def test_recorder_uses_jev_choice_and_verifies_it_through_browser_runtime():
     settings_service = SimpleNamespace(
         get_runtime_config=AsyncMock(return_value=SimpleNamespace(enabled=True, timeout=2))
     )
@@ -156,9 +146,19 @@ async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
             )
         )
     )
-    page = MagicMock()
-    page.get_by_test_id.return_value = LocatorStub()
-    service = BrowserRecorderService(decision_service, settings_service)
+    browser_runtime = SimpleNamespace(
+        verify_locator=AsyncMock(
+            return_value={
+                "unique": True,
+                "visible": True,
+                "enabled": True,
+                "editable": None,
+                "clickable": True,
+                "verified": True,
+            }
+        )
+    )
+    service = BrowserRecorderService(decision_service, settings_service, browser_runtime=browser_runtime)
     event = {
         "action": "click",
         "tag": "button",
@@ -173,7 +173,7 @@ async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
         ],
     }
 
-    selection = await service._select_locator_candidate(page, event, "recorder-session")
+    selection = await service._select_locator_candidate(None, event, "recorder-session", "browser-session")
 
     assert selection["selected_candidate"]["kind"] == "test_id"
     assert selection["summary"]["provider"] == "jev"
@@ -188,6 +188,7 @@ async def test_recorder_uses_jev_choice_and_verifies_it_with_playwright():
     }
     assert any(item["type"] == "decision_completed" for item in selection["trace"])
     decision_service.choose.assert_awaited_once()
+    browser_runtime.verify_locator.assert_awaited_once()
 
 
 def test_browser_proxy_splits_credentials_and_bypasses_local_hosts(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -229,20 +230,16 @@ def test_generated_case_uses_same_proxy_environment(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_failed_initial_navigation_keeps_session_open(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_failed_initial_navigation_keeps_session_open() -> None:
     page = MagicMock(url="about:blank")
-    page.goto = AsyncMock(side_effect=RuntimeError("ERR_NETWORK_ACCESS_DENIED"))
-    context = MagicMock()
-    context.add_init_script = AsyncMock()
-    context.new_page = AsyncMock(return_value=page)
-    context.close = AsyncMock()
-    browser = MagicMock()
-    browser.new_context = AsyncMock(return_value=context)
-    browser.close = AsyncMock()
-    playwright = SimpleNamespace(chromium=SimpleNamespace(launch=AsyncMock(return_value=browser)))
-    service = BrowserRecorderService()
-    monkeypatch.setattr(service, "_start_playwright", AsyncMock(return_value=playwright))
-    monkeypatch.setattr("app.services.recorder_service.browser_proxy_options", lambda: None)
+    runtime_session = SimpleNamespace(id="browser-session", current_url=page.url)
+    browser_runtime = SimpleNamespace(
+        create_session=AsyncMock(return_value=runtime_session),
+        add_init_script=AsyncMock(),
+        navigate=AsyncMock(side_effect=RuntimeError("ERR_NETWORK_ACCESS_DENIED")),
+        close_session=AsyncMock(),
+    )
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
 
     session = await service.create_session(
         "owner", RecorderSessionCreate(project_id="project", start_url="https://www.google.com")
@@ -251,9 +248,9 @@ async def test_failed_initial_navigation_keeps_session_open(monkeypatch: pytest.
     assert await service.get(session.id, "owner") is session
     assert session.requested_url == "https://www.google.com"
     assert session.navigation_error == "ERR_NETWORK_ACCESS_DENIED"
-    context.close.assert_not_awaited()
-    browser.close.assert_not_awaited()
+    browser_runtime.close_session.assert_not_awaited()
     await service.close(session.id, "owner")
+    browser_runtime.close_session.assert_awaited_once_with("browser-session")
 
 
 @pytest.fixture(autouse=True)

@@ -11,8 +11,12 @@ import pytest
 from app.api.tasks import task_runtime_service
 from app.main import app as fastapi_app
 from app.persistence.models import TaskORM
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.decision_service import DecisionService
-from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+from app.services.task_browser_executor import TaskBrowserExecutor
+from app.services.task_errors import TaskBlocked
+from app.services.task_execution_orchestrator import TaskExecutionOrchestrator
+from app.services.task_runtime_service import TaskRuntimeService
 from app.settings import settings
 from project_model.models import DecisionResult
 from qa_core.ai.models import AICompletionResponse, BrowserActionCandidate, BrowserAgentPlan
@@ -233,9 +237,7 @@ class NotFoundRecoveryPlanner:
 
 
 @pytest.mark.asyncio
-async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(
-    test_db_session, tmp_path, monkeypatch
-):
+async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(test_db_session, tmp_path, monkeypatch):
     server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -277,7 +279,9 @@ async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(
             session.add(task)
             await session.commit()
 
-        result = await TaskRuntimeService()._browser_agent(task, {})
+        result = await TaskRuntimeService(
+            repository_scope=TaskRepositoryScopeFactory()
+        ).execution.browser_executor._browser_agent(task, {})
 
         assert result["verified"] is True
         assert result["final_url"] == f"http://127.0.0.1:{server.server_port}/selenium"
@@ -294,9 +298,7 @@ async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(
 
 
 @pytest.mark.asyncio
-async def test_browser_agent_api_e2e_persists_jev_decisions_and_browser_evidence(
-    client, tmp_path, monkeypatch
-):
+async def test_browser_agent_api_e2e_persists_jev_decisions_and_browser_evidence(client, tmp_path, monkeypatch):
     server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -406,7 +408,9 @@ async def test_browser_agent_blocks_back_to_blank_when_no_prior_page_was_observe
             await session.commit()
 
         with pytest.raises(TaskBlocked) as blocked:
-            await TaskRuntimeService()._browser_agent(task, {})
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
 
         assert blocked.value.failure_type == "NO_SAFE_HISTORY", blocked.value.details
         assert "没有执行后退操作" in str(blocked.value)
@@ -414,7 +418,7 @@ async def test_browser_agent_blocks_back_to_blank_when_no_prior_page_was_observe
         assert blocked.value.details["current_url"] == f"http://127.0.0.1:{server.server_port}/missing"
         assert blocked.value.details["metrics"]["browser_actions"] == 0
 
-        detail = await TaskRuntimeService().get(task.id)
+        detail = await TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory()).commands.get(task.id)
         assert detail is not None
         blocked_event = next(event for event in detail.events if event.type == "browser.action_blocked")
         assert blocked_event.payload["action_executed"] is False
@@ -452,7 +456,9 @@ async def test_browser_agent_stops_on_initial_http_error_without_calling_ai_or_j
             await session.commit()
 
         with pytest.raises(TaskBlocked) as blocked:
-            await TaskRuntimeService()._browser_agent(task, {})
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
 
         assert blocked.value.failure_type == "HTTP_STATUS_ERROR"
         assert "HTTP 404" in str(blocked.value)
@@ -460,7 +466,7 @@ async def test_browser_agent_stops_on_initial_http_error_without_calling_ai_or_j
         assert blocked.value.details["action_executed"] is False
         assert blocked.value.details["metrics"]["browser_actions"] == 0
 
-        detail = await TaskRuntimeService().get(task.id)
+        detail = await TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory()).commands.get(task.id)
         assert detail is not None
         blocked_event = next(event for event in detail.events if event.type == "browser.action_blocked")
         assert blocked_event.payload["http_status"] == 404
@@ -472,27 +478,40 @@ async def test_browser_agent_stops_on_initial_http_error_without_calling_ai_or_j
 
 
 @pytest.mark.asyncio
-async def test_browser_agent_reports_navigation_cause_and_closes_owned_browser(
-    test_db_session, monkeypatch
-):
+async def test_browser_agent_reports_navigation_cause_and_closes_owned_browser(test_db_session, monkeypatch):
+    import app.adapters.playwright.browser_runtime as browser_runtime_module
     import playwright.async_api as playwright_api
-    from app.services import task_runtime_service
 
     class FakePage:
         url = "about:blank"
 
+        def on(self, *_args, **_kwargs):
+            return None
+
+        def is_closed(self):
+            return False
+
         async def goto(self, *_args, **_kwargs):
             raise RuntimeError(
-                "Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at "
-                "https://shop.example/products?token=private-value"
+                "Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://shop.example/products?token=private-value"
             )
 
     class FakeContext:
+        def on(self, *_args, **_kwargs):
+            return None
+
         async def new_page(self):
             return FakePage()
 
+        async def close(self):
+            return None
+
     class FakeBrowser:
         closed = False
+        version = "fake-chromium"
+
+        def is_connected(self):
+            return True
 
         async def new_context(self, **_kwargs):
             return FakeContext()
@@ -513,12 +532,12 @@ async def test_browser_agent_reports_navigation_cause_and_closes_owned_browser(
     browser = FakeBrowser()
     playwright = FakePlaywright()
     monkeypatch.setattr(playwright_api, "async_playwright", lambda: FakePlaywrightManager())
-    monkeypatch.setattr(task_runtime_service, "browser_proxy_options", lambda: None)
+    monkeypatch.setattr(browser_runtime_module, "browser_proxy_options", lambda: None)
 
     async def launch(_playwright, **_kwargs):
         return browser
 
-    monkeypatch.setattr(task_runtime_service, "launch_chromium", launch)
+    monkeypatch.setattr(browser_runtime_module, "launch_chromium", launch)
     task = TaskORM(
         id=uuid4().hex,
         type="EXPLORE_PAGE",
@@ -531,7 +550,9 @@ async def test_browser_agent_reports_navigation_cause_and_closes_owned_browser(
         await session.commit()
 
     with pytest.raises(TaskBlocked) as blocked:
-        await TaskRuntimeService()._browser_agent(task, {})
+        await TaskRuntimeService(
+            repository_scope=TaskRepositoryScopeFactory()
+        ).execution.browser_executor._browser_agent(task, {})
 
     assert blocked.value.failure_type == "NAVIGATION_FAILED"
     assert blocked.value.details["stage"] == "page_navigation"
@@ -553,12 +574,19 @@ async def test_browser_agent_reports_low_confidence_jev_without_executing_action
     monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: FixturePlanner())
 
-    async def reject_low_confidence(_service, _request, **_kwargs):
+    observed_decision_requests = []
+
+    async def reject_low_confidence(_service, request, **_kwargs):
+        observed_decision_requests.append(request)
         return DecisionResult(
             provider="fallback",
             fallback_used=True,
             reason="below_minimum_confidence",
             confidence=0.42,
+            attempted_provider="jev",
+            attempted_model="jev-test",
+            attempted_choice="search",
+            minimum_confidence=0.6,
         )
 
     monkeypatch.setattr(DecisionService, "choose", reject_low_confidence)
@@ -578,23 +606,122 @@ async def test_browser_agent_reports_low_confidence_jev_without_executing_action
             await session.commit()
 
         with pytest.raises(TaskBlocked) as blocked:
-            await TaskRuntimeService()._browser_agent(task, {})
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
 
         assert blocked.value.failure_type == "JEV_NO_DECISION"
         assert "0.42" in str(blocked.value)
+        assert "0.60" in str(blocked.value)
         assert blocked.value.details["decision_failure"] == "below_minimum_confidence"
+        assert observed_decision_requests[0].state["candidates"][0]["value"] == "Selenium"
         assert blocked.value.details["jev_confidence"] == 0.42
+        assert blocked.value.details["jev_minimum_confidence"] == 0.6
+        assert blocked.value.details["jev_attempted_choice"] == "search"
         assert blocked.value.details["action_executed"] is False
         assert blocked.value.details["metrics"]["jev_failed"] == 1
         assert blocked.value.details["metrics"]["fallbacks"] == 0
         assert blocked.value.details["metrics"]["browser_actions"] == 0
 
-        detail = await TaskRuntimeService().get(task.id)
+        detail = await TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory()).commands.get(task.id)
         assert detail is not None
         blocked_event = next(event for event in detail.events if event.type == "browser.decision_blocked")
         assert blocked_event.payload["candidate_count"] == 1
         assert blocked_event.payload["failure_reason"] == "below_minimum_confidence"
         assert blocked_event.payload["confidence"] == 0.42
+        assert blocked_event.payload["minimum_confidence"] == 0.6
+        assert blocked_event.payload["provider"] == "jev"
+        assert blocked_event.payload["model"] == "jev-test"
+        assert blocked_event.payload["attempted_choice"] == "search"
+        assert blocked_event.payload["fallback_used"] is True
+        assert blocked_event.payload["action_executed"] is False
+        assert not any(event.type == "browser.action_started" for event in detail.events)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_browser_agent_blocks_when_task_jev_budget_is_exhausted(test_db_session, tmp_path, monkeypatch):
+    from app.services import task_decision_service as task_decision_module
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
+    planner = FixturePlanner()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: planner)
+
+    class NeverCalledJevProvider:
+        calls = 0
+
+        async def choose(self, _request):
+            self.calls += 1
+            raise AssertionError("Jev provider must not be called after the task budget is exhausted")
+
+    jev_provider = NeverCalledJevProvider()
+
+    class EnabledJevSettings:
+        async def get_runtime_config(self):
+            return DecisionRuntimeConfig(
+                provider="jev",
+                enabled=True,
+                api_key="test-key",
+                model="test-model",
+                base_url="https://example.test",
+                timeout=1,
+                minimum_confidence=0.6,
+            )
+
+    class ProviderRegistry:
+        def create(self, _name, _config):
+            return jev_provider
+
+    class NoopAIRepository:
+        async def record_invocation(self, **_kwargs):
+            return None
+
+    decision_service = DecisionService(
+        settings_service=EnabledJevSettings(),
+        provider_registry=ProviderRegistry(),
+        ai_repo=NoopAIRepository(),
+    )
+    monkeypatch.setattr(task_decision_module, "DecisionService", lambda **_kwargs: decision_service)
+    task = TaskORM(
+        id=uuid4().hex,
+        type="EXPLORE_PAGE",
+        goal="Search for Selenium and inspect the result.",
+        owner_id=uuid4().hex,
+        max_ai_calls=1,
+        inputs={
+            "url": f"http://127.0.0.1:{server.server_port}/",
+            "require_jev_decisions": True,
+        },
+    )
+    try:
+        async with test_db_session() as session:
+            session.add(task)
+            await session.commit()
+
+        with pytest.raises(TaskBlocked) as blocked:
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
+
+        assert planner.calls == 1
+        assert jev_provider.calls == 0
+        assert blocked.value.failure_type == "AI_BUDGET_EXHAUSTED"
+        assert blocked.value.details["decision_failure"] == "task_ai_budget_exhausted"
+        assert blocked.value.details["action_executed"] is False
+        assert blocked.value.details["metrics"]["browser_actions"] == 0
+        assert blocked.value.details["metrics"]["jev_failed"] == 1
+
+        detail = await TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory()).commands.get(task.id)
+        assert detail is not None
+        blocked_event = next(event for event in detail.events if event.type == "browser.decision_blocked")
+        assert blocked_event.payload["failure_reason"] == "task_ai_budget_exhausted"
         assert blocked_event.payload["action_executed"] is False
         assert not any(event.type == "browser.action_started" for event in detail.events)
     finally:
@@ -615,7 +742,7 @@ async def test_browser_agent_reports_low_confidence_jev_without_executing_action
 async def test_browser_agent_checks_and_switches_to_popup_landing(
     landing_host, should_block, redirect_during_action_start, test_db_session, tmp_path, monkeypatch
 ):
-    from app.services import task_runtime_service as runtime_module
+    import app.adapters.playwright.browser_runtime as runtime_module
 
     monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
     planner = PopupRedirectPlanner(propose_popup_followup=redirect_during_action_start)
@@ -642,6 +769,7 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
     class RoutedBrowser:
         def __init__(self, browser):
             self.browser = browser
+            self.version = browser.version
 
         async def new_context(self, **options):
             context = await self.browser.new_context(ignore_https_errors=True, **options)
@@ -658,7 +786,7 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
                     await route.fulfill(status=200, content_type="text/html", body=body)
                 elif request_url.hostname == "www.baidu.com":
                     body = (
-                        '<title>搜索结果</title><h1>Selenium</h1>'
+                        "<title>搜索结果</title><h1>Selenium</h1>"
                         '<a target="_blank" href="https://selenium.dev/redirect">'
                         "Selenium official website</a>"
                     )
@@ -684,15 +812,19 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
         async def close(self):
             await self.browser.close()
 
+        def is_connected(self):
+            return self.browser.is_connected()
+
     async def launch_routed_browser(playwright, **options):
         return RoutedBrowser(await real_launch(playwright, **options))
 
     monkeypatch.setattr(runtime_module, "launch_chromium", launch_routed_browser)
-    real_execute = TaskRuntimeService._execute_browser_candidate
+    real_execute = TaskBrowserExecutor._execute_browser_candidate
     executed_candidates = []
     current_page = {}
 
-    async def execute_with_popup(page, candidate):
+    async def execute_with_popup(executor, browser_session_id, candidate):
+        page = await executor.browser_runtime.get_page(browser_session_id)
         current_page["page"] = page
         executed_candidates.append(candidate["candidate_id"])
         if candidate["candidate_id"] == "open-selenium-popup":
@@ -700,15 +832,11 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
             await popup.goto(f"https://{landing_host}/landing", wait_until="domcontentloaded")
             current_page["page"] = popup
             return
-        await real_execute(page, candidate)
+        await real_execute(executor, browser_session_id, candidate)
 
-    monkeypatch.setattr(
-        TaskRuntimeService,
-        "_execute_browser_candidate",
-        staticmethod(execute_with_popup),
-    )
+    monkeypatch.setattr(TaskBrowserExecutor, "_execute_browser_candidate", execute_with_popup)
     if redirect_during_action_start:
-        real_event = TaskRuntimeService._browser_agent_event
+        real_event = TaskExecutionOrchestrator._browser_agent_event
         recorded_events = []
 
         async def event_with_delayed_redirect(
@@ -733,12 +861,13 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
                 duration_ms=duration_ms,
                 metadata=metadata,
             )
-            if event_type == "browser.action_started" and (metadata or {}).get("candidate_id") == "inspect-trusted-popup":
-                await current_page["page"].goto(
-                    "https://selenium.evil.com/interstitial", wait_until="domcontentloaded"
-                )
+            if (
+                event_type == "browser.action_started"
+                and (metadata or {}).get("candidate_id") == "inspect-trusted-popup"
+            ):
+                await current_page["page"].goto("https://selenium.evil.com/interstitial", wait_until="domcontentloaded")
 
-        monkeypatch.setattr(TaskRuntimeService, "_browser_agent_event", event_with_delayed_redirect)
+        monkeypatch.setattr(TaskExecutionOrchestrator, "_browser_agent_event", event_with_delayed_redirect)
     task = TaskORM(
         id=uuid4().hex,
         type="EXPLORE_PAGE",
@@ -757,7 +886,9 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
 
     if should_block:
         with pytest.raises(TaskBlocked) as blocked:
-            await TaskRuntimeService()._browser_agent(task, {})
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
 
         assert blocked.value.failure_type == "OFFICIAL_DOMAIN_UNVERIFIED"
         assert blocked.value.details["stop_reason"] == "OFFICIAL_DOMAIN_UNVERIFIED"
@@ -780,7 +911,9 @@ async def test_browser_agent_checks_and_switches_to_popup_landing(
             assert executed_candidates == ["fill-search", "submit-search", "open-selenium-popup"]
     else:
         try:
-            result = await TaskRuntimeService()._browser_agent(task, {})
+            result = await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
         except TaskBlocked as error:
             async with test_db_session() as session:
                 stored_task = await session.get(TaskORM, task.id)

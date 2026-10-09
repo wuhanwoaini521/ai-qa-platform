@@ -44,6 +44,52 @@ class TestCaseRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_test_design(self, design_id: str) -> TestCaseORM | None:
+        result = await self.session.execute(select(TestCaseORM).where(TestCaseORM.test_design_id == design_id))
+        return result.scalar_one_or_none()
+
+    async def list_by_requirement(
+        self, requirement_id: str, project_id: str | None = None, limit: int | None = None
+    ) -> list[TestCaseORM]:
+        query = select(TestCaseORM).where(TestCaseORM.requirement_id == requirement_id)
+        if project_id is not None:
+            query = query.where(TestCaseORM.project_id == project_id)
+        if limit is not None:
+            query = query.order_by(TestCaseORM.created_at.desc()).limit(limit)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def list_by_ids(
+        self, case_ids: list[str], *, project_id: str, requirement_id: str | None = None
+    ) -> list[TestCaseORM]:
+        query = select(TestCaseORM).where(TestCaseORM.id.in_(case_ids or [""]))
+        query = query.where(TestCaseORM.project_id == project_id)
+        if requirement_id is not None:
+            query = query.where(TestCaseORM.requirement_id == requirement_id)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_by_external_case(
+        self, project_id: str, external_system: str, external_case_id: str
+    ) -> TestCaseORM | None:
+        result = await self.session.execute(
+            select(TestCaseORM).where(
+                TestCaseORM.project_id == project_id,
+                TestCaseORM.external_system == external_system,
+                TestCaseORM.external_case_id == external_case_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def update_automation_status(self, case_id: str, status: str) -> bool:
+        case = await self.get_by_id(case_id)
+        if case is None:
+            return False
+        case.automation_status = status
+        case.updated_at = utc_now()
+        await self.session.flush()
+        return True
+
     async def create(self, data: TestCaseCreate, *, case_id: str | None = None) -> TestCaseORM:
         case_id = case_id or f"tc_{uuid.uuid4().hex[:12]}"
         now = utc_now()

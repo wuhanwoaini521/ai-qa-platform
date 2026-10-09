@@ -18,7 +18,18 @@ class LocatorRepairProposal(BaseModel):
     confidence: float | None = None
     strategy: str
     reason: str
+    candidate_id: str | None = None
+    provider: str = "local-strategy"
+    model: str | None = None
+    latency_ms: float | None = None
+    ai_provider: str | None = None
+    ai_fallback_used: bool = False
+    verified: bool = False
+    verification_reason: str | None = None
+    resolved_classification: str | None = None
+    decision_summary: dict[str, object] = Field(default_factory=dict)
     code_diff: str = ""
     file_path: str | None = None
+    source_sha256: str | None = None
     applied: bool = False
     execution_trace: list[AITraceEvent] = Field(default_factory=list)

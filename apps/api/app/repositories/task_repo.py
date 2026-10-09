@@ -11,10 +11,12 @@ from project_model.task_models import (
     TaskEvidence,
     TaskStep,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.task_records import TaskRecord
 from app.persistence.models import (
+    AIInvocationORM,
     TaskArtifactORM,
     TaskDecisionORM,
     TaskEventORM,
@@ -29,7 +31,7 @@ class TaskRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create(self, values: dict[str, Any], steps: list[dict[str, Any]]) -> TaskORM:
+    async def create(self, values: dict[str, Any], steps: list[dict[str, Any]]) -> TaskRecord:
         task = TaskORM(id=uuid.uuid4().hex, **values)
         self.session.add(task)
         await self.session.flush()
@@ -37,19 +39,197 @@ class TaskRepository:
             self.session.add(TaskStepORM(id=uuid.uuid4().hex, task_id=task.id, position=position, **spec))
         await self.session.flush()
         await self.add_event(task.id, "task.created", {"type": task.type, "goal": task.goal})
-        return task
+        return TaskRecord.from_record(task)
 
-    async def get(self, task_id: str, owner_id: str | None = None) -> TaskORM | None:
+    async def get(self, task_id: str, owner_id: str | None = None) -> TaskRecord | None:
         stmt = select(TaskORM).where(TaskORM.id == task_id)
         if owner_id:
             stmt = stmt.where(TaskORM.owner_id == owner_id)
-        return (await self.session.execute(stmt)).scalar_one_or_none()
+        row = (await self.session.execute(stmt)).scalar_one_or_none()
+        return TaskRecord.from_record(row) if row else None
 
-    async def get_steps(self, task_id: str) -> list[TaskStepORM]:
+    async def get_steps(self, task_id: str) -> list[TaskStep]:
         stmt = select(TaskStepORM).where(TaskStepORM.task_id == task_id).order_by(TaskStepORM.position)
+        return [
+            TaskStep.model_validate(row, from_attributes=True) for row in (await self.session.execute(stmt)).scalars()
+        ]
+
+    async def get_step(self, step_id: str) -> TaskStep | None:
+        row = await self.session.get(TaskStepORM, step_id)
+        return TaskStep.model_validate(row, from_attributes=True) if row else None
+
+    async def get_by_id(self, task_id: str) -> TaskRecord | None:
+        row = await self.session.get(TaskORM, task_id)
+        return TaskRecord.from_record(row) if row else None
+
+    async def add_step(self, **values: Any) -> TaskStep:
+        row = TaskStepORM(id=uuid.uuid4().hex, **values)
+        self.session.add(row)
+        await self.session.flush()
+        return TaskStep.model_validate(row, from_attributes=True)
+
+    async def claim_resume(self, task_id: str, owner_id: str) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(TaskORM.id == task_id, TaskORM.owner_id == owner_id, TaskORM.status == "PAUSED")
+            .values(status="RESUMING", updated_at=utc_now())
+        )
+        return result.rowcount == 1
+
+    async def restore_paused_after_resume_failure(self, task_id: str, owner_id: str) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(TaskORM.id == task_id, TaskORM.owner_id == owner_id, TaskORM.status == "RESUMING")
+            .values(status="PAUSED", updated_at=utc_now())
+        )
+        return result.rowcount == 1
+
+    async def claim_approval(self, task_id: str, owner_id: str, step_id: str) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.owner_id == owner_id,
+                TaskORM.status == "WAITING",
+                TaskORM.current_step_id == step_id,
+            )
+            .values(updated_at=utc_now())
+        )
+        return result.rowcount == 1
+
+    async def finish_resume(self, task_id: str, owner_id: str, status: str, context: dict[str, Any]) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(TaskORM.id == task_id, TaskORM.owner_id == owner_id, TaskORM.status == "RESUMING")
+            .values(
+                status=status,
+                context=context,
+                failure_reason=None,
+                finished_at=None,
+                updated_at=utc_now(),
+            )
+        )
+        return result.rowcount == 1
+
+    async def claim_replan(
+        self, task_id: str, owner_id: str, replan_count: int, instructions: str, inputs: dict[str, Any]
+    ) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.owner_id == owner_id,
+                TaskORM.status.in_(["BLOCKED", "FAILED"]),
+                TaskORM.replan_count == replan_count,
+                TaskORM.replan_count < TaskORM.max_replans,
+            )
+            .values(
+                status="REPLANNING",
+                replan_count=TaskORM.replan_count + 1,
+                retry_count=TaskORM.retry_count + 1,
+                inputs={**inputs, "replan_instructions": instructions[:4000]},
+                failure_reason=None,
+                finished_at=None,
+                current_step_id=None,
+                updated_at=utc_now(),
+            )
+        )
+        return result.rowcount == 1
+
+    async def claim_for_execution(self, task_id: str) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(TaskORM.id == task_id, TaskORM.status.in_(["PENDING", "REPLANNING"]))
+            .values(status="PLANNING", updated_at=utc_now())
+        )
+        return result.rowcount == 1
+
+    async def claim_running_step(self, task_id: str, step_id: str, task_status: str) -> TaskStep | None:
+        task = await self.session.get(TaskORM, task_id)
+        step = await self.session.get(TaskStepORM, step_id)
+        if task is None or step is None or task.status in {"CANCELLED", "PAUSING"}:
+            return None
+        step.status = "RUNNING"
+        step.started_at = step.started_at or utc_now()
+        task.current_step_id = step.id
+        task.status = task_status
+        context = task.context or {}
+        task.context = {**context, "tool_calls": int(context.get("tool_calls", 0)) + 1}
+        await self.session.flush()
+        return TaskStep.model_validate(step, from_attributes=True)
+
+    async def await_step_approval(
+        self, task_id: str, owner_id: str, current_status: str, step_id: str, next_status: str
+    ) -> bool:
+        task_claim = await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.owner_id == owner_id,
+                TaskORM.status == current_status,
+                TaskORM.current_step_id == step_id,
+            )
+            .values(status=next_status, current_step_id=step_id, updated_at=utc_now())
+        )
+        if task_claim.rowcount != 1:
+            return False
+        step_claim = await self.session.execute(
+            update(TaskStepORM)
+            .where(TaskStepORM.id == step_id, TaskStepORM.status == "RUNNING")
+            .values(status="WAITING_FOR_APPROVAL")
+        )
+        return step_claim.rowcount == 1
+
+    async def update_context(self, task_id: str, **values: Any) -> TaskRecord | None:
+        task = await self.session.get(TaskORM, task_id)
+        if task is None:
+            return None
+        task.context = {**(task.context or {}), **values}
+        task.updated_at = utc_now()
+        await self.session.flush()
+        return TaskRecord.from_record(task)
+
+    async def reserve_ai_call(self, task_id: str) -> bool:
+        task = await self.session.get(TaskORM, task_id, with_for_update=True)
+        if task is None:
+            return False
+        context = task.context or {}
+        used = int(context.get("ai_calls", 0))
+        if used >= task.max_ai_calls:
+            return False
+        task.context = {**context, "ai_calls": used + 1}
+        task.updated_at = utc_now()
+        await self.session.flush()
+        return True
+
+    async def update_inputs(self, task_id: str, **values: Any) -> TaskRecord | None:
+        task = await self.session.get(TaskORM, task_id)
+        if task is None:
+            return None
+        task.inputs = {**(task.inputs or {}), **values}
+        task.updated_at = utc_now()
+        await self.session.flush()
+        return TaskRecord.from_record(task)
+
+    async def completed_steps(self, task_id: str) -> list[TaskStep]:
+        stmt = (
+            select(TaskStepORM)
+            .where(TaskStepORM.task_id == task_id, TaskStepORM.status == "COMPLETED")
+            .order_by(TaskStepORM.position)
+        )
+        return [
+            TaskStep.model_validate(row, from_attributes=True) for row in (await self.session.execute(stmt)).scalars()
+        ]
+
+    async def artifacts_for_task(self, task_id: str) -> list[TaskArtifactORM]:
+        stmt = select(TaskArtifactORM).where(TaskArtifactORM.task_id == task_id)
         return list((await self.session.execute(stmt)).scalars().all())
 
-    async def get_steps_for_tasks(self, task_ids: list[str]) -> dict[str, list[TaskStepORM]]:
+    async def ai_invocations_for_task(self, task_id: str) -> list[AIInvocationORM]:
+        stmt = select(AIInvocationORM).where(AIInvocationORM.task_id == task_id).order_by(AIInvocationORM.created_at)
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def get_steps_for_tasks(self, task_ids: list[str]) -> dict[str, list[TaskStep]]:
         if not task_ids:
             return {}
         stmt = (
@@ -57,12 +237,13 @@ class TaskRepository:
             .where(TaskStepORM.task_id.in_(task_ids))
             .order_by(TaskStepORM.task_id, TaskStepORM.position)
         )
-        grouped: dict[str, list[TaskStepORM]] = {}
-        for step in (await self.session.execute(stmt)).scalars():
+        grouped: dict[str, list[TaskStep]] = {}
+        for row in (await self.session.execute(stmt)).scalars():
+            step = TaskStep.model_validate(row, from_attributes=True)
             grouped.setdefault(step.task_id, []).append(step)
         return grouped
 
-    async def get_detail(self, task: TaskORM) -> TaskDetail:
+    async def get_detail(self, task: TaskRecord) -> TaskDetail:
         steps = await self.get_steps(task.id)
         evidence_rows = list(
             (
@@ -109,7 +290,7 @@ class TaskRepository:
             .scalars()
             .all()
         )
-        step_models = [TaskStep.model_validate(row, from_attributes=True) for row in steps]
+        step_models = steps
         return TaskDetail(
             **self.task_values(task),
             plan=step_models,
@@ -150,15 +331,28 @@ class TaskRepository:
             event_cursor=event_rows[0].id if event_rows else 0,
         )
 
-    async def list(self, owner_id: str, project_id: str | None = None, limit: int = 50) -> list[TaskORM]:
+    async def list(self, owner_id: str, project_id: str | None = None, limit: int = 50) -> list[TaskRecord]:
         stmt = select(TaskORM).where(TaskORM.owner_id == owner_id)
         if project_id:
             stmt = stmt.where(TaskORM.project_id == project_id)
         stmt = stmt.order_by(TaskORM.created_at.desc()).limit(limit)
-        return list((await self.session.execute(stmt)).scalars().all())
+        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
+
+    async def recent_qa_goals(self, owner_id: str, project_id: str, limit: int = 100) -> list[TaskRecord]:
+        stmt = (
+            select(TaskORM)
+            .where(
+                TaskORM.owner_id == owner_id,
+                TaskORM.project_id == project_id,
+                TaskORM.type == "QA_GOAL",
+            )
+            .order_by(TaskORM.created_at.desc())
+            .limit(limit)
+        )
+        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
     @staticmethod
-    def task_values(row: TaskORM) -> dict[str, Any]:
+    def task_values(row: TaskRecord | TaskORM) -> dict[str, Any]:
         return {
             "id": row.id,
             "type": row.type,
@@ -184,24 +378,24 @@ class TaskRepository:
             "updated_at": row.updated_at,
         }
 
-    async def update_task(self, task_id: str, **values: Any) -> TaskORM | None:
-        task = await self.get(task_id)
+    async def update_task(self, task_id: str, **values: Any) -> TaskRecord | None:
+        task = await self.session.get(TaskORM, task_id)
         if not task:
             return None
         for key, value in values.items():
             setattr(task, key, value)
         task.updated_at = utc_now()
         await self.session.flush()
-        return task
+        return TaskRecord.from_record(task)
 
-    async def update_step(self, step_id: str, **values: Any) -> TaskStepORM | None:
+    async def update_step(self, step_id: str, **values: Any) -> TaskStep | None:
         step = await self.session.get(TaskStepORM, step_id)
         if not step:
             return None
         for key, value in values.items():
             setattr(step, key, value)
         await self.session.flush()
-        return step
+        return TaskStep.model_validate(step, from_attributes=True)
 
     async def add_event(self, task_id: str, event_type: str, payload: dict[str, Any] | None = None) -> TaskEventORM:
         payload = payload or {}
@@ -244,21 +438,23 @@ class TaskRepository:
         )
         return list((await self.session.execute(stmt)).scalars().all())
 
-    async def unfinished(self) -> list[TaskORM]:
+    async def unfinished(self) -> list[TaskRecord]:
         stmt = select(TaskORM).where(
             TaskORM.status.in_(["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING", "PAUSING", "RESUMING"])
         )
-        return list((await self.session.execute(stmt)).scalars().all())
+        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
-    async def pending(self, limit: int = 100) -> list[TaskORM]:
+    async def pending(self, limit: int = 100) -> list[TaskRecord]:
         stmt = (
             select(TaskORM)
             .where(TaskORM.status.in_(["PENDING", "REPLANNING"]))
             .order_by(TaskORM.created_at)
             .limit(limit)
         )
-        return list((await self.session.execute(stmt)).scalars().all())
+        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
-    async def steps_for_task(self, task_id: str) -> list[TaskStepORM]:
+    async def steps_for_task(self, task_id: str) -> list[TaskStep]:
         stmt = select(TaskStepORM).where(TaskStepORM.task_id == task_id)
-        return list((await self.session.execute(stmt)).scalars().all())
+        return [
+            TaskStep.model_validate(row, from_attributes=True) for row in (await self.session.execute(stmt)).scalars()
+        ]

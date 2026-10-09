@@ -182,6 +182,9 @@ class PytestRunner:
         report_runtime = tempfile.TemporaryDirectory(prefix="qa-pytest-report-")
         report_directory = Path(report_runtime.name)
         report_path = report_directory / "results.jsonl"
+        # xdist workers must not scan the host's global pytest temp directory. Keeping worker temp
+        # files alongside this run's structured report also makes local runs isolated and repeatable.
+        cmd.append(f"--basetemp={report_directory / 'pytest-tmp'}")
         cmd.extend(["-p", write_plugin(report_directory)])
         env["QA_PLATFORM_REPORT_LOG"] = str(report_path)
         env["PYTHONPATH"] = str(report_directory) + os.pathsep + env.get("PYTHONPATH", "")
@@ -221,9 +224,7 @@ class PytestRunner:
                 proc = await asyncio.create_subprocess_exec(*cmd, **process_options)
             except NotImplementedError:
                 # Uvicorn uses a selector loop on Windows, which cannot create subprocess transports.
-                exit_code, timed_out = await self._run_in_thread(
-                    cmd, ws_path, env, raw_logs, on_log, execution_timeout
-                )
+                exit_code, timed_out = await self._run_in_thread(cmd, ws_path, env, raw_logs, on_log, execution_timeout)
             else:
                 try:
                     await asyncio.wait_for(collect_output(), timeout=execution_timeout)

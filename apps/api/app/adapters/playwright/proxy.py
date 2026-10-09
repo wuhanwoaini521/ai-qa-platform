@@ -1,4 +1,4 @@
-"""Proxy options shared by API-hosted Playwright browsers."""
+"""Proxy configuration and browser launch fallback for the Playwright adapter."""
 
 from __future__ import annotations
 
@@ -6,17 +6,12 @@ import os
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-from app.settings import settings
+from app.settings import get_config
 
 
 def browser_proxy_options() -> dict[str, str] | None:
-    raw = (
-        settings.browser_proxy_url
-        or os.getenv("HTTPS_PROXY")
-        or os.getenv("https_proxy")
-        or os.getenv("HTTP_PROXY")
-        or os.getenv("http_proxy")
-    )
+    browser = get_config().browser
+    raw = browser.proxy_url.get_secret_value()
     if not raw:
         return None
     parsed = urlsplit(raw if "://" in raw else f"http://{raw}")
@@ -33,7 +28,7 @@ def browser_proxy_options() -> dict[str, str] | None:
         options["username"] = unquote(parsed.username)
     if parsed.password:
         options["password"] = unquote(parsed.password)
-    bypass = settings.browser_proxy_bypass or os.getenv("NO_PROXY") or os.getenv("no_proxy")
+    bypass = browser.proxy_bypass
     if bypass:
         options["bypass"] = bypass
     return options

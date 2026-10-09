@@ -1,21 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from project_model.models import Project, ProjectCreate, ProjectUpdate
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.project_repo import ProjectRepository
-from app.repositories.workspace_repo import WorkspaceRepository
+from app.container import get_project_service
 from app.services.project_service import ProjectService
-from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
-
-
-def get_project_service(session: AsyncSession = Depends(get_db)) -> ProjectService:
-    workspace_service = WorkspaceService()
-    project_repo = ProjectRepository(session)
-    workspace_repo = WorkspaceRepository(session)
-    return ProjectService(project_repo, workspace_repo, workspace_service)
 
 
 @router.get("", response_model=list[Project])

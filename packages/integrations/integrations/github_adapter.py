@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 
@@ -231,7 +230,7 @@ class GitHubPullRequestAdapter(PullRequestAdapter):
     """Real GitHub REST API adapter reading token securely from environment."""
 
     def __init__(self, token: str | None = None, api_base_url: str = "https://api.github.com") -> None:
-        self.token = token or os.getenv("GITHUB_TOKEN", "").strip()
+        self.token = (token or "").strip()
         self.api_base_url = api_base_url.rstrip("/")
         self._fallback_adapter = FakePullRequestAdapter()
 

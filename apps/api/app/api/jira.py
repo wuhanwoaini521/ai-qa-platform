@@ -10,26 +10,11 @@ from project_model.models import (
     JiraIssue,
     Requirement,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.integration_audit_repo import IntegrationAuditRepository
-from app.repositories.requirement_repo import RequirementRepository
-from app.repositories.test_run_repo import TestRunRepository
+from app.container import get_jira_service
 from app.services.jira_service import JiraService
 
 router = APIRouter(prefix="/jira", tags=["Jira Integration"])
-
-
-def get_jira_service(session: AsyncSession = Depends(get_db)) -> JiraService:
-    req_repo = RequirementRepository(session)
-    audit_repo = IntegrationAuditRepository(session)
-    test_run_repo = TestRunRepository(session)
-    return JiraService(
-        requirement_repo=req_repo,
-        audit_repo=audit_repo,
-        test_run_repo=test_run_repo,
-    )
 
 
 @router.get("/issues", response_model=list[JiraIssue])

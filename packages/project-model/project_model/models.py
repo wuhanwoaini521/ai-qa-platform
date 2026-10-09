@@ -522,6 +522,47 @@ class ApplyRepairRequest(BaseModel):
     new_code: str
 
 
+class FailureRepairState(str, Enum):
+    CREATED = "CREATED"
+    ANALYZING = "ANALYZING"
+    DECIDING = "DECIDING"
+    VERIFYING_CANDIDATE = "VERIFYING_CANDIDATE"
+    PATCH_READY = "PATCH_READY"
+    APPLYING = "APPLYING"
+    PATCH_APPLIED = "PATCH_APPLIED"
+    VERIFYING_FIX = "VERIFYING_FIX"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    ROLLED_BACK = "ROLLED_BACK"
+
+
+class FailureRepairAction(str, Enum):
+    START_ANALYSIS = "START_ANALYSIS"
+    APPLY = "APPLY"
+    VERIFY = "VERIFY"
+    ROLLBACK = "ROLLBACK"
+    RETRY = "RETRY"
+    CREATE_ISSUE_DRAFT = "CREATE_ISSUE_DRAFT"
+
+
+class FailureRepairWorkflow(BaseModel):
+    """Server-owned repair state and the commands currently legal for the client."""
+
+    repair_id: str | None = None
+    failure_id: str
+    analysis_id: str | None = None
+    state: FailureRepairState
+    allowed_actions: list[FailureRepairAction] = Field(default_factory=list)
+    verification_run_id: str | None = None
+    verification_run_status: str | None = None
+    retry_run_id: str | None = None
+    retry_run_status: str | None = None
+    verified: bool = False
+    repair_proposal: dict[str, Any] | None = None
+
+
 # --- Phase 5: Production AI Models ---
 class AIProviderStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
@@ -556,6 +597,7 @@ class AIStatusResponse(BaseModel):
 
 
 class AIProviderSettingsResponse(BaseModel):
+    enabled: bool = True
     provider: str
     api_key_configured: bool = False
     api_key_masked: str | None = None
@@ -563,7 +605,7 @@ class AIProviderSettingsResponse(BaseModel):
     base_url: str
     timeout: float
     max_retries: int
-    max_request_tokens: int = 16000
+    max_request_tokens: int = 1_000_000
     max_daily_requests: int = 1000
     max_task_calls: int = 8
 
@@ -576,7 +618,7 @@ class AIProviderSettingsUpdate(BaseModel):
     base_url: str = Field(min_length=1, max_length=2048)
     timeout: float = Field(ge=1, le=300)
     max_retries: int = Field(ge=0, le=10)
-    max_request_tokens: int = Field(default=16000, ge=512, le=128000)
+    max_request_tokens: int = Field(default=1_000_000, ge=512, le=1_000_000)
     max_daily_requests: int = Field(default=1000, ge=1, le=100000)
     max_task_calls: int = Field(default=8, ge=1, le=100)
 
@@ -646,6 +688,10 @@ class DecisionResult(BaseModel):
     probabilities: dict[str, float] = Field(default_factory=dict)
     provider: str
     model: str | None = None
+    attempted_provider: str | None = None
+    attempted_model: str | None = None
+    attempted_choice: str | None = None
+    minimum_confidence: float | None = None
     usage: dict[str, int | float | None] | None = None
     fallback_used: bool = False
     reason: str | None = None
@@ -678,6 +724,20 @@ class DecisionConnectionResult(BaseModel):
     choice: str | None = None
     model: str | None = None
     latency_ms: float | None = None
+
+
+class JevRuntimeCheckResponse(BaseModel):
+    connectivity: str
+    runtime: str
+    enabled: bool
+    api_key_configured: bool
+    provider: str
+    model: str
+    base_url_valid: bool
+    minimum_confidence: float
+    budget_available: bool
+    latency_ms: float | None = None
+    reasons: list[str] = Field(default_factory=list)
 
 
 class DecisionPlaygroundResult(DecisionResult):
@@ -838,7 +898,7 @@ class DashboardStats(BaseModel):
     total_runs: int = 0
     runs_today: int = 0
     tests_executed_today: int = 0
-    pass_rate_today: float = 0.0
+    pass_rate_today: float | None = None
     total_failures: int = 0
     flaky_tests_count: int = 0
     rerun_recovery_count: int = 0

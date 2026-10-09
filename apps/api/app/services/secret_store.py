@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -11,7 +10,11 @@ class SecretStore:
     """Authenticated encryption for credentials persisted by API services."""
 
     def __init__(self, master_key: str | None = None) -> None:
-        self.master_key = master_key or os.getenv("APP_SECRET_KEY", "qa-platform-super-secret-master-key-32b")
+        if master_key is None:
+            from app.settings import get_config
+
+            master_key = get_config().app.secret_key.get_secret_value()
+        self.master_key = master_key
         self._in_memory_vault: dict[str, str] = {}
         derived_key = base64.urlsafe_b64encode(hashlib.sha256(self.master_key.encode("utf-8")).digest())
         self._fernet = Fernet(derived_key)

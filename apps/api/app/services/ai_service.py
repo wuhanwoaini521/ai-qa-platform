@@ -22,6 +22,8 @@ from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.ai_observability import log_ai_execution
+from app.services.ai_runtime import build_ai_budget_guard, build_ai_orchestrator
+from app.services.ai_settings_service import AISettingsService
 from app.services.operation_trace import trace_progress
 
 logger = logging.getLogger("app.ai")
@@ -37,6 +39,7 @@ class AIService:
         test_run_repo: TestRunRepository | None = None,
         project_repo: ProjectRepository | None = None,
         orchestrator: ProductionQAOrchestrator | None = None,
+        settings_service: AISettingsService | None = None,
     ) -> None:
         self.ai_repo = ai_repo or AIRepository()
         self.requirement_repo = requirement_repo
@@ -44,13 +47,14 @@ class AIService:
         self.test_case_repo = test_case_repo
         self.test_run_repo = test_run_repo
         self.project_repo = project_repo
-        self.orchestrator = orchestrator or ProductionQAOrchestrator()
-        self.budget_guard = AIBudgetGuard()
+        self.orchestrator = orchestrator or build_ai_orchestrator()
+        self.settings_service = settings_service
+        self.budget_guard = self.orchestrator.budget_guard if orchestrator else build_ai_budget_guard()
 
     async def get_status(self) -> AIStatusResponse:
-        from app.services.ai_settings_service import AISettingsService
-
-        return await AISettingsService().get_status()
+        if self.settings_service is None:
+            raise RuntimeError("AI status requires an injected settings service")
+        return await self.settings_service.get_status()
 
     async def get_usage(
         self, limit: int = 50, since: datetime | None = None, feature: str | None = None

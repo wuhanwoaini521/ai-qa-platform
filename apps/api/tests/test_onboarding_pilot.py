@@ -7,13 +7,35 @@ execute it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
+from app.services.onboarding_service import OnboardingError, OnboardingService
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.integration
+
+
+async def wait_for_run(client: AsyncClient, run_id: str) -> dict:
+    for _ in range(200):
+        response = await client.get(f"/api/runs/{run_id}")
+        assert response.status_code == 200, response.text
+        run = response.json()
+        if run["status"] in {"PASSED", "FAILED", "ERROR", "CANCELLED"}:
+            return run
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"Run {run_id} did not reach a terminal status")
+
+
+def test_contract_pytest_command_is_reduced_to_supported_options():
+    assert OnboardingService._pytest_args_from_contract(["python", "-m", "pytest", "-v", "--tb=short"]) == [
+        "-v",
+        "--tb=short",
+    ]
+    with pytest.raises(OnboardingError, match="unsupported options"):
+        OnboardingService._pytest_args_from_contract(["python", "-m", "pytest", "tests/test_other.py::test_unsafe"])
 
 
 def build_reference_repo(root: Path) -> Path:
@@ -129,6 +151,9 @@ async def test_onboarding_flow_from_preview_to_pilot_run(client: AsyncClient, tm
     )
     assert run.status_code == 200, run.text
     run_body = run.json()
+    assert run_body["run_id"]
+    assert run_body["run"]["status"] in {"QUEUED", "RUNNING"}
+    assert run_body["run"]["workspace_id"] == project_id
 
     # The browser test is refused by the safety policy, the two offline tests execute.
     assert run_body["executed_nodeids"] == [
@@ -139,12 +164,14 @@ async def test_onboarding_flow_from_preview_to_pilot_run(client: AsyncClient, tm
     assert "tests/test_sample.py::test_requires_a_browser" in rejected
     assert any("page" in reason for reason in rejected["tests/test_sample.py::test_requires_a_browser"]["reasons"])
 
-    statuses = {test["nodeid"]: test["status"] for test in run_body["outcome"]["logical_tests"]}
+    completed_run = await wait_for_run(client, run_body["run_id"])
+    statuses = {test["nodeid"]: test["status"] for test in completed_run["executions"]}
     assert statuses == {
         "tests/test_sample.py::test_offline_math": "PASSED",
         "tests/test_sample.py::test_offline_regression": "FAILED",
-    }
-    assert run_body["run_id"]
+    }, completed_run.get("log_output")
+    assert completed_run["runner_type"] == "LOCAL", completed_run.get("log_output")
+    assert completed_run["log_output"]
 
     # The failing test becomes a platform failure record with a real classification.
     failures = await client.get(f"/api/failures?project_id={project_id}")
@@ -196,6 +223,22 @@ async def test_allow_unsafe_execution_is_explicit_and_recorded(client: AsyncClie
     )
     assert refused.json()["executed_nodeids"] == []
     assert refused.json()["rejected"]
+    assert refused.json()["run_id"] is None
+    assert refused.json()["persisted"] is False
+
+    full_selection = await client.post(f"/api/onboarding/{project_id}/run", json={})
+    assert full_selection.status_code == 200, full_selection.text
+    body = full_selection.json()
+    assert "tests/test_sample.py::test_requires_a_browser" not in body["executed_nodeids"]
+    assert "tests/test_sample.py::test_requires_a_browser" in {item["nodeid"] for item in body["rejected"]}
+    await wait_for_run(client, body["run_id"])
+
+    non_persistent = await client.post(
+        f"/api/onboarding/{project_id}/run",
+        json={"nodeids": ["tests/test_sample.py::test_offline_math"], "persist": False},
+    )
+    assert non_persistent.status_code == 400
+    assert "must be persisted" in non_persistent.json()["detail"]
 
 
 async def test_marker_selection_collects_first_and_still_applies_the_safety_policy(client: AsyncClient, tmp_path: Path):
@@ -212,6 +255,8 @@ async def test_marker_selection_collects_first_and_still_applies_the_safety_poli
         "tests/test_sample.py::test_c2002_marked_smoke",
     }
     assert [verdict["nodeid"] for verdict in body["rejected"]] == ["tests/test_sample.py::test_requires_a_browser"]
+    completed = await wait_for_run(client, body["run_id"])
+    assert completed["status"] == "PASSED", completed.get("log_output")
 
 
 async def test_importing_a_host_path_requires_the_security_permission(client: AsyncClient, role_client, tmp_path: Path):
@@ -302,15 +347,24 @@ async def test_runner_options_are_named_not_raw_flags(client: AsyncClient, tmp_p
     )
     # The field no longer exists, and an unknown field must not silently reach the command line.
     assert rejected.status_code == 200, rejected.text
-    assert "--junitxml" not in rejected.json()["outcome"]["command"]
+    assert rejected.json()["run"]["nodeids"] == ["tests/test_sample.py::test_offline_math"]
+    assert (await wait_for_run(client, rejected.json()["run_id"]))["status"] == "PASSED"
 
     accepted = await client.post(
         f"/api/onboarding/{project_id}/run",
-        json={"nodeids": ["tests/test_sample.py::test_offline_math"], "n_workers": 2, "reruns": 1},
+        json={"nodeids": ["tests/test_sample.py::test_offline_math"], "n_workers": 2},
     )
-    command = accepted.json()["outcome"]["command"]
-    assert "-n" in command and "2" in command
-    assert "--reruns" in command
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["run"]["parallel_workers"] == 2
+    completed = await wait_for_run(client, accepted.json()["run_id"])
+    assert completed["status"] == "PASSED", completed.get("log_output")
+
+    unsupported_retry = await client.post(
+        f"/api/onboarding/{project_id}/run",
+        json={"nodeids": ["tests/test_sample.py::test_offline_math"], "reruns": 1},
+    )
+    assert unsupported_retry.status_code == 400
+    assert "pytest-rerunfailures" in unsupported_retry.json()["detail"]
 
 
 @pytest.mark.integration

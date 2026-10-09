@@ -1,45 +1,23 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from project_model.models import (
     ApplyRepairRequest,
     FailureRecord,
     FailureRecurrenceItem,
+    FailureRepairWorkflow,
+    TestRun,
 )
 from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.container import get_failure_service, get_failure_workflow_service
 from app.event_stream import event_frame
-from app.persistence.database import get_db
-from app.repositories.ai_repo import AIRepository
-from app.repositories.run_history_repo import RunHistoryRepository
-from app.repositories.test_run_repo import TestRunRepository
-from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
 from app.services.failure_workflow_service import FailureWorkflowService
-from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/failures", tags=["Failures & Healing"])
-
-
-def get_failure_service(session: AsyncSession = Depends(get_db)) -> FailureService:
-    run_repo = TestRunRepository(session)
-    workspace_repo = WorkspaceRepository(session)
-    workspace_service = WorkspaceService()
-    # RunHistoryRepository manages its own session context; keep it separate from this request's
-    # session so history reads cannot detach ORM rows that the failure service later updates.
-    history_repo = RunHistoryRepository()
-    # Invocation telemetry owns its transaction; keep the request session attached to its ORM rows.
-    ai_repo = AIRepository()
-    return FailureService(
-        run_repo=run_repo,
-        workspace_repo=workspace_repo,
-        workspace_service=workspace_service,
-        history_repo=history_repo,
-        ai_repo=ai_repo,
-    )
 
 
 @router.get("", response_model=list[FailureRecord])
@@ -74,18 +52,94 @@ async def diagnose_failure(
 
 
 @router.get("/{failure_id}/analyses")
-async def list_failure_analyses(failure_id: str, service: FailureService = Depends(get_failure_service)):
+async def list_failure_analyses(
+    failure_id: str,
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
     if await service.get_failure(failure_id) is None:
         raise HTTPException(status_code=404, detail="Failure record not found")
-    return await FailureWorkflowService(service).list_history(failure_id)
+    return await workflow.list_history(failure_id)
+
+
+@router.get("/{failure_id}/repair-workflow", response_model=FailureRepairWorkflow)
+async def get_repair_workflow(
+    failure_id: str,
+    analysis_id: str | None = Query(default=None),
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.get_repair_workflow(failure_id, analysis_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/{failure_id}/analyses/{analysis_id}/apply")
+async def apply_analysis_repair(
+    failure_id: str,
+    analysis_id: str,
+    payload: ApplyRepairRequest = Body(...),
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.apply_repair(failure_id, analysis_id, payload)
+    except LocatorRepairNotApplicableError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{failure_id}/analyses/{analysis_id}/rollback")
+async def rollback_analysis_repair(
+    failure_id: str,
+    analysis_id: str,
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.rollback_repair(failure_id, analysis_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{failure_id}/analyses/{analysis_id}/verification/run", response_model=TestRun)
+async def start_analysis_verification(
+    failure_id: str,
+    analysis_id: str,
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.start_verification(failure_id, analysis_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{failure_id}/analyses/{analysis_id}/retry/run", response_model=TestRun)
+async def start_failure_retry(
+    failure_id: str,
+    analysis_id: str,
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.start_retry(failure_id, analysis_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post("/{failure_id}/analyses/{analysis_id}/verification")
 async def link_analysis_verification(
-    failure_id: str, analysis_id: str, run_id: str = Query(...), service: FailureService = Depends(get_failure_service)
+    failure_id: str,
+    analysis_id: str,
+    run_id: str = Query(...),
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
     try:
-        await FailureWorkflowService(service).attach_verification(failure_id, analysis_id, run_id)
+        await workflow.attach_verification(failure_id, analysis_id, run_id)
         return {"analysis_id": analysis_id, "run_id": run_id, "verified": False}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -96,14 +150,25 @@ async def stream_failure_workflow(
     failure_id: str,
     request: Request,
     service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
     language: str = Query(default="en"),
 ):
     if await service.get_failure(failure_id) is None:
         raise HTTPException(status_code=404, detail="Failure record not found")
+    try:
+        analysis_id, start_new_analysis = await workflow.start_analysis(failure_id)
+    except ValueError as error:
+        status_code = 404 if str(error) == "Failure record not found" else 409
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     async def events():
         response_language = "zh-CN" if language.lower().startswith("zh") else "en"
-        stream = FailureWorkflowService(service).stream(failure_id, response_language=response_language)
+        stream = workflow.stream(
+            failure_id,
+            response_language=response_language,
+            analysis_id=analysis_id,
+            start_new_analysis=start_new_analysis,
+        )
         try:
             async for event in stream:
                 if await request.is_disconnected():
@@ -203,12 +268,41 @@ async def get_failure_recurrence(
 async def apply_repair_proposal(
     failure_id: str,
     workspace_id: str = Query(..., description="Target workspace ID"),
-    payload: ApplyRepairRequest = ...,
+    payload: ApplyRepairRequest = Body(...),
     service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
     try:
-        return await service.apply_repair(workspace_id, payload, failure_id=failure_id)
+        state = await workflow.get_repair_workflow(failure_id)
+        if not state.analysis_id:
+            raise ValueError("No repair analysis exists for this failure")
+        return await workflow.apply_repair(
+            failure_id,
+            state.analysis_id,
+            payload,
+            expected_workspace_id=workspace_id,
+        )
     except LocatorRepairNotApplicableError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{failure_id}/rollback-repair")
+async def rollback_repair(
+    failure_id: str,
+    workspace_id: str = Query(..., description="Target workspace ID"),
+    service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        state = await workflow.get_repair_workflow(failure_id)
+        if not state.analysis_id:
+            raise ValueError("No repair analysis exists for this failure")
+        return await workflow.rollback_repair(
+            failure_id,
+            state.analysis_id,
+            expected_workspace_id=workspace_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

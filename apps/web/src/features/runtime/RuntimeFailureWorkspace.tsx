@@ -329,9 +329,18 @@ export function RuntimeFailureWorkspace({
       {analysisError && <p className="rt-notice" role="alert">{analysisError}</p>}
       {diagnosis && (
         <div className="rt-failure-diagnosis">
-          <div><span>{t('failureWorkspace.rootCause')}</span><p>{diagnosis.root_cause}</p></div>
-          {diagnosis.hypotheses.length > 0 && <div><span>{t('failureWorkspace.hypotheses')}</span><ul>{diagnosis.hypotheses.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul></div>}
-          {diagnosis.recommended_actions.length > 0 && <div><span>{t('failureWorkspace.recommendations')}</span><ul>{diagnosis.recommended_actions.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul></div>}
+          <div className="rt-failure-diagnosis-primary">
+            <div><span>{t('failureWorkspace.rootCause')}</span><p>{diagnosis.root_cause}</p></div>
+            {diagnosis.recommended_actions[0] && <div><span>{t('failureWorkspace.nextStep')}</span><p>{diagnosis.recommended_actions[0]}</p></div>}
+          </div>
+          <details className="rt-failure-analysis-details">
+            <summary>{t('failureWorkspace.fullAnalysis')}</summary>
+            <div>
+              <div><span>{t('failureWorkspace.rootCause')}</span><p>{diagnosis.root_cause}</p></div>
+              {diagnosis.hypotheses.length > 0 && <div><span>{t('failureWorkspace.hypotheses')}</span><ul>{diagnosis.hypotheses.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul></div>}
+              {diagnosis.recommended_actions.length > 0 && <div><span>{t('failureWorkspace.recommendations')}</span><ul>{diagnosis.recommended_actions.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul></div>}
+            </div>
+          </details>
         </div>
       )}
       {decision && (

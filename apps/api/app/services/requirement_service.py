@@ -9,11 +9,20 @@ from project_model.models import (
 
 from app.persistence.models import RequirementORM
 from app.repositories.requirement_repo import RequirementRepository
+from app.repositories.test_case_repo import TestCaseRepository
+from app.repositories.test_design_repo import TestDesignRepository
 
 
 class RequirementService:
-    def __init__(self, requirement_repo: RequirementRepository) -> None:
+    def __init__(
+        self,
+        requirement_repo: RequirementRepository,
+        test_case_repo: TestCaseRepository,
+        test_design_repo: TestDesignRepository,
+    ) -> None:
         self.requirement_repo = requirement_repo
+        self.test_case_repo = test_case_repo
+        self.test_design_repo = test_design_repo
 
     def _to_dto(self, orm: RequirementORM) -> Requirement:
         from project_model.lifecycle import RequirementDocument
@@ -87,7 +96,7 @@ class RequirementService:
                 raise ValueError("Analysis history is server-owned and cannot be edited")
             if history and data.qa_model and data.qa_model.analysis != self._to_dto(original).qa_model.analysis:
                 raise ValueError("Recorded analysis is server-owned; use the analysis workflow to replace it")
-            await validate_requirement_replacement(self.requirement_repo.session, req_id, data.qa_model)
+            await validate_requirement_replacement(self.test_case_repo, self.test_design_repo, req_id, data.qa_model)
         orm = await self.requirement_repo.update(req_id, data)
         if not orm:
             return None

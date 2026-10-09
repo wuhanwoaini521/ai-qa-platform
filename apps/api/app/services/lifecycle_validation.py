@@ -4,9 +4,6 @@ import hashlib
 import json
 
 from project_model.lifecycle import ModernTestModel, RequirementDocument, TestScenario
-from sqlalchemy import select
-
-from app.persistence.models import RequirementORM, TestCaseORM, TestDesignORM
 
 
 def input_hash(title, description, acceptance_criteria, document):
@@ -14,12 +11,12 @@ def input_hash(title, description, acceptance_criteria, document):
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-async def validate_case_model(session, data):
-    design = await session.get(TestDesignORM, data.test_design_id) if data.test_design_id else None
+async def validate_case_model(requirements, designs, data):
+    design = await designs.get_by_id(data.test_design_id) if data.test_design_id else None
     if data.test_design_id and not design:
         raise ValueError("Test design does not exist")
     requirement_id = data.requirement_id or (design.requirement_id if design else None)
-    requirement = await session.get(RequirementORM, requirement_id) if requirement_id else None
+    requirement = await requirements.get_by_id(requirement_id) if requirement_id else None
     if requirement_id and (not requirement or requirement.project_id != data.project_id):
         raise ValueError("Test case requirement belongs to a different project or does not exist")
     if design and design.requirement_id != requirement_id:
@@ -40,8 +37,8 @@ async def validate_case_model(session, data):
     return data.model_copy(update={"requirement_id": requirement_id})
 
 
-async def validate_design_model(session, data):
-    requirement = await session.get(RequirementORM, data.requirement_id)
+async def validate_design_model(requirements, data):
+    requirement = await requirements.get_by_id(data.requirement_id)
     if not requirement:
         raise ValueError("Requirement does not exist")
     if data.scenario_model:
@@ -50,9 +47,9 @@ async def validate_design_model(session, data):
         RequirementDocument.model_validate(requirement.qa_model).validate_coverage(data.scenario_model.coverage)
 
 
-async def validate_requirement_replacement(session, requirement_id, document):
+async def validate_requirement_replacement(test_cases, test_designs, requirement_id, document):
     """A changed model cannot silently orphan already adopted designs or cases."""
-    cases = (await session.execute(select(TestCaseORM).where(TestCaseORM.requirement_id == requirement_id))).scalars()
+    cases = await test_cases.list_by_requirement(requirement_id)
     for case in cases:
         if case.test_model:
             if not document:
@@ -66,9 +63,7 @@ async def validate_requirement_replacement(session, requirement_id, document):
                 not document.analysis or model.scenario_id not in {item.id for item in document.analysis.scenarios}
             ):
                 raise ValueError("Cannot remove scenarios used by test cases")
-    designs = (
-        await session.execute(select(TestDesignORM).where(TestDesignORM.requirement_id == requirement_id))
-    ).scalars()
+    designs = await test_designs.list_by_requirement(requirement_id)
     for design in designs:
         if design.scenario_model:
             if not document:

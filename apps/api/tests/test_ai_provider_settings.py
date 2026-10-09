@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 from app.persistence.models import AIProviderConfigORM
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.ai_settings_service import AISettingsService
 from project_model.models import AIProviderConnectionResult
 from qa_core.ai.models import AICompletionResponse, AIStreamChunk, ProviderHealth, ProviderHealthStatus
@@ -75,7 +76,7 @@ async def test_ai_provider_settings_are_encrypted_and_activated(client, test_db_
             assert "normal-ai-secret" not in row.encrypted_api_key
 
         AIProviderRegistry.reset()
-        await AISettingsService().load_runtime_config()
+        await AISettingsService(repository_scope=TaskRepositoryScopeFactory()).load_runtime_config()
         restored = AIProviderRegistry.get_provider()
         assert isinstance(restored.inner, FallbackAIProvider)
         assert restored.primary.api_key == "normal-ai-secret"

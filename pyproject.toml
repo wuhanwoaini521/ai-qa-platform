@@ -13,12 +13,14 @@ members = [
     "packages/qa-core",
     "packages/project-model",
     "packages/integrations",
+    "packages/platform-config",
 ]
 
 [tool.uv.sources]
 project-model = { workspace = true }
 qa-core = { workspace = true }
 integrations = { workspace = true }
+platform-config = { workspace = true }
 api = { workspace = true }
 worker = { workspace = true }
 
@@ -45,7 +47,7 @@ testpaths = ["apps/api/tests", "packages/qa-core/tests", "packages/integrations/
 # third-party test code (and fail on their dependencies) instead of the platform's own suite.
 norecursedirs = [".git", ".venv", "node_modules", "runtime", "dist", ".pytest_cache", ".ruff_cache"]
 asyncio_mode = "auto"
-pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "apps/worker"]
+pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "packages/platform-config", "apps/worker"]
 markers = [
     "unit: fast, isolated test with no external dependency",
     "integration: test spanning several layers (API, services, persistence)",

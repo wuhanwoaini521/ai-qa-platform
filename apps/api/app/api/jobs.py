@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
-from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest, JobStatus, RunStatus
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest
 from pydantic import BaseModel
 from qa_core.execution.models import SuiteExecutionResult
 from qa_core.failure.redactor import SensitiveRedactor
 
-from app.api.runs import get_run_service
-from app.persistence.database import get_session
-from app.persistence.models import utc_now
-from app.repositories.job_repo import JobRepository
-from app.repositories.test_run_repo import TestRunRepository
-from app.services.job_queue_service import JobQueueService
+from app.container import get_job_queue_service
+from app.services.job_queue_service import (
+    JobAssignmentConflict,
+    JobNotFoundError,
+    JobQueueService,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-job_queue_service = JobQueueService()
 
 
 class WorkerLogPayload(BaseModel):
@@ -27,13 +26,13 @@ class WorkerResultPayload(BaseModel):
     result: SuiteExecutionResult
 
 
-async def _assigned_job(job_id: str, worker_id: str) -> ExecutionJob:
-    job = await JobRepository().get_by_id(job_id)
-    if not job:
+async def _assigned_job(job_id: str, worker_id: str, service: JobQueueService) -> ExecutionJob:
+    try:
+        return await service.get_assigned_job(job_id, worker_id)
+    except JobNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.assigned_worker_id != worker_id or job.status not in (JobStatus.ASSIGNED, JobStatus.RUNNING):
+    except JobAssignmentConflict:
         raise HTTPException(status_code=409, detail="Job is not assigned to this worker")
-    return job
 
 
 @router.get("", response_model=list[ExecutionJob])
@@ -42,88 +41,77 @@ async def list_jobs(
     project_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
+    service: JobQueueService = Depends(get_job_queue_service),
 ) -> list[ExecutionJob]:
-    return await job_queue_service.list_jobs(run_id=run_id, project_id=project_id, status=status, limit=limit)
+    return await service.list_jobs(run_id=run_id, project_id=project_id, status=status, limit=limit)
 
 
 @router.get("/{job_id}", response_model=ExecutionJob)
-async def get_job(job_id: str) -> ExecutionJob:
-    job = await JobRepository().get_by_id(job_id)
-    if not job:
+async def get_job(job_id: str, service: JobQueueService = Depends(get_job_queue_service)) -> ExecutionJob:
+    try:
+        return await service.get_job(job_id)
+    except JobNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
-    return job
 
 
 @router.post("/claim", response_model=ExecutionJob | None)
-async def claim_next_job(request: ClaimJobRequest) -> ExecutionJob | None:
-    return await job_queue_service.dispatch_next_job(worker_id=request.worker_id, browser=request.browser)
+async def claim_next_job(
+    request: ClaimJobRequest, service: JobQueueService = Depends(get_job_queue_service)
+) -> ExecutionJob | None:
+    return await service.dispatch_next_job(worker_id=request.worker_id, browser=request.browser)
 
 
 @router.post("/{job_id}/log")
-async def append_job_log(job_id: str, payload: WorkerLogPayload) -> dict[str, bool]:
-    job = await _assigned_job(job_id, payload.worker_id)
+async def append_job_log(
+    job_id: str, payload: WorkerLogPayload, service: JobQueueService = Depends(get_job_queue_service)
+) -> dict[str, bool]:
     safe_log = SensitiveRedactor.redact_text(payload.log)
-    async with get_session() as session:
-        run_repo = TestRunRepository(session)
-        run = await run_repo.get_by_id(job.run_id)
-        if run is None or run.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
-            raise HTTPException(status_code=409, detail="Run is no longer active")
-        changed = await run_repo.transition_run_status(
-            job.run_id,
-            [RunStatus.QUEUED, RunStatus.RUNNING],
-            RunStatus.RUNNING,
-            started_at=utc_now() if run.started_at is None else None,
-            log_output=((run.log_output or "") + safe_log)[-20000:],
-        )
-        if not changed:
-            raise HTTPException(status_code=409, detail="Run is no longer active")
-        await session.commit()
-    await JobRepository().update_job_status(job_id, JobStatus.RUNNING)
+    try:
+        await service.append_worker_log(job_id, payload.worker_id, safe_log)
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except JobAssignmentConflict:
+        raise HTTPException(status_code=409, detail="Run is no longer active or job is not assigned to this worker")
     return {"saved": True}
 
 
 @router.post("/{job_id}/result", response_model=ExecutionJob)
-async def submit_job_result(job_id: str, payload: WorkerResultPayload) -> ExecutionJob:
-    job = await _assigned_job(job_id, payload.worker_id)
-    async with get_session() as session:
-        await get_run_service(session).persist_suite_result(job.run_id, payload.result)
-    result = await job_queue_service.complete_job(job_id, duration_ms=payload.result.duration_ms)
-    assert result is not None
-    return result
+async def submit_job_result(
+    job_id: str, payload: WorkerResultPayload, service: JobQueueService = Depends(get_job_queue_service)
+) -> ExecutionJob:
+    try:
+        return await service.submit_worker_result(job_id, payload.worker_id, payload.result)
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except JobAssignmentConflict:
+        raise HTTPException(status_code=409, detail="Job is not assigned to this worker")
 
 
 @router.post("/{job_id}/complete", response_model=ExecutionJob)
-async def complete_job(job_id: str, request: CompleteJobRequest) -> ExecutionJob:
-    job = await job_queue_service.complete_job(job_id, duration_ms=request.duration_ms)
+async def complete_job(
+    job_id: str, request: CompleteJobRequest, service: JobQueueService = Depends(get_job_queue_service)
+) -> ExecutionJob:
+    job = await service.complete_job(job_id, duration_ms=request.duration_ms)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return job
 
 
 @router.post("/{job_id}/fail", response_model=ExecutionJob)
-async def fail_job(job_id: str, request: FailJobRequest) -> ExecutionJob:
+async def fail_job(
+    job_id: str, request: FailJobRequest, service: JobQueueService = Depends(get_job_queue_service)
+) -> ExecutionJob:
     safe_error = SensitiveRedactor.redact_text(request.error_message)
-    job = await job_queue_service.fail_job(job_id, error_message=safe_error)
+    job = await service.fail_job(job_id, error_message=safe_error)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
-    async with get_session() as session:
-        run_repo = TestRunRepository(session)
-        run = await run_repo.get_by_id(job.run_id)
-        if run is not None and run.status in ("QUEUED", "RUNNING"):
-            await run_repo.transition_run_status(
-                job.run_id,
-                [RunStatus.QUEUED, RunStatus.RUNNING],
-                RunStatus.ERROR,
-                finished_at=utc_now(),
-                log_output=((run.log_output or "") + "\nWorker error: " + safe_error)[-20000:],
-            )
-            await session.commit()
+    await service.mark_run_error(job.run_id, safe_error)
     return job
 
 
 @router.post("/{job_id}/cancel", response_model=ExecutionJob)
-async def cancel_job(job_id: str) -> ExecutionJob:
-    job = await job_queue_service.cancel_job(job_id)
+async def cancel_job(job_id: str, service: JobQueueService = Depends(get_job_queue_service)) -> ExecutionJob:
+    job = await service.cancel_job(job_id)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return job

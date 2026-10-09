@@ -1,17 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from project_model.models import Requirement, RequirementCreate, RequirementUpdate
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.requirement_repo import RequirementRepository
+from app.container import get_requirement_service
 from app.services.requirement_service import RequirementService
 
 router = APIRouter(prefix="/requirements", tags=["Requirements"])
-
-
-def get_requirement_service(session: AsyncSession = Depends(get_db)) -> RequirementService:
-    repo = RequirementRepository(session)
-    return RequirementService(repo)
 
 
 @router.get("", response_model=list[Requirement])

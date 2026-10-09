@@ -172,10 +172,12 @@ class StubSettingsService:
 class StubDecisionProvider:
     def __init__(self, confidence: float):
         self.confidence = confidence
+        self.calls = 0
 
     async def choose(self, request):
         from project_model.models import DecisionResult
 
+        self.calls += 1
         probabilities = {"yes": self.confidence} if self.confidence is not None else {}
         return DecisionResult(
             choice="yes", confidence=self.confidence, probabilities=probabilities, provider="jev", model="m"
@@ -219,6 +221,45 @@ async def test_decision_service_falls_back_when_disabled_or_below_confidence():
     assert result.choice == "unknown" and result.fallback_used
     assert result.reason == "below_minimum_confidence"
     assert result.confidence == 0.59
+    assert result.attempted_provider == "jev"
+    assert result.attempted_model == "m"
+    assert result.attempted_choice == "yes"
+    assert result.minimum_confidence == 0.6
+
+
+@pytest.mark.unit
+async def test_task_jev_decision_reserves_per_task_budget_before_provider_call(monkeypatch):
+    from app.services import task_decision_service as task_decision_module
+    from app.services.task_decision_service import TaskDecisionService
+
+    provider = StubDecisionProvider(0.95)
+    decision_service = DecisionService(
+        settings_service=StubSettingsService(enabled=True),
+        provider_registry=StubRegistry(provider),
+        ai_repo=NoopAIRepository(),
+    )
+    monkeypatch.setattr(task_decision_module, "DecisionService", lambda **_kwargs: decision_service)
+    reserved_for = []
+
+    async def reserve_ai_call(task_id: str) -> bool:
+        reserved_for.append(task_id)
+        return False
+
+    service = TaskDecisionService(repository_scope=None, reserve_ai_call=reserve_ai_call)
+    result = await service.choose(
+        DecisionRequest(
+            name="browser_action_selection",
+            state={},
+            options=[DecisionOption(key="click", description="Click observed target")],
+        ),
+        task_id="task-budget",
+        run_id="decision-budget",
+    )
+
+    assert reserved_for == ["task-budget"]
+    assert provider.calls == 0
+    assert result.fallback_used is True
+    assert result.reason == "task_ai_budget_exhausted"
 
 
 @pytest.mark.unit
@@ -347,6 +388,113 @@ async def test_jev_settings_are_admin_only(client, role_client):
                 },
             )
         ).status_code == 403
+
+
+@pytest.mark.integration
+async def test_runtime_check_reports_disabled_without_probing_connectivity(client, monkeypatch):
+    async def unexpected_probe(*_args, **_kwargs):
+        raise AssertionError("A disabled runtime must not call Jev")
+
+    monkeypatch.setattr(JevDecisionProvider, "choose", unexpected_probe)
+    saved = await client.put(
+        "/api/decision/settings",
+        json={
+            "enabled": False,
+            "api_key": "configured-but-disabled",
+            "model": "jev-test",
+            "base_url": "https://mock.typesafe.test/v1/systemone",
+            "timeout": 2,
+            "minimum_confidence": 0.87,
+        },
+    )
+    assert saved.status_code == 200
+
+    response = await client.post("/api/decision/runtime-check")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "connectivity": "NOT_CHECKED",
+        "runtime": "DISABLED",
+        "enabled": False,
+        "api_key_configured": True,
+        "provider": "jev",
+        "model": "jev-test",
+        "base_url_valid": True,
+        "minimum_confidence": 0.87,
+        "budget_available": True,
+        "latency_ms": None,
+        "reasons": ["provider_disabled"],
+    }
+
+
+@pytest.mark.integration
+async def test_runtime_check_probes_enabled_jev_through_decision_service(client, monkeypatch):
+    async def connected_probe(self, request):
+        from project_model.models import DecisionResult
+
+        return DecisionResult(
+            choice=request.options[0].key,
+            confidence=0.99,
+            provider="jev",
+            model="jev-test",
+        )
+
+    monkeypatch.setattr(JevDecisionProvider, "choose", connected_probe)
+    saved = await client.put(
+        "/api/decision/settings",
+        json={
+            "enabled": True,
+            "api_key": "configured-for-runtime-check",
+            "model": "jev-test",
+            "base_url": "https://mock.typesafe.test/v1/systemone",
+            "timeout": 2,
+            "minimum_confidence": 0.87,
+        },
+    )
+    assert saved.status_code == 200
+
+    response = await client.post("/api/decision/runtime-check")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["connectivity"] == "CONNECTED"
+    assert response.json()["runtime"] == "READY"
+    assert response.json()["model"] == "jev-test"
+    assert response.json()["minimum_confidence"] == 0.87
+    assert response.json()["budget_available"] is True
+
+
+@pytest.mark.integration
+async def test_runtime_check_blocks_when_jev_response_misses_runtime_confidence(client, monkeypatch):
+    async def low_confidence(self, request):
+        from project_model.models import DecisionResult
+
+        return DecisionResult(
+            choice=request.options[0].key,
+            confidence=0.2,
+            provider="jev",
+            model="jev-test",
+        )
+
+    monkeypatch.setattr(JevDecisionProvider, "choose", low_confidence)
+    saved = await client.put(
+        "/api/decision/settings",
+        json={
+            "enabled": True,
+            "api_key": "configured-for-runtime-check",
+            "model": "jev-test",
+            "base_url": "https://mock.typesafe.test/v1/systemone",
+            "timeout": 2,
+            "minimum_confidence": 0.87,
+        },
+    )
+    assert saved.status_code == 200
+
+    response = await client.post("/api/decision/runtime-check")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["connectivity"] == "CONNECTED"
+    assert response.json()["runtime"] == "BLOCKED"
+    assert response.json()["reasons"] == ["below_minimum_confidence"]
 
 
 @pytest.fixture(autouse=True)

@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from project_model.models import Breakpoint, DebugSessionBootstrap
+from app.settings import get_config
 
 ALLOWED_DAP_COMMANDS = frozenset(
     {
@@ -120,9 +121,14 @@ class DebugSessionService:
             process_options["start_new_session"] = True
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                str(self.adapter_interpreter), "-m", "debugpy.adapter", **process_options
+            process = await asyncio.wait_for(
+                asyncio.create_subprocess_exec(
+                    str(self.adapter_interpreter), "-m", "debugpy.adapter", **process_options
+                ),
+                timeout=get_config().debugger.startup_timeout_seconds,
             )
+        except asyncio.TimeoutError as error:
+            raise RuntimeError("Python Debug Runtime did not start before the configured timeout.") from error
         except (FileNotFoundError, OSError) as error:
             raise RuntimeError("Python Debug Runtime is unavailable; install the API debugpy dependency.") from error
 
@@ -327,11 +333,15 @@ class DebugSessionService:
             except (BrokenPipeError, ConnectionError, RuntimeError):
                 pass
             try:
-                await asyncio.wait_for(process.wait(), timeout=3)
+                await asyncio.wait_for(
+                    process.wait(), timeout=get_config().debugger.shutdown_grace_timeout_seconds
+                )
             except asyncio.TimeoutError:
                 process.terminate()
                 try:
-                    await asyncio.wait_for(process.wait(), timeout=2)
+                    await asyncio.wait_for(
+                        process.wait(), timeout=get_config().debugger.shutdown_force_timeout_seconds
+                    )
                 except asyncio.TimeoutError:
                     process.kill()
                     await process.wait()

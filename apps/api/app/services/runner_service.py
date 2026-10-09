@@ -12,6 +12,7 @@ from qa_core.execution.runner_backend import LocalRunnerBackend
 
 from app.persistence.models import RunnerProfileORM
 from app.repositories.runner_profile_repo import RunnerProfileRepository
+from app.settings import get_config
 
 
 class RunnerService:
@@ -68,11 +69,13 @@ class RunnerService:
             )
 
         if runner.type == RunnerType.JENKINS.value:
+            integration = get_config().integrations.jenkins
+            global_config = integration if integration.enabled else None
             config = JenkinsConfig(
-                base_url=runner.config.get("base_url", "http://localhost:8080"),
+                base_url=runner.config.get("base_url") or (global_config.base_url if global_config else ""),
                 job_name=runner.config.get("job_name", "qa-suite"),
-                user=runner.config.get("user"),
-                api_token=runner.config.get("api_token"),
+                user=runner.config.get("user") or (global_config.username if global_config else None),
+                api_token=runner.config.get("api_token") or (global_config.token.get_secret_value() if global_config else None),
             )
             backend = JenkinsRunnerBackend(config=config)
             return await backend.check_health()

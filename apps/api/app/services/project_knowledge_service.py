@@ -6,44 +6,23 @@ from collections import Counter
 
 from project_model.lifecycle import CoverageMetric, KnowledgeEdge, KnowledgeNode, ProjectKnowledge, RequirementDocument
 from qa_core.failure.redactor import SensitiveRedactor
-from sqlalchemy import select
 
-from app.persistence.models import (
-    AutomationBindingORM,
-    ExternalArtifactReferenceORM,
-    FailureAnalysisORM,
-    FailureRecordORM,
-    ProjectORM,
-    RequirementORM,
-    TestCaseORM,
-    TestDesignORM,
-    TestExecutionORM,
-    TestRunORM,
-)
+from app.repositories.project_knowledge_repo import ProjectKnowledgeRepository
 
 
-class ProjectKnowledgeService:
+class ProjectKnowledgeQueryService:
     def __init__(self, session):
-        self.session = session
+        self.repository = ProjectKnowledgeRepository(session)
 
     async def build(
         self, project_id: str, *, focus: str | None = None, hops: int = 2, requirement_id: str | None = None
     ) -> ProjectKnowledge:
-        project = await self.session.get(ProjectORM, project_id)
+        data = await self.repository.load_project_graph(project_id)
+        project = data.get("project")
         if not project:
             raise ValueError("Project does not exist")
-        requirements = list(
-            (
-                await self.session.scalars(
-                    select(RequirementORM).where(RequirementORM.project_id == project_id).limit(501)
-                )
-            ).all()
-        )
-        cases = list(
-            (
-                await self.session.scalars(select(TestCaseORM).where(TestCaseORM.project_id == project_id).limit(1001))
-            ).all()
-        )
+        requirements = data["requirements"]
+        cases = data["cases"]
         complete = len(requirements) <= 500 and len(cases) <= 1000
         requirements, cases = requirements[:500], cases[:1000]
         if requirement_id:
@@ -53,31 +32,8 @@ class ProjectKnowledgeService:
             cases = [item for item in cases if item.requirement_id == requirement_id]
         requirement_ids = {item.id for item in requirements}
         case_ids = {item.id for item in cases}
-        designs = list(
-            (
-                await self.session.scalars(
-                    select(TestDesignORM).where(TestDesignORM.requirement_id.in_(requirement_ids)).limit(1001)
-                )
-            ).all()
-        )
-        bindings = list(
-            (
-                await self.session.scalars(
-                    select(AutomationBindingORM).where(AutomationBindingORM.test_case_id.in_(case_ids))
-                )
-            ).all()
-        )
-        executions = list(
-            (
-                await self.session.execute(
-                    select(TestExecutionORM, TestRunORM)
-                    .join(TestRunORM, TestExecutionORM.run_id == TestRunORM.id)
-                    .where(TestRunORM.project_id == project_id)
-                    .order_by(TestRunORM.created_at.desc(), TestExecutionORM.id)
-                    .limit(2001)
-                )
-            ).all()
-        )
+        designs, bindings = await self.repository.load_designs_and_bindings(requirement_ids, case_ids)
+        executions = data["executions"]
         complete = complete and len(designs) <= 1000 and len(executions) <= 2000
         designs, executions = designs[:1000], executions[:2000]
         binding_by_case = {item.test_case_id: item for item in bindings}
@@ -240,26 +196,9 @@ class ProjectKnowledgeService:
                     "executed_by" if execution.status in {"PASSED", "FAILED", "ERROR"} else "attempted_by",
                 )
         if run_ids:
-            artifacts = (
-                await self.session.scalars(
-                    select(ExternalArtifactReferenceORM)
-                    .where(ExternalArtifactReferenceORM.run_id.in_(run_ids))
-                    .limit(501)
-                )
-            ).all()
-            failures = (
-                await self.session.scalars(
-                    select(FailureRecordORM).where(FailureRecordORM.run_id.in_(run_ids)).limit(501)
-                )
-            ).all()
+            artifacts, failures, analysis_rows = await self.repository.load_run_evidence(run_ids)
             analyses_by_failure = {}
-            for analysis in (
-                await self.session.scalars(
-                    select(FailureAnalysisORM)
-                    .where(FailureAnalysisORM.failure_id.in_([item.id for item in failures[:500]]))
-                    .limit(2000)
-                )
-            ).all():
+            for analysis in analysis_rows:
                 analyses_by_failure.setdefault(analysis.failure_id, []).append(analysis)
             for artifact in artifacts[:500]:
                 node(

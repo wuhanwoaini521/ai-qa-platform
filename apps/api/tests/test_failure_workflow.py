@@ -2,18 +2,65 @@ from __future__ import annotations
 
 import asyncio
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 from app.api.failures import get_failure_service
 from app.main import app
-from app.persistence.models import BrowserSessionORM
+from app.persistence.models import BrowserSessionORM, FailureAnalysisORM
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskRepositoryUnitOfWork
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.locator_history_service import LocatorHistoryService
+from app.services.test_run_service import TestRunService as RunApplicationService
 from project_model.models import DecisionResult, RunStatus, TestRunCreate
+from qa_core.ai.models import FailureAnalysisResponse
 from qa_core.ai.provider import FakeAIProvider
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
+
+
+def make_run_service(failure_service, session):
+    repositories = TaskRepositoryUnitOfWork(session)
+    return RunApplicationService(
+        failure_service.run_repo,
+        failure_service.workspace_repo,
+        failure_service.workspace_service,
+        repository_scope=TaskRepositoryScopeFactory(),
+        repositories=repositories,
+        runner_repo=repositories.runner_profiles,
+    )
+
+
+@pytest.fixture
+def local_html_url():
+    servers = []
+
+    def serve(html: str) -> str:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        servers.append((server, thread))
+        return f"http://127.0.0.1:{server.server_port}/"
+
+    yield serve
+    for server, thread in servers:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 @pytest.mark.asyncio
@@ -25,7 +72,7 @@ async def test_verified_locator_heal_is_counted_once_and_unverified_is_not(clien
     async with test_db_session() as session:
         session.add(FailureAnalysisORM(id="analysis-heal", failure_id=failure_id, result={"verified": False}))
         await session.commit()
-    service = LocatorHistoryService()
+    service = LocatorHistoryService(TaskRepositoryScopeFactory())
     await service.record(
         "https://example.test/cart",
         'get_by_role("button", name="Help")',
@@ -53,11 +100,403 @@ async def test_verified_locator_heal_is_counted_once_and_unverified_is_not(clien
         assert history.heal_count == history.verification_count == 1
 
 
-async def seed(client, test_db_session, *, error, kind="PYTHON", candidates=None):
+@pytest.mark.asyncio
+async def test_repair_verification_command_creates_and_links_exact_idempotent_run(client, test_db_session):
+    from app.persistence.models import FailureRecordORM, TestRunORM
+    from sqlalchemy import select
+
+    project_id, failure_id, _ = await seed(
+        client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI"
+    )
+    analysis_id = "repair-analysis-command"
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = {"applied": True, "proposed_locator": "#checkout-new"}
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": {"proposed_locator": "#checkout-new"},
+                },
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        failure_service = get_failure_service(session)
+        runs = make_run_service(failure_service, session)
+        runs._schedule_local_run = lambda *_args, **_kwargs: None
+        workflow = FailureWorkflowService(failure_service, run_service=runs)
+        run = await workflow.start_verification(failure_id, analysis_id)
+        repeated = await workflow.start_verification(failure_id, analysis_id)
+        assert run.id == repeated.id
+        assert run.project_id == project_id
+        assert run.workspace_id == project_id
+        assert run.nodeids == ["tests/test_workflow.py::test_workflow"]
+        assert run.origin_failure_id == failure_id
+
+        history = await workflow.list_history(failure_id)
+        assert history[0]["result"]["verification_run_id"] == run.id
+        persisted = (
+            (await session.execute(select(TestRunORM).where(TestRunORM.origin_failure_id == failure_id)))
+            .scalars()
+            .all()
+        )
+        assert len(persisted) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_failure_analysis_requests_share_one_active_analysis(client, test_db_session):
+    from sqlalchemy import select
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as first_session, test_db_session() as second_session:
+        scope = TaskRepositoryScopeFactory()
+        first = FailureWorkflowService(get_failure_service(first_session), repository_scope=scope)
+        second = FailureWorkflowService(get_failure_service(second_session), repository_scope=scope)
+        claims = await asyncio.gather(first.start_analysis(failure_id), second.start_analysis(failure_id))
+
+    assert claims[0][0] == claims[1][0]
+    assert sum(created for _, created in claims) == 1
+    async with test_db_session() as session:
+        active = (
+            (
+                await session.execute(
+                    select(FailureAnalysisORM).where(
+                        FailureAnalysisORM.failure_id == failure_id,
+                        FailureAnalysisORM.status == "RUNNING",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(active) == 1
+
+
+@pytest.mark.asyncio
+async def test_repair_verification_api_exposes_resource_command(client, test_db_session, monkeypatch):
+    from app.persistence.models import FailureRecordORM
+
+    project_id, failure_id, _ = await seed(
+        client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI"
+    )
+    analysis_id = "repair-analysis-api"
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = {"applied": True, "proposed_locator": "#checkout-new"}
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": {"proposed_locator": "#checkout-new"},
+                },
+            )
+        )
+        await session.commit()
+        service = get_failure_service(session)
+        monkeypatch.setattr(RunApplicationService, "_schedule_local_run", lambda *_args, **_kwargs: None)
+        app.dependency_overrides[get_failure_service] = lambda: service
+        try:
+            response = await client.post(f"/api/failures/{failure_id}/analyses/{analysis_id}/verification/run")
+        finally:
+            app.dependency_overrides.pop(get_failure_service, None)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["project_id"] == project_id
+        assert body["workspace_id"] == project_id
+        assert body["nodeids"] == ["tests/test_workflow.py::test_workflow"]
+        assert body["origin_failure_id"] == failure_id
+
+
+@pytest.mark.asyncio
+async def test_repair_verification_command_requires_applied_repair(client, test_db_session):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    analysis_id = "repair-analysis-not-applied"
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={"repair_state": "PATCH_READY"},
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        failure_service = get_failure_service(session)
+        runs = make_run_service(failure_service, session)
+        workflow = FailureWorkflowService(failure_service, run_service=runs)
+        with pytest.raises(ValueError, match="Apply the verified repair"):
+            await workflow.start_verification(failure_id, analysis_id)
+
+
+@pytest.mark.asyncio
+async def test_failed_analysis_does_not_remain_in_analyzing_repair_state(client, test_db_session):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    analysis_id = "failed-analysis-not-analyzing"
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="FAILED",
+                result={"repair_state": "ANALYZING"},
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(
+            failure_id, analysis_id
+        )
+
+    assert state.state == "BLOCKED"
+    assert state.allowed_actions == ["START_ANALYSIS"]
+
+    async with test_db_session() as session:
+        workflow = FailureWorkflowService(get_failure_service(session))
+        first_id, first_started = await workflow.start_analysis(failure_id)
+        second_id, second_started = await workflow.start_analysis(failure_id)
+
+    assert first_started is True
+    assert second_started is False
+    assert second_id == first_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("repair_state", "expected_actions"),
+    [
+        ("FAILED", ["START_ANALYSIS"]),
+        ("BLOCKED", ["START_ANALYSIS"]),
+    ],
+)
+async def test_retryable_terminal_failure_states_allow_fresh_analysis(
+    client, test_db_session, repair_state, expected_actions
+):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id=f"analysis-{repair_state.lower()}",
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={"repair_state": repair_state},
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id)
+
+    assert state.state == repair_state
+    assert state.allowed_actions == expected_actions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("verification_source", ["playwright", "playwright_snapshot"])
+@pytest.mark.parametrize("stored_state", ["PATCH_READY", "BLOCKED"])
+async def test_patch_ready_workflow_keeps_apply_and_allows_fresh_analysis(
+    client, test_db_session, verification_source, stored_state
+):
+    from app.persistence.models import FailureRecordORM
+
+    _, failure_id, _ = await seed(client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI")
+    proposal = {
+        "proposed_locator": 'get_by_test_id("checkout-new")',
+        "verified": True,
+        "provider": "jev",
+        "decision_summary": {
+            "fallback_used": False,
+            "verification_source": verification_source,
+            "confidence": 0.92,
+        },
+        "ai_provider": "openai-compatible",
+        "ai_fallback_used": False,
+        "candidate_id": "candidate_1",
+        "code_diff": "- locator(#checkout)\n+ get_by_test_id(checkout-new)",
+        "source_sha256": "source-hash",
+    }
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = proposal
+        session.add(
+            FailureAnalysisORM(
+                id="analysis-patch-ready",
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={"repair_state": stored_state, "repair_proposal": proposal},
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id)
+
+    assert state.state == "PATCH_READY"
+    assert state.allowed_actions == ["APPLY", "START_ANALYSIS"]
+
+
+@pytest.mark.asyncio
+async def test_failed_applied_patch_requires_rollback_before_reanalysis(client, test_db_session):
+    from app.persistence.models import FailureRecordORM, TestRunORM
+
+    _, failure_id, _ = await seed(client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI")
+    proposal = {
+        "proposed_locator": 'get_by_test_id("checkout-new")',
+        "verified": True,
+        "provider": "jev",
+        "decision_summary": {"fallback_used": False, "verification_source": "playwright", "confidence": 0.92},
+        "ai_provider": "openai-compatible",
+        "ai_fallback_used": False,
+        "candidate_id": "candidate_1",
+        "code_diff": "- old locator\n+ new locator",
+        "source_sha256": "source-hash",
+        "applied": True,
+        "rollback_status": "AVAILABLE",
+    }
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        original_run = await session.get(TestRunORM, failure.run_id)
+        original_run.status = RunStatus.FAILED
+        failure.repair_proposal = proposal
+        session.add(
+            FailureAnalysisORM(
+                id="analysis-failed-applied",
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "FAILED",
+                    "repair_proposal": proposal,
+                    "verification_run_id": failure.run_id,
+                },
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id)
+
+    assert state.state == "FAILED"
+    assert "ROLLBACK" in state.allowed_actions
+    assert "START_ANALYSIS" not in state.allowed_actions
+
+
+@pytest.mark.asyncio
+async def test_rolled_back_patch_allows_fresh_analysis(client, test_db_session):
+    from app.persistence.models import FailureRecordORM
+
+    _, failure_id, _ = await seed(client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI")
+    proposal = {"proposed_locator": 'get_by_test_id("checkout-new")', "rollback_status": "ROLLED_BACK"}
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = proposal
+        session.add(
+            FailureAnalysisORM(
+                id="analysis-rolled-back",
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={"repair_state": "ROLLED_BACK", "repair_proposal": proposal},
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id)
+
+    assert state.state == "ROLLED_BACK"
+    assert state.allowed_actions == ["START_ANALYSIS"]
+
+
+@pytest.mark.asyncio
+async def test_workflow_authorizes_retry_from_real_diagnosis_and_starts_one_server_run(client, test_db_session):
+    project_id, failure_id, _ = await seed(client, test_db_session, error="Connection timed out")
+    analysis_id = "failure-retry-command"
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "NOT_APPLICABLE",
+                    "diagnosis": {
+                        "classification": "NETWORK",
+                        "provider": "openai-compatible",
+                        "fallback_used": False,
+                    },
+                },
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        runs = make_run_service(service, session)
+        runs._schedule_local_run = lambda *_args, **_kwargs: None
+        workflow = FailureWorkflowService(service, run_service=runs)
+        state = await workflow.get_repair_workflow(failure_id, analysis_id)
+        assert "RETRY" in state.allowed_actions
+        retry = await workflow.start_retry(failure_id, analysis_id)
+        repeated = await workflow.start_retry(failure_id, analysis_id)
+        assert retry.id == repeated.id
+        assert retry.project_id == project_id
+        assert retry.nodeids == ["tests/test_workflow.py::test_workflow"]
+        assert retry.origin_failure_id == failure_id
+        refreshed = await workflow.get_repair_workflow(failure_id, analysis_id)
+        assert refreshed.retry_run_id == retry.id
+        assert "RETRY" not in refreshed.allowed_actions
+
+
+@pytest.mark.asyncio
+async def test_workflow_does_not_authorize_retry_or_issue_draft_from_fake_diagnosis(client, test_db_session):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    analysis_id = "failure-fake-diagnosis"
+    async with test_db_session() as session:
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "NOT_APPLICABLE",
+                    "diagnosis": {
+                        "classification": "PRODUCT_DEFECT",
+                        "provider": "fake",
+                        "fallback_used": False,
+                    },
+                },
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id, analysis_id)
+        assert "RETRY" not in state.allowed_actions
+        assert "CREATE_ISSUE_DRAFT" not in state.allowed_actions
+
+
+async def seed(
+    client,
+    test_db_session,
+    *,
+    error,
+    kind="PYTHON",
+    candidates=None,
+    url="http://localhost/checkout",
+    source="def test_workflow():\n    actual = 1\n    assert actual == 2\n",
+):
     project = (
         await client.post("/api/projects", json={"name": "Workflow evidence", "bootstrap_workspace": False})
     ).json()
-    source = "def test_workflow():\n    actual = 1\n    assert actual == 2\n"
     written = await client.put(
         f"/api/workspaces/{project['id']}/file", json={"path": "tests/test_workflow.py", "content": source}
     )
@@ -88,20 +527,22 @@ async def seed(client, test_db_session, *, error, kind="PYTHON", candidates=None
                     browser_session_id="browser",
                     page_id="page",
                     nodeid=execution.nodeid,
-                    current_url="http://localhost/checkout",
+                    current_url=url,
                     page_evidence_json=json.dumps(
                         {
+                            "url": url,
                             "controls": [
-                                {
-                                    "candidates": candidates
+                                {"visible": True, "enabled": True, "candidates": [candidate]}
+                                for candidate in (
+                                    candidates
                                     or [
                                         {"kind": "test_id", "value": "checkout-submit"},
                                         {"kind": "role", "value": "button", "name": "Checkout"},
                                         {"kind": "text", "value": "Checkout"},
                                         {"kind": "id", "value": "checkout-new"},
                                     ]
-                                }
-                            ]
+                                )
+                            ],
                         }
                     ),
                 )
@@ -110,10 +551,108 @@ async def seed(client, test_db_session, *, error, kind="PYTHON", candidates=None
         return project["id"], failure.id, source
 
 
+@pytest.mark.asyncio
+async def test_rollback_history_is_idempotent_and_resists_stale_failure_updates(client, test_db_session):
+    from qa_core.ai.trace import make_trace_event
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        workflow = FailureWorkflowService(service)
+        failure = await service.get_failure_state(failure_id)
+        analysis_id = await workflow._history_create(failure_id)
+        rollback_event = make_trace_event(
+            failure.run_id,
+            "repair.rolled_back",
+            stage="repair",
+            step_id=f"{analysis_id}:repair:rolled_back",
+            title="Repair patch rolled back",
+            message="The failed repair was safely rolled back",
+            metadata={"state": "ROLLED_BACK", "automatic": True},
+        )
+        await workflow._history_append(
+            analysis_id,
+            make_trace_event(
+                failure.run_id,
+                "repair.rolled_back",
+                stage="repair",
+                step_id=f"{analysis_id}:repair:rolled_back",
+                title="Repair patch rolled back",
+                message="The failed repair was safely rolled back",
+                metadata={"state": "ROLLED_BACK", "automatic": True, "verification_run_id": "run-stale"},
+            ),
+            result={"repair_state": "ROLLED_BACK", "auto_rolled_back": True, "changes_applied": False},
+        )
+        await workflow._history_append(
+            analysis_id,
+            make_trace_event(
+                failure.run_id,
+                "repair.failed",
+                stage="repair",
+                step_id=f"{analysis_id}:repair:failed",
+                title="Repair verification failed",
+                message="A stale concurrent reconciliation",
+                metadata={"state": "FAILED"},
+            ),
+            result={"repair_state": "FAILED", "changes_applied": True},
+        )
+        await workflow._history_append(
+            analysis_id,
+            rollback_event,
+            result={"repair_state": "ROLLED_BACK", "auto_rolled_back": True, "changes_applied": False},
+        )
+        row = next(item for item in await workflow._history_list(failure_id) if item["id"] == analysis_id)
+
+    assert row["result"] == {
+        "repair_state": "ROLLED_BACK",
+        "auto_rolled_back": True,
+        "changes_applied": False,
+    }
+    assert [event["type"] for event in row["events"]].count("repair.rolled_back") == 1
+    assert not any(event["type"] == "repair.failed" for event in row["events"])
+
+
+@pytest.mark.asyncio
+async def test_successful_ai_classification_is_not_overwritten_by_rule_classification(client, test_db_session):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+
+        class SuccessfulDiagnosis:
+            ai_provider = type("Provider", (), {"records_usage": True})()
+            last_completion = None
+
+            async def diagnose_failure_ai(self, **_kwargs):
+                return FailureAnalysisResponse(
+                    classification="LOCATOR_CHANGED",
+                    root_cause="The failing test step uses a locator that no longer matches its target.",
+                    provider="openai-compatible",
+                    fallback_used=False,
+                    confidence=0.92,
+                )
+
+            @staticmethod
+            def last_invocation_metadata():
+                return {
+                    "provider": "openai-compatible",
+                    "model": "unit-test-model",
+                    "fallback_used": False,
+                    "prompt_version": "test",
+                }
+
+        service.orchestrator = SuccessfulDiagnosis()
+        diagnosis = await service.diagnose_failure_ai(failure_id)
+
+    assert diagnosis.classification == "LOCATOR_CHANGED"
+    assert diagnosis.provider == "openai-compatible"
+    assert diagnosis.fallback_used is False
+
+
 class RecordingDecision:
-    def __init__(self, *, fallback=False):
+    def __init__(self, *, fallback=False, confidence=0.95):
         self.calls = []
         self.fallback = fallback
+        self.confidence = confidence
 
     async def choose(self, request, **kwargs):
         self.calls.append(request)
@@ -121,9 +660,148 @@ class RecordingDecision:
             choice=request.options[0].key,
             provider="jev",
             model="unit-test-jev",
+            confidence=self.confidence,
             fallback_used=self.fallback,
             reason="unit-test-fallback" if self.fallback else None,
         )
+
+
+@pytest.mark.asyncio
+async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_pipeline(
+    client, test_db_session, local_html_url
+):
+    url = local_html_url('<button aria-label="Complete order">Continue</button>')
+    source = 'def test_workflow(page):\n    page.locator("#checkout").click()\n'
+    project_id, failure_id, _ = await seed(
+        client,
+        test_db_session,
+        error='AssertionError: locator("#checkout") did not resolve',
+        kind="UI",
+        candidates=[{"kind": "role", "value": "button", "name": "Complete order", "exact": True}],
+        url=url,
+        source=source,
+    )
+    decision = RecordingDecision()
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+
+        async def diagnose(*_args, **_kwargs):
+            return FailureAnalysisResponse(
+                classification="LOCATOR_CHANGED",
+                root_cause="The checkout locator changed to an accessible Complete order button.",
+                provider="openai-compatible",
+                fallback_used=False,
+                confidence=0.94,
+            )
+
+        service.diagnose_failure_ai = diagnose
+        runs = make_run_service(service, session)
+        runs._schedule_local_run = lambda *_args, **_kwargs: None
+        workflow = FailureWorkflowService(
+            service,
+            LocatorDecisionService(decision_service=decision),
+            run_service=runs,
+            auto_repair_mode="AUTO",
+        )
+        events = [
+            event
+            async for event in workflow.stream(failure_id)
+        ]
+        verification_monitors = tuple(workflow._verification_monitors)
+
+    completed = next(event for event in events if event.type == "run.completed")
+    result = completed.metadata
+    assert events[-1].type == "run.completed", [
+        (event.type, event.stage, event.status, event.message) for event in events
+    ]
+    verification = next(
+        (
+            event
+            for event in events
+            if event.type == "workflow.step"
+            and event.stage == "verification"
+            and event.metadata.get("test_rerun") is True
+        ),
+        None,
+    )
+    assert verification is not None, json.dumps(
+        {
+            "result": result,
+            "steps": [
+                {
+                    "stage": event.stage,
+                    "status": event.status,
+                    "message": event.message,
+                    "metadata": event.metadata,
+                }
+                for event in events
+                if event.type == "workflow.step"
+            ],
+        },
+        ensure_ascii=False,
+    )
+    assert events.index(verification) < len(events) - 1
+    assert result["initial_classification"] == "ASSERTION_FAILURE"
+    assert result["resolved_classification"] == "LOCATOR_CHANGED"
+    assert result["classification_source"] == "AI_DIAGNOSIS"
+    assert len(decision.calls) == 1
+    assert result["selection"]["provider"] == "jev"
+    assert result["repair_proposal"]["proposed_locator"] == 'get_by_role("button", name="Complete order")'
+    assert result["repair_proposal"]["verified"] is True, json.dumps(result["repair_proposal"], ensure_ascii=False)
+    assert result["repair_proposal"]["code_diff"]
+    assert result["repair_state"] == "VERIFYING_FIX"
+    assert result["changes_applied"] is True
+    assert verification.status == "RUNNING"
+    assert verification.metadata["test_rerun"] is True
+    assert verification.metadata["verified"] is False
+    history = await workflow.list_history(failure_id)
+    run_id = history[0]["result"]["verification_run_id"]
+    run_response = await client.get(f"/api/runs/{run_id}")
+    assert run_response.status_code == 200, run_response.text
+    assert run_response.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
+    source_response = await client.get(
+        f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"}
+    )
+    assert source_response.status_code == 200, source_response.text
+    repaired_source = source_response.json()["content"]
+    assert 'page.locator("#checkout").click()' not in repaired_source
+    assert result["repair_proposal"]["proposed_locator"] in repaired_source
+
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        await service.run_repo.update_run_status(
+            run_id,
+            RunStatus.FAILED,
+            failed=1,
+            total=1,
+            log_output="Simulated asynchronous verification failure",
+        )
+        await service.run_repo.add_execution(
+            run_id,
+            "tests/test_workflow.py::test_workflow",
+            RunStatus.FAILED,
+            error_message="Simulated asynchronous verification failure",
+        )
+        await session.commit()
+
+    history = []
+    for _ in range(30):
+        await asyncio.sleep(0.1)
+        async with test_db_session() as session:
+            service = get_failure_service(session)
+            history = await FailureWorkflowService(service)._history_list(failure_id)
+        if history[0]["result"].get("auto_rolled_back"):
+            break
+    assert history[0]["result"]["repair_state"] == "ROLLED_BACK", history[0]["result"]
+    assert history[0]["result"]["auto_rolled_back"] is True
+    assert history[0]["result"]["changes_applied"] is False
+    assert any(event["type"] == "repair.rolled_back" for event in history[0]["events"])
+    restored_response = await client.get(
+        f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"}
+    )
+    assert restored_response.status_code == 200, restored_response.text
+    assert restored_response.json()["content"] == source
+    await asyncio.gather(*verification_monitors, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -200,13 +878,13 @@ async def test_non_ui_workflow_is_replayable_and_never_calls_locator_decision(
         verification = next(event for event in events if event.stage == "verification")
         assert verification.status == "PENDING"
         assert verification.metadata["test_rerun"] is False
-        persisted = await workflow.history.list(failure_id)
+        persisted = await workflow.list_history(failure_id)
         assert persisted[0]["status"] == "COMPLETED"
         assert persisted[0]["events"][-1]["event_id"] == events[-1].event_id
         assert persisted[0]["result"]["verified"] is False
         await asyncio.sleep(0.01)
         await anext_second_run(workflow, failure_id)
-        assert len(await workflow.history.list(failure_id)) == 2
+        assert len(await workflow.list_history(failure_id)) == 2
         app.dependency_overrides[get_failure_service] = lambda: service
         try:
             streamed = await client.post(f"/api/failures/{failure_id}/analyze/stream")
@@ -233,9 +911,12 @@ async def anext_second_run(workflow, failure_id):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fallback", [False, True])
 async def test_ui_candidates_stream_the_actual_decision_engine_without_claiming_verification(
-    client, test_db_session, fallback
+    client, test_db_session, fallback, local_html_url
 ):
-    _, failure_id, _ = await seed(client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI")
+    url = local_html_url('<button aria-label="Checkout">Checkout</button>')
+    _, failure_id, _ = await seed(
+        client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI", url=url
+    )
     decision = RecordingDecision(fallback=fallback)
     async with test_db_session() as session:
         service = get_failure_service(session)
@@ -249,12 +930,16 @@ async def test_ui_candidates_stream_the_actual_decision_engine_without_claiming_
         inspection = next(event for event in events if event.stage == "inspection" and event.status == "COMPLETED")
         assert inspection.metadata["candidate_count"] == 4
         assert len(decision.calls) == 1
-        engine = "Local Strategy" if fallback else "Jev"
         actual = next(event for event in events if event.type == "decision_completed")
-        assert actual.metadata["provider"] == ("local-strategy" if fallback else "jev")
-        assert events[-1].metadata["selection"]["engine"] == engine
-        assert events[-1].metadata["verified"] is False
-        assert not any(event.type == "verification_completed" for event in events)
+        assert actual.metadata["provider"] == ("blocked" if fallback else "jev")
+        proposal = events[-1].metadata["repair_proposal"]
+        if fallback:
+            assert events[-1].metadata["selection"]["provider"] == "blocked"
+            assert proposal is None
+        else:
+            assert proposal["verified"] is True, proposal
+            assert proposal["provider"] == "jev"
+        assert events[-1].metadata["repair_state"] == "BLOCKED"  # Fake AI cannot authorize a repair.
 
 
 def test_locator_candidates_prioritize_the_most_specific_failed_target_match():
@@ -268,38 +953,138 @@ def test_locator_candidates_prioritize_the_most_specific_failed_target_match():
         }
     )
 
-    relevant = LocatorDecisionService.prioritize_candidates_for_failure(
-        '[data-testid="legacy-add-cart"]', candidates
-    )
+    relevant = LocatorDecisionService.prioritize_candidates_for_failure('[data-testid="legacy-add-cart"]', candidates)
 
     assert [candidate["name"] if candidate.get("name") else candidate["value"] for candidate in relevant] == [
         "Add to cart",
         "add-to-cart",
+        "Cart (0)",
     ]
 
 
 @pytest.mark.asyncio
-async def test_unrelated_page_elements_do_not_become_a_locator_repair(client, test_db_session):
+async def test_semantically_unrelated_local_fallback_candidate_is_blocked_before_auto_apply(
+    client, test_db_session, local_html_url
+):
+    url = local_html_url("<button>Logout</button>")
     _, failure_id, _ = await seed(
         client,
         test_db_session,
         error='Timeout waiting for locator("#checkout")',
         kind="UI",
-        candidates=[{"kind": "test_id", "value": "logout"}],
+        candidates=[{"kind": "role", "value": "button", "name": "Logout", "exact": True}],
+        url=url,
     )
-    decision = RecordingDecision()
+    decision = RecordingDecision(fallback=True)
     async with test_db_session() as session:
         service = get_failure_service(session)
-        service.orchestrator = ProductionQAOrchestrator(ai_provider=FakeAIProvider())
+
+        async def diagnose(*_args, **_kwargs):
+            return FailureAnalysisResponse(
+                classification="LOCATOR_CHANGED",
+                root_cause="The failed checkout control is no longer present.",
+                provider="openai-compatible",
+                fallback_used=False,
+                confidence=0.91,
+            )
+
+        service.diagnose_failure_ai = diagnose
         events = [
             event
             async for event in FailureWorkflowService(
                 service, LocatorDecisionService(decision_service=decision)
             ).stream(failure_id)
         ]
-        assert not decision.calls
-        assert next(event for event in events if event.stage == "decision").status == "BLOCKED"
-        assert events[-1].metadata["selection"] is None
+        assert len(decision.calls) == 1
+        assert decision.calls[0].options[0].description == 'get_by_role("button", name="Logout")'
+        assert events[-1].metadata["selection"]["provider"] == "blocked"
+        assert events[-1].metadata["repair_proposal"] is None
+        decision_event = next(event for event in events if event.type == "decision_completed")
+        assert decision_event.metadata["provider"] == "blocked"
+        assert decision_event.metadata["fallback_used"] is True
+        assert events[-1].metadata["repair_state"] == "BLOCKED"
+        assert events[-1].metadata["changes_applied"] is False
+
+
+@pytest.mark.asyncio
+async def test_jev_low_confidence_is_blocked_after_playwright_and_never_applied(
+    client, test_db_session, local_html_url
+):
+    url = local_html_url('<button aria-label="Checkout">Checkout</button>')
+    project_id, failure_id, source = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#checkout")',
+        kind="UI",
+        url=url,
+        source='def test_workflow(page):\n    page.locator("#checkout").click()\n',
+    )
+    decision = RecordingDecision(confidence=0.65)
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+
+        async def diagnose(*_args, **_kwargs):
+            return FailureAnalysisResponse(
+                classification="LOCATOR_CHANGED",
+                root_cause="The checkout locator changed.",
+                provider="openai-compatible",
+                fallback_used=False,
+                confidence=0.92,
+            )
+
+        service.diagnose_failure_ai = diagnose
+        workflow = FailureWorkflowService(
+            service,
+            LocatorDecisionService(decision_service=decision),
+            auto_repair_mode="AUTO",
+        )
+        events = [event async for event in workflow.stream(failure_id)]
+
+    result = next(event.metadata for event in events if event.type == "run.completed")
+    assert len(decision.calls) == 1
+    assert result["repair_state"] == "BLOCKED"
+    assert result["selection"]["confidence"] == 0.65
+    assert result["repair_proposal"] is None
+    assert result["changes_applied"] is False
+    assert not any(event.type == "patch.generated" for event in events)
+    current = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
+    assert current.json()["content"] == source
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["JEV_DISABLED", "JEV_TIMEOUT", "AI_BUDGET_EXHAUSTED"])
+async def test_automatic_runtime_block_prevents_diagnosis_decision_and_patch(
+    client, test_db_session, monkeypatch, reason
+):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    decision = RecordingDecision()
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        diagnosis_calls = []
+
+        async def unexpected_diagnosis(*_args, **_kwargs):
+            diagnosis_calls.append(True)
+            raise AssertionError("Runtime readiness must block before diagnosis")
+
+        async def blocked_readiness():
+            return {"ready": False, "reason": reason}
+
+        service.diagnose_failure_ai = unexpected_diagnosis
+        workflow = FailureWorkflowService(
+            service,
+            LocatorDecisionService(decision_service=decision),
+            auto_repair_mode="AUTO",
+        )
+        monkeypatch.setattr(workflow, "_runtime_readiness", blocked_readiness)
+        events = [event async for event in workflow.stream(failure_id, auto_triggered=True)]
+
+    completed = next(event for event in events if event.type == "run.completed")
+    assert completed.metadata["block_reason"] == reason
+    assert completed.metadata["repair_state"] == "BLOCKED"
+    assert completed.metadata["automatic_triggered"] is True
+    assert not diagnosis_calls
+    assert not decision.calls
+    assert not any(event.type in {"patch.generated", "patch.applied"} for event in events)
 
 
 @pytest.mark.asyncio
@@ -316,10 +1101,14 @@ async def test_failed_model_is_redacted_and_persisted_without_success(client, te
         workflow = FailureWorkflowService(service)
         events = [event async for event in workflow.stream(failure_id)]
         assert events[-1].type == "run.failed"
-        records = await workflow.history.list(failure_id)
+        records = await workflow.list_history(failure_id)
         assert records[0]["status"] == "FAILED"
         assert "private-workflow-token" not in json.dumps(records)
-        assert not records[0]["result"]
+        assert records[0]["result"] == {
+            "repair_state": "BLOCKED",
+            "verified": False,
+            "changes_applied": False,
+        }
 
 
 @pytest.mark.asyncio
@@ -347,12 +1136,15 @@ async def test_cancel_and_restart_preserve_incomplete_analysis(client, test_db_s
         await asyncio.wait_for(entered.wait(), timeout=3)
         await stream.aclose()
         assert cancelled.is_set()
-        records = await workflow.history.list(failure_id)
+        records = await workflow.list_history(failure_id)
         assert records[0]["status"] == "CANCELLED"
         assert records[0]["events"][-1]["type"] == "run.cancelled"
-        unfinished = await workflow.history.create(failure_id)
-        await workflow.history.recover_interrupted()
-        records = await workflow.history.list(failure_id)
+        async with workflow.repository_scope() as repositories:
+            unfinished = await repositories.failure_analyses.create(failure_id)
+            await repositories.commit()
+            await repositories.failure_analyses.recover_interrupted()
+            await repositories.commit()
+        records = await workflow.list_history(failure_id)
         assert next(record for record in records if record["id"] == unfinished)["status"] == "INTERRUPTED"
 
 

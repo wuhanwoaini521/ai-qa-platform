@@ -1,23 +1,14 @@
 import type {
-  AIFailureDiagnosisResponse,
-  FailureAnalysisRun,
   FailureRecord,
+  FailureRepairAction,
+  FailureRepairState,
   LocatorRepairProposal,
 } from '../../types';
 
-export type DiagnosisState =
-  | 'NOT_ANALYZED'
-  | 'ANALYZING'
-  | 'DIAGNOSED'
-  | 'REPAIR_PROPOSED'
-  | 'REPAIR_APPLIED'
-  | 'VERIFYING'
-  | 'VERIFIED'
-  | 'BLOCKED';
+export type DiagnosisState = FailureRepairState;
 
 export type PrimaryAction =
   | 'RUN_DIAGNOSIS'
-  | 'GENERATE_LOCATOR_REPAIR'
   | 'RETRY'
   | 'CREATE_ISSUE_DRAFT'
   | 'REVIEW_REPAIR'
@@ -71,21 +62,19 @@ export function failedLocatorFromFailure(failure: FailureRecord): string {
 
 export function displayedFailureClassification(
   failureClassification: string | null | undefined,
-  diagnosis: AIFailureDiagnosisResponse | null,
 ): string {
-  if (
-    diagnosis?.classification?.trim() &&
-    diagnosis.provider !== 'fake' &&
-    !diagnosis.fallback_used
-  ) {
-    return normalizeFailureClassification(diagnosis.classification);
-  }
   return normalizeFailureClassification(failureClassification);
 }
 
-export function summarizeFailureError(error = ''): string {
+export function summarizeFailureError(error = '', failureClassification?: string | null): string {
   if (/BrowserType\.launch/i.test(error) && /spawn\s+EPERM/i.test(error)) {
     return 'browserLaunchEperm';
+  }
+  if (
+    normalizeFailureClassification(failureClassification) === 'LOCATOR_CHANGED' &&
+    /TimeoutError|timed out|timeout/i.test(error)
+  ) {
+    return 'locatorTimeout';
   }
   if (/TimeoutError|timed out|timeout/i.test(error)) return 'timeout';
   if (/AssertionError|assertion failed/i.test(error)) return 'assertion';
@@ -115,6 +104,20 @@ export function extractRelevantFrames(stackTrace = '', limit = 3): string[] {
   return frames;
 }
 
+export function failureSourceLocation(
+  failure: Pick<FailureRecord, 'test_nodeid' | 'stack_trace'>,
+): { filePath: string | null; lineNumber: number | null } {
+  const filePath = failure.test_nodeid.split('::')[0]?.trim() || null;
+  const fileName = filePath?.split(/[\\/]/).at(-1)?.toLowerCase();
+  const frames = extractRelevantFrames(failure.stack_trace);
+  const frame = frames.find((candidate) => {
+    const colon = candidate.lastIndexOf(':');
+    return colon > 0 && candidate.slice(0, colon).toLowerCase() === fileName;
+  }) ?? frames[0];
+  const line = frame?.match(/:(\d+)$/)?.[1];
+  return { filePath, lineNumber: line ? Number(line) : null };
+}
+
 export function failureFingerprint(failure: FailureRecord): string | null {
   const combined = `${failure.exception_type}\n${failure.error_message}\n${failure.stack_trace}`;
   if (/BrowserType\.launch/i.test(combined) && /spawn\s+EPERM/i.test(combined)) {
@@ -138,62 +141,24 @@ export function relatedFailures(
   );
 }
 
-export function deriveDiagnosisState(input: {
-  diagnosing: boolean;
-  diagnosis: AIFailureDiagnosisResponse | null;
-  repairProposed: boolean;
-  repairApplied: boolean;
-  verificationStatus?: string | null;
-  verified?: boolean;
-  analysis?: FailureAnalysisRun;
-  error?: string;
-}): DiagnosisState {
-  const verification = (input.verificationStatus ?? '').toUpperCase();
-  if (verification === 'QUEUED' || verification === 'RUNNING') return 'VERIFYING';
-  if (input.verified || verification === 'PASSED') return 'VERIFIED';
-  if (input.repairApplied) return 'REPAIR_APPLIED';
-  if (input.repairProposed) return 'REPAIR_PROPOSED';
-  if (input.diagnosing || input.analysis?.status === 'RUNNING') return 'ANALYZING';
-  if (input.diagnosis || input.analysis?.status === 'COMPLETED') return 'DIAGNOSED';
-  if (
-    input.error ||
-    ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(input.analysis?.status ?? '')
-  ) {
-    return 'BLOCKED';
-  }
-  return 'NOT_ANALYZED';
-}
-
-export function primaryActionFor(input: {
-  state: DiagnosisState;
-  classification: string;
-  diagnosedClassification?: string;
-  hasFailedLocator: boolean;
-}): PrimaryAction {
-  if (input.state === 'ANALYZING') return 'ANALYZING';
-  if (input.state === 'VERIFYING') return 'VERIFYING';
-  if (input.state === 'VERIFIED') return 'VERIFIED';
-  if (input.state === 'REPAIR_APPLIED') return 'VERIFY_FIX';
-  if (input.state === 'REPAIR_PROPOSED') return 'REVIEW_REPAIR';
-  if (input.state === 'BLOCKED' || input.state === 'NOT_ANALYZED') {
-    return 'RUN_DIAGNOSIS';
-  }
-
-  const category = normalizeFailureClassification(
-    input.diagnosedClassification ?? input.classification,
-  );
-  if (category === 'LOCATOR_CHANGED') {
-    return input.hasFailedLocator ? 'GENERATE_LOCATOR_REPAIR' : 'BLOCKED';
-  }
-  if (category === 'PRODUCT_DEFECT') return 'CREATE_ISSUE_DRAFT';
-  if (['ENVIRONMENT', 'NETWORK', 'TIMING', 'TEST_DATA'].includes(category)) {
-    return 'RETRY';
-  }
+export function primaryActionForWorkflow(
+  state: FailureRepairState,
+  actions: FailureRepairAction[],
+): PrimaryAction {
+  if (actions.includes('START_ANALYSIS')) return 'RUN_DIAGNOSIS';
+  if (actions.includes('APPLY')) return 'REVIEW_REPAIR';
+  if (actions.includes('VERIFY')) return 'VERIFY_FIX';
+  if (actions.includes('RETRY')) return 'RETRY';
+  if (actions.includes('CREATE_ISSUE_DRAFT')) return 'CREATE_ISSUE_DRAFT';
+  if (state === 'ANALYZING' || state === 'DECIDING' || state === 'VERIFYING_CANDIDATE') return 'ANALYZING';
+  if (state === 'VERIFYING_FIX') return 'VERIFYING';
+  if (state === 'VERIFIED') return 'VERIFIED';
   return 'BLOCKED';
 }
 
 export function availableEvidenceTabs(
   failure: FailureRecord,
+  browserEvidence: Record<string, unknown> = {},
 ): EvidenceTab[] {
   const bundle = failure.evidence_bundle ?? {};
   const tabs: EvidenceTab[] = ['SUMMARY'];
@@ -205,52 +170,23 @@ export function availableEvidenceTabs(
     failure.screenshot_path ||
     failure.dom_snapshot_path ||
     hasEvidence(bundle.page_url) ||
-    hasEvidence(bundle.browser)
+    hasEvidence(bundle.browser) ||
+    hasEvidence(browserEvidence)
   ) {
     tabs.push('BROWSER');
   }
-  if (failure.console_logs?.length || hasEvidence(bundle.console)) tabs.push('CONSOLE');
-  if (hasEvidence(bundle.network)) tabs.push('NETWORK');
+  if (failure.console_logs?.length || hasEvidence(bundle.console) || hasEvidence(browserEvidence.console_logs)) tabs.push('CONSOLE');
+  if (hasEvidence(bundle.network) || hasEvidence(browserEvidence.network_logs)) tabs.push('NETWORK');
   if (
     failure.screenshot_path ||
     failure.trace_path ||
     failure.dom_snapshot_path ||
-    hasEvidence(bundle.artifacts)
+    hasEvidence(bundle.artifacts) ||
+    hasEvidence(browserEvidence.last_frame_artifact_id)
   ) {
     tabs.push('ARTIFACTS');
   }
   return tabs;
-}
-
-export function repairEligibility(input: {
-  diagnosis: AIFailureDiagnosisResponse | null;
-  failure: FailureRecord;
-  trustedAnalysis?: boolean;
-}): { eligible: boolean; reason: string } {
-  const classification = normalizeFailureClassification(
-    input.diagnosis?.classification ??
-      input.failure.failure_kind ??
-      input.failure.classification,
-  );
-  if (classification !== 'LOCATOR_CHANGED') {
-    return { eligible: false, reason: 'classification' };
-  }
-  if (!failedLocatorFromFailure(input.failure)) {
-    return { eligible: false, reason: 'missing-locator' };
-  }
-  if (!input.failure.error_message.trim() && !input.failure.stack_trace.trim()) {
-    return { eligible: false, reason: 'missing-evidence' };
-  }
-  if (!input.diagnosis && !input.trustedAnalysis) {
-    return { eligible: false, reason: 'not-diagnosed' };
-  }
-  if (
-    input.diagnosis &&
-    (input.diagnosis.provider === 'fake' || input.diagnosis.fallback_used)
-  ) {
-    return { eligible: false, reason: 'untrusted-diagnosis' };
-  }
-  return { eligible: true, reason: 'eligible' };
 }
 
 export function storedRepairProposal(
@@ -267,6 +203,16 @@ export function storedRepairProposal(
     confidence: typeof value.confidence === 'number' ? value.confidence : null,
     strategy: value.strategy,
     reason: value.reason ?? '',
+    candidate_id: value.candidate_id ?? null,
+    provider: value.provider ?? 'local-strategy',
+    model: value.model ?? null,
+    latency_ms: value.latency_ms ?? null,
+    ai_provider: value.ai_provider ?? null,
+    ai_fallback_used: value.ai_fallback_used === true,
+    verified: value.verified === true,
+    verification_reason: value.verification_reason ?? null,
+    resolved_classification: value.resolved_classification ?? null,
+    decision_summary: value.decision_summary ?? {},
     code_diff: value.code_diff ?? '',
     file_path: value.file_path ?? null,
     applied: value.applied === true,

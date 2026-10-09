@@ -1,34 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decisionFacts } from '../src/features/runtime/jevModel.ts';
-test('JEV attempt remains in trace and fallback summary does not carry old confidence', () => {
+test('AI candidate metadata is not mixed with the JEV decision result', () => {
   const events = [
     {
+      type: 'step.progress',
+      category: 'step',
       metadata: {
-        provider: 'jev',
-        candidate_id: 'first',
-        confidence: 0.9,
-        candidate_count: 2,
+        operation: 'browser_action_candidates',
+        provider: 'openai-compatible',
+        model: 'deepseek-flash',
+        fallback_used: false,
+        latency_ms: 3557,
       },
     },
-    { metadata: { verified: false } },
     {
+      type: 'candidates_generated',
+      category: 'decision',
       metadata: {
-        provider: 'local-strategy',
-        candidate_id: 'second',
-        confidence: null,
-        verified: true,
-        fallback_used: true,
-        fallback_reason: 'selected_candidate_failed_verification',
+        provider: 'openai-compatible',
+        model: 'deepseek-flash',
+        candidate_count: 1,
+        candidate_summary: '[{"candidate_id":"fill_search_selenium"}]',
+        rejected_count: 0,
+      },
+    },
+    {
+      type: 'decision_started',
+      category: 'decision',
+      metadata: { candidate_count: 1, jev_attempted: true },
+    },
+    {
+      type: 'browser.decision_blocked',
+      category: 'browser',
+      status: 'BLOCKED',
+      metadata: {
+        confidence: 0.24,
+        minimum_confidence: 0.6,
+        attempted_choice: 'fill_search_selenium',
+        failure_reason: 'below_minimum_confidence',
+        action_executed: false,
       },
     },
   ];
   const facts = decisionFacts(events);
-  assert.equal(events[0].metadata.provider, 'jev');
-  assert.equal(facts.provider, 'local-strategy');
-  assert.equal(facts.confidence, null);
-  assert.equal(facts.candidate_count, 2);
-  assert.equal(facts.verified, true);
-  assert.equal(facts.fallback_used, true);
-  assert.ok(!Object.hasOwn(facts, 'scores'));
+  assert.equal(facts.candidateGeneration.provider, 'openai-compatible');
+  assert.equal(facts.candidateGeneration.model, 'deepseek-flash');
+  assert.equal(facts.candidateGeneration.fallback_used, false);
+  assert.equal(facts.candidateGeneration.latency_ms, 3557);
+  assert.equal(facts.candidateGeneration.candidate_count, 1);
+  assert.equal(facts.jevDecision.provider, 'jev');
+  assert.equal(facts.jevDecision.confidence, 0.24);
+  assert.equal(facts.jevDecision.minimum_confidence, 0.6);
+  assert.equal(facts.jevDecision.attempted_choice, 'fill_search_selenium');
+  assert.equal(facts.jevDecision.failure_reason, 'below_minimum_confidence');
+  assert.ok(!Object.hasOwn(facts.jevDecision, 'fallback_reason'));
+  assert.equal(facts.jevDecision.status, 'BLOCKED');
+  assert.equal(facts.jevDecision.action_executed, false);
+  assert.ok(!Object.hasOwn(facts.jevDecision, 'model'));
+  assert.ok(!Object.hasOwn(facts.jevDecision, 'fallback_used'));
 });

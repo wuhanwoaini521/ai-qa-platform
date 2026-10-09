@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -383,6 +384,15 @@ class LocatorHistoryORM(Base):
 
 class FailureAnalysisORM(Base):
     __tablename__ = "failure_analyses"
+    __table_args__ = (
+        Index(
+            "uq_failure_analyses_one_running_per_failure",
+            "failure_id",
+            unique=True,
+            sqlite_where=text("status = 'RUNNING'"),
+            postgresql_where=text("status = 'RUNNING'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     failure_id: Mapped[str] = mapped_column(
@@ -444,7 +454,7 @@ class AIProviderConfigORM(Base):
     base_url: Mapped[str] = mapped_column(String(2048), default="https://api.openai.com/v1")
     timeout: Mapped[float] = mapped_column(Float, default=30.0)
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
-    max_request_tokens: Mapped[int] = mapped_column(Integer, default=16000)
+    max_request_tokens: Mapped[int] = mapped_column(Integer, default=1_000_000)
     max_daily_requests: Mapped[int] = mapped_column(Integer, default=1000)
     max_task_calls: Mapped[int] = mapped_column(Integer, default=8)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)

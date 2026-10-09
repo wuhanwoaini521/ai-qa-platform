@@ -22,7 +22,10 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 IS_WINDOWS = os.name == "nt"
@@ -179,6 +182,22 @@ def _dev_port(env_name: str, default: int) -> int:
     return selected
 
 
+def _wait_for_http(process: subprocess.Popen, url: str, *, timeout_sec: float = 60.0) -> bool:
+    """Wait until a child service responds, or stop waiting if it exits or times out."""
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            return False
+        try:
+            with urlopen(url, timeout=1) as response:
+                if response.status == 200:
+                    return True
+        except (OSError, TimeoutError, URLError):
+            pass
+        time.sleep(0.25)
+    return False
+
+
 def task_setup() -> int:
     require_tools()
     if use_mise():
@@ -250,8 +269,8 @@ def task_dev() -> int:
             {"VITE_DEV_API_TARGET": f"http://127.0.0.1:{api_port}"},
         ),
     ]
-    running = [(label, _spawn(label, argv, lock, extra_env)) for label, argv, extra_env in services]
-    processes = [process for _, process in running]
+    running: list[tuple[str, subprocess.Popen]] = []
+    processes: list[subprocess.Popen] = []
 
     def shutdown(*_: object) -> None:
         for process in processes:
@@ -261,9 +280,27 @@ def task_dev() -> int:
     if not IS_WINDOWS:
         signal.signal(signal.SIGTERM, shutdown)
 
-    # Whichever server exits first takes the whole session down: a dev loop where the API died
-    # silently and only the UI kept running hides the real failure.
     try:
+        # Vite sends API requests as soon as the browser loads. Start it only after FastAPI has
+        # completed startup and answers its public liveness probe, otherwise every initial page
+        # request races the API bind and logs a misleading ECONNREFUSED.
+        api_label, api_argv, api_env = services[0]
+        api_process = _spawn(api_label, api_argv, lock, api_env)
+        running.append((api_label, api_process))
+        processes.append(api_process)
+        api_live_url = f"http://127.0.0.1:{api_port}/api/health/live"
+        log(f"Waiting for API startup at {api_live_url}...")
+        if not _wait_for_http(api_process, api_live_url):
+            log("\nerror: the API did not become ready; the web server was not started.")
+            return api_process.poll() or 1
+
+        web_label, web_argv, web_env = services[1]
+        web_process = _spawn(web_label, web_argv, lock, web_env)
+        running.append((web_label, web_process))
+        processes.append(web_process)
+
+        # Whichever server exits first takes the whole session down: a dev loop where the API
+        # dies silently and only the UI keeps running hides the real failure.
         while True:
             failed = [pair for pair in running if pair[1].poll() is not None]
             if failed:

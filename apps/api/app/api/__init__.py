@@ -17,6 +17,7 @@ from app.api.qa_assistant import router as qa_assistant_router
 from app.api.quality import router as quality_router
 from app.api.recorder import router as recorder_router
 from app.api.releases import router as releases_router
+from app.api.settings import router as settings_router
 from app.api.requirements import router as requirements_router
 from app.api.runners import router as runners_router
 from app.api.runs import router as runs_router
@@ -49,6 +50,7 @@ __all__ = [
     "qa_assistant_router",
     "quality_router",
     "releases_router",
+    "settings_router",
     "requirements_router",
     "runners_router",
     "runs_router",

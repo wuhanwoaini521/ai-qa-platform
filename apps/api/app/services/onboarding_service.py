@@ -14,12 +14,11 @@ from typing import Any
 import yaml
 from project_model.models import (
     ProjectCreate,
-    RunStatus,
+    TestRun,
     TestRunCreate,
     WorkspaceCreate,
 )
 from pydantic import BaseModel, Field
-from qa_core.failure.classifier import FailureClassifier
 from qa_core.onboarding import (
     AllureImportReport,
     AllureResultImporter,
@@ -31,19 +30,17 @@ from qa_core.onboarding import (
     QAProjectContract,
     QAProjectDetection,
     QAProjectImporter,
-    QAProjectRunner,
     QARuntimeProvisioner,
     RuntimeProvisioningResult,
     SafetyPolicy,
     SafetyVerdict,
-    SuiteRunOutcome,
     load_contract_file,
     render_contract,
 )
 
 from app.repositories.project_repo import ProjectRepository
-from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.test_run_service import LocalPytestExecutionOptions, TestRunService
 
 CONTRACT_FILENAME = ".qa-platform.yaml"
 
@@ -122,7 +119,7 @@ class CollectionReport(BaseModel):
 class PilotRunReport(BaseModel):
     project_id: str
     run_id: str | None = None
-    outcome: SuiteRunOutcome
+    run: TestRun | None = None
     executed_nodeids: list[str] = Field(default_factory=list)
     rejected: list[SafetyVerdict] = Field(default_factory=list)
     persisted: bool = False
@@ -135,13 +132,13 @@ class OnboardingService:
         self,
         project_repo: ProjectRepository,
         workspace_repo: WorkspaceRepository,
-        run_repo: TestRunRepository,
+        run_service: TestRunService,
         workspace_base_dir: Path | None = None,
         imports_dir: Path | None = None,
     ) -> None:
         self.project_repo = project_repo
         self.workspace_repo = workspace_repo
-        self.run_repo = run_repo
+        self.run_service = run_service
         self.workspace_base_dir = workspace_base_dir
         self.imports_dir = imports_dir
 
@@ -264,6 +261,8 @@ class OnboardingService:
     ) -> PilotRunReport:
         imported = await self.get_imported_project(project_id)
         root = Path(imported.workspace_path)
+        if not persist:
+            raise OnboardingError("Pilot runs must be persisted through the platform Run service")
 
         requested = validate_nodeids(list(nodeids or []))
         if markers:
@@ -275,111 +274,116 @@ class OnboardingService:
                 )
             requested.extend(test.nodeid for test in collection.tests)
 
+        if not requested:
+            collection = await self._collect(imported)
+            if collection.status.value != "COLLECTED":
+                raise OnboardingError(f"cannot run the project: test collection failed ({collection.error_message})")
+            requested.extend(test.nodeid for test in collection.tests)
+
+        requested = list(dict.fromkeys(requested))
+
         safe, rejected = SafetyPolicy().split(requested, root) if requested else ([], [])
         if allow_unsafe:
             safe, rejected = requested, []
 
-        if requested and not safe:
+        if not safe:
             return PilotRunReport(
                 project_id=project_id,
-                outcome=SuiteRunOutcome(exit_code=None, command=[], timed_out=False),
+                run=None,
                 executed_nodeids=[],
                 rejected=rejected,
                 persisted=False,
             )
 
-        # When the project reports through Allure *and* its own runtime was provisioned (so the
-        # plugin is guaranteed to be importable), the platform owns the results directory: the run's
-        # artifacts land inside the isolated workspace and can be imported afterwards. Without a
-        # provisioned runtime the ambient interpreter is used and no project plugin may be assumed.
-        run_args: list[str] = []
-        if n_workers:
-            run_args.extend(["-n", str(max(1, min(n_workers, 32)))])
+        run_args = self._pytest_args_from_contract(imported.contract.test_command)
         if reruns:
+            if not imported.contract.has_plugin("rerunfailures"):
+                raise OnboardingError("Retry count requires the imported project's pytest-rerunfailures plugin")
             run_args.extend(["--reruns", str(max(0, min(reruns, 5)))])
         if imported.contract.has_plugin("allure") and imported.contract.runtime.virtualenv_dir:
-            results_dir = root / (imported.contract.allure_results_dir or "allure-results")
+            results_dir = self._workspace_relative_path(root, imported.contract.allure_results_dir or "allure-results")
             run_args.append(f"--alluredir={results_dir}")
 
-        outcome = await QAProjectRunner(
-            imported.contract,
-            artifacts_dir=self._report_artifacts_dir(imported.project_id),
-        ).run(root, nodeids=safe or None, extra_args=run_args)
-
-        run_id: str | None = None
-        if persist:
-            run_id = await self._persist_run(imported, outcome, safe or requested)
-        return PilotRunReport(
-            project_id=project_id,
-            run_id=run_id,
-            outcome=outcome,
-            executed_nodeids=safe,
-            rejected=rejected,
-            persisted=persist,
-        )
-
-    async def _persist_run(self, imported: ImportedProject, outcome: SuiteRunOutcome, executed: list[str]) -> str:
-        run = await self.run_repo.create_run(
+        run = await self.run_service.create_and_execute_run(
             TestRunCreate(
                 project_id=imported.project_id,
-                workspace_id=imported.workspace_id,
+                workspace_id=imported.project_id,
                 requested_by="pilot",
-                runner_type="IMPORTED_PYTEST",
-                nodeids=executed,
-            )
+                runner_type="LOCAL",
+                nodeids=safe,
+                parallel_workers=max(1, min(n_workers or 1, 16)),
+            ),
+            local_pytest_options=LocalPytestExecutionOptions(
+                interpreter=imported.contract.runtime.resolve_interpreter(root),
+                environment=tuple({**imported.contract.runtime.environment, **imported.contract.environment}.items()),
+                extra_pytest_args=tuple(run_args),
+                timeout_sec=900.0,
+            ),
         )
-        status = RunStatus.PASSED if outcome.exit_code == 0 else RunStatus.FAILED
-
-        counts = outcome.counts
-        for logical in outcome.logical_tests:
-            execution = await self.run_repo.add_execution(
-                run_id=run.id,
-                nodeid=logical.nodeid,
-                status=RunStatus(logical.status.value)
-                if logical.status.value in {member.value for member in RunStatus}
-                else RunStatus.ERROR,
-                retry_count=logical.reruns,
-                error_message=logical.failure_message,
-                stack_trace=outcome.stdout_tail if logical.status.value in ("FAILED", "ERROR") else None,
-            )
-            # Skips, xfails and xpasses are outcomes, not failures: only real failures feed the
-            # diagnosis/repair pipeline.
-            if logical.status.value in ("FAILED", "ERROR"):
-                category, action, locator = FailureClassifier.classify(
-                    logical.failure_message or "", outcome.stdout_tail
-                )
-                await self.run_repo.create_failure_record(
-                    run_id=run.id,
-                    execution_id=execution.id,
-                    test_nodeid=logical.nodeid,
-                    test_name=logical.nodeid.split("::")[-1][:250],
-                    classification=category.value,
-                    exception_type=(logical.failure_message or "").split(":")[0][:200] or "UnknownError",
-                    error_message=logical.failure_message or "test failed",
-                    stack_trace=outcome.stdout_tail,
-                    failing_locator=locator,
-                    suggested_action=action,
-                )
-
-        await self.run_repo.update_run_status(
+        return PilotRunReport(
+            project_id=project_id,
             run_id=run.id,
-            status=status,
-            passed=counts.get("passed", 0),
-            failed=counts.get("failed", 0) + counts.get("error", 0),
-            skipped=counts.get("skipped", 0),
-            duration_ms=outcome.duration_ms,
-            log_output=((outcome.stdout_tail or "") + ("\n" + outcome.stderr_tail if outcome.stderr_tail else ""))[
-                -20000:
-            ]
-            or None,
+            run=run,
+            executed_nodeids=safe,
+            rejected=rejected,
+            persisted=True,
         )
-        return run.id
+
+    @staticmethod
+    def _pytest_args_from_contract(command: list[str]) -> list[str]:
+        """Translate the project's standard pytest command without permitting a second runner."""
+        if not command:
+            return []
+
+        tokens = list(command)
+        executable = Path(tokens[0]).name.lower()
+        prefix = 0
+        if executable in {"pytest", "pytest.exe"}:
+            prefix = 1
+        elif executable in {"python", "python3", "python.exe", "python3.exe"} and tokens[1:3] == ["-m", "pytest"]:
+            prefix = 3
+        elif executable in {"uv", "uv.exe", "poetry", "poetry.exe", "pdm", "pdm.exe", "pipenv", "pipenv.exe"}:
+            if tokens[1:3] == ["run", "pytest"]:
+                prefix = 3
+            elif tokens[1:4] == ["run", "python", "-m"] and tokens[4:5] == ["pytest"]:
+                prefix = 5
+
+        if not prefix:
+            raise OnboardingError("The imported project's test command must invoke pytest")
+
+        args = tokens[prefix:]
+        allowed = {
+            "-v",
+            "--verbose",
+            "-q",
+            "--quiet",
+            "--tb=short",
+            "--tb=long",
+            "--strict-markers",
+            "--disable-warnings",
+        }
+        if any(arg not in allowed for arg in args):
+            raise OnboardingError("The imported project's pytest command contains unsupported options")
+        return args
+
+    @staticmethod
+    def _workspace_relative_path(root: Path, value: str) -> Path:
+        relative = PurePosixPath(value.replace("\\", "/"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise OnboardingError("The imported project's Allure results path must stay inside its workspace")
+        resolved_root = root.resolve()
+        resolved = (root / Path(*relative.parts)).resolve()
+        if not resolved.is_relative_to(resolved_root):
+            raise OnboardingError("The imported project's Allure results path must stay inside its workspace")
+        return resolved
 
     # --- allure -----------------------------------------------------------------------------
 
     async def import_allure_results(self, project_id: str) -> AllureImportReport:
         imported = await self.get_imported_project(project_id)
-        results_dir = Path(imported.workspace_path) / (imported.contract.allure_results_dir or "allure-results")
+        results_dir = self._workspace_relative_path(
+            Path(imported.workspace_path), imported.contract.allure_results_dir or "allure-results"
+        )
         if not results_dir.is_dir():
             raise OnboardingError(f"No Allure results directory in the imported workspace: {results_dir}")
         return AllureResultImporter().import_from(results_dir)
@@ -391,16 +395,6 @@ class OnboardingService:
         if self.imports_dir:
             return Path(self.imports_dir) / project_id
         return Path(self.workspace_base_dir or Path("runtime/workspaces")) / project_id
-
-    def _report_artifacts_dir(self, project_id: str) -> Path:
-        """Platform-owned directory for pytest report logs, deliberately outside the workspace."""
-        # Absolute: the report directory is passed to the project process through PYTHONPATH, and a
-        # relative entry would resolve against the workspace the child runs in.
-        base = (
-            (self.workspace_base_dir or Path("runtime/workspaces")).parent / "pytest-reports" / project_id
-        ).resolve()
-        base.mkdir(parents=True, exist_ok=True)
-        return base
 
     def _identity_mapper(self, workspace_path: str) -> NodeIdCaseMapper:
         return NodeIdCaseMapper(self._explicit_mappings(Path(workspace_path)))

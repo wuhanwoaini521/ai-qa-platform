@@ -35,10 +35,19 @@ AI_QA_USER_AGENT = "ai-qa-platform"
 class AIProviderError(RuntimeError):
     """A safe provider failure that keeps its diagnosis separate from upstream text."""
 
-    def __init__(self, code: str, safe_message: str, retry_count: int = 0) -> None:
+    def __init__(
+        self,
+        code: str,
+        safe_message: str,
+        retry_count: int = 0,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
         self.code = code
         self.safe_message = safe_message
         self.retry_count = retry_count
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
         super().__init__(safe_message)
 
 
@@ -46,12 +55,24 @@ def is_output_limit_finish_reason(finish_reason: str | None) -> bool:
     return (finish_reason or "").strip().lower() in {"length", "max_tokens", "max_output_tokens"}
 
 
-def output_limit_error(*, max_tokens: int, output_tokens: int | None = None) -> AIProviderError:
+def output_limit_error(
+    *,
+    max_tokens: int | None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> AIProviderError:
     generated = f"本次已生成 {output_tokens:,} tokens；" if output_tokens is not None else ""
+    requested_limit = (
+        f"应用请求输出上限为 {max_tokens:,} tokens；"
+        if max_tokens is not None
+        else "本次请求未设置应用侧输出上限；"
+    )
     return AIProviderError(
         "output_limit",
-        f"AI Provider 因输出长度上限提前终止。{generated}请求上限为 {max_tokens:,} tokens，结果不完整，未作为有效分析返回。"
-        "请检查模型或网关的实际输出上限，或缩短上下文后重试。",
+        f"AI Provider 因输出长度上限提前终止。{generated}{requested_limit}结果不完整，未作为有效分析返回。"
+        "这是输出额度，不是输入上下文长度限制；请检查模型/网关的最大输出配置。",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
 
 
@@ -450,8 +471,9 @@ class OpenAICompatibleProvider:
                 {"role": "user", "content": request.prompt},
             ],
             "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
         }
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
         if request.thinking_mode is not None:
             payload["thinking"] = {"type": request.thinking_mode}
         if request.response_schema:
@@ -519,7 +541,11 @@ class OpenAICompatibleProvider:
                     output_tokens = usage.get("completion_tokens")
 
                     if is_output_limit_finish_reason(choice.get("finish_reason")):
-                        raise output_limit_error(max_tokens=request.max_tokens, output_tokens=output_tokens)
+                        raise output_limit_error(
+                            max_tokens=request.max_tokens,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                        )
                     if not raw_content.strip():
                         raise empty_response_error(streamed=False)
 
@@ -649,10 +675,11 @@ class OpenAICompatibleProvider:
                 {"role": "user", "content": request.prompt},
             ],
             "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
         if request.thinking_mode is not None:
             payload["thinking"] = {"type": request.thinking_mode}
         if request.response_schema:
@@ -823,6 +850,7 @@ class FallbackAIProvider:
         providers = [self.primary, *self.fallbacks]
         saw_empty_stream = False
         empty_finish_reason: str | None = None
+        empty_input_tokens: int | None = None
         empty_output_tokens: int | None = None
         for index, provider in enumerate(providers):
             emitted_content = False
@@ -834,6 +862,9 @@ class FallbackAIProvider:
                         if chunk.finish_reason:
                             empty_finish_reason = chunk.finish_reason
                         if chunk.usage:
+                            usage_tokens = chunk.usage.get("prompt_tokens", chunk.usage.get("input_tokens"))
+                            if isinstance(usage_tokens, int):
+                                empty_input_tokens = usage_tokens
                             usage_tokens = chunk.usage.get("completion_tokens", chunk.usage.get("output_tokens"))
                             if isinstance(usage_tokens, int):
                                 empty_output_tokens = usage_tokens
@@ -861,7 +892,11 @@ class FallbackAIProvider:
                 if emitted_content:
                     raise
         if saw_empty_stream and is_output_limit_finish_reason(empty_finish_reason):
-            raise output_limit_error(max_tokens=request.max_tokens, output_tokens=empty_output_tokens)
+            raise output_limit_error(
+                max_tokens=request.max_tokens,
+                input_tokens=empty_input_tokens,
+                output_tokens=empty_output_tokens,
+            )
         if saw_empty_stream:
             raise empty_response_error(streamed=True)
         raise RuntimeError("AI provider unavailable")

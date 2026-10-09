@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from project_model.models import (
@@ -11,11 +12,14 @@ from project_model.models import (
     DecisionOption,
     DecisionRequest,
     DecisionResult,
+    JevRuntimeCheckResponse,
     JevSettingsUpdate,
 )
 from qa_core.ai.budget import BudgetExceededError
 from qa_core.failure.redactor import SensitiveRedactor
 
+from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.repositories.ai_repo import AIRepository
 from app.services.ai_observability import log_ai_execution
 from app.services.decision_provider import DecisionProviderRegistry
@@ -46,6 +50,7 @@ def default_provider_registry() -> DecisionProviderRegistry:
             model=config.model,
             base_url=config.base_url,
             timeout=config.timeout,
+            retries=config.retries,
         ),
     )
     return registry
@@ -59,13 +64,23 @@ class DecisionService:
         settings_service: DecisionSettingsService | None = None,
         provider_registry: DecisionProviderRegistry | None = None,
         ai_repo: AIRepository | None = None,
+        repository_scope: RepositoryScopeFactory | None = None,
     ) -> None:
-        self.settings_service = settings_service or DecisionSettingsService()
+        self.repository_scope = repository_scope
+        self.settings_service = settings_service or DecisionSettingsService(repository_scope)
         self.provider_registry = provider_registry or default_provider_registry()
         self.ai_repo = ai_repo or AIRepository()
 
     def _fallback(
-        self, request: DecisionRequest, reason: str, *, confidence: float | None = None
+        self,
+        request: DecisionRequest,
+        reason: str,
+        *,
+        confidence: float | None = None,
+        minimum_confidence: float | None = None,
+        attempted_provider: str | None = None,
+        attempted_model: str | None = None,
+        attempted_choice: str | None = None,
     ) -> DecisionResult:
         choice = next((option.key for option in request.options if option.key.lower() == "unknown"), None)
         return DecisionResult(
@@ -73,6 +88,10 @@ class DecisionService:
             confidence=confidence,
             probabilities={},
             provider="fallback",
+            attempted_provider=attempted_provider,
+            attempted_model=attempted_model,
+            attempted_choice=attempted_choice,
+            minimum_confidence=minimum_confidence,
             fallback_used=True,
             reason=reason,
         )
@@ -127,7 +146,11 @@ class DecisionService:
         config = await self.settings_service.get_runtime_config()
         started = time.perf_counter()
         if not config.enabled:
-            result = self._fallback(request, "provider_disabled")
+            result = self._fallback(
+                request,
+                "provider_disabled",
+                minimum_confidence=config.minimum_confidence,
+            )
             await self._record(
                 decision_name=request.name,
                 provider="fallback",
@@ -153,13 +176,14 @@ class DecisionService:
 
         error_code: str | None = None
         remote_result: DecisionResult | None = None
+        provider_attempted = False
         try:
             from app.services.ai_execution_service import AIExecutionService
             from app.services.ai_settings_service import AISettingsService
 
-            policy = await AISettingsService()._effective_config()
+            policy = await AISettingsService(self.repository_scope)._effective_config()
             request = request.model_copy(update={"state": SensitiveRedactor.redact_value(request.state)})
-            if (
+            if policy.budget_enabled and (
                 len(json.dumps(request.model_dump(), ensure_ascii=False).encode("utf-8")) // 3 + 100
                 > policy.max_request_tokens
             ):
@@ -167,8 +191,10 @@ class DecisionService:
             if reserve_task_call is not None and not await reserve_task_call():
                 error_code = "task_ai_budget_exhausted"
             else:
-                await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
+                if policy.budget_enabled and self.repository_scope is not None:
+                    await AIExecutionService.reserve_daily_limit(policy.max_daily_requests, self.repository_scope)
                 provider = self.provider_registry.create(config.provider, config)
+                provider_attempted = True
                 remote_result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
             if error_code == "task_ai_budget_exhausted":
                 pass
@@ -181,38 +207,43 @@ class DecisionService:
             ):
                 error_code = "below_minimum_confidence"
             elif remote_result is not None:
+                accepted_result = remote_result.model_copy(
+                    update={"minimum_confidence": config.minimum_confidence}
+                )
                 duration = (time.perf_counter() - started) * 1000
                 await self._record(
                     decision_name=request.name,
-                    provider=remote_result.provider,
-                    model=remote_result.model,
+                    provider=accepted_result.provider,
+                    model=accepted_result.model,
                     duration_ms=duration,
-                    result=remote_result,
+                    result=accepted_result,
                     status="SUCCESS",
-                    usage=remote_result.usage,
+                    usage=accepted_result.usage,
                     task_id=task_id,
                     run_id=run_id,
                 )
                 logger.info(
-                    "Decision completed run_id=%s name=%s provider=%s model=%s latency_ms=%.1f confidence=%s",
+                    "Decision completed run_id=%s name=%s provider=%s model=%s timeout_seconds=%s minimum_confidence=%s latency_ms=%.1f confidence=%s",
                     run_id,
                     request.name,
-                    remote_result.provider,
-                    remote_result.model,
+                    accepted_result.provider,
+                    accepted_result.model,
+                    config.timeout,
+                    config.minimum_confidence,
                     duration,
-                    remote_result.confidence,
+                    accepted_result.confidence,
                 )
                 log_ai_execution(
                     logger,
                     run_id=run_id,
                     feature=request.name,
-                    provider=remote_result.provider,
-                    model=remote_result.model or "",
+                    provider=accepted_result.provider,
+                    model=accepted_result.model or "",
                     duration_ms=duration,
                     status="SUCCESS",
-                    fallback_used=remote_result.fallback_used,
+                    fallback_used=accepted_result.fallback_used,
                 )
-                return remote_result
+                return accepted_result
         except asyncio.TimeoutError:
             error_code = "timeout"
         except DecisionProviderError as error:
@@ -228,6 +259,10 @@ class DecisionService:
             request,
             error_code or "unknown_error",
             confidence=remote_result.confidence if remote_result else None,
+            minimum_confidence=config.minimum_confidence,
+            attempted_provider=config.provider if provider_attempted else None,
+            attempted_model=(remote_result.model if remote_result else config.model) if provider_attempted else None,
+            attempted_choice=remote_result.choice if remote_result else None,
         )
         await self._record(
             decision_name=request.name,
@@ -261,8 +296,16 @@ class DecisionService:
         )
         return result
 
-    async def test_connection(self, update: JevSettingsUpdate) -> DecisionConnectionResult:
+    async def test_connection(self, update: JevSettingsUpdate | None = None) -> DecisionConnectionResult:
         config = await self.settings_service.config_for_test(update)
+        if not config.enabled:
+            return DecisionConnectionResult(
+                connected=False,
+                code="provider_disabled",
+                message="Jev is disabled by the effective AppConfig.",
+                model=config.model,
+                latency_ms=0,
+            )
         request = DecisionRequest(
             name="connection_test",
             state="This is a connection test. Choose the option 'ok'.",
@@ -277,8 +320,9 @@ class DecisionService:
             from app.services.ai_execution_service import AIExecutionService
             from app.services.ai_settings_service import AISettingsService
 
-            policy = await AISettingsService()._effective_config()
-            await AIExecutionService.reserve_daily_limit(policy.max_daily_requests)
+            policy = await AISettingsService(self.repository_scope)._effective_config()
+            if policy.budget_enabled and self.repository_scope is not None:
+                await AIExecutionService.reserve_daily_limit(policy.max_daily_requests, self.repository_scope)
             provider = self.provider_registry.create(config.provider, config)
             result = await asyncio.wait_for(provider.choose(request), timeout=config.timeout + 1)
             latency = (time.perf_counter() - started) * 1000
@@ -303,6 +347,8 @@ class DecisionService:
             code = "timeout"
         except DecisionProviderError as error:
             code = error.code
+        except BudgetExceededError:
+            code = "budget_exceeded"
         except Exception as error:
             code = "unknown_error"
             logger.warning("Jev connection test failed error_type=%s", type(error).__name__)
@@ -324,6 +370,81 @@ class DecisionService:
             message=message,
             model=config.model,
             latency_ms=round(latency, 1),
+        )
+
+    async def runtime_check(self) -> JevRuntimeCheckResponse:
+        config = await self.settings_service.get_runtime_config()
+        from app.services.ai_settings_service import AISettingsService
+
+        policy = await AISettingsService(self.repository_scope)._effective_config()
+        if self.repository_scope is None:
+            budget = None
+        else:
+            async with self.repository_scope() as repositories:
+                budget = await repositories.ai_budgets.get_by_day(utc_now().date().isoformat())
+        budget_available = not policy.budget_enabled or budget is None or budget.reserved_requests < policy.max_daily_requests
+        parsed = urlsplit(config.base_url)
+        base_url_valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+        reasons = []
+        if not config.enabled:
+            reasons.append("provider_disabled")
+        if not config.api_key:
+            reasons.append("missing_api_key")
+        if config.provider != "jev":
+            reasons.append("unsupported_provider")
+        if not config.model.strip():
+            reasons.append("missing_model")
+        if not base_url_valid:
+            reasons.append("invalid_base_url")
+        if not 0 <= config.minimum_confidence <= 1:
+            reasons.append("invalid_minimum_confidence")
+        if not 0 < config.timeout <= 120:
+            reasons.append("invalid_timeout")
+        if not budget_available:
+            reasons.append("budget_exceeded")
+        if reasons:
+            return JevRuntimeCheckResponse(
+                connectivity="NOT_CHECKED",
+                runtime="DISABLED" if not config.enabled else "BLOCKED",
+                enabled=config.enabled,
+                api_key_configured=bool(config.api_key),
+                provider=config.provider,
+                model=config.model,
+                base_url_valid=base_url_valid,
+                minimum_confidence=config.minimum_confidence,
+                budget_available=budget_available,
+                reasons=reasons,
+            )
+
+        started = time.perf_counter()
+        result = await self.choose(
+            DecisionRequest(
+                name="jev_runtime_check",
+                state={"purpose": "runtime readiness check"},
+                instructions="Choose the only available option to verify a usable runtime decision.",
+                options=[DecisionOption(key="ok", description="Runtime decision is available.")],
+            )
+        )
+        latency = round((time.perf_counter() - started) * 1000, 1)
+        response_received = result.reason in {"below_minimum_confidence", "confidence_missing"}
+        connected = result.provider == config.provider or response_received
+        not_checked = result.reason in {"budget_exceeded", "task_ai_budget_exhausted"}
+        ready = connected and not result.fallback_used and result.choice == "ok"
+        reason = result.reason
+        if connected and not ready and reason is None:
+            reason = "unexpected_probe_decision"
+        return JevRuntimeCheckResponse(
+            connectivity="CONNECTED" if connected else "NOT_CHECKED" if not_checked else "FAILED",
+            runtime="READY" if ready else "BLOCKED",
+            enabled=config.enabled,
+            api_key_configured=bool(config.api_key),
+            provider=config.provider,
+            model=config.model,
+            base_url_valid=base_url_valid,
+            minimum_confidence=config.minimum_confidence,
+            budget_available=budget_available,
+            latency_ms=latency,
+            reasons=[] if ready else [reason or "decision_unavailable"],
         )
 
 

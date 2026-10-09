@@ -116,6 +116,17 @@ async def test_db_session(tmp_path: Path):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+        if not using_postgres():
+            from alembic.runtime.migration import MigrationContext
+            from alembic.script import ScriptDirectory
+            from app.persistence.migrations import migration_config
+
+            script_directory = ScriptDirectory.from_config(migration_config())
+            await conn.run_sync(
+                lambda sync_connection: MigrationContext.configure(sync_connection).stamp(
+                    script_directory, script_directory.get_current_head()
+                )
+            )
 
     async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 

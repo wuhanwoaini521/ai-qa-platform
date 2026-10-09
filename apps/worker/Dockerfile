@@ -10,8 +10,10 @@ COPY pyproject.toml uv.lock ./
 COPY packages/project-model ./packages/project-model
 COPY packages/qa-core ./packages/qa-core
 COPY packages/integrations ./packages/integrations
+COPY packages/platform-config ./packages/platform-config
 COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
+COPY config ./config
 
 RUN uv sync --frozen --no-dev --package worker
 
@@ -45,6 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/packages /app/packages
 COPY --from=builder /app/apps/worker /app/apps/worker
+COPY --from=builder /app/config /app/config
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/apps/worker:/app/packages/qa-core:/app/packages/project-model:/app/packages/integrations"

@@ -74,6 +74,7 @@ export const FailureWorkflowPanel: React.FC<{
       ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
     );
   const selectedRun = history.find((item) => item.id === selectedId);
+  const selectedResult = selectedRun?.result;
   const completedMetadata = asRecord(terminal?.metadata);
   const diagnosis = asRecord(selectedRun?.result.diagnosis) ?? asRecord(completedMetadata?.diagnosis);
   const diagnosisEvent = [...events]
@@ -89,7 +90,8 @@ export const FailureWorkflowPanel: React.FC<{
     .reverse()
     .find(
       (event) =>
-        event.type === 'workflow.step' && event.stage === 'verification',
+        (event.type === 'workflow.step' && event.stage === 'verification') ||
+        event.type === 'verification.completed',
     );
   const rawRecommendations = diagnosis?.recommended_actions ?? suggestionEvent?.metadata.recommended_actions;
   const recommendations = Array.isArray(rawRecommendations)
@@ -131,21 +133,35 @@ export const FailureWorkflowPanel: React.FC<{
     .reverse()
     .find((event) => event.type === 'workflow.step' && event.stage === 'decision');
   const decisionEngine = String(selection?.engine ?? selection?.provider ?? decisionEvent?.metadata.engine ?? '');
+  const decisionFallbackReason = String(
+    selection?.fallback_reason ?? decisionEvent?.metadata.fallback_reason ?? 'unknown',
+  );
+  const decisionFallbackReasonLabel =
+    decisionFallbackReason === 'below_minimum_confidence' && typeof selection?.confidence === 'number'
+      ? t('workflow.localDecisionLowConfidence', { confidence: selection.confidence.toFixed(2) })
+      : decisionFallbackReason;
   const localDecisionFallback = /local[- ]strategy|local strategy/i.test(decisionEngine);
-  const changesApplied = suggestionEvent?.metadata.changes_applied === true;
-  const testRerun = verification?.metadata.test_rerun === true;
+  const changesApplied = typeof selectedResult?.changes_applied === 'boolean'
+    ? selectedResult.changes_applied
+    : suggestionEvent?.metadata.changes_applied === true;
+  const rolledBack = selectedResult?.repair_state === 'ROLLED_BACK';
+  const autoRolledBack = selectedResult?.auto_rolled_back === true;
+  const testRerun = verification?.metadata.test_rerun === true || Boolean(selectedResult?.verification_run_id);
+  const capturedEvidenceVerified =
+    verification?.metadata.verification_source === 'captured_browser_evidence' ||
+    selection?.verification_source === 'captured_browser_evidence';
   const completed = selectedRun?.status === 'COMPLETED' || terminal?.type === 'run.completed';
   const interrupted =
     history.find((item) => item.id === selectedId)?.status === 'INTERRUPTED';
   const failed = terminal?.type === 'run.failed';
   const cancelled = terminal?.type === 'run.cancelled';
-  const verified = verification?.metadata?.verified === true;
+  const verified = verification?.metadata?.verified === true || selectedResult?.verified === true;
   const verifying =
-    verification?.status === 'RUNNING' &&
-    verification?.metadata?.test_rerun === true;
+    (verification?.status === 'RUNNING' && verification?.metadata?.test_rerun === true) ||
+    (selectedResult?.repair_state === 'VERIFYING_FIX' && testRerun);
   const verificationFailed =
-    verification?.status === 'FAILED' &&
-    verification?.metadata?.test_rerun === true;
+    (verification?.status === 'FAILED' && testRerun) ||
+    (testRerun && ['FAILED', 'ERROR', 'CANCELLED'].includes(selectedResult?.verification_run_status ?? ''));
   const heading = running
     ? t('workflow.analyzing')
     : failed
@@ -158,11 +174,13 @@ export const FailureWorkflowPanel: React.FC<{
             ? t('workflow.verifying')
             : verified
               ? t('workflow.verified')
-              : verificationFailed
-                ? t('workflow.verificationFailed')
-                : terminal
-                  ? t('workflow.finished')
-                  : t('workflow.ready');
+              : rolledBack
+                ? t('workflow.rolledBackHeading')
+                : verificationFailed
+                  ? t('workflow.verificationFailed')
+                  : terminal
+                    ? t('workflow.finished')
+                    : t('workflow.ready');
   return (
     <section
       className="failure-workflow"
@@ -227,11 +245,21 @@ export const FailureWorkflowPanel: React.FC<{
             </p>
           )}
           <div className="failure-workflow-result-status">
-            <span>{t('workflow.codeChangeStatus', { status: changesApplied ? t('workflow.applied') : t('workflow.notApplied') })}</span>
-            <span>{t('workflow.retestStatus', { status: verified ? t('workflow.verified') : testRerun ? t('workflow.verificationFailed') : t('workflow.notRun') })}</span>
+            <span>{t('workflow.codeChangeStatus', { status: rolledBack ? t('workflow.rolledBack') : changesApplied ? t('workflow.applied') : t('workflow.notApplied') })}</span>
+            <span>{t('workflow.retestStatus', { status: verified ? t('workflow.verified') : verifying ? t('workflow.verifying') : testRerun ? t('workflow.verificationFailed') : t('workflow.notRun') })}</span>
           </div>
+          {rolledBack && (
+            <p className="failure-workflow-fallback-note" role="status">
+              {t(autoRolledBack ? 'workflow.autoRolledBack' : 'workflow.rolledBackDetail')}
+            </p>
+          )}
           {localDecisionFallback && (
-            <p className="failure-workflow-fallback-note">{t('workflow.localDecisionFallback')}</p>
+            <p className="failure-workflow-fallback-note">
+              {t(
+                capturedEvidenceVerified ? 'workflow.localEvidenceDecision' : 'workflow.localDecisionFallback',
+                { reason: decisionFallbackReasonLabel },
+              )}
+            </p>
           )}
           {(recommendations.length > 0 || (locatorTimeout && Boolean(observedCartLocator))) && (
             <div className="failure-workflow-result-block">

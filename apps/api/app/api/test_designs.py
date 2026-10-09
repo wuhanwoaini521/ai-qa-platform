@@ -1,17 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from project_model.models import TestDesign, TestDesignCreate, TestDesignUpdate
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.test_design_repo import TestDesignRepository
+from app.container import get_test_design_service
 from app.services.test_design_service import TestDesignService
 
 router = APIRouter(prefix="/test-designs", tags=["Test Designs"])
-
-
-def get_test_design_service(session: AsyncSession = Depends(get_db)) -> TestDesignService:
-    repo = TestDesignRepository(session)
-    return TestDesignService(repo)
 
 
 @router.get("", response_model=list[TestDesign])

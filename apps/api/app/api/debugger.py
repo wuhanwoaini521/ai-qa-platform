@@ -3,16 +3,15 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from project_model.models import Breakpoint, DebugSessionBootstrap, DebugSessionCreate, Permission, User
+from project_model.models import DebugSessionBootstrap, DebugSessionCreate, Permission, User
 from qa_core.onboarding.contract import venv_interpreter
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import authenticate_websocket_stream, get_current_user, has_permission, require_permission
-from app.persistence.database import get_db
-from app.persistence.models import BreakpointORM
+from app.api.workspace_dependencies import get_workspace_catalog_service
 from app.services.debug_session_service import debug_session_service, validate_debug_nodeid
+from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import SecurityException, WorkspaceService
+from app.settings import get_config
 
 router = APIRouter(prefix="/debug", tags=["Python Debugger"])
 
@@ -22,8 +21,10 @@ async def create_debug_session(
     payload: DebugSessionCreate,
     user: User = Depends(get_current_user),
     _: User = Depends(require_permission(Permission.RUN_EXECUTE)),
-    session: AsyncSession = Depends(get_db),
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
 ) -> DebugSessionBootstrap:
+    if not get_config().features.debugger:
+        raise HTTPException(status_code=503, detail="Debugger is disabled by config/config.yaml.")
     workspace_service = WorkspaceService()
     try:
         workspace_dir = workspace_service.get_workspace_dir(payload.workspace_id)
@@ -33,12 +34,7 @@ async def create_debug_session(
     if not workspace_dir.is_dir():
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    result = await session.execute(
-        select(BreakpointORM)
-        .where(BreakpointORM.workspace_id == payload.workspace_id, BreakpointORM.enabled.is_(True))
-        .order_by(BreakpointORM.file_path, BreakpointORM.line_number)
-    )
-    breakpoints = [Breakpoint.model_validate(row) for row in result.scalars().all()]
+    breakpoints = await catalog.list_enabled_breakpoints(payload.workspace_id)
     target_interpreter = venv_interpreter(workspace_dir / ".qa-platform-runtime")
     try:
         return await debug_session_service.create(
@@ -69,6 +65,9 @@ async def close_debug_session(
 
 @router.websocket("/sessions/{session_id}/stream")
 async def debug_stream(websocket: WebSocket, session_id: str) -> None:
+    if not get_config().features.debugger:
+        await websocket.close(code=4403, reason="Debugger is disabled by config/config.yaml")
+        return
     user = await authenticate_websocket_stream(websocket, f"debug:{session_id}")
     if not user or not has_permission(user, Permission.RUN_EXECUTE):
         if user:
@@ -80,6 +79,30 @@ async def debug_stream(websocket: WebSocket, session_id: str) -> None:
         return
 
     session.connected = True
+    try:
+        first_message = await asyncio.wait_for(
+            websocket.receive_json(), timeout=get_config().debugger.attach_timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        await debug_session_service.close(session_id, user.id)
+        await websocket.close(code=4408, reason="Debug client did not attach before the configured timeout")
+        return
+    except WebSocketDisconnect:
+        await debug_session_service.close(session_id, user.id)
+        return
+    try:
+        await debug_session_service.forward(session, first_message)
+    except (ValueError, RuntimeError) as error:
+        await websocket.send_json(
+            {
+                "seq": 0,
+                "type": "response",
+                "request_seq": first_message.get("seq", 0),
+                "success": False,
+                "command": first_message.get("command", ""),
+                "message": str(error),
+            }
+        )
     receive_task: asyncio.Task | None = asyncio.create_task(websocket.receive_json())
     send_task: asyncio.Task | None = asyncio.create_task(session.outgoing.get())
     try:

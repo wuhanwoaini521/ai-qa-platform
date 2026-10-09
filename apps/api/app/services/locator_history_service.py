@@ -6,15 +6,15 @@ import re
 from urllib.parse import urlsplit, urlunsplit
 
 from qa_core.failure.redactor import SensitiveRedactor
-from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from app.persistence import database
-from app.persistence.models import FailureAnalysisORM, LocatorHistoryORM, utc_now
+from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
 
 
 class LocatorHistoryService:
+    def __init__(self, repository_scope: RepositoryScopeFactory | None = None) -> None:
+        self.repository_scope = repository_scope
+
     @staticmethod
     def identity(url: str, locator: str):
         parts = urlsplit(SensitiveRedactor.redact_url(url))
@@ -43,10 +43,10 @@ class LocatorHistoryService:
         keys = {self.identity(url, item["locator"])[0]: item for item in candidates}
         if not keys:
             return
-        async with database.get_session() as session:
-            rows = (
-                (await session.execute(select(LocatorHistoryORM).where(LocatorHistoryORM.id.in_(keys)))).scalars().all()
-            )
+        if self.repository_scope is None:
+            return
+        async with self.repository_scope() as repositories:
+            rows = await repositories.locator_history.list_by_ids(list(keys))
             for row in rows:
                 keys[row.id]["evidence"]["history"] = {
                     "success_count": row.success_count,
@@ -79,35 +79,12 @@ class LocatorHistoryService:
             "last_success_at": now if passed and not verification else None,
             "last_failure_at": now if not passed and not verification else None,
         }
-        async with database.get_session() as session:
+        if self.repository_scope is None:
+            return
+        async with self.repository_scope() as repositories:
+            repository = repositories.locator_history
             if healed_analysis_id:
-                analysis = await session.get(FailureAnalysisORM, healed_analysis_id)
-                if (
-                    analysis is None
-                    or not analysis.result.get("verified")
-                    or analysis.result.get("locator_heal_recorded")
-                ):
+                if not await repository.claim_verified_heal(healed_analysis_id):
                     return
-                claimed = await session.execute(
-                    update(FailureAnalysisORM)
-                    .where(
-                        FailureAnalysisORM.id == healed_analysis_id,
-                        FailureAnalysisORM.result == analysis.result,
-                    )
-                    .values(result={**analysis.result, "locator_heal_recorded": True})
-                )
-                if not claimed.rowcount:
-                    return
-            insert = sqlite_insert if session.bind.dialect.name == "sqlite" else pg_insert
-            statement = insert(LocatorHistoryORM).values(**values)
-            updates = {
-                field: getattr(LocatorHistoryORM, field) + values[field]
-                for field in ("success_count", "failure_count", "verification_count", "heal_count")
-            }
-            updates["updated_at"] = now
-            if values["last_success_at"]:
-                updates["last_success_at"] = now
-            if values["last_failure_at"]:
-                updates["last_failure_at"] = now
-            await session.execute(statement.on_conflict_do_update(index_elements=["id"], set_=updates))
-            await session.commit()
+            await repository.record_outcome(values)
+            await repositories.commit()

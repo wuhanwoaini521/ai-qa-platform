@@ -46,7 +46,7 @@ class DashboardService:
         # Historical runs may have total=0 even though their execution rows have verdicts.
         tests_executed_today = sum(max(r.total, r.passed + r.failed + r.skipped) for r in runs_today)
         passed_today = sum(r.passed for r in runs_today)
-        pass_rate = (passed_today / tests_executed_today * 100.0) if tests_executed_today > 0 else 100.0
+        pass_rate = (passed_today / tests_executed_today * 100.0) if tests_executed_today > 0 else None
 
         # Flaky and recovery intelligence
         flaky_tests = await self.history_repo.list_flaky_tests()
@@ -64,7 +64,7 @@ class DashboardService:
             total_runs=len(runs_orms),
             runs_today=len(runs_today),
             tests_executed_today=tests_executed_today,
-            pass_rate_today=round(pass_rate, 1),
+            pass_rate_today=round(pass_rate, 1) if pass_rate is not None else None,
             total_failures=len(failures_orms),
             flaky_tests_count=flaky_count,
             rerun_recovery_count=rerun_recoveries,

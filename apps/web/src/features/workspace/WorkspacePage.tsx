@@ -18,6 +18,7 @@ import { FailuresPage } from '../../pages/FailuresPage';
 import { useRunStore } from '../runs/useRunStore';
 import { useRuntimeSnapshot } from '../runtime/useRuntimeSnapshot';
 import { RuntimeDetail } from '../runtime/RuntimeDetail';
+import { failureSourceLocation } from '../failures/failureWorkspaceModel';
 import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
 import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget } from './workspaceRunModel';
 import type { AgentGoalPreview, AgentTask, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
@@ -238,6 +239,7 @@ export function WorkspacePage() {
       ? undefined
       : cases.find((item) => item.requirement_id === requirementId);
     const nextCase = selectedCase ?? relatedCase;
+    const preserveFailureDebugContext = Boolean(context.failureId && context.view === 'debug');
     if (
       requirementId !== context.requirementId ||
       relatedCase ||
@@ -251,9 +253,9 @@ export function WorkspacePage() {
         testCaseId: nextCase?.id,
         testDesignId: nextCase?.test_design_id ?? undefined,
         automationBindingId: nextCase?.binding?.id,
-        file: nextCase?.binding?.file_path,
-        lineNumber: undefined,
-        nodeId: nextCase?.binding?.nodeid,
+        file: preserveFailureDebugContext ? context.file : nextCase?.binding?.file_path,
+        lineNumber: preserveFailureDebugContext ? context.lineNumber : undefined,
+        nodeId: preserveFailureDebugContext ? context.nodeId : nextCase?.binding?.nodeid,
         stage: context.stage ?? 'requirement',
       }, true);
     }
@@ -350,6 +352,7 @@ export function WorkspacePage() {
   const currentFailure = failures.find((item) => item.run_id === activeRunId)
     ?? failures.find((item) => item.id === context.failureId)
     ?? null;
+  const currentFailureSource = currentFailure ? failureSourceLocation(currentFailure) : null;
   const currentRun = runLive.run ?? runs.find((item) => item.id === activeRunId) ?? null;
 
   useEffect(() => {
@@ -742,6 +745,7 @@ export function WorkspacePage() {
               {view === 'cases' && <TestCasesPage
                 projects={projects}
                 selectedProjectId={projectId}
+                initialRequirementId={context.requirementId}
                 initialTestCaseId={context.testCaseId}
                 onSelectTestCase={(id) => updateContext({ testCaseId: id, view: 'cases', stage: 'cases' })}
                 onCaseCreated={(createdCase) => {
@@ -811,7 +815,7 @@ export function WorkspacePage() {
         </div>
         <div className="workspace-inspector-overlay" hidden={!showInspector} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInspector(false); }}>
           <aside id="workspace-inspector-drawer" ref={inspectorDrawerRef} className="workspace-inspector workspace-inspector-drawer" role="dialog" aria-modal={showInspector} aria-label={t('inspector.title')}>
-            <div className="workspace-panel-heading"><div><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setShowInspector(false)}><X size={15} /></button></div>
+            <div className="workspace-panel-heading"><div><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('inspector.close')} onClick={() => setShowInspector(false)}><X size={15} /></button></div>
             <div className="workspace-inspector-tabs" role="tablist" aria-label={t('inspector.title')}>
               {(['context', 'ai', 'run'] as const).map((item) => <button key={item} type="button" role="tab" aria-selected={inspectorTab === item} className={inspectorTab === item ? 'is-selected' : ''} onClick={() => setInspectorTab(item)}>{t(`inspector.tabs.${item}`)}</button>)}
             </div>
@@ -886,7 +890,7 @@ export function WorkspacePage() {
         onOpen={openRunDetails}
         onViewResult={() => { setShowRunPanel(false); setView('results'); }}
         onViewFailure={() => void diagnoseCurrentRun()}
-        onDebug={() => updateContext({ file: currentFailure?.test_nodeid ? selectedCase?.binding?.file_path ?? context.file : context.file, nodeId: currentFailure?.test_nodeid ?? binding?.nodeid ?? context.nodeId, failureId: currentFailure?.id ?? context.failureId, stage: 'automation', view: 'debug' })}
+        onDebug={() => updateContext({ file: currentFailureSource?.filePath ?? selectedCase?.binding?.file_path ?? context.file, lineNumber: currentFailureSource?.lineNumber ?? context.lineNumber, nodeId: currentFailure?.test_nodeid ?? binding?.nodeid ?? context.nodeId, failureId: currentFailure?.id ?? context.failureId, stage: 'automation', view: 'debug' })}
         onRerun={() => void runSelectedCase(true)}
         onOpenCode={() => setView('code')}
       />}

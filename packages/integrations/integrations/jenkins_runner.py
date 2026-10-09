@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -23,10 +22,10 @@ logger = logging.getLogger("integrations.jenkins")
 
 @dataclass
 class JenkinsConfig:
-    base_url: str = field(default_factory=lambda: os.getenv("JENKINS_BASE_URL", "http://localhost:8080"))
+    base_url: str = ""
     job_name: str = "qa-automation-suite"
-    user: str | None = field(default_factory=lambda: os.getenv("JENKINS_USER", None))
-    api_token: str | None = field(default_factory=lambda: os.getenv("JENKINS_API_TOKEN", None))
+    user: str | None = None
+    api_token: str | None = None
     credential_reference: str | None = None
     default_parameters: dict[str, Any] = field(default_factory=dict)
     parameter_mapping: dict[str, str] = field(
@@ -54,8 +53,8 @@ class JenkinsRunnerBackend(RunnerBackend):
         self._log_offsets: dict[str, int] = {}
 
     def _get_auth(self) -> tuple[str, str] | None:
-        user = self.config.user or os.getenv("JENKINS_USER")
-        token = self.config.api_token or os.getenv("JENKINS_API_TOKEN")
+        user = self.config.user
+        token = self.config.api_token
         if user and token:
             return (user, token)
         return None

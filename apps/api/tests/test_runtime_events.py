@@ -76,10 +76,18 @@ def test_metadata_is_scalar_whitelisted_and_uses_existing_redactor():
             "provider": "jev",
             "url": "https://user:pass@example.com/path?api_key=private",
             "confidence": float("nan"),
+            "minimum_confidence": 0.6,
+            "attempted_choice": "search",
             "candidate_count": 3,
             "secret": "hidden",
         }
-    ) == {"provider": "jev", "url": "https://example.com/path", "candidate_count": 3}
+    ) == {
+        "provider": "jev",
+        "url": "https://example.com/path",
+        "minimum_confidence": 0.6,
+        "attempted_choice": "search",
+        "candidate_count": 3,
+    }
     assert public_metadata(None) == {}
 
 

@@ -15,7 +15,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003_task_run_relationship"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004_one_running_failure_analysis"
     engine.dispose()
 
 

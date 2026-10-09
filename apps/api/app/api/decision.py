@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from project_model.models import (
     DecisionConnectionResult,
     DecisionPlaygroundResult,
     DecisionRequest,
+    JevRuntimeCheckResponse,
     JevSettingsResponse,
     JevSettingsUpdate,
     Permission,
@@ -12,6 +13,7 @@ from project_model.models import (
 )
 
 from app.api.authz import get_current_user, require_permission
+from app.container import get_decision_service, get_decision_settings_service
 from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 
@@ -22,8 +24,9 @@ router = APIRouter(prefix="/decision", tags=["Decision Layer"])
 async def get_jev_settings(
     _: User = Depends(get_current_user),
     __: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: DecisionSettingsService = Depends(get_decision_settings_service),
 ) -> JevSettingsResponse:
-    return await DecisionSettingsService().get_response()
+    return await service.get_response()
 
 
 @router.put("/settings", response_model=JevSettingsResponse)
@@ -31,17 +34,31 @@ async def save_jev_settings(
     update: JevSettingsUpdate,
     _: User = Depends(get_current_user),
     __: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: DecisionSettingsService = Depends(get_decision_settings_service),
 ) -> JevSettingsResponse:
-    return await DecisionSettingsService().save(update)
+    try:
+        return await service.save(update)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.post("/test-connection", response_model=DecisionConnectionResult)
 async def test_jev_connection(
-    update: JevSettingsUpdate,
+    update: JevSettingsUpdate | None = None,
     _: User = Depends(get_current_user),
     __: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: DecisionService = Depends(get_decision_service),
 ) -> DecisionConnectionResult:
-    return await DecisionService().test_connection(update)
+    return await service.test_connection(update)
+
+
+@router.post("/runtime-check", response_model=JevRuntimeCheckResponse)
+async def check_jev_runtime(
+    _: User = Depends(get_current_user),
+    __: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: DecisionService = Depends(get_decision_service),
+) -> JevRuntimeCheckResponse:
+    return await service.runtime_check()
 
 
 @router.post("/choose", response_model=DecisionPlaygroundResult)
@@ -49,6 +66,7 @@ async def decide(
     request: DecisionRequest,
     _: User = Depends(get_current_user),
     __: User = Depends(require_permission(Permission.SECURITY_ADMIN)),
+    service: DecisionService = Depends(get_decision_service),
 ) -> DecisionPlaygroundResult:
-    result = await DecisionService().choose(request)
+    result = await service.choose(request)
     return DecisionPlaygroundResult(decision_name=request.name, **result.model_dump())

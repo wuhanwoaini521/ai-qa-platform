@@ -172,6 +172,7 @@
   "inspector": {
     "tabs": { "context": "Context", "ai": "AI plan", "run": "Run" },
     "title": "Inspector",
+    "close": "Close Inspector",
     "liveContext": "Live context",
     "requirement": "Requirement analysis",
     "case": "Current case",

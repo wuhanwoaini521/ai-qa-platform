@@ -6,14 +6,14 @@ from typing import Any
 
 from project_model.models import JobStatus, WorkerStatus
 
-from app.persistence.database import async_session_factory
-from app.repositories import JobRepository, TestRunRepository, WorkerRepository
+from app.ports.repository_scope import RepositoryScopeFactory
 
 
 class MetricsService:
     """Manages system metrics collection and Prometheus exposition formatting."""
 
-    def __init__(self) -> None:
+    def __init__(self, repository_scope: RepositoryScopeFactory) -> None:
+        self.repository_scope = repository_scope
         self._start_time = time.time()
         self._http_requests_total: dict[str, int] = defaultdict(int)
         self._http_request_durations: dict[str, list[float]] = defaultdict(list)
@@ -48,22 +48,18 @@ class MetricsService:
         return "/" + "/".join(normalized)
 
     async def get_summary_metrics(self) -> dict[str, Any]:
-        async with async_session_factory() as session:
-            worker_repo = WorkerRepository(session)
-            job_repo = JobRepository(session)
-            run_repo = TestRunRepository(session)
-
-            workers = await worker_repo.list_all()
+        async with self.repository_scope() as repositories:
+            workers = await repositories.workers.list_all()
             online_workers = [w for w in workers if w.status in (WorkerStatus.ONLINE, WorkerStatus.BUSY)]
             busy_workers = [w for w in workers if w.status == WorkerStatus.BUSY]
 
-            jobs = await job_repo.list_jobs()
+            jobs = await repositories.jobs.list_jobs()
             queued_jobs = [j for j in jobs if j.status == JobStatus.QUEUED]
             running_jobs = [j for j in jobs if j.status == JobStatus.RUNNING]
             completed_jobs = [j for j in jobs if j.status == JobStatus.COMPLETED]
             failed_jobs = [j for j in jobs if j.status == JobStatus.FAILED]
 
-            runs = await run_repo.list_runs()
+            runs = await repositories.test_runs.list_runs()
 
         return {
             "uptime_seconds": round(self.uptime_seconds, 2),
@@ -121,7 +117,3 @@ class MetricsService:
 
         lines.append("")
         return "\n".join(lines)
-
-
-# Singleton instance
-metrics_service = MetricsService()

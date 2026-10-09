@@ -7,31 +7,13 @@ from project_model.models import (
     TestCaseCreate,
     TestCaseUpdate,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.automation_binding_repo import AutomationBindingRepository
-from app.repositories.test_case_repo import TestCaseRepository
-from app.repositories.workspace_repo import WorkspaceRepository
+from app.container import get_binding_service, get_test_case_service
 from app.services.automation_binding_service import AutomationBindingService
 from app.services.operation_trace import stream_operation
 from app.services.test_case_service import TestCaseService
-from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
-
-
-def get_test_case_service(session: AsyncSession = Depends(get_db)) -> TestCaseService:
-    repo = TestCaseRepository(session)
-    return TestCaseService(repo)
-
-
-def get_binding_service(session: AsyncSession = Depends(get_db)) -> AutomationBindingService:
-    binding_repo = AutomationBindingRepository(session)
-    test_case_repo = TestCaseRepository(session)
-    workspace_repo = WorkspaceRepository(session)
-    workspace_service = WorkspaceService()
-    return AutomationBindingService(binding_repo, test_case_repo, workspace_repo, workspace_service)
 
 
 @router.post("/{case_id}/generate-automation/stream")

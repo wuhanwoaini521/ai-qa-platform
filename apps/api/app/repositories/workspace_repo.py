@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from project_model.models import WorkspaceCreate
 from sqlalchemy import select
@@ -20,6 +21,12 @@ class WorkspaceRepository:
     async def get_by_id(self, workspace_id: str) -> WorkspaceORM | None:
         result = await self.session.execute(select(WorkspaceORM).where(WorkspaceORM.id == workspace_id))
         return result.scalar_one_or_none()
+
+    async def list_by_project_id(self, project_id: str) -> Sequence[WorkspaceORM]:
+        result = await self.session.execute(
+            select(WorkspaceORM).where(WorkspaceORM.project_id == project_id).order_by(WorkspaceORM.created_at.desc())
+        )
+        return result.scalars().all()
 
     async def create(self, data: WorkspaceCreate, path: str) -> WorkspaceORM:
         ws_id = f"ws_{uuid.uuid4().hex[:12]}"

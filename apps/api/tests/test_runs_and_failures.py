@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 import warnings
 from datetime import timedelta
@@ -17,10 +18,12 @@ from app.persistence.models import (
     TestRunORM,
     utc_now,
 )
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskRepositoryUnitOfWork
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.failure_service import FailureService, _validated_trace_events
-from app.services.test_run_service import TestRunService, event_bus
+from app.services.test_run_service import TestRunService as _TestRunService
+from app.services.test_run_service import event_bus
 from app.services.workspace_service import WorkspaceService
 from httpx import AsyncClient
 from project_model.models import RunStatus, TestRunCreate
@@ -32,6 +35,17 @@ from qa_core.healing.models import LocatorRepairProposal
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
+
+
+def make_test_run_service(*args):
+    session = args[0].session
+    repositories = TaskRepositoryUnitOfWork(session) if hasattr(session, "execute") else None
+    return _TestRunService(
+        *args,
+        repository_scope=TaskRepositoryScopeFactory(),
+        repositories=repositories,
+        runner_repo=repositories.runner_profiles if repositories else None,
+    )
 
 
 async def test_late_browser_subscriber_gets_the_last_actual_frame_and_terminal_run_releases_it():
@@ -66,7 +80,7 @@ async def test_last_browser_frame_survives_detail_reload_and_requires_auth(
         )
         owner_id = other.id
         await session.commit()
-    service = TestRunService(
+    service = make_test_run_service(
         TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
     )
     session_id = "1234567890abcdef1234567890abcdef"
@@ -343,7 +357,7 @@ async def test_failure_secrets_are_redacted_before_storage_api_and_ai_input(clie
         ],
     )
     async with test_db_session() as session:
-        service = TestRunService(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
         await service.persist_suite_result(run_id, suite)
 
     async with test_db_session() as session:
@@ -462,7 +476,7 @@ async def test_late_suite_result_cannot_add_executions_to_a_cancelled_run(client
         results=[SingleTestResult(nodeid="tests/test_late.py::test_late", status=TestExecutionStatus.PASSED)],
     )
     async with test_db_session() as session:
-        service = TestRunService(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
         await service.persist_suite_result(run_id, result)
 
     fetched = await client.get(f"/api/runs/{run_id}")
@@ -517,7 +531,7 @@ async def test_jenkins_cancellation_reuses_the_selected_profile(client: AsyncCli
 
     monkeypatch.setattr("app.services.test_run_service.JenkinsRunnerBackend", StubJenkinsBackend)
     async with test_db_session() as session:
-        service = TestRunService(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
         cancelled = await service.cancel_run(run_id)
     assert cancelled is not None and cancelled.status == RunStatus.CANCELLED
     assert observed["config"].base_url == "https://jenkins.example.test/root"
@@ -584,7 +598,7 @@ async def test_jenkins_worker_polls_until_remote_build_is_terminal(client: Async
 
     monkeypatch.setattr("app.services.test_run_service.JenkinsRunnerBackend", StubJenkinsBackend)
     async with test_db_session() as session:
-        service = TestRunService(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
         worker = asyncio.create_task(service._run_jenkins_worker_task(run_id, data))
         await asyncio.wait_for(first_poll.wait(), timeout=2)
         async with test_db_session() as read_session:
@@ -613,7 +627,9 @@ async def test_browser_event_urls_are_sanitized_before_database_and_sse(client: 
     sentinel_url = "https://user:pass@example.test/account?access_token=sentinel#private"
     try:
         async with test_db_session() as session:
-            service = TestRunService(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+            service = make_test_run_service(
+                TestRunRepository(session), WorkspaceRepository(session), WorkspaceService()
+            )
             await service._record_browser_event(
                 run_id,
                 {
@@ -656,7 +672,7 @@ async def test_run_stream_replays_browser_sessions_created_before_connection(cli
         repository = TestRunRepository(session)
         run = await repository.create_run(TestRunCreate(project_id=project["id"], workspace_id=project["id"]))
         await session.commit()
-        service = TestRunService(repository, WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(repository, WorkspaceRepository(session), WorkspaceService())
         # There is no subscriber when this event arrives, as with a page refresh.
         await service._record_browser_event(
             run.id,
@@ -697,7 +713,7 @@ async def test_run_stream_unsubscribes_when_closed_after_connected(client: Async
         repository = TestRunRepository(session)
         run = await repository.create_run(TestRunCreate(project_id=project["id"], workspace_id=project["id"]))
         await session.commit()
-        service = TestRunService(repository, WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(repository, WorkspaceRepository(session), WorkspaceService())
         stream = service.event_generator(run.id)
         await anext(stream)
         await stream.aclose()
@@ -785,8 +801,90 @@ async def _seed_locator_failure(client: AsyncClient, test_db_session, file_path:
     return project_id, failure_id
 
 
+def test_captured_playwright_candidate_requires_unique_visible_enabled_interactive_control():
+    candidate = {
+        "kind": "role",
+        "value": "button",
+        "name": "Add to cart",
+        "locator": 'get_by_role("button", name="Add to cart")',
+    }
+    control = {
+        "tag": "button",
+        "role": "button",
+        "visible": True,
+        "enabled": True,
+        "candidates": [{"kind": "role", "value": "button", "name": "Add to cart"}],
+    }
+
+    assert FailureService._candidate_matches_captured_control(candidate, {"controls": [control]})
+    assert not FailureService._candidate_matches_captured_control(
+        candidate, {"controls": [control, {**control, "visible": False}]}
+    )
+    assert not FailureService._candidate_matches_captured_control(
+        candidate, {"controls": [{**control, "enabled": False}]}
+    )
+    assert not FailureService._candidate_matches_captured_control(
+        candidate, {"controls": [{**control, "tag": "div", "role": "generic"}]}
+    )
+
+
+async def _store_verified_repair(
+    client: AsyncClient,
+    test_db_session,
+    project_id: str,
+    failure_id: str,
+    file_path: str,
+    old_locator: str,
+    new_locator: str,
+):
+    source_response = await client.get(
+        f"/api/workspaces/{project_id}/file", params={"path": file_path}
+    )
+    assert source_response.status_code == 200, source_response.text
+    source_sha256 = hashlib.sha256(source_response.json()["content"].encode("utf-8")).hexdigest()
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        assert failure is not None
+        failure.repair_proposal = {
+            "old_locator": old_locator,
+            "proposed_locator": new_locator,
+            "file_path": file_path,
+            "provider": "jev",
+            "model": "test-jev",
+            "ai_provider": "openai-compatible",
+            "ai_fallback_used": False,
+            "candidate_id": "candidate_1",
+            "verified": True,
+            "source_sha256": source_sha256,
+            "decision_summary": {
+                "decision_id": "decision-test-1",
+                "decision_type": "locator_candidate_selection",
+                "provider": "jev",
+                "fallback_used": False,
+                "confidence": 0.95,
+                "verification_source": "playwright",
+            },
+            "resolved_classification": "LOCATOR_CHANGED",
+            "applied": False,
+            "code_diff": f"- {old_locator}\n+ {new_locator}",
+        }
+        analysis_id = f"analysis-{failure_id}"
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": {**failure.repair_proposal, "file_path": file_path},
+                },
+            )
+        )
+        await session.commit()
+
+
 @pytest.mark.integration
-async def test_generated_repair_proposal_persists_without_closing_request_session(client: AsyncClient, test_db_session):
+async def test_locator_repair_requires_observed_candidates(client: AsyncClient, test_db_session):
     project = (await client.post("/api/projects", json={"name": "Persist Repair Proposal"})).json()
     async with test_db_session() as session:
         run_repo = TestRunRepository(session)
@@ -809,51 +907,24 @@ async def test_generated_repair_proposal_persists_without_closing_request_sessio
         )
         await session.commit()
         failure_id = failure.id
-        execution_id = execution.id
 
         service = get_failure_service(session)
 
-        class StubOrchestrator:
-            async def diagnose_failure_ai(self, **_kwargs):
-                return FailureAnalysisResponse(
-                    classification="LOCATOR_CHANGED",
-                    root_cause="The old locator no longer matches the page.",
-                    provider="fake",
-                    fallback_used=True,
-                )
+        from app.services.failure_service import LocatorRepairNotApplicableError
 
-            def last_invocation_metadata(self):
-                return {"provider": "fake", "model": "fake-qa-model", "fallback_used": True}
-
-            def propose_locator_repair(self, *, failing_locator, dom_snapshot, error_message, file_path):
-                return LocatorRepairProposal(
-                    old_locator=failing_locator,
-                    proposed_locator='[data-testid="cart-submit"]',
-                    strategy="test_id",
-                    reason=error_message,
-                    file_path=file_path,
-                )
-
-        service.orchestrator = StubOrchestrator()
-        proposal = await service.generate_repair_proposal(failure_id)
+        with pytest.raises(LocatorRepairNotApplicableError, match="trusted candidate decision"):
+            await service.generate_repair_proposal(failure_id)
         assert session.is_active
-        assert proposal.proposed_locator == '[data-testid="cart-submit"]'
-        assert all(
-            event.case_execution_id == execution_id
-            for event in proposal.execution_trace
-            if event.case_execution_id is not None
-        )
         await session.commit()
 
     async with test_db_session() as session:
         stored = await session.get(FailureRecordORM, failure_id)
         assert stored is not None
-        assert stored.repair_proposal["proposed_locator"] == '[data-testid="cart-submit"]'
-        assert stored.repair_proposal["execution_trace"]
+        assert stored.repair_proposal in (None, {})
 
 
 @pytest.mark.integration
-async def test_repair_proposal_reuses_saved_diagnosis_and_returns_unverified_observed_candidate(
+async def test_repair_proposal_blocks_without_trusted_jev_even_with_saved_diagnosis(
     client: AsyncClient, test_db_session
 ):
     locator = '[data-testid="legacy-add-cart"]'
@@ -861,7 +932,7 @@ async def test_repair_proposal_reuses_saved_diagnosis_and_returns_unverified_obs
         client,
         test_db_session,
         "tests/test_known_locator.py",
-        'def test_x(page):\n    page.locator("[data-testid=\\\"legacy-add-cart\\\"]").click()\n',
+        'def test_x(page):\n    page.locator("[data-testid=\\"legacy-add-cart\\"]").click()\n',
         locator,
     )
     candidates = [
@@ -898,8 +969,8 @@ async def test_repair_proposal_reuses_saved_diagnosis_and_returns_unverified_obs
         await session.commit()
 
     response = await client.post(f"/api/failures/{failure_id}/repair-proposal")
-    assert response.status_code == 200, response.text
-    assert response.json()["proposed_locator"] == 'get_by_role("button", name="Add to cart")'
+    assert response.status_code == 422, response.text
+    assert "Jev did not make a trusted candidate decision" in response.json()["detail"]
 
     async with test_db_session() as session:
         service = get_failure_service(session)
@@ -912,30 +983,21 @@ async def test_repair_proposal_reuses_saved_diagnosis_and_returns_unverified_obs
                 raise AssertionError("Captured candidates should be used before empty-DOM fallback")
 
         service.orchestrator = StubOrchestrator()
-        proposal = await service.generate_repair_proposal(failure_id)
+        from app.services.failure_service import LocatorRepairNotApplicableError
+
+        with pytest.raises(LocatorRepairNotApplicableError, match="trusted candidate decision"):
+            await service.generate_repair_proposal(failure_id)
 
         assert session.is_active
-        assert proposal.proposed_locator == 'get_by_role("button", name="Add to cart")'
-        assert proposal.confidence is not None and proposal.confidence <= 0.75
-        assert "Playwright 复验未通过或未能运行" in proposal.reason
-        repair_event = next(event for event in proposal.execution_trace if event.type == "repair_suggested")
-        assert repair_event.metadata["verified"] is False
-        assert repair_event.metadata["proposed_locator"] == proposal.proposed_locator
-        assert repair_event.metadata["strategy"] == proposal.strategy
-        assert proposal.proposed_locator in repair_event.message
-        assert "尚未改写代码" in repair_event.message
-        assert "失败页面没有可重新打开的 URL" in repair_event.message
-        assert "failed_page_url_unavailable" not in repair_event.message
-        assert repair_event.metadata["verification_reason"]
         await session.commit()
 
     async with test_db_session() as session:
         failure = await session.get(FailureRecordORM, failure_id)
         assert failure is not None
-        assert failure.repair_proposal["proposed_locator"] == 'get_by_role("button", name="Add to cart")'
-        assert failure.repair_proposal["applied"] is False
-        assert failure.repair_proposal["execution_trace"]
-        unchanged = (await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_known_locator.py"})).json()
+        assert failure.repair_proposal in (None, {})
+        unchanged = (
+            await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_known_locator.py"})
+        ).json()
         assert "legacy-add-cart" in unchanged["content"]
 
 
@@ -947,6 +1009,15 @@ async def test_apply_repair_keeps_the_file_parseable_when_the_locator_contains_q
     original = 'def test_x():\n    selector = "#checkout-submit"\n    assert selector\n'
     project_id, failure_id = await _seed_locator_failure(
         client, test_db_session, "tests/test_repair.py", original, "#checkout-submit"
+    )
+    await _store_verified_repair(
+        client,
+        test_db_session,
+        project_id,
+        failure_id,
+        "tests/test_repair.py",
+        "#checkout-submit",
+        '[data-testid="submit"]',
     )
 
     applied = await client.post(
@@ -975,6 +1046,15 @@ async def test_apply_repair_refuses_a_patch_that_would_break_the_file(client: As
     project_id, failure_id = await _seed_locator_failure(
         client, test_db_session, "tests/test_repair_broken.py", original, "#checkout-submit"
     )
+    await _store_verified_repair(
+        client,
+        test_db_session,
+        project_id,
+        failure_id,
+        "tests/test_repair_broken.py",
+        "#checkout-submit",
+        "first line\nsecond line",
+    )
 
     refused = await client.post(
         f"/api/failures/{failure_id}/apply-repair",
@@ -991,6 +1071,80 @@ async def test_apply_repair_refuses_a_patch_that_would_break_the_file(client: As
     assert "nothing was written" in refused.json()["detail"]
     unchanged = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_repair_broken.py")).json()
     assert unchanged["content"] == original
+
+
+@pytest.mark.integration
+async def test_apply_repair_refuses_an_unverified_locator(client: AsyncClient, test_db_session):
+    original = 'def test_x(page):\n    page.locator("#checkout").click()\n'
+    project_id, failure_id = await _seed_locator_failure(
+        client, test_db_session, "tests/test_unverified.py", original, "#checkout"
+    )
+    response = await client.post(
+        f"/api/failures/{failure_id}/apply-repair",
+        params={"workspace_id": project_id},
+        json={
+            "file_path": "tests/test_unverified.py",
+            "old_code": "#checkout",
+            "new_code": 'get_by_role("button", name="Checkout")',
+        },
+    )
+    assert response.status_code == 400
+    assert "No repair analysis exists" in response.json()["detail"]
+    unchanged = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_unverified.py")).json()
+    assert unchanged["content"] == original
+
+
+@pytest.mark.integration
+async def test_verified_repair_can_be_rolled_back(client: AsyncClient, test_db_session):
+    original = 'def test_x(page):\n    page.locator("#checkout").click()\n'
+    project_id, failure_id = await _seed_locator_failure(
+        client, test_db_session, "tests/test_rollback.py", original, "#checkout"
+    )
+    replacement = 'get_by_role("button", name="Complete order")'
+    await _store_verified_repair(
+        client, test_db_session, project_id, failure_id, "tests/test_rollback.py", "#checkout", replacement
+    )
+    applied = await client.post(
+        f"/api/failures/{failure_id}/apply-repair",
+        params={"workspace_id": project_id},
+        json={"file_path": "tests/test_rollback.py", "old_code": "#checkout", "new_code": replacement},
+    )
+    assert applied.status_code == 200, applied.text
+    patched = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_rollback.py")).json()["content"]
+    assert 'page.get_by_role("button", name="Complete order").click()' in patched
+
+    rolled_back = await client.post(f"/api/failures/{failure_id}/rollback-repair", params={"workspace_id": project_id})
+    assert rolled_back.status_code == 200, rolled_back.text
+    restored = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_rollback.py")).json()["content"]
+    assert restored == original
+
+
+@pytest.mark.integration
+async def test_rollback_refuses_to_overwrite_later_workspace_edits(client, test_db_session):
+    original = 'def test_x(page):\n    page.locator("#checkout").click()\n'
+    project_id, failure_id = await _seed_locator_failure(
+        client, test_db_session, "tests/test_rollback_edit.py", original, "#checkout"
+    )
+    replacement = 'get_by_role("button", name="Complete order")'
+    await _store_verified_repair(
+        client, test_db_session, project_id, failure_id, "tests/test_rollback_edit.py", "#checkout", replacement
+    )
+    applied = await client.post(
+        f"/api/failures/{failure_id}/apply-repair",
+        params={"workspace_id": project_id},
+        json={"file_path": "tests/test_rollback_edit.py", "old_code": "#checkout", "new_code": replacement},
+    )
+    assert applied.status_code == 200, applied.text
+    edited = 'def test_x(page):\n    page.get_by_role("button", name="Later edit").click()\n'
+    await client.put(
+        f"/api/workspaces/{project_id}/file",
+        json={"path": "tests/test_rollback_edit.py", "content": edited},
+    )
+    rolled_back = await client.post(f"/api/failures/{failure_id}/rollback-repair", params={"workspace_id": project_id})
+    assert rolled_back.status_code == 400
+    assert "文件已变化" in rolled_back.json()["detail"]
+    current = (await client.get(f"/api/workspaces/{project_id}/file?path=tests/test_rollback_edit.py")).json()
+    assert current["content"] == edited
 
 
 def test_public_locator_proposal_replaces_call_only_in_failed_test():
@@ -1047,18 +1201,25 @@ async def test_imported_run_persists_its_console_output(client: AsyncClient, tmp
     )
     assert run.status_code == 200, run.text
     run_id = run.json()["run_id"]
+    assert run.json()["run"]["status"] == "QUEUED"
 
-    fetched = await client.get(f"/api/runs/{run_id}")
-    assert fetched.status_code == 200, fetched.text
-    body = fetched.json()
-    assert body["status"] == "FAILED"
+    for _ in range(200):
+        fetched = await client.get(f"/api/runs/{run_id}")
+        assert fetched.status_code == 200, fetched.text
+        body = fetched.json()
+        if body["status"] in {"PASSED", "FAILED", "ERROR", "CANCELLED"}:
+            break
+        await asyncio.sleep(0.05)
+    else:
+        raise AssertionError(f"Run {run_id} did not reach a terminal status")
+
+    assert body["status"] == "FAILED", body
     assert body["log_output"], "a finished run must keep the runner's console output"
     assert "test_fails" in body["log_output"]
 
 
 @pytest.mark.integration
 async def test_failed_user_frame_creates_auto_failure_breakpoint(client: AsyncClient, test_db_session):
-    from app.services.test_run_service import TestRunService
     from app.services.workspace_service import WorkspaceService
 
     project = (
@@ -1091,7 +1252,7 @@ async def test_failed_user_frame_creates_auto_failure_breakpoint(client: AsyncCl
             )
         ],
     )
-    service = TestRunService(
+    service = make_test_run_service(
         TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
     )
     await service.persist_suite_result(run_id, suite, workspace_id=project_id, workspace_dir=workspace_dir)
@@ -1108,6 +1269,72 @@ async def test_failed_user_frame_creates_auto_failure_breakpoint(client: AsyncCl
         breakpoint = result.scalar_one_or_none()
     assert breakpoint is not None
     assert breakpoint.run_id == run_id
+
+
+@pytest.mark.parametrize(("mode", "expected_schedules"), [("OFF", 0), ("ASSISTED", 1), ("AUTO", 1)])
+async def test_failed_suite_schedules_auto_repair_by_mode_and_skips_repair_runs(
+    client: AsyncClient, test_db_session, monkeypatch, mode, expected_schedules
+):
+    from app.services.workspace_service import WorkspaceService
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "failure_auto_repair_mode", mode)
+    schedules = []
+    monkeypatch.setattr(
+        _TestRunService,
+        "_schedule_auto_failure_repair",
+        staticmethod(lambda failure_ids, *, workspace_id, mode: schedules.append((failure_ids, workspace_id, mode))),
+    )
+    project = (
+        await client.post("/api/projects", json={"name": "Automatic failure trigger", "bootstrap_workspace": True})
+    ).json()
+    project_id = project["id"]
+    workspace_dir = WorkspaceService().get_workspace_dir(project_id)
+    suite = SuiteExecutionResult(
+        exit_code=1,
+        total=1,
+        failed=1,
+        results=[
+            SingleTestResult(
+                nodeid="tests/test_cart.py::test_cart",
+                status=TestExecutionStatus.FAILED,
+                error_message="AssertionError: assert False",
+            )
+        ],
+    )
+
+    async with test_db_session() as session:
+        repository = TestRunRepository(session)
+        original = await repository.create_run(
+            TestRunCreate(
+                project_id=project_id,
+                workspace_id=project_id,
+                nodeids=["tests/test_cart.py::test_cart"],
+            )
+        )
+        await session.commit()
+        service = make_test_run_service(repository, WorkspaceRepository(session), WorkspaceService())
+        await service.persist_suite_result(original.id, suite, workspace_id=project_id, workspace_dir=workspace_dir)
+        failure = (await repository.list_failures_by_run(original.id))[0]
+        repair_rerun = await repository.create_run(
+            TestRunCreate(
+                project_id=project_id,
+                workspace_id=project_id,
+                nodeids=["tests/test_cart.py::test_cart"],
+                origin_failure_id=failure.id,
+            )
+        )
+        await session.commit()
+        await service.persist_suite_result(
+            repair_rerun.id, suite, workspace_id=project_id, workspace_dir=workspace_dir
+        )
+
+    assert len(schedules) == expected_schedules
+    if expected_schedules:
+        failure_ids, scheduled_workspace, scheduled_mode = schedules[0]
+        assert len(failure_ids) == 1
+        assert scheduled_workspace == project_id
+        assert scheduled_mode == mode
 
 
 @pytest.mark.integration
@@ -1159,10 +1386,9 @@ async def test_a_suite_that_never_ran_is_an_error_not_a_pass(client: AsyncClient
         await session.commit()
         run_id = run.id
 
-    from app.services.test_run_service import TestRunService
     from app.services.workspace_service import WorkspaceService
 
-    service = TestRunService(
+    service = make_test_run_service(
         TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
     )
     await service._run_worker_task(run_id, TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[]))
@@ -1206,7 +1432,7 @@ async def test_task_run_worker_uses_remaining_budget_without_a_short_hard_cap(cl
         await session.commit()
         run_id = run.id
 
-    service = TestRunService(
+    service = make_test_run_service(
         TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
     )
     observed: dict[str, float] = {}
@@ -1246,7 +1472,7 @@ async def test_run_stream_updates_equal_length_rolling_log(client, test_db_sessi
         run = await repository.create_run(TestRunCreate(project_id=project["id"], workspace_id=project["id"]))
         run.log_output = "a" * 19996 + "old!"
         await session.commit()
-        service = TestRunService(repository, WorkspaceRepository(session), WorkspaceService())
+        service = make_test_run_service(repository, WorkspaceRepository(session), WorkspaceService())
         stream = service.event_generator(run.id)
         try:
             while True:

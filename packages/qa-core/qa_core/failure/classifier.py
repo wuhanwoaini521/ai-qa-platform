@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 
 from qa_core.failure.models import FailureCategory
@@ -98,8 +99,14 @@ class FailureClassifier:
                 "nosuchelement",
             ]
         ):
-            locator_match = re.search(r"(?i)locator\(['\"](.*?)['\"]\)", error_message)
-            failing_loc = locator_match.group(1) if locator_match else None
+            locator_match = re.search(
+                r'''(?i)\blocator\(("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\)''',
+                error_message,
+            )
+            try:
+                failing_loc = ast.literal_eval(locator_match.group(1)) if locator_match else None
+            except (SyntaxError, ValueError):
+                failing_loc = None
             return (
                 FailureCategory.LOCATOR_CHANGED,
                 "Target web element locator could not be resolved in the DOM.",

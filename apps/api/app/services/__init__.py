@@ -20,6 +20,7 @@ from app.services.test_run_service import TestRunService
 from app.services.testrail_service import TestRailService
 from app.services.user_service import UserService
 from app.services.worker_service import WorkerService
+from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import SecurityException, WorkspaceService
 
 __all__ = [
@@ -47,4 +48,5 @@ __all__ = [
     "UserService",
     "WorkerService",
     "WorkspaceService",
+    "WorkspaceCatalogService",
 ]

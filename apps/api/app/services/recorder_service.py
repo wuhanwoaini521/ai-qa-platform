@@ -15,7 +15,9 @@ from project_model.models import TestCaseCreate
 from pydantic import BaseModel, Field, field_validator
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
-from app.services.browser_proxy import browser_proxy_options, launch_chromium
+from app.ports.browser_runtime import BrowserRuntime, BrowserRuntimeSession
+from app.ports.repository_scope import RepositoryScopeFactory
+from app.settings import get_config
 
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
@@ -253,9 +255,7 @@ class RecorderSession:
     id: str
     owner_id: str
     project_id: str
-    browser: Any
-    context: Any
-    page: Any
+    runtime_session: BrowserRuntimeSession
     state: str = "READY"
     last_url: str = "about:blank"
     requested_url: str = "about:blank"
@@ -267,57 +267,65 @@ class RecorderSession:
     locator_trace: list[dict[str, Any]] = field(default_factory=list)
     pending_pick_action: str = "click"
 
+    @property
+    def browser_session_id(self) -> str:
+        return self.runtime_session.id
+
 
 class BrowserRecorderService:
-    def __init__(self, decision_service: Any | None = None, decision_settings_service: Any | None = None) -> None:
-        self._playwright = None
+    def __init__(
+        self,
+        decision_service: Any | None = None,
+        decision_settings_service: Any | None = None,
+        browser_runtime: BrowserRuntime | None = None,
+        repository_scope: RepositoryScopeFactory | None = None,
+    ) -> None:
+        if browser_runtime is None:
+            from app.container import get_browser_runtime
+
+            browser_runtime = get_browser_runtime()
+        self.browser_runtime = browser_runtime
+        self.repository_scope = repository_scope
         self._sessions: dict[str, RecorderSession] = {}
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._decision_service = decision_service
         self._decision_settings_service = decision_settings_service
 
-    async def _start_playwright(self):
-        if self._playwright is None:
-            from playwright.async_api import async_playwright
-
-            self._playwright = await async_playwright().start()
-        return self._playwright
-
     async def create_session(self, owner_id: str, data: RecorderSessionCreate) -> RecorderSession:
+        config = get_config()
+        if not config.recorder.enabled or not config.features.recorder:
+            raise RuntimeError("Browser recorder is disabled by config/config.yaml.")
         async with self._lifecycle_lock:
-            proxy = browser_proxy_options()
-            playwright = await self._start_playwright()
+            runtime_session = await self.browser_runtime.create_session()
             try:
-                browser = await launch_chromium(playwright, headless=True, **({"proxy": proxy} if proxy else {}))
+                await self.browser_runtime.add_init_script(runtime_session.id, RECORDER_INIT_SCRIPT)
             except Exception as error:
+                await self.browser_runtime.close_session(runtime_session.id)
                 raise RuntimeError(
-                    "无法启动 Playwright Chromium 或系统 Chrome/Edge。请安装 Playwright Chromium。 "
-                    + str(error).splitlines()[0]
+                    "无法初始化实时浏览器会话。请检查 Playwright 浏览器安装和运行权限。 " + str(error).splitlines()[0]
                 ) from error
-            context = await browser.new_context(viewport={"width": 1280, "height": 720})
-            await context.add_init_script(RECORDER_INIT_SCRIPT)
-            page = await context.new_page()
             navigation_error = None
             if data.start_url != "about:blank":
                 try:
-                    await page.goto(data.start_url, wait_until="domcontentloaded", timeout=30000)
+                    await self.browser_runtime.navigate(
+                        runtime_session.id,
+                        data.start_url,
+                        timeout_ms=round(config.browser.navigation_timeout_seconds * 1000),
+                    )
                 except Exception as error:
                     # A blocked target must not destroy the browser; the user can retry another URL.
                     navigation_error = str(error)
             session = RecorderSession(
-                uuid.uuid4().hex,
-                owner_id,
-                data.project_id,
-                browser,
-                context,
-                page,
-                last_url=page.url,
+                id=runtime_session.id,
+                owner_id=owner_id,
+                project_id=data.project_id,
+                runtime_session=runtime_session,
+                last_url=runtime_session.current_url,
                 requested_url=data.start_url,
                 navigation_error=navigation_error,
             )
             session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in data.recovered_steps]
-            context.on("page", lambda new_page: setattr(session, "page", new_page))
             async with self._lock:
                 self._sessions[session.id] = session
         return session
@@ -325,6 +333,107 @@ class BrowserRecorderService:
     async def get(self, session_id: str, owner_id: str) -> RecorderSession | None:
         session = self._sessions.get(session_id)
         return session if session and session.owner_id == owner_id else None
+
+    @staticmethod
+    def session_status(session: RecorderSession) -> dict[str, Any]:
+        return {
+            "id": session.id,
+            "project_id": session.project_id,
+            "state": session.state,
+            "url": session.last_url,
+            "requested_url": session.requested_url,
+            "navigation_error": session.navigation_error,
+            "steps": session.steps,
+        }
+
+    @staticmethod
+    def touch(session: RecorderSession) -> None:
+        session.last_activity = asyncio.get_running_loop().time()
+
+    @staticmethod
+    def navigation_failed(session: RecorderSession, message: str) -> None:
+        session.navigation_error = message
+
+    async def apply_command(self, session: RecorderSession, command: dict[str, Any]) -> str | None:
+        runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
+        if runtime_session is None:
+            raise RuntimeError("Recorder browser session is closed or expired")
+        page = await self.browser_runtime.get_page(session.browser_session_id)
+        action = command.get("action")
+        if action == "navigate":
+            target = RecorderSessionCreate(project_id=session.project_id, start_url=command["url"]).start_url
+            session.requested_url = target
+            try:
+                await self.browser_runtime.navigate(session.browser_session_id, target, timeout_ms=30_000)
+                session.navigation_error = None
+            except Exception as error:
+                session.navigation_error = str(error)
+                raise
+        elif action == "back":
+            await page.go_back(wait_until="domcontentloaded", timeout=15_000)
+        elif action == "forward":
+            await page.go_forward(wait_until="domcontentloaded", timeout=15_000)
+        elif action == "reload":
+            await page.reload(wait_until="domcontentloaded", timeout=30_000)
+        elif action == "start":
+            session.state = "RECORDING"
+            if not session.steps:
+                session.steps.extend(self.events_to_steps([{"action": "navigate", "url": page.url}]))
+            for frame in page.frames:
+                await frame.evaluate("() => {window.__qaRecorderEnabled=true; window.__qaRecorderEvents=[]}")
+        elif action == "pause":
+            session.state = "PAUSED"
+        elif action == "resume":
+            session.state = "RECORDING"
+        elif action == "stop":
+            session.state = "STOPPED"
+        elif action == "click":
+            await page.mouse.click(command["x"], command["y"])
+        elif action == "double_click":
+            await page.mouse.dblclick(command["x"], command["y"])
+        elif action == "move":
+            await page.mouse.move(command["x"], command["y"])
+        elif action == "pick_element":
+            requested_action = command.get("step_action")
+            session.pending_pick_action = (
+                requested_action
+                if requested_action in {"click", "double_click", "fill", "select", "check", "uncheck", "press", "hover"}
+                else "click"
+            )
+            for frame in page.frames:
+                await frame.evaluate("() => { window.__qaRecorderPickMode = true; window.__qaRecorderEnabled = true; }")
+        elif action == "wheel":
+            await page.mouse.wheel(command.get("delta_x", 0), command.get("delta_y", 0))
+        elif action == "type":
+            await page.keyboard.insert_text(command.get("text", ""))
+        elif action == "press":
+            await page.keyboard.press(command["key"])
+        elif action == "tab":
+            index = int(command["index"])
+            try:
+                await self.browser_runtime.select_page(session.browser_session_id, index)
+            except IndexError:
+                pass
+        elif action == "add_step":
+            session.steps.append(RecorderStep.model_validate(command["step"]).model_dump(mode="json"))
+        elif action == "replace_steps":
+            raw_steps = command.get("steps")
+            if not isinstance(raw_steps, list) or len(raw_steps) > 500:
+                raise ValueError("A recorder session can contain at most 500 steps.")
+            session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
+        elif action == "edit_step":
+            updated = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
+            session.steps = [updated if step["id"] == updated["id"] else step for step in session.steps]
+        elif action == "delete_step":
+            session.steps = [step for step in session.steps if step["id"] != command.get("id")]
+        elif action == "reorder":
+            order = command.get("ids", [])
+            by_id = {step["id"]: step for step in session.steps}
+            session.steps = [by_id[item] for item in order if item in by_id] + [
+                step for step in session.steps if step["id"] not in order
+            ]
+        self.touch(session)
+        return page.url if action == "navigate" else None
 
     async def close(self, session_id: str, owner_id: str) -> None:
         session = await self.get(session_id, owner_id)
@@ -334,11 +443,7 @@ class BrowserRecorderService:
             async with self._lock:
                 if self._sessions.pop(session_id, None) is None:
                     return
-            await session.context.close()
-            await session.browser.close()
-            if not self._sessions and self._playwright is not None:
-                await self._playwright.stop()
-                self._playwright = None
+            await self.browser_runtime.close_session(session.browser_session_id)
 
     async def close_all(self) -> None:
         for session in list(self._sessions.values()):
@@ -360,15 +465,16 @@ class BrowserRecorderService:
         )
 
     async def page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
-        page = session.page
-        if page.is_closed():
+        runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
+        if runtime_session is None:
             return {
                 "type": "error",
-                "message": "浏览器页面已关闭",
+                "message": "浏览器会话已关闭或过期",
                 "url": "",
                 "state": "CRASHED",
                 "steps": session.steps,
             }
+        page = await self.browser_runtime.get_page(session.browser_session_id)
         try:
             new_steps: list[dict[str, Any]] = []
             if page.url.startswith("chrome-error://"):
@@ -379,6 +485,13 @@ class BrowserRecorderService:
                     "state": session.state,
                     "steps": session.steps,
                 }
+            snapshot = await self.browser_runtime.snapshot(
+                session.browser_session_id,
+                screenshot_type="jpeg",
+                screenshot_quality=62,
+                full_page=False,
+                screenshot_timeout_ms=5_000,
+            )
             if session.state == "RECORDING" and page.url != session.last_url:
                 step = self.events_to_steps([{"action": "navigate", "url": page.url}])[0]
                 session.steps.append(step)
@@ -392,7 +505,9 @@ class BrowserRecorderService:
                         session.pending_pick_action = "click"
                         continue
                     if session.state == "RECORDING":
-                        locator_selection = await self._select_locator_candidate(page, event, session.id)
+                        locator_selection = await self._select_locator_candidate(
+                            page, event, session.id, session.browser_session_id
+                        )
                         if locator_selection:
                             event = {**event, "locator_selection": locator_selection}
                             session.locator_trace = locator_selection["trace"]
@@ -400,14 +515,12 @@ class BrowserRecorderService:
                             if not session.steps or self._dedupe_key(session.steps[-1]) != self._dedupe_key(step):
                                 session.steps.append(step)
                                 new_steps.append(step)
-            image = await page.screenshot(type="jpeg", quality=62, timeout=5000)
-            tabs = []
-            for index, item in enumerate(session.context.pages):
-                tabs.append({"index": index, "url": item.url, "title": await item.title(), "active": item is page})
+            image = snapshot.screenshot or b""
+            tabs = snapshot.tabs
             picked = session.picked_element
             session.picked_element = None
             if picked:
-                selection = await self._select_locator_candidate(page, picked, session.id)
+                selection = await self._select_locator_candidate(page, picked, session.id, session.browser_session_id)
                 if selection:
                     session.locator_trace = selection["trace"]
                 picked = {
@@ -417,8 +530,8 @@ class BrowserRecorderService:
                 }
             return {
                 "type": "frame",
-                "url": page.url,
-                "title": await page.title(),
+                "url": snapshot.url,
+                "title": snapshot.title,
                 "image": base64.b64encode(image).decode("ascii"),
                 "state": session.state,
                 "steps": session.steps,
@@ -444,22 +557,25 @@ class BrowserRecorderService:
             }
 
     async def _select_locator_candidate(
-        self, page: Any, event: dict[str, Any], trace_run_id: str
+        self, page: Any, event: dict[str, Any], trace_run_id: str, browser_session_id: str
     ) -> dict[str, Any] | None:
         from app.services.locator_decision_service import LocatorDecisionService
 
         candidates = LocatorDecisionService.generate_candidates(event)
+        candidates = candidates[: get_config().recorder.candidate_limit]
         if not candidates:
             return None
         pipeline = LocatorDecisionService(
             decision_service=self._decision_service,
             settings_service=self._decision_settings_service,
+            browser_runtime=self.browser_runtime,
+            repository_scope=self.repository_scope,
         )
         return await pipeline.decide(
             run_id=trace_run_id,
             event=event,
             candidates=candidates,
-            page=page,
+            browser_session_id=browser_session_id,
             step_id=str(event.get("step_id") or "") or None,
         )
 
@@ -471,11 +587,9 @@ class BrowserRecorderService:
 
     @staticmethod
     async def _verify_locator_candidate(
-        page: Any, candidate: dict[str, Any], event: dict[str, Any]
+        self, browser_session_id: str, candidate: dict[str, Any], event: dict[str, Any]
     ) -> dict[str, bool | None]:
-        from app.services.locator_decision_service import LocatorDecisionService
-
-        return await LocatorDecisionService.verify_candidate(page, candidate, event)
+        return await self.browser_runtime.verify_locator(browser_session_id, candidate, event)
 
     @staticmethod
     def _dedupe_key(step: dict[str, Any]) -> tuple:
@@ -510,9 +624,15 @@ class BrowserRecorderService:
             locator_data = None
             locator_decision = None
             if action != "navigate":
-                candidates = rank_locator_candidates(event.get("candidates") or [])
+                recorder_config = get_config().recorder
+                candidates = rank_locator_candidates(event.get("candidates") or [])[: recorder_config.candidate_limit]
                 selection = event.get("locator_selection") or {}
-                candidate = selection.get("selected_candidate") or (
+                selected = selection.get("selected_candidate")
+                if selected is None and recorder_config.locator_strategy != "semantic":
+                    selected = next(
+                        (item for item in candidates if item.get("kind") == recorder_config.locator_strategy), None
+                    )
+                candidate = selected or (
                     candidates[0] if candidates else {"kind": "css", "value": event.get("tag", "body")}
                 )
                 locator_data = {
@@ -584,8 +704,7 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "from playwright.sync_api import sync_playwright, expect",
         "",
         "def _browser_proxy():",
-        "    raw = (os.getenv('BROWSER_PROXY_URL') or os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')",
-        "           or os.getenv('HTTP_PROXY') or os.getenv('http_proxy'))",
+        "    raw = os.getenv('BROWSER_PROXY_URL')",
         "    if not raw:",
         "        return None",
         "    parsed = urlsplit(raw if '://' in raw else f'http://{raw}')",
@@ -597,7 +716,7 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "        proxy['username'] = unquote(parsed.username)",
         "    if parsed.password:",
         "        proxy['password'] = unquote(parsed.password)",
-        "    bypass = os.getenv('BROWSER_PROXY_BYPASS') or os.getenv('NO_PROXY') or os.getenv('no_proxy')",
+        "    bypass = os.getenv('BROWSER_PROXY_BYPASS')",
         "    if bypass:",
         "        proxy['bypass'] = bypass",
         "    return proxy",
@@ -605,7 +724,7 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         f"def {test_name}():",
         "    with sync_playwright() as playwright:",
         "        proxy = _browser_proxy()",
-        "        channels = [os.getenv('PLAYWRIGHT_CHANNEL'), None, 'msedge', 'chrome']",
+        "        channels = [None, 'msedge', 'chrome']",
         "        browser = None",
         "        launch_error = None",
         "        for channel in dict.fromkeys(channels):",
@@ -660,6 +779,3 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
                 lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
     lines.extend(["        finally:", "            browser.close()", ""])
     return "\n".join(lines)
-
-
-recorder_service = BrowserRecorderService()

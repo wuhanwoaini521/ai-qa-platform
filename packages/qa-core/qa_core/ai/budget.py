@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 class BudgetExceededError(Exception):
@@ -12,15 +11,20 @@ class BudgetExceededError(Exception):
 
 @dataclass
 class AIBudgetGuard:
-    max_requests: int = field(default_factory=lambda: int(os.getenv("QA_AI_MAX_REQUESTS_PER_RUN", "50")))
-    max_input_tokens: int = field(default_factory=lambda: int(os.getenv("QA_AI_MAX_INPUT_TOKENS_PER_RUN", "100000")))
-    max_output_tokens: int = field(default_factory=lambda: int(os.getenv("QA_AI_MAX_OUTPUT_TOKENS_PER_RUN", "50000")))
+    """Per-run budget guard. Infrastructure passes the effective policy explicitly."""
+
+    enabled: bool = True
+    max_requests: int = 50
+    max_input_tokens: int = 100_000
+    max_output_tokens: int = 50_000
 
     requests_count: int = 0
     input_tokens_count: int = 0
     output_tokens_count: int = 0
 
     def check_and_record_request(self) -> None:
+        if not self.enabled:
+            return
         if self.requests_count >= self.max_requests:
             raise BudgetExceededError(
                 f"AI request budget exceeded: {self.requests_count}/{self.max_requests} requests executed."
@@ -28,6 +32,8 @@ class AIBudgetGuard:
         self.requests_count += 1
 
     def record_tokens(self, input_tokens: int | None, output_tokens: int | None) -> None:
+        if not self.enabled:
+            return
         if input_tokens:
             self.input_tokens_count += input_tokens
             if self.input_tokens_count > self.max_input_tokens:
@@ -42,6 +48,8 @@ class AIBudgetGuard:
                 )
 
     def is_within_budget(self) -> bool:
+        if not self.enabled:
+            return True
         return (
             self.requests_count < self.max_requests
             and self.input_tokens_count < self.max_input_tokens

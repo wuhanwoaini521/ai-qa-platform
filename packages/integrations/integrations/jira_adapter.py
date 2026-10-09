@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import urllib.parse
 import urllib.request
 from typing import Any, Protocol, runtime_checkable
@@ -133,9 +132,9 @@ class JiraAdapter:
         api_token: str | None = None,
         timeout_seconds: float = 10.0,
     ) -> None:
-        self.base_url = (base_url or os.environ.get("JIRA_BASE_URL", "")).rstrip("/")
-        self.email = email or os.environ.get("JIRA_EMAIL", "")
-        self.api_token = api_token or os.environ.get("JIRA_API_TOKEN", "")
+        self.base_url = (base_url or "").rstrip("/")
+        self.email = email or ""
+        self.api_token = api_token or ""
         self.timeout = timeout_seconds
 
     def _get_headers(self) -> dict[str, str]:

@@ -29,6 +29,10 @@ class ProjectRepository:
         result = await self.session.execute(select(ProjectORM).where(ProjectORM.id == project_id))
         return result.scalar_one_or_none()
 
+    async def get_by_id_for_update(self, project_id: str) -> ProjectORM | None:
+        result = await self.session.execute(select(ProjectORM).where(ProjectORM.id == project_id).with_for_update())
+        return result.scalar_one_or_none()
+
     async def create(self, data: ProjectCreate) -> ProjectORM:
         proj_id = f"proj_{uuid.uuid4().hex[:12]}"
         now = utc_now()

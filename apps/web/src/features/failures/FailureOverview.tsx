@@ -6,6 +6,7 @@ import {
   Code2,
   ExternalLink,
   Play,
+  RefreshCw,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -53,8 +54,12 @@ export const FailureOverview: React.FC<{
   primaryAction: PrimaryAction;
   primaryDisabled: boolean;
   showPrimaryAction?: boolean;
+  showReanalysis?: boolean;
+  reanalysisPending?: boolean;
+  reanalysisBlockedReason?: string;
   primaryReason?: string;
   onPrimaryAction: () => void;
+  onReanalysis?: () => void;
   canRetry: boolean;
   rerunning: boolean;
   onRetry: () => void;
@@ -77,8 +82,12 @@ export const FailureOverview: React.FC<{
   primaryAction,
   primaryDisabled,
   showPrimaryAction = true,
+  showReanalysis = false,
+  reanalysisPending = false,
+  reanalysisBlockedReason,
   primaryReason,
   onPrimaryAction,
+  onReanalysis,
   canRetry,
   rerunning,
   onRetry,
@@ -96,7 +105,10 @@ export const FailureOverview: React.FC<{
   const platform = Object.entries(environment).find(([key]) =>
     /(^|_)(os|platform|operating_system)(_|$)/i.test(key),
   )?.[1];
-  const summaryKind = summarizeFailureError(failure.error_message);
+  const summaryKind = summarizeFailureError(
+    failure.error_message,
+    failure.failure_kind ?? failure.classification,
+  );
   const isChinese = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('zh');
   const locatorTimeout = /TimeoutError|Locator\.\w+: Timeout/i.test(failure.error_message);
   const failedLocator = failedLocatorFromFailure(failure) || '未知定位器';
@@ -106,7 +118,6 @@ export const FailureOverview: React.FC<{
     : diagnosis?.root_cause;
   const classification = displayedFailureClassification(
     failure.failure_kind ?? failure.classification,
-    diagnosis,
   );
   const heuristicHint = summaryKind === 'browserLaunchEperm' && classification === 'UNKNOWN';
   const primaryIcon =
@@ -127,11 +138,11 @@ export const FailureOverview: React.FC<{
   const currentStage =
     primaryAction === 'CREATE_ISSUE_DRAFT'
       ? null
-      : state === 'VERIFYING' || state === 'VERIFIED'
+      : state === 'VERIFYING_FIX' || state === 'VERIFIED'
         ? 'verification'
-        : state === 'REPAIR_APPLIED' || primaryAction === 'RETRY'
+        : state === 'PATCH_APPLIED' || state === 'FAILED' || primaryAction === 'RETRY'
           ? 'retry'
-          : state === 'REPAIR_PROPOSED' || primaryAction === 'REVIEW_REPAIR' || primaryAction === 'GENERATE_LOCATOR_REPAIR' || (state === 'DIAGNOSED' && primaryAction === 'BLOCKED')
+          : state === 'PATCH_READY' || primaryAction === 'REVIEW_REPAIR' || (state === 'NOT_APPLICABLE' && primaryAction === 'BLOCKED')
             ? 'repair'
             : 'diagnosis';
   const retryRunLabel = verificationRun
@@ -177,7 +188,9 @@ export const FailureOverview: React.FC<{
                 ? platform
                   ? t('summary.browserLaunchWithPlatform', { platform })
                   : t('summary.browserLaunch')
-                : summaryKind === 'timeout'
+                : summaryKind === 'locatorTimeout'
+                  ? t('summary.locatorTimeout', { locator: failedLocator })
+                  : summaryKind === 'timeout'
                   ? t('summary.timeout')
                   : summaryKind === 'assertion'
                     ? t('summary.assertion')
@@ -215,8 +228,22 @@ export const FailureOverview: React.FC<{
                     {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
                   </>
                 )}
-                {state === 'NOT_ANALYZED' && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
+                {state === 'CREATED' && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
               </>
+            )}
+            {showReanalysis && (
+              <button
+                type="button"
+                className="btn btn-secondary failure-reanalyze-action"
+                onClick={onReanalysis}
+                disabled={reanalysisPending}
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+                {t(reanalysisPending ? 'reanalyzingAIJev' : 'reanalyzeAIJev')}
+              </button>
+            )}
+            {reanalysisBlockedReason && (
+              <p className="failure-action-reason" role="status">{reanalysisBlockedReason}</p>
             )}
           </div>
         </div>
@@ -268,7 +295,7 @@ export const FailureOverview: React.FC<{
         )}
 
         <div className="failure-secondary-actions">
-          {primaryAction !== 'BLOCKED' && (onOpenStudio || onDebug) && (
+        {(onOpenStudio || onDebug) && (
             <details>
               <summary>{t('developerActions')}</summary>
               <div className="failure-secondary-buttons">

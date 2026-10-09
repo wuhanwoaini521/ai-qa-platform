@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from project_model.models import RequirementCreate, RequirementUpdate
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import RequirementORM, utc_now
@@ -35,6 +35,18 @@ class RequirementRepository:
             query = query.limit(limit)
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def list_with_qa_model(self) -> list[dict[str, object]]:
+        result = await self.session.execute(select(RequirementORM).where(RequirementORM.qa_model.is_not(None)))
+        return [{"id": row.id, "qa_model": row.qa_model} for row in result.scalars().all()]
+
+    async def update_qa_model(self, requirement_id: str, value: dict) -> None:
+        await self.session.execute(
+            update(RequirementORM)
+            .where(RequirementORM.id == requirement_id)
+            .values(qa_model=value, updated_at=utc_now())
+        )
+        await self.session.flush()
 
     async def get_by_id(self, req_id: str) -> RequirementORM | None:
         result = await self.session.execute(select(RequirementORM).where(RequirementORM.id == req_id))
@@ -73,3 +85,14 @@ class RequirementRepository:
         orm.updated_at = utc_now()
         await self.session.flush()
         return orm
+
+    async def update_qa_model_if_current(self, req_id: str, expected: dict | None, value: dict) -> bool:
+        query = update(RequirementORM).where(RequirementORM.id == req_id)
+        query = query.where(
+            or_(RequirementORM.qa_model == expected, RequirementORM.qa_model.is_(None))
+            if not expected
+            else RequirementORM.qa_model == expected
+        )
+        result = await self.session.execute(query.values(qa_model=value, updated_at=utc_now()))
+        await self.session.flush()
+        return result.rowcount == 1

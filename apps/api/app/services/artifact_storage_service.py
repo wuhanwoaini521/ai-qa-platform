@@ -7,7 +7,7 @@ from pathlib import Path
 from project_model.models import ArtifactDownloadInfo, ArtifactUploadResponse
 
 from app.repositories.artifact_repo import ArtifactRepository
-from app.settings import settings
+from app.settings import get_config
 
 
 class ArtifactStorageService:
@@ -25,7 +25,7 @@ class ArtifactStorageService:
         self.artifact_repo = artifact_repo or ArtifactRepository()
         # Default to the configured artifact directory: the health probe checks that directory, so
         # writing anywhere else would let /health report writable for a location the API never uses.
-        self.base_dir = Path(base_dir or settings.artifact_storage_dir)
+        self.base_dir = Path(base_dir or get_config().app.artifact_storage_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     async def save_artifact(

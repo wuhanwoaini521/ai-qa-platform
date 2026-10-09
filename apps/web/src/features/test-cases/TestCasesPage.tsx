@@ -24,6 +24,7 @@ interface TestCasesPageProps {
   onNavigateToStudio?: (filePath: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
   initialTestCaseId?: string | null;
+  initialRequirementId?: string | null;
   onSelectTestCase?: (testCaseId: string) => void;
   onTaskStarted?: (taskId: string) => void;
   workspaceMode?: boolean;
@@ -38,6 +39,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   onNavigateToStudio,
   onNavigateToRuns,
   initialTestCaseId,
+  initialRequirementId,
   onSelectTestCase,
   onTaskStarted,
   workspaceMode = false,
@@ -48,6 +50,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   const { t } = useTranslation('testCases');
   const form = useTestCaseFormModal(
     selectedProjectId || (projects[0]?.id ?? ''),
+    initialRequirementId,
   );
 
   // `binding` is only dereferenced once the case list loads, after both hooks are initialized.
@@ -256,6 +259,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
       <TestCaseFormModal
         isOpen={form.isOpen}
         projects={projects}
+        workspaceMode={workspaceMode}
         formData={form.formData}
         setFormData={form.setFormData}
         stepsText={form.stepsText}

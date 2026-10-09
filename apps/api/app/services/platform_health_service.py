@@ -10,14 +10,12 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
-from sqlalchemy import select
-
-from app.persistence import database
-from app.persistence.models import WorkerORM, utc_now
+from app.persistence.models import utc_now
+from app.ports.browser_runtime import BrowserRuntime
+from app.ports.database_health import DatabaseHealthProbe
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.services.decision_settings_service import DecisionSettingsService
-from app.settings import settings
+from app.settings import get_config
 
 
 class PlatformHealthService:
@@ -27,7 +25,19 @@ class PlatformHealthService:
         "browser": 15,
     }
 
-    def __init__(self):
+    def __init__(
+        self,
+        browser_runtime: BrowserRuntime | None = None,
+        repository_scope: RepositoryScopeFactory | None = None,
+        database_health_probe: DatabaseHealthProbe | None = None,
+    ):
+        if browser_runtime is None:
+            from app.container import get_browser_runtime
+
+            browser_runtime = get_browser_runtime()
+        self.browser_runtime = browser_runtime
+        self.repository_scope = repository_scope
+        self.database_health_probe = database_health_probe
         self._cached = None
         self._expires = 0.0
         self._lock = asyncio.Lock()
@@ -75,27 +85,14 @@ class PlatformHealthService:
             return self._cached
 
     async def _database(self):
-        if not await database.check_db_health():
-            return {"status": "error", "message": "Database is unreachable."}
-        from app.persistence.migrations import migration_config
-
-        head_revision = ScriptDirectory.from_config(migration_config()).get_current_head()
-        async with database.engine.connect() as connection:
-            current_revision = await connection.run_sync(
-                lambda conn: MigrationContext.configure(conn).get_current_revision()
-            )
-        pending = current_revision != head_revision
-        return {
-            "status": "error" if pending else "ok",
-            "message": "Database schema update pending." if pending else "Database connected; schema is current.",
-            "current_revision": current_revision,
-            "head_revision": head_revision,
-        }
+        if self.database_health_probe is None:
+            raise RuntimeError("Platform health requires a database health probe")
+        return await self.database_health_probe.check()
 
     async def _ai(self, refresh=False):
         from app.services.ai_settings_service import AISettingsService
 
-        status = await AISettingsService().get_status(refresh=refresh)
+        status = await AISettingsService(self.repository_scope).get_status(refresh=refresh)
         real_available = status.real_model_available
         return {
             "status": "ok" if real_available else "warning",
@@ -107,7 +104,7 @@ class PlatformHealthService:
         }
 
     async def _jev(self):
-        config = await DecisionSettingsService().get_runtime_config()
+        config = await DecisionSettingsService(self.repository_scope).get_runtime_config()
         if not config.enabled or not config.api_key:
             return {
                 "status": "warning",
@@ -150,39 +147,21 @@ class PlatformHealthService:
         }
 
     async def _browser(self):
-        from playwright.async_api import async_playwright
-
-        from app.services.browser_proxy import browser_proxy_options, launch_chromium
-
-        proxy = browser_proxy_options()
-        async with async_playwright() as playwright:
-            browser = await launch_chromium(
-                playwright,
-                headless=True,
-                timeout=12_000,
-                **({"proxy": proxy} if proxy else {}),
-            )
-            version = browser.version
-            await browser.close()
+        session = await self.browser_runtime.create_session(launch_options={"timeout": 12_000})
+        try:
+            version = session.browser_version
+        finally:
+            await self.browser_runtime.close_session(session.id)
         return {
             "status": "ok",
             "message": f"Playwright launched a browser successfully (version {version}).",
         }
 
     async def _worker(self):
-        async with database.get_session() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(WorkerORM).where(
-                            WorkerORM.last_heartbeat_at >= utc_now() - timedelta(seconds=90),
-                            WorkerORM.status.in_(["ONLINE", "BUSY"]),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
+        if self.repository_scope is None:
+            raise RuntimeError("Platform health requires a repository scope")
+        async with self.repository_scope() as repositories:
+            rows = await repositories.workers.list_recent_active(utc_now() - timedelta(seconds=90))
         return {
             "status": "ok",
             "message": (
@@ -202,7 +181,8 @@ class PlatformHealthService:
         }
 
     async def _filesystem(self):
-        for directory in (settings.workspace_storage_dir, settings.artifact_storage_dir):
+        app_config = get_config().app
+        for directory in (app_config.workspace_storage_dir, app_config.artifact_storage_dir):
             with tempfile.TemporaryFile(dir=directory) as handle:
                 handle.write(b"ready")
                 handle.flush()
@@ -214,6 +194,3 @@ class PlatformHealthService:
             "status": "ok" if available else "warning",
             "message": "basedpyright is installed." if available else "Python language server is missing.",
         }
-
-
-platform_health_service = PlatformHealthService()

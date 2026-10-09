@@ -6,12 +6,16 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
+from uuid import uuid4
 
 from project_model.models import DecisionOption, DecisionRequest
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.failure.redactor import SensitiveRedactor
+from app.settings import get_config
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
+from app.ports.browser_runtime import BrowserRuntime
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 
@@ -37,6 +41,36 @@ _LOCATOR_NOISE = {
     "xpath",
     "old",
 }
+_GENERIC_TARGET_TOKENS = {
+    "add",
+    "button",
+    "cancel",
+    "cart",
+    "checkout",
+    "click",
+    "close",
+    "continue",
+    "create",
+    "delete",
+    "login",
+    "logout",
+    "open",
+    "order",
+    "purchase",
+    "remove",
+    "save",
+    "send",
+    "submit",
+    "update",
+}
+
+
+def _locator_tokens(value: str) -> set[str]:
+    return {
+        token.lower()
+        for token in re.findall(r"[\w]+", value)
+        if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
+    }
 
 
 class LocatorDecisionService:
@@ -46,14 +80,24 @@ class LocatorDecisionService:
         self,
         decision_service: DecisionService | None = None,
         settings_service: DecisionSettingsService | None = None,
+        browser_runtime: BrowserRuntime | None = None,
+        repository_scope: RepositoryScopeFactory | None = None,
     ) -> None:
-        self.settings_service = settings_service or DecisionSettingsService()
-        self.decision_service = decision_service or DecisionService(settings_service=self.settings_service)
+        self.settings_service = settings_service or DecisionSettingsService(repository_scope)
+        self.repository_scope = repository_scope
+        self.decision_service = decision_service or DecisionService(
+            settings_service=self.settings_service, repository_scope=repository_scope
+        )
+        if browser_runtime is None:
+            from app.container import get_browser_runtime
+
+            browser_runtime = get_browser_runtime()
+        self.browser_runtime = browser_runtime
 
     @staticmethod
     def generate_candidates(event: dict[str, Any]) -> list[dict[str, Any]]:
         """Enrich only locators observed for the target; never synthesize a selector."""
-        raw = rank_locator_candidates(event.get("candidates") or [])[:10]
+        raw = rank_locator_candidates(event.get("candidates") or [])[:8]
         result: list[dict[str, Any]] = []
         for index, item in enumerate(raw, start=1):
             kind = item["kind"]
@@ -77,34 +121,30 @@ class LocatorDecisionService:
         return result
 
     @staticmethod
-    def prioritize_candidates_for_failure(failing_locator: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Keep only candidates that match the most specific words in the failed locator."""
-        target_tokens = {
-            token.lower()
-            for token in re.findall(r"[\w]+", failing_locator)
-            if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
-        }
-        if not target_tokens:
-            return []
-
-        scored: list[tuple[int, dict[str, Any]]] = []
-        for candidate in candidates:
+    def prioritize_candidates_for_failure(
+        failing_locator: str, candidates: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Boost candidates related to the old locator without excluding semantic replacements."""
+        target_tokens = _locator_tokens(failing_locator)
+        scored: list[tuple[int, float, int, dict[str, Any]]] = []
+        for index, candidate in enumerate(candidates):
             description = " ".join(
                 str(candidate.get(key) or "") for key in ("kind", "value", "name", "locator", "strategy")
             )
-            candidate_tokens = {
-                token.lower()
-                for token in re.findall(r"[\w]+", description)
-                if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
-            }
+            candidate_tokens = _locator_tokens(description)
             overlap = len(target_tokens & candidate_tokens)
-            if overlap:
-                scored.append((overlap, candidate))
+            static_score = candidate.get("static_score", 0.0)
+            scored.append((overlap, static_score if isinstance(static_score, (int, float)) else 0.0, -index, candidate))
 
-        if not scored:
-            return []
-        strongest_match = max(score for score, _ in scored)
-        return [candidate for score, candidate in scored if score == strongest_match]
+        return [item for _, _, _, item in sorted(scored, reverse=True)]
+
+    @staticmethod
+    def semantically_matches_failed_locator(failing_locator: str, proposed_locator: str) -> bool:
+        """Require stronger target evidence before a local fallback can authorize a patch."""
+        shared = _locator_tokens(failing_locator) & _locator_tokens(proposed_locator)
+        if len(shared) >= 2:
+            return True
+        return any(len(token) >= 7 and token not in _GENERIC_TARGET_TOKENS for token in shared)
 
     @staticmethod
     def format_locator(candidate: dict[str, Any]) -> str:
@@ -129,16 +169,20 @@ class LocatorDecisionService:
         event: dict[str, Any],
         candidates: list[dict[str, Any]],
         page: Any | None = None,
+        browser_session_id: str | None = None,
         case_execution_id: str | None = None,
         step_id: str | None = None,
         on_event: Callable[[AITraceEvent], Awaitable[None]] | None = None,
+        require_jev: bool = False,
     ) -> dict[str, Any]:
         started = time.perf_counter()
+        candidates = candidates[: get_config().agent.browser.max_candidates]
+        decision_id = uuid4().hex
         trace: list[AITraceEvent] = []
         safe_url = SensitiveRedactor.redact_url(str(event.get("url") or ""))
         from app.services.locator_history_service import LocatorHistoryService
 
-        history = LocatorHistoryService()
+        history = LocatorHistoryService(self.repository_scope)
         await history.enrich(safe_url, candidates)
         ranked = rank_locator_candidates(candidates)
         scores = {item["candidate_id"]: item["confidence"] for item in ranked}
@@ -156,10 +200,10 @@ class LocatorDecisionService:
             duration: float | None = None,
         ) -> None:
             status = "RUNNING" if event_type.endswith("_started") else "COMPLETED"
-            if (
-                event_type == "failed"
-                or event_type == "verification_completed"
-                and not (metadata or {}).get("verified")
+            if event_type == "repair_suggested" and not (metadata or {}).get("verified"):
+                status = "UNVERIFIED"
+            elif event_type == "failed" or (
+                event_type == "verification_completed" and not (metadata or {}).get("verified")
             ):
                 status = "FAILED"
             item = make_trace_event(
@@ -204,7 +248,7 @@ class LocatorDecisionService:
 
         decision: Any = None
         latency_ms = 0.0
-        fallback_reason = "jev_disabled"
+        fallback_reason = "no_candidates"
         if candidates:
             options = [
                 DecisionOption(key=item["candidate_id"], description=item["locator"][:1000]) for item in candidates
@@ -248,9 +292,9 @@ class LocatorDecisionService:
             )
             decision_started = time.perf_counter()
             try:
-                decision = await asyncio.wait_for(
-                    self.decision_service.choose(request, run_id=run_id, allow_missing_confidence=True), timeout=3.5
-                )
+                # DecisionService owns the configured provider timeout. A second short
+                # timeout here cancelled healthy Jev requests before that policy elapsed.
+                decision = await self.decision_service.choose(request, run_id=run_id)
                 latency_ms = round((time.perf_counter() - decision_started) * 1000, 1)
                 fallback_reason = decision.reason or "provider_unavailable"
             except asyncio.TimeoutError:
@@ -258,30 +302,61 @@ class LocatorDecisionService:
             except Exception as error:
                 fallback_reason = type(error).__name__
 
-        actual_jev = bool(decision and decision.provider == "jev" and not decision.fallback_used and decision.choice)
-        selected_id = str(decision.choice) if actual_jev else None
         candidate_by_id = {item["candidate_id"]: item for item in candidates}
+        actual_jev = bool(
+            decision
+            and decision.provider == "jev"
+            and not decision.fallback_used
+            and decision.choice
+            and decision.confidence is not None
+            and str(decision.choice) in candidate_by_id
+        )
+        if decision and decision.provider == "jev" and not decision.fallback_used and decision.choice:
+            if str(decision.choice) not in candidate_by_id:
+                fallback_reason = "choice_not_in_candidates"
+        elif decision and not decision.fallback_used and decision.provider != "jev":
+            fallback_reason = "unexpected_provider"
+        elif decision and decision.fallback_used:
+            fallback_reason = decision.reason or "decision_fallback"
+        selected_id = str(decision.choice) if actual_jev else None
         selected = candidate_by_id.get(selected_id) if selected_id else None
-        engine = "Jev" if selected is not None and actual_jev else "Local Strategy"
-        if selected is None and candidates:
+        engine = "Jev" if selected is not None and actual_jev else "BLOCKED" if require_jev else "Local Strategy"
+        attempted_provider = (
+            (decision.attempted_provider or decision.provider) if decision else None
+        )
+        attempted_model = (
+            (decision.attempted_model or decision.model) if decision else None
+        )
+        attempted_choice = decision.attempted_choice if decision else None
+        minimum_confidence = decision.minimum_confidence if decision else None
+        if selected is None and candidates and not require_jev:
             selected = candidates[0]
             selected_id = selected["candidate_id"]
 
         await emit(
             "decision_completed",
-            "Jev selected candidate" if engine == "Jev" else "Local Strategy selected candidate",
+            "Jev selected candidate" if engine == "Jev" else "Repair decision blocked" if require_jev else "Local Strategy selected candidate",
             stage="decision",
             message=(selected["locator"] if selected else "No usable candidate")
             + (f" · {latency_ms:.1f} ms" if engine == "Jev" else ""),
             metadata={
-                "provider": "jev" if engine == "Jev" else "local-strategy",
+                "provider": "jev" if engine == "Jev" else "blocked" if require_jev else "local-strategy",
                 "model": decision.model if engine == "Jev" else None,
                 "candidate_id": selected_id,
                 "selected_locator": selected.get("locator") if selected else None,
                 "candidate_count": len(candidates),
-                "confidence": decision.confidence if engine == "Jev" else None,
+                "confidence": decision.confidence if decision else None,
+                "attempted_provider": attempted_provider,
+                "attempted_model": attempted_model,
+                "attempted_choice": attempted_choice,
+                "minimum_confidence": minimum_confidence,
                 "latency_ms": latency_ms if engine == "Jev" else None,
+                "fallback_used": not actual_jev,
                 "fallback_reason": None if engine == "Jev" else fallback_reason,
+                "decision_id": decision_id,
+                "decision_type": "locator_candidate_selection",
+                "candidate_ids": [item["candidate_id"] for item in candidates],
+                "probabilities": decision.probabilities if decision and engine == "Jev" else {},
             },
         )
 
@@ -294,8 +369,12 @@ class LocatorDecisionService:
             "verified": False,
         }
         verified_candidate = None
-        ordered = ([selected] if selected else []) + [item for item in candidates if item is not selected]
-        if page is not None:
+        ordered = (
+            ([selected] if selected else [])
+            if require_jev
+            else ([selected] if selected else []) + [item for item in candidates if item is not selected]
+        )
+        if page is not None or browser_session_id is not None:
             for candidate in ordered:
                 await emit(
                     "verification_started",
@@ -303,7 +382,11 @@ class LocatorDecisionService:
                     stage="verification",
                     metadata={"candidate_id": candidate["candidate_id"]},
                 )
-                verification = await self.verify_candidate(page, candidate, event)
+                verification = (
+                    await self.browser_runtime.verify_locator(browser_session_id, candidate, event)
+                    if browser_session_id is not None
+                    else await self.browser_runtime.verify_page_locator(page, candidate, event)
+                )
                 await history.record(safe_url, candidate["locator"], bool(verification["verified"]), verification=True)
                 await emit(
                     "verification_completed",
@@ -345,11 +428,26 @@ class LocatorDecisionService:
                                 },
                             )
                     break
+                if require_jev:
+                    fallback_reason = "JEV_SELECTED_CANDIDATE_FAILED"
+                    await emit(
+                        "jev.selected_candidate_failed",
+                        "Jev-selected candidate failed browser verification",
+                        stage="verification",
+                        metadata={
+                            "decision_id": decision_id,
+                            "candidate_id": candidate["candidate_id"],
+                            "provider": "jev",
+                            "fallback_used": False,
+                            "verification": verification,
+                        },
+                    )
 
-        if selected is not None and page is not None and verified_candidate is None:
+        browser_verified = page is not None or browser_session_id is not None
+        if selected is not None and browser_verified and verified_candidate is None:
             selected = None
             selected_id = None
-        if selected is not None and page is None and engine == "Jev":
+        if selected is not None and not browser_verified and engine == "Jev":
             # Non-browser callers must verify later; keep the result explicitly pending.
             verification["verified"] = False
 
@@ -370,15 +468,24 @@ class LocatorDecisionService:
             duration=elapsed,
         )
         summary = {
-            "provider": "jev" if engine == "Jev" else "local-strategy",
+            "provider": "jev" if engine == "Jev" else "blocked" if require_jev else "local-strategy",
             "engine": engine,
             "model": decision.model if engine == "Jev" else None,
             "latency_ms": latency_ms if engine == "Jev" else None,
-            "confidence": decision.confidence if engine == "Jev" else None,
+            "confidence": decision.confidence if decision else None,
+            "attempted_provider": attempted_provider,
+            "attempted_model": attempted_model,
+            "attempted_choice": attempted_choice,
+            "minimum_confidence": minimum_confidence,
             "candidate_count": len(candidates),
             "candidate_id": selected_id,
             "selected_locator": selected.get("locator") if selected else None,
             "verified": bool(verification["verified"]),
+            "decision_id": decision_id,
+            "decision_type": "locator_candidate_selection",
+            "candidate_ids": [item["candidate_id"] for item in candidates],
+            "probabilities": decision.probabilities if decision and engine == "Jev" else {},
+            "fallback_used": not actual_jev,
             "fallback_reason": None if engine == "Jev" else fallback_reason,
         }
         return {
@@ -388,79 +495,3 @@ class LocatorDecisionService:
             "verification": verification,
             "trace": [event.model_dump(mode="json") for event in trace],
         }
-
-    @staticmethod
-    async def verify_candidate(page: Any, candidate: dict[str, Any], event: dict[str, Any]) -> dict[str, bool | None]:
-        locator = page
-        try:
-            for selector in event.get("frame_path") or []:
-                locator = locator.frame_locator(selector)
-            kind = candidate.get("kind")
-            value = str(candidate.get("value") or "")
-            if kind == "role":
-                locator = locator.get_by_role(value, name=candidate.get("name"), exact=candidate.get("exact", True))
-            elif kind == "test_id":
-                locator = locator.get_by_test_id(value)
-            elif kind == "label":
-                locator = locator.get_by_label(value, exact=candidate.get("exact", True))
-            elif kind == "placeholder":
-                locator = locator.get_by_placeholder(value, exact=candidate.get("exact", True))
-            elif kind == "text":
-                locator = locator.get_by_text(value, exact=candidate.get("exact", True))
-            elif kind == "id":
-                locator = locator.locator(f"[id={json.dumps(value)}]")
-            elif kind == "name":
-                locator = locator.locator(f"[name={json.dumps(value)}]")
-            else:
-                locator = locator.locator(value if kind != "xpath" or value.startswith("xpath=") else f"xpath={value}")
-            count = await locator.count()
-            target = locator.nth(candidate["nth"]) if candidate.get("nth") is not None else locator
-            visible = count > 0 and await target.is_visible()
-            interactive = str(event.get("action") or "") in {
-                "click",
-                "double_click",
-                "fill",
-                "select",
-                "check",
-                "uncheck",
-                "press",
-                "hover",
-            }
-            enabled = count > 0 and await target.is_enabled() if interactive else None
-            editable = count > 0 and await target.is_editable() if event.get("action") in {"fill", "press"} else None
-            clickable = None
-            if event.get("action") in {"click", "double_click"}:
-                clickable = bool(
-                    await target.evaluate("""el => {
-                      const tag = el.tagName.toLowerCase();
-                      const role = el.getAttribute('role');
-                      const interactive = (tag === 'a' && Boolean(el.getAttribute('href')))
-                        || ['button', 'input', 'textarea', 'select', 'summary'].includes(tag)
-                        || ['button', 'link', 'checkbox', 'radio', 'switch', 'menuitem'].includes(role);
-                      const rect = el.getBoundingClientRect();
-                      if (!interactive || rect.width <= 0 || rect.height <= 0) return false;
-                      const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
-                      if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
-                      const hit = document.elementFromPoint(x, y);
-                      return hit === el || el.contains(hit);
-                    }""")
-                )
-            unique = count == 1
-            verified = unique and visible and enabled is not False and editable is not False and clickable is not False
-            return {
-                "unique": unique,
-                "visible": visible,
-                "enabled": enabled,
-                "editable": editable,
-                "clickable": clickable,
-                "verified": verified,
-            }
-        except Exception:
-            return {
-                "unique": False,
-                "visible": False,
-                "enabled": False,
-                "editable": False,
-                "clickable": False,
-                "verified": False,
-            }

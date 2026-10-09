@@ -9,15 +9,37 @@ from types import SimpleNamespace
 
 import pytest
 from app.api.runs import open_run_service
-from app.api.tasks import task_runtime_service
+from app.api.tasks import task_command_service, task_execution_service, task_scheduler_service
 from app.persistence.models import TaskORM, TaskStepORM
 from app.repositories.task_repo import TaskRepository
-from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
+from app.services.task_code_generation_service import TaskCodeGenerationService
+from app.services.task_errors import TaskBlocked
+from app.services.task_runtime_service import TaskRuntimeService
 from app.services.task_workflows import build_plan, build_qa_goal_plan, parse_qa_goal
 from app.settings import settings
 from project_model.task_models import TaskStatus, TaskStepStatus, TaskType
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+async def test_task_creation_uses_runtime_loaded_ai_call_limit(client, monkeypatch):
+    from qa_core.ai.registry import AIProviderRegistry
+
+    monkeypatch.setattr(AIProviderRegistry, "_runtime_config", {"max_task_calls": "3"})
+    response = await client.post(
+        "/api/tasks",
+        json={
+            "type": "EXPLORE_PAGE",
+            "goal": "Explore the checkout page safely",
+            "inputs": {"url": "https://example.com/checkout"},
+            "max_ai_calls": 50,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["max_ai_calls"] == 3
 
 
 @pytest.mark.asyncio
@@ -36,28 +58,30 @@ async def test_agent_goal_child_run_preserves_browser_environment_and_worker_con
     async def open_service():
         yield RunService()
 
-    monkeypatch.setattr('app.api.runs.open_run_service', open_service)
+    monkeypatch.setattr("app.container.open_run_service", open_service)
     task = SimpleNamespace(
-        id='task-context',
-        project_id='project-context',
-        workspace_id='project-context',
-        owner_id='qa-engineer',
+        id="task-context",
+        project_id="project-context",
+        workspace_id="project-context",
+        owner_id="qa-engineer",
         type=TaskType.QA_GOAL.value,
         max_duration_seconds=60,
         inputs={
-            'browser': 'firefox',
-            'environment': {'QA_ENVIRONMENT': 'production'},
-            'region': 'EU',
-            'parallel_workers': 3,
+            "browser": "firefox",
+            "environment": {"QA_ENVIRONMENT": "production"},
+            "region": "EU",
+            "parallel_workers": 3,
         },
     )
 
     with pytest.raises(CapturedRun):
-        await TaskRuntimeService()._execute_pytest(task, ['tests/test_checkout.py::test_checkout'])
+        await TaskRuntimeService(
+            repository_scope=TaskRepositoryScopeFactory()
+        ).execution.test_execution._execute_pytest(task, ["tests/test_checkout.py::test_checkout"])
 
     assert len(captured) == 1
-    assert captured[0].browser == 'firefox'
-    assert captured[0].environment == {'QA_ENVIRONMENT': 'production', 'QA_REGION': 'EU'}
+    assert captured[0].browser == "firefox"
+    assert captured[0].environment == {"QA_ENVIRONMENT": "production", "QA_REGION": "EU"}
     assert captured[0].parallel_workers == 3
 
 
@@ -217,17 +241,17 @@ async def test_qa_goal_prefixed_repair_outputs_keep_tool_aliases(monkeypatch):
         captured["summary"] = outputs
         return {}
 
-    monkeypatch.setattr(task_runtime_service, "_load", load)
-    monkeypatch.setattr(task_runtime_service, "_apply_repair", capture_apply)
-    monkeypatch.setattr(task_runtime_service, "_summarize_goal", capture_summary)
+    monkeypatch.setattr(task_execution_service.execution_ports, "load_task", load)
+    monkeypatch.setattr(task_execution_service.failure_repair, "_apply_repair", capture_apply)
+    monkeypatch.setattr(task_execution_service.goal_service, "_summarize_goal", capture_summary)
 
-    await task_runtime_service._run_tool("task-1", "repair_apply", "source.apply_repair")
+    await task_execution_service._run_tool("task-1", "repair_apply", "source.apply_repair")
     assert captured["apply"]["collect"]["id"] == "failure-1"
     assert captured["apply"]["diagnose"]["repairable"] is True
     assert captured["apply"]["repair"]["file_path"] == "tests/test_shop.py"
     assert captured["apply"]["approval"]["approved"] is True
 
-    await task_runtime_service._run_tool("task-1", "goal_summary", "goal.summary")
+    await task_execution_service._run_tool("task-1", "goal_summary", "goal.summary")
     assert captured["summary"]["diagnose"]["repairable"] is True
     assert captured["summary"]["apply"]["written"] is True
     assert captured["summary"]["target_run"]["run_id"] == "run-1"
@@ -241,17 +265,17 @@ async def test_repair_regression_failure_cannot_be_summarized_as_verified(test_d
     async def no_evidence(*_args, **_kwargs):
         return {}
 
-    monkeypatch.setattr(task_runtime_service, "_evidence", no_evidence)
+    monkeypatch.setattr(task_execution_service.execution_ports, "evidence", no_evidence)
     outputs = {
         "target_run": {"run_id": "target-1", "status": "PASSED", "total": 1, "passed": 1, "failed": 0},
         "regression": {"run_id": "regression-1", "status": "FAILED", "total": 2, "passed": 1, "failed": 1},
     }
 
-    verification = await task_runtime_service._verify_tests(task, outputs)
+    verification = await task_execution_service._verify_tests(task, outputs)
     assert not verification["verified"]
     assert verification["run_ids"] == ["target-1", "regression-1"]
 
-    summary_result = await task_runtime_service._summarize_goal(task, outputs)
+    summary_result = await task_execution_service._summarize_goal(task, outputs)
     assert summary_result["summary"]["status"] == "COMPLETED_WITH_UNRESOLVED"
     assert not summary_result["verified"]
     assert summary_result["summary"]["tests"]["failed"] == 1
@@ -288,15 +312,15 @@ async def test_task_execution_budget_is_preserved_across_worker_resume(client, t
                 task.status = TaskStatus.FAILED.value
                 await session.commit()
 
-    monkeypatch.setattr(task_runtime_service, "_execute_dag", observe_deadline)
-    await task_runtime_service._execute_task(task_id)
+    monkeypatch.setattr(task_scheduler_service, "_execute_dag", observe_deadline)
+    await task_scheduler_service._execute_task(task_id)
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
         assert task is not None
         assert task.context["_execution_elapsed_seconds"] >= 7.02
         task.status = TaskStatus.PENDING.value
         await session.commit()
-    await task_runtime_service._execute_task(task_id)
+    await task_scheduler_service._execute_task(task_id)
 
     assert all(2.5 <= remaining <= 3.1 for remaining in remaining_budgets)
     async with test_db_session() as session:
@@ -319,10 +343,10 @@ async def test_pause_boundary_persists_execution_budget_before_resume(client, te
         task.status = TaskStatus.PAUSING.value
         task.context = {**task.context, "_execution_elapsed_seconds": 4.0}
         await session.commit()
-    monkeypatch.setattr(task_runtime_service, "_workspace_source_snapshot", lambda _workspace_id: {})
+    monkeypatch.setattr("app.services.task_scheduler_service.workspace_source_snapshot", lambda _workspace_id: {})
 
-    assert await task_runtime_service._pause_at_boundary(task_id, elapsed_seconds=6.0)
-    paused = await task_runtime_service.get(task_id)
+    assert await task_scheduler_service._pause_at_boundary(task_id, elapsed_seconds=6.0)
+    paused = await task_command_service.get(task_id)
     assert paused is not None and paused.status == TaskStatus.PAUSED
     assert paused.context["_execution_elapsed_seconds"] == 6.0
 
@@ -404,7 +428,7 @@ def test_goal_parser_keeps_ambiguous_project_goals_read_only_and_respects_case_r
 @pytest.mark.asyncio
 async def test_browser_verify_rejects_unmet_explicit_goal_criteria():
     with pytest.raises(TaskBlocked, match="did not satisfy"):
-        await task_runtime_service._browser_verify(
+        await task_execution_service._browser_verify(
             None,
             {
                 "inspect": {"url": "https://shop.example", "title": "Shop"},
@@ -432,7 +456,7 @@ async def test_browser_verify_rejects_unmet_explicit_goal_criteria():
 )
 def test_goal_generated_test_rejects_assertion_or_skip_bypasses(source):
     with pytest.raises(TaskBlocked):
-        task_runtime_service._validate_goal_generated_test(source, "tests/generated.py")
+        TaskCodeGenerationService._validate_goal_generated_test(source, "tests/generated.py")
 
 
 @pytest.mark.asyncio
@@ -631,10 +655,14 @@ async def test_paused_goal_rereads_studio_edits_and_refreshes_its_plan(client, t
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
     async with test_db_session() as session:
-        rows = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        rows = await repo.steps_for_task(task_id)
         coverage_step = next(row for row in rows if row.key == "coverage")
-        coverage_step.status = TaskStepStatus.COMPLETED.value
-        coverage_step.outputs = {"missing_criteria": ["stale finding"]}
+        await repo.update_step(
+            coverage_step.id,
+            status=TaskStepStatus.COMPLETED.value,
+            outputs={"missing_criteria": ["stale finding"]},
+        )
         await session.commit()
 
     paused = await client.post(f"/api/tasks/{task_id}/pause")
@@ -687,11 +715,15 @@ async def test_paused_typed_review_invalidates_stale_source_findings(client, tes
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
     async with test_db_session() as session:
-        rows = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        rows = await repo.steps_for_task(task_id)
         for row in rows:
             if row.key in {"inspect", "review"}:
-                row.status = TaskStepStatus.COMPLETED.value
-                row.outputs = {"source_digest": "before-studio-edit"}
+                await repo.update_step(
+                    row.id,
+                    status=TaskStepStatus.COMPLETED.value,
+                    outputs={"source_digest": "before-studio-edit"},
+                )
         await session.commit()
 
     paused = await client.post(f"/api/tasks/{task_id}/pause")
@@ -730,10 +762,14 @@ async def test_paused_typed_create_invalidates_generated_output_after_source_cha
     paused = await client.post(f"/api/tasks/{task_id}/pause")
     assert paused.status_code == 200 and paused.json()["status"] == "PAUSED"
     async with test_db_session() as session:
-        rows = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        rows = await repo.steps_for_task(task_id)
         generate = next(row for row in rows if row.key == "generate")
-        generate.status = TaskStepStatus.COMPLETED.value
-        generate.outputs = {"target_file": "tests/test_target.py", "code": "old generated code"}
+        await repo.update_step(
+            generate.id,
+            status=TaskStepStatus.COMPLETED.value,
+            outputs={"target_file": "tests/test_target.py", "code": "old generated code"},
+        )
         await session.commit()
 
     edited_file = Path(settings.workspace_storage_dir) / project_id / "tests" / "test_target.py"
@@ -779,14 +815,14 @@ async def test_cancel_during_resume_cannot_restart_task(client, monkeypatch):
 
     compile_started = asyncio.Event()
     continue_compile = asyncio.Event()
-    original_compile = task_runtime_service._compile_goal
+    original_compile = task_command_service._compile_goal
 
     async def blocked_compile(data):
         compile_started.set()
         await continue_compile.wait()
         return await original_compile(data)
 
-    monkeypatch.setattr(task_runtime_service, "_compile_goal", blocked_compile)
+    monkeypatch.setattr(task_command_service, "_compile_goal", blocked_compile)
     resuming = asyncio.create_task(client.post(f"/api/tasks/{task_id}/resume"))
     await asyncio.wait_for(compile_started.wait(), timeout=5)
     cancelled = await client.post(f"/api/tasks/{task_id}/cancel")
@@ -863,9 +899,13 @@ async def test_task_replan_retries_only_failed_read_only_step(client, test_db_se
         task = await session.get(TaskORM, task_id)
         assert task is not None
         task.status = TaskStatus.BLOCKED.value
-        rows = await TaskRepository(session).steps_for_task(task_id)
-        rows[0].status = TaskStepStatus.FAILED.value
-        rows[0].error = "Temporary navigation error"
+        repo = TaskRepository(session)
+        rows = await repo.steps_for_task(task_id)
+        await repo.update_step(
+            rows[0].id,
+            status=TaskStepStatus.FAILED.value,
+            error="Temporary navigation error",
+        )
         await session.commit()
 
     replanned = await client.post(
@@ -892,13 +932,14 @@ async def test_restart_recovery_blocks_active_steps_without_replaying_them(clien
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
         task.status = TaskStatus.RUNNING.value
-        steps = await TaskRepository(session).steps_for_task(task_id)
-        steps[0].status = TaskStepStatus.RUNNING.value
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
+        await repo.update_step(steps[0].id, status=TaskStepStatus.RUNNING.value)
         await session.commit()
 
-    recovered = await task_runtime_service.recover_interrupted()
+    recovered = await task_scheduler_service.recover_interrupted()
     assert task_id in recovered
-    detail = await task_runtime_service.get(task_id)
+    detail = await task_command_service.get(task_id)
     assert detail is not None and detail.status == TaskStatus.BLOCKED
     assert detail.steps[0].status == TaskStepStatus.FAILED
     assert "API restarted" in (detail.steps[0].error or "")
@@ -915,15 +956,19 @@ async def test_replan_refuses_to_replay_completed_source_writes(client, test_db_
         task = await session.get(TaskORM, task_id)
         owner_id = task.owner_id
         task.status = TaskStatus.BLOCKED.value
-        steps = await TaskRepository(session).steps_for_task(task_id)
-        steps[0].key = "write"
-        steps[0].tool = "source.write_generated"
-        steps[0].status = TaskStepStatus.COMPLETED.value
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
+        await repo.update_step(
+            steps[0].id,
+            key="write",
+            tool="source.write_generated",
+            status=TaskStepStatus.COMPLETED.value,
+        )
         await session.commit()
 
     with pytest.raises(ValueError, match="already changed workspace source"):
-        await task_runtime_service.replan(task_id, owner_id, "retry")
-    detail = await task_runtime_service.get(task_id)
+        await task_command_service.replan(task_id, owner_id, "retry")
+    detail = await task_command_service.get(task_id)
     assert detail is not None and detail.status == TaskStatus.BLOCKED
 
 
@@ -942,7 +987,8 @@ async def test_replan_retries_failed_step_and_preserves_completed_steps(client, 
         assert task is not None
         owner_id = task.owner_id
         task.status = TaskStatus.BLOCKED.value
-        steps = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
         failed = TaskStepORM(
             id=uuid4().hex,
             task_id=task_id,
@@ -954,17 +1000,20 @@ async def test_replan_retries_failed_step_and_preserves_completed_steps(client, 
         )
         session.add(failed)
         await session.flush()
-        steps = await TaskRepository(session).steps_for_task(task_id)
+        steps = await repo.steps_for_task(task_id)
         completed, failed = steps[:2]
-        completed.status = TaskStepStatus.COMPLETED.value
-        failed.status = TaskStepStatus.FAILED.value
-        failed.retry_count = 2
-        failed.duration_ms = 875
+        await repo.update_step(completed.id, status=TaskStepStatus.COMPLETED.value)
+        await repo.update_step(
+            failed.id,
+            status=TaskStepStatus.FAILED.value,
+            retry_count=2,
+            duration_ms=875,
+        )
         task.current_step_id = failed.id
         task.failure_reason = "AI did not return executable source code."
         await session.commit()
 
-    detail = await task_runtime_service.replan(task_id, owner_id, "Retry the failed step with the same evidence.")
+    detail = await task_command_service.replan(task_id, owner_id, "Retry the failed step with the same evidence.")
     assert detail is not None and detail.status == TaskStatus.REPLANNING
     assert detail.retry_count == 1 and detail.replan_count == 1
     assert detail.steps[0].status == TaskStepStatus.COMPLETED
@@ -985,14 +1034,15 @@ async def test_concurrent_replans_only_claim_a_blocked_task_once(client, test_db
         task = await session.get(TaskORM, task_id)
         assert task is not None
         task.status = TaskStatus.BLOCKED.value
-        steps = await TaskRepository(session).steps_for_task(task_id)
-        steps[0].status = TaskStepStatus.FAILED.value
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
+        await repo.update_step(steps[0].id, status=TaskStepStatus.FAILED.value)
         await session.commit()
         owner_id = task.owner_id
 
     results = await asyncio.gather(
-        task_runtime_service.replan(task_id, owner_id, "Retry A"),
-        task_runtime_service.replan(task_id, owner_id, "Retry B"),
+        task_command_service.replan(task_id, owner_id, "Retry A"),
+        task_command_service.replan(task_id, owner_id, "Retry B"),
     )
     assert sum(result is not None for result in results) == 1
     async with test_db_session() as session:
@@ -1005,7 +1055,7 @@ async def test_concurrent_replans_only_claim_a_blocked_task_once(client, test_db
 
 @pytest.mark.asyncio
 async def test_cancel_during_approval_request_stays_cancelled(client, monkeypatch):
-    from app.services.task_runtime_service import ApprovalRequired
+    from app.services.task_errors import ApprovalRequired
 
     project = await client.post("/api/projects", json={"name": "Cancel Approval Race", "bootstrap_workspace": True})
     assert project.status_code == 201, project.text
@@ -1022,17 +1072,17 @@ async def test_cancel_during_approval_request_stays_cancelled(client, monkeypatc
         },
     )
     assert created.status_code == 201, created.text
-    task, steps = await task_runtime_service._load(created.json()["id"])
+    task, steps = await task_execution_service._load(created.json()["id"])
     assert task is not None
     approval = next(step for step in steps if step.key == "approval")
 
     async def cancel_before_wait(_task_id, _step, *, deadline=None):
-        await task_runtime_service.cancel(task.id, task.owner_id)
+        await task_command_service.cancel(task.id, task.owner_id)
         raise ApprovalRequired()
 
-    monkeypatch.setattr(task_runtime_service, "_run_step_tool", cancel_before_wait)
-    result = await task_runtime_service._execute_step(task, approval)
-    detail = await task_runtime_service.get(task.id)
+    monkeypatch.setattr(task_execution_service, "_run_step_tool", cancel_before_wait)
+    result = await task_execution_service._execute_step(task, approval)
+    detail = await task_command_service.get(task.id)
     assert isinstance(result, ApprovalRequired)
     assert detail is not None and detail.status == TaskStatus.CANCELLED
     assert next(step for step in detail.steps if step.id == approval.id).status == TaskStepStatus.CANCELLED
@@ -1061,11 +1111,12 @@ async def test_task_approval_resumes_only_an_owned_waiting_task(client, test_db_
 
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
-        rows = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        rows = await repo.steps_for_task(task_id)
         approval = next(step for step in rows if step.key == "approval")
         task.status = TaskStatus.WAITING.value
         task.current_step_id = approval.id
-        approval.status = TaskStepStatus.WAITING_FOR_APPROVAL.value
+        await repo.update_step(approval.id, status=TaskStepStatus.WAITING_FOR_APPROVAL.value)
         await session.commit()
 
     response = await client.post(f"/api/tasks/{task_id}/approval", json={"approved": True, "comment": "Reviewed"})
@@ -1108,7 +1159,7 @@ async def test_cancelling_active_task_stops_its_child_pytest(client):
     test_path.parent.mkdir(parents=True, exist_ok=True)
     test_path.write_text("import time\n\ndef test_wait_for_cancellation():\n    time.sleep(30)\n", encoding="utf-8")
 
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -1124,7 +1175,7 @@ async def test_cancelling_active_task_stops_its_child_pytest(client):
         task_id = created.json()["id"]
         for _ in range(100):
             await asyncio.sleep(0.1)
-            child_run_id = task_runtime_service._child_runs.get(task_id)
+            child_run_id = task_execution_service._child_runs.get(task_id)
             if child_run_id:
                 async with open_run_service() as service:
                     child = await service.get_run(child_run_id)
@@ -1142,14 +1193,14 @@ async def test_cancelling_active_task_stops_its_child_pytest(client):
             child = await service.get_run(child_run_id)
         assert child is not None and child.status.value == "CANCELLED"
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
 
 
 def test_generated_code_policy_rejects_python_internal_access():
-    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+    from app.services.task_errors import TaskBlocked
 
     with pytest.raises(TaskBlocked, match="Python internals"):
-        TaskRuntimeService._validate_python_test(
+        TaskCodeGenerationService._validate_python_test(
             "def test_bad():\n    __builtins__['__import__']('os').system('whoami')\n",
             "tests/test_bad.py",
         )
@@ -1159,10 +1210,11 @@ def test_generated_code_policy_rejects_python_internal_access():
 async def test_ai_repair_cannot_change_existing_assertions(monkeypatch):
     from types import SimpleNamespace
 
-    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+    from app.services.task_errors import TaskBlocked
+    from app.services.task_runtime_service import TaskRuntimeService
 
-    service = TaskRuntimeService()
-    task = SimpleNamespace(inputs={}, goal="Repair the missing argument")
+    service = TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory())
+    task = SimpleNamespace(id="task-1", inputs={}, goal="Repair the missing argument")
     proposal = SimpleNamespace(
         suggested_code="def test_total():\n    result = calculate_total(20, 2)\n    assert result == 99\n"
     )
@@ -1170,9 +1222,9 @@ async def test_ai_repair_cannot_change_existing_assertions(monkeypatch):
     async def code_ai(*_args):
         return proposal
 
-    monkeypatch.setattr(service, "_call_code_ai", code_ai)
+    monkeypatch.setattr(service.execution.execution_ports, "call_code_ai", code_ai)
     with pytest.raises(TaskBlocked, match="changed an existing assertion"):
-        await service._prepare_repair(
+        await service.execution._prepare_repair(
             task,
             {
                 "collect": {
@@ -1192,17 +1244,18 @@ async def test_ai_repair_cannot_change_existing_assertions(monkeypatch):
 async def test_literal_false_assertion_blocks_before_ai_call(monkeypatch):
     from types import SimpleNamespace
 
-    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+    from app.services.task_errors import TaskBlocked
+    from app.services.task_runtime_service import TaskRuntimeService
 
-    service = TaskRuntimeService()
+    service = TaskRuntimeService(repository_scope=TaskRepositoryScopeFactory())
     task = SimpleNamespace(inputs={}, goal="Repair the failure")
 
     async def code_ai(*_args):
         pytest.fail("A contradictory literal assertion requires an explicit intended expectation")
 
-    monkeypatch.setattr(service, "_call_code_ai", code_ai)
+    monkeypatch.setattr(service.execution.execution_ports, "call_code_ai", code_ai)
     with pytest.raises(TaskBlocked, match="deterministically false literal assertion"):
-        await service._prepare_repair(
+        await service.execution._prepare_repair(
             task,
             {
                 "collect": {"test_nodeid": "tests/test_total.py::test_total"},
@@ -1212,22 +1265,22 @@ async def test_literal_false_assertion_blocks_before_ai_call(monkeypatch):
 
 
 def test_generated_code_policy_allows_url_parsing_but_blocks_network_imports():
-    from app.services.task_runtime_service import TaskBlocked, TaskRuntimeService
+    from app.services.task_errors import TaskBlocked
 
-    TaskRuntimeService._validate_python_test(
+    TaskCodeGenerationService._validate_python_test(
         "from urllib.parse import unquote, urlsplit\n\n"
         "def test_proxy_url():\n    assert urlsplit(unquote('https%3A%2F%2Fexample.test')).scheme == 'https'\n",
         "tests/test_proxy_url.py",
     )
 
     with pytest.raises(TaskBlocked, match="process/network/system-control"):
-        TaskRuntimeService._validate_python_test(
+        TaskCodeGenerationService._validate_python_test(
             "from urllib.request import urlopen\n\ndef test_bad():\n    urlopen('https://example.test')\n",
             "tests/test_bad.py",
         )
 
     with pytest.raises(TaskBlocked, match="approved browser environment settings"):
-        TaskRuntimeService._validate_python_test(
+        TaskCodeGenerationService._validate_python_test(
             "import os\n\ndef test_bad():\n    os.getenv('AWS_SECRET_ACCESS_KEY')\n",
             "tests/test_bad.py",
         )
@@ -1242,7 +1295,7 @@ async def test_regression_task_executes_a_real_local_pytest_run(client):
     test_path.parent.mkdir(parents=True, exist_ok=True)
     test_path.write_text("def test_real_pytest_assertion():\n    assert 6 * 7 == 42\n", encoding="utf-8")
 
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -1275,7 +1328,7 @@ async def test_regression_task_executes_a_real_local_pytest_run(client):
             child_run = await service.get_run(executed["outputs"]["run_id"])
         assert child_run is not None and child_run.environment["QA_REGION"] == "local-test"
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
 
 
 @pytest.mark.asyncio
@@ -1286,7 +1339,7 @@ async def test_regression_task_executes_a_real_local_pytest_run(client):
 async def test_browser_agent_observe_jev_execute_and_reobserve_on_local_page(
     client, monkeypatch, jev_available, scenario
 ):
-    from app.api.tasks import task_runtime_service
+    from app.api.tasks import task_scheduler_service
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse
     from qa_core.ai.registry import AIProviderRegistry
@@ -1422,8 +1475,8 @@ async def test_browser_agent_observe_jev_execute_and_reobserve_on_local_page(
 
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda *_args, **_kwargs: FixtureAIProvider())
     decision_service = FixtureDecisionService()
-    monkeypatch.setattr("app.services.task_runtime_service.DecisionService", lambda: decision_service)
-    await task_runtime_service.start()
+    monkeypatch.setattr("app.services.task_decision_service.DecisionService", lambda **_kwargs: decision_service)
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -1486,7 +1539,7 @@ async def test_browser_agent_observe_jev_execute_and_reobserve_on_local_page(
         assert downloaded.status_code == 200
         assert downloaded.content.startswith(b"\x89PNG\r\n\x1a\n")
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
         server.close()
         await server.wait_closed()
 
@@ -1497,7 +1550,7 @@ async def test_browser_agent_completes_second_ecommerce_journey_on_demo_shop(cli
     from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
     from threading import Thread
 
-    from app.api.tasks import task_runtime_service
+    from app.api.tasks import task_scheduler_service
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse
     from qa_core.ai.registry import AIProviderRegistry
@@ -1655,8 +1708,10 @@ async def test_browser_agent_completes_second_ecommerce_journey_on_demo_shop(cli
             )
 
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda *_args, **_kwargs: DemoShopAIProvider())
-    monkeypatch.setattr("app.services.task_runtime_service.DecisionService", lambda: DemoShopDecisionService())
-    await task_runtime_service.start()
+    monkeypatch.setattr(
+        "app.services.task_decision_service.DecisionService", lambda **_kwargs: DemoShopDecisionService()
+    )
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -1702,7 +1757,7 @@ async def test_browser_agent_completes_second_ecommerce_journey_on_demo_shop(cli
         assert all(item["ai_provider"] == "test-provider" for item in result["decision_samples"])
         assert result["actions"][-1]["cart_verified"] is True
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
@@ -1713,8 +1768,8 @@ async def test_browser_agent_manual_takeover_resumes_same_recorder_session(clien
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from threading import Thread
 
-    from app.api.tasks import task_runtime_service
-    from app.services.recorder_service import recorder_service
+    from app.api.tasks import task_scheduler_service
+    from app.container import recorder_service
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse
     from qa_core.ai.registry import AIProviderRegistry
@@ -1807,8 +1862,10 @@ async def test_browser_agent_manual_takeover_resumes_same_recorder_session(clien
             )
 
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda *_args, **_kwargs: TakeoverAIProvider())
-    monkeypatch.setattr("app.services.task_runtime_service.DecisionService", lambda: TakeoverDecisionService())
-    await task_runtime_service.start()
+    monkeypatch.setattr(
+        "app.services.task_decision_service.DecisionService", lambda **_kwargs: TakeoverDecisionService()
+    )
+    await task_scheduler_service.start()
     try:
         project_response = await client.post("/api/projects", json={"name": "Browser Takeover Test"})
         assert project_response.status_code == 201, project_response.text
@@ -1846,11 +1903,12 @@ async def test_browser_agent_manual_takeover_resumes_same_recorder_session(clien
 
         async with async_session_factory() as db_session:
             task = await db_session.get(TaskORM, task_id)
-            owner_id = task.owner_id if task else None
+        owner_id = task.owner_id if task else None
         assert owner_id
         live_session = await recorder_service.get(session_id, owner_id)
-        assert live_session is not None and live_session.page.url.endswith("/continue")
-        await live_session.page.goto(f"{url}manual", wait_until="domcontentloaded")
+        assert live_session is not None and live_session.runtime_session.current_url.endswith("/continue")
+        page = await recorder_service.browser_runtime.get_page(live_session.browser_session_id)
+        await page.goto(f"{url}manual", wait_until="domcontentloaded")
         resumed = await client.post(f"/api/tasks/{task_id}/resume")
         assert resumed.status_code == 200, resumed.text
         for _ in range(100):
@@ -1868,7 +1926,7 @@ async def test_browser_agent_manual_takeover_resumes_same_recorder_session(clien
         assert any(event["type"] == "browser.human_takeover" for event in body["events"])
         assert result["recorder_session_id"] == session_id
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
         if session_id:
             await client.delete(f"/api/recorder/sessions/{session_id}")
         server.shutdown()
@@ -1923,7 +1981,7 @@ async def test_create_test_runs_browser_decision_approval_and_generated_pytest(c
             "description": "Verify details content",
         },
     ]
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -1976,7 +2034,7 @@ async def test_create_test_runs_browser_decision_approval_and_generated_pytest(c
         assert binding.status_code == 200 and binding.json()["nodeid"] == run_step["outputs"]["nodeids"][0]
         assert any(event["type"] == "decision.created" for event in body["events"])
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
         server.close()
         await server.wait_closed()
 
@@ -2014,7 +2072,7 @@ async def test_real_failure_record_repair_approval_and_targeted_rerun(client):
     assert failures.status_code == 200, failures.text
     failure = next(item for item in failures.json() if item["run_id"] == run_id)
 
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -2063,7 +2121,7 @@ async def test_real_failure_record_repair_approval_and_targeted_rerun(client):
         assert verification_run["origin_failure_id"] == failure["id"]
         assert body["verification"]["verified"] is True
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
 
 
 @pytest.mark.asyncio
@@ -2074,7 +2132,7 @@ async def test_review_task_uses_real_source_and_persists_findings(client):
     test_path = Path(settings.workspace_storage_dir) / project_id / "tests" / "test_review_e2e.py"
     test_path.write_text("def test_review_has_an_assertion():\n    assert True\n", encoding="utf-8")
 
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -2099,7 +2157,7 @@ async def test_review_task_uses_real_source_and_persists_findings(client):
         assert report["outputs"]["finding_count"] >= 1
         assert any(item["type"] == "SourceCode" for item in body["evidence"])
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
 
 
 @pytest.mark.asyncio
@@ -2111,7 +2169,7 @@ async def test_optimize_task_requires_approval_and_runs_the_proposed_refactor(cl
     test_path.write_text("def test_total():\n    assert (1 + 1) == 2\n", encoding="utf-8")
     proposal = "def test_total():\n    total = sum([1, 1])\n    assert total == 2\n"
 
-    await task_runtime_service.start()
+    await task_scheduler_service.start()
     try:
         created = await client.post(
             "/api/tasks",
@@ -2150,12 +2208,12 @@ async def test_optimize_task_requires_approval_and_runs_the_proposed_refactor(cl
         assert "total = sum([1, 1])" in test_path.read_text(encoding="utf-8")
         assert body["verification"]["verified"] is True
     finally:
-        await task_runtime_service.stop()
+        await task_scheduler_service.stop()
 
 
 @pytest.mark.asyncio
 async def test_repair_approval_uses_repair_proposal_when_generation_output_exists(client, test_db_session):
-    from app.services.task_runtime_service import ApprovalRequired
+    from app.services.task_errors import ApprovalRequired
 
     project = (
         await client.post("/api/projects", json={"name": "Repair Approval Branch", "bootstrap_workspace": True})
@@ -2175,10 +2233,11 @@ async def test_repair_approval_uses_repair_proposal_when_generation_output_exist
     task_id = created.json()["id"]
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
-        steps = await TaskRepository(session).steps_for_task(task_id)
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
         assert task is not None
         approval = next(step for step in steps if step.key == "approval")
-        approval.key = "repair_approval"
+        await repo.update_step(approval.id, key="repair_approval")
         task.current_step_id = approval.id
         task.status = TaskStatus.RUNNING.value
         await session.commit()
@@ -2190,8 +2249,8 @@ async def test_repair_approval_uses_repair_proposal_when_generation_output_exist
         "repair": {"target_file": "tests/repaired.py", "suggested_code": "def test_repaired(): pass\n"},
     }
     with pytest.raises(ApprovalRequired):
-        await task_runtime_service._request_approval(task, outputs)
-    detail = await task_runtime_service.get(task_id)
+        await task_execution_service._request_approval(task, outputs)
+    detail = await task_command_service.get(task_id)
     assert detail is not None
     assert detail.context["pending_change_summary"]["file_path"] == "tests/repaired.py"
 
@@ -2199,7 +2258,7 @@ async def test_repair_approval_uses_repair_proposal_when_generation_output_exist
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["repair", "refactor", "generate"])
 async def test_approval_preserves_source_modified_while_waiting(client, test_db_session, kind):
-    from app.services.task_runtime_service import ApprovalRequired, TaskBlocked
+    from app.services.task_errors import ApprovalRequired, TaskBlocked
     from app.services.workspace_service import WorkspaceService
 
     project = (
@@ -2230,10 +2289,10 @@ async def test_approval_preserves_source_modified_while_waiting(client, test_db_
         change["old_code"] = original
     outputs = {kind: change, "approval": {"approved": True}}
     with pytest.raises(ApprovalRequired):
-        await task_runtime_service._request_approval(task, outputs)
+        await task_execution_service._request_approval(task, outputs)
     user_edit = "def test_user_edit():\n    assert True\n"
     await source.write_file(workspace_id, path, user_edit)
-    apply = task_runtime_service._apply_repair if kind == "repair" else task_runtime_service._write_generated
+    apply = task_execution_service._apply_repair if kind == "repair" else task_execution_service._write_generated
     with pytest.raises(TaskBlocked, match="Existing edits were preserved"):
         await apply(task, outputs)
     assert await source.read_file(workspace_id, path) == user_edit
@@ -2241,7 +2300,7 @@ async def test_approval_preserves_source_modified_while_waiting(client, test_db_
 
 @pytest.mark.asyncio
 async def test_approval_diff_exposes_tail_and_keeps_complete_artifact(client, test_db_session):
-    from app.services.task_runtime_service import ApprovalRequired
+    from app.services.task_errors import ApprovalRequired
     from app.services.workspace_service import WorkspaceService
 
     project = (await client.post("/api/projects", json={"name": "Diff tail", "bootstrap_workspace": True})).json()
@@ -2269,8 +2328,8 @@ async def test_approval_diff_exposes_tail_and_keeps_complete_artifact(client, te
         "approval": {"approved": True},
     }
     with pytest.raises(ApprovalRequired):
-        await task_runtime_service._request_approval(task, outputs)
-    detail = await task_runtime_service.get(task.id)
+        await task_execution_service._request_approval(task, outputs)
+    detail = await task_command_service.get(task.id)
     summary = detail.context["pending_change_summary"]
     assert summary["preview_truncated"] is True
     assert summary["preview"].startswith("--- a/")
@@ -2278,5 +2337,5 @@ async def test_approval_diff_exposes_tail_and_keeps_complete_artifact(client, te
     response = await client.get(f"/api/artifacts/{artifact.artifact_id}/download")
     assert response.status_code == 200
     assert "-    assert 1 == 1" in response.text and "+    assert 2 == 2" in response.text
-    await task_runtime_service._write_generated(task, outputs)
+    await task_execution_service._write_generated(task, outputs)
     assert await WorkspaceService().read_file(wid, path) == updated

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import urllib.parse
 import urllib.request
 from typing import Any, Protocol, runtime_checkable
@@ -228,9 +227,9 @@ class TestRailAdapter:
         api_key: str | None = None,
         timeout_seconds: float = 10.0,
     ) -> None:
-        self.base_url = (base_url or os.environ.get("TESTRAIL_BASE_URL", "")).rstrip("/")
-        self.email = email or os.environ.get("TESTRAIL_EMAIL", "")
-        self.api_key = api_key or os.environ.get("TESTRAIL_API_KEY", "")
+        self.base_url = (base_url or "").rstrip("/")
+        self.email = email or ""
+        self.api_key = api_key or ""
         self.timeout = timeout_seconds
 
     def _get_headers(self) -> dict[str, str]:

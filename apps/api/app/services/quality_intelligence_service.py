@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from project_model.models import (
+    FlakyClassification,
     ImpactAnalysisResult,
     QualityCoverageSummary,
     QualityRiskItem,
@@ -130,13 +131,17 @@ class QualityIntelligenceService:
     async def calculate_risk_matrix(self, project_id: str) -> QualityRiskMatrix:
         test_cases = await self.test_case_repo.list_by_project(project_id)
         failures = await self.test_run_repo.list_failures(limit=20)
-        flaky_items = await self.history_repo.list_flaky_tests(project_id=project_id)
+        history_items = await self.history_repo.list_flaky_tests(project_id=project_id)
+        flaky_items = [
+            item for item in history_items if item.flaky_score.classification == FlakyClassification.LIKELY_FLAKY
+        ]
+        persistent_failures = [
+            item for item in history_items if item.flaky_score.classification == FlakyClassification.PERSISTENT_FAILURE
+        ]
 
         risks: list[QualityRiskItem] = []
         unautomated_p0 = 0
-        high_risk_count = 0
-
-        # 1. Unautomated P0 / P1 Critical Tests
+        # 1. Unautomated P0 Critical Tests
         for tc in test_cases:
             if tc.priority == "P0" and tc.automation_status != "AUTOMATED":
                 unautomated_p0 += 1
@@ -158,8 +163,6 @@ class QualityIntelligenceService:
         # 2. Flaky Tests Risk
         for flaky in flaky_items:
             level = QualityRiskLevel.HIGH if flaky.flaky_score.score >= 0.5 else QualityRiskLevel.MEDIUM
-            if level in (QualityRiskLevel.HIGH, QualityRiskLevel.CRITICAL):
-                high_risk_count += 1
             risks.append(
                 QualityRiskItem(
                     id=f"risk_flaky_{flaky.nodeid.replace('::', '_')}",
@@ -175,6 +178,24 @@ class QualityIntelligenceService:
                     recommended_actions=[
                         "Inspect locator stability and async wait conditions",
                         "Quarantine the test or review a locator repair proposal (applying it stays manual)",
+                    ],
+                )
+            )
+
+        for failure in persistent_failures:
+            risks.append(
+                QualityRiskItem(
+                    id=f"risk_persistent_{failure.nodeid.replace('::', '_')}",
+                    area=f"Persistent Failure: {failure.test_name}",
+                    risk_level=QualityRiskLevel.HIGH,
+                    score=100.0,
+                    reasons=[
+                        f"The test failed in all {failure.flaky_score.sample_count} observed runs",
+                    ],
+                    impacted_nodeids=[failure.nodeid],
+                    recommended_actions=[
+                        "Inspect the latest failure evidence and fix the underlying defect",
+                        "Rerun the test after the fix",
                     ],
                 )
             )
@@ -201,12 +222,17 @@ class QualityIntelligenceService:
                 )
 
         # Compute overall quality score
-        penalty = (unautomated_p0 * 15.0) + (len(flaky_items) * 8.0) + (len(failures) * 5.0)
+        penalty = (
+            (unautomated_p0 * 15.0)
+            + (len(flaky_items) * 8.0)
+            + (len(persistent_failures) * 10.0)
+            + (len(failures) * 5.0)
+        )
         overall_score = max(0.0, min(100.0, round(100.0 - penalty, 1)))
 
         if unautomated_p0 >= 3:
             overall_level = QualityRiskLevel.CRITICAL
-        elif unautomated_p0 > 0:
+        elif unautomated_p0 > 0 or persistent_failures:
             overall_level = QualityRiskLevel.HIGH
         elif overall_score >= 85.0:
             overall_level = QualityRiskLevel.LOW

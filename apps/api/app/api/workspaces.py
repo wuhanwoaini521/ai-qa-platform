@@ -1,6 +1,3 @@
-import re
-from pathlib import PurePosixPath
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from project_model.models import (
     Breakpoint,
@@ -14,12 +11,9 @@ from project_model.models import (
     ValidationReport,
     Workspace,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.persistence.models import BreakpointORM, WorkspaceORM
-from app.repositories.project_repo import ProjectRepository
+from app.api.workspace_dependencies import get_workspace_catalog_service
+from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import SecurityException, WorkspaceService
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
@@ -28,25 +22,9 @@ router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 @router.get("", response_model=list[Workspace])
 async def list_workspaces(
     project_id: str = Query(...),
-    session: AsyncSession = Depends(get_db),
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
 ) -> list[Workspace]:
-    result = await session.execute(
-        select(WorkspaceORM).where(WorkspaceORM.project_id == project_id).order_by(WorkspaceORM.created_at.desc())
-    )
-    # The existing workspace/file/run APIs use project_id as their workspace key. Return that
-    # canonical key instead of exposing the unused internal WorkspaceORM row ID.
-    return [
-        Workspace(
-            id=row.project_id,
-            project_id=row.project_id,
-            path=row.path,
-            branch=row.branch,
-            status=row.status,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
-        for row in result.scalars().all()
-    ]
+    return await catalog.list_workspaces(project_id)
 
 
 def get_workspace_service() -> WorkspaceService:
@@ -67,71 +45,31 @@ async def get_workspace_files(
 @router.get("/{workspace_id}/breakpoints", response_model=list[Breakpoint])
 async def list_breakpoints(
     workspace_id: str,
-    session: AsyncSession = Depends(get_db),
-) -> list[BreakpointORM]:
-    result = await session.execute(
-        select(BreakpointORM)
-        .where(BreakpointORM.workspace_id == workspace_id)
-        .order_by(BreakpointORM.file_path, BreakpointORM.line_number, BreakpointORM.source)
-    )
-    return list(result.scalars().all())
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
+) -> list[Breakpoint]:
+    return await catalog.list_breakpoints(workspace_id)
 
 
 @router.put("/{workspace_id}/breakpoints", response_model=Breakpoint)
 async def upsert_breakpoint(
     workspace_id: str,
     payload: BreakpointUpsert,
-    session: AsyncSession = Depends(get_db),
-) -> BreakpointORM:
-    if payload.source != "manual":
-        raise HTTPException(status_code=400, detail="Only auto failure analysis can create auto_failure breakpoints")
-    file_path = payload.file_path.replace("\\", "/")
-    path = PurePosixPath(file_path)
-    if path.is_absolute() or re.match(r"^[A-Za-z]:", file_path) or any(part in ("", ".", "..") for part in path.parts):
-        raise HTTPException(status_code=400, detail="Breakpoint file_path must be a safe workspace-relative path")
-
-    result = await session.execute(
-        select(BreakpointORM).where(
-            BreakpointORM.workspace_id == workspace_id,
-            BreakpointORM.file_path == path.as_posix(),
-            BreakpointORM.line_number == payload.line_number,
-            BreakpointORM.source == "manual",
-        )
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
-        row = BreakpointORM(
-            workspace_id=workspace_id,
-            file_path=path.as_posix(),
-            line_number=payload.line_number,
-            enabled=payload.enabled,
-            source="manual",
-        )
-        session.add(row)
-    else:
-        row.enabled = payload.enabled
-    await session.commit()
-    await session.refresh(row)
-    return row
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
+) -> Breakpoint:
+    try:
+        return await catalog.upsert_manual_breakpoint(workspace_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.delete("/{workspace_id}/breakpoints/{breakpoint_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_breakpoint(
     workspace_id: str,
     breakpoint_id: str,
-    session: AsyncSession = Depends(get_db),
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
 ) -> Response:
-    result = await session.execute(
-        select(BreakpointORM).where(
-            BreakpointORM.workspace_id == workspace_id,
-            BreakpointORM.id == breakpoint_id,
-        )
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
+    if not await catalog.delete_breakpoint(workspace_id, breakpoint_id):
         raise HTTPException(status_code=404, detail="Breakpoint not found")
-    await session.delete(row)
-    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -263,12 +201,10 @@ async def collect_workspace_tests(
 @router.post("/{workspace_id}/bootstrap")
 async def bootstrap_workspace(
     workspace_id: str,
-    session: AsyncSession = Depends(get_db),
+    catalog: WorkspaceCatalogService = Depends(get_workspace_catalog_service),
     service: WorkspaceService = Depends(get_workspace_service),
 ):
-    proj_repo = ProjectRepository(session)
-    project = await proj_repo.get_by_id(workspace_id)
-    proj_name = project.name if project else "Automation Project"
+    proj_name = await catalog.project_name_for_workspace(workspace_id)
 
     try:
         await service.initialize_workspace(workspace_id, proj_name)

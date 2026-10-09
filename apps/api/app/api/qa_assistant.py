@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from project_model.models import QAChatRequest, QAChatResponse
 
+from app.container import get_qa_assistant_service
 from app.event_stream import event_frame
 from app.services.qa_assistant_service import QAAssistantService
 
 router = APIRouter(prefix="/qa-assistant", tags=["QA Assistant Sidecar"])
 
 
-def get_assistant_service() -> QAAssistantService:
-    return QAAssistantService()
+get_assistant_service = get_qa_assistant_service
 
 
 @router.post("/chat", response_model=QAChatResponse)

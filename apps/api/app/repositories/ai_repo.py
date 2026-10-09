@@ -72,6 +72,35 @@ class AIRepository:
             await session.refresh(inv)
             return inv
 
+    async def finish_invocation(
+        self,
+        invocation_id: str,
+        *,
+        status: str,
+        duration_ms: float,
+        error_type: str | None = None,
+        response=None,
+    ) -> AIInvocationORM | None:
+        async with self.session_factory() as session:
+            row = await session.get(AIInvocationORM, invocation_id)
+            if row is None:
+                return None
+            row.status = status
+            row.error_type = error_type
+            row.duration_ms = duration_ms
+            if response:
+                row.provider = response.provider
+                row.model = response.model
+                row.fallback_used = response.fallback_used or response.provider == "fake"
+                row.input_tokens = response.input_tokens if response.provider != "fake" else None
+                row.output_tokens = response.output_tokens if response.provider != "fake" else None
+                row.token_source = (
+                    "provider" if row.input_tokens is not None or row.output_tokens is not None else "unknown"
+                )
+                row.retry_count = response.retry_count
+            await session.commit()
+            return row
+
     async def get_usage_summary(
         self, limit: int = 50, since: datetime | None = None, feature: str | None = None
     ) -> AIUsageSummary:

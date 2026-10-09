@@ -12,8 +12,10 @@ COPY pyproject.toml uv.lock ./
 COPY packages/project-model ./packages/project-model
 COPY packages/qa-core ./packages/qa-core
 COPY packages/integrations ./packages/integrations
+COPY packages/platform-config ./packages/platform-config
 COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
+COPY config ./config
 
 # Install dependencies into virtualenv
 RUN uv sync --frozen --no-dev --package api
@@ -51,6 +53,7 @@ RUN groupadd -r aiqa && useradd -r -g aiqa -d /app aiqa
 COPY --from=builder --chown=aiqa:aiqa /app/.venv /app/.venv
 COPY --from=builder --chown=aiqa:aiqa /app/packages /app/packages
 COPY --from=builder --chown=aiqa:aiqa /app/apps/api /app/apps/api
+COPY --from=builder --chown=aiqa:aiqa /app/config /app/config
 COPY --chown=aiqa:aiqa examples/quickstart /app/examples/quickstart
 
 # The browser recorder runs a headless Chromium instance inside the API container.
@@ -70,6 +73,6 @@ USER aiqa
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://127.0.0.1:8000/api/health/live || exit 1
+  CMD-SHELL curl -f "http://127.0.0.1:${API_PORT:-8000}/api/health/live" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app"]

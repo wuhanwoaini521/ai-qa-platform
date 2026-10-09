@@ -84,6 +84,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const recentRuns: TestRun[] = stats?.recent_runs ?? [];
   const trendPoints = [...recentRuns]
+    .filter((run) => run.passed + run.failed > 0)
     .reverse()
     .slice(-16)
     .map((run) => {
@@ -93,7 +94,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           hour: '2-digit',
           minute: '2-digit',
         }),
-        value: total > 0 ? Math.round((run.passed / total) * 1000) / 10 : 100,
+        value: Math.round((run.passed / total) * 1000) / 10,
       };
     });
 
@@ -121,7 +122,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <span className="stat-label">{t('passRateToday')}</span>
             </div>
             <span className="stat-value">
-                {stats?.pass_rate_today !== undefined ? `${stats.pass_rate_today.toFixed(1)}%` : '—'}
+                {stats?.pass_rate_today != null ? `${stats.pass_rate_today.toFixed(1)}%` : '—'}
               </span>
           </div>
           <div className="stat-metric">

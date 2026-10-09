@@ -43,6 +43,7 @@ export function RuntimeInspector({
   const { t } = useTranslation('runtime');
   const { step, decisions, evidence, artifacts, events, runs } =
     inspectorContext(snapshot, selectedStepId);
+  const decisionDetails = decisionFacts(events);
   const [detail, setDetail] = useState<{
     id: string;
     inputs: Record<string, unknown>;
@@ -157,7 +158,13 @@ export function RuntimeInspector({
       {!!events.some((event) => event.category === 'decision') && (
         <section>
           <h4>{t('decisionValidation')}</h4>
-          <Fields value={decisionFacts(events)} />
+          <h5>{t('candidateGeneration')}</h5>
+          <Fields value={decisionDetails.candidateGeneration} />
+          {Object.keys(decisionDetails.jevDecision).length > 0 && <>
+            <h5>{t('jevDecision')}</h5>
+            <p className="rt-muted">{t('jevConfidenceNote')}</p>
+            <Fields value={decisionDetails.jevDecision} />
+          </>}
           <AIExecutionTimeline
             events={events
               .filter(

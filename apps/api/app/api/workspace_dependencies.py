@@ -1,0 +1,1 @@
+from app.container import get_workspace_catalog_service as get_workspace_catalog_service

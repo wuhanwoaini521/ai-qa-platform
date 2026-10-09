@@ -106,7 +106,7 @@ async def test_recorder_run_retry_reuses_queued_run_and_new_intent_creates_a_new
     scheduled: list[str] = []
     release_workers = asyncio.Event()
 
-    async def hold_local_worker(self, run_id, data, *, execution_deadline=None):
+    async def hold_local_worker(self, run_id, data, *, execution_deadline=None, local_pytest_options=None):
         scheduled.append(run_id)
         await release_workers.wait()
 

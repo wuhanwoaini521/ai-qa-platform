@@ -67,6 +67,49 @@ async def test_orchestrator_repairs_invalid_streamed_schema_within_the_same_time
 
 
 @pytest.mark.asyncio
+async def test_failure_diagnosis_uses_bounded_output_budget_for_complete_streamed_json():
+    class DiagnosisProvider:
+        provider_name = "test"
+        model = "test-model"
+
+        def __init__(self):
+            self.max_tokens = None
+
+        async def stream_complete(self, request):
+            self.max_tokens = request.max_tokens
+            yield AIStreamChunk(
+                content_delta=json.dumps(
+                    {
+                        "classification": "LOCATOR_CHANGED",
+                        "root_cause": "The original selector no longer matches.",
+                        "evidence": ["The failed locator timed out."],
+                        "hypotheses": [],
+                        "recommended_actions": ["Inspect the current page controls."],
+                        "confidence": 0.9,
+                    }
+                ),
+                finish_reason="stop",
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    provider = DiagnosisProvider()
+    orchestrator = ProductionQAOrchestrator(ai_provider=provider)
+
+    async def on_progress(_generated_chars, _elapsed_seconds):
+        return None
+
+    result = await orchestrator.diagnose_failure_ai(
+        error_message="TimeoutError: locator not found",
+        test_nodeid="tests/test_checkout.py::test_checkout",
+        on_progress=on_progress,
+    )
+
+    assert result.classification == "LOCATOR_CHANGED"
+    assert provider.max_tokens == 5000
+
+
+@pytest.mark.asyncio
 async def test_stream_output_limit_is_not_retried_as_schema_repair():
     class Summary(BaseModel):
         summary: str
@@ -102,6 +145,36 @@ async def test_stream_output_limit_is_not_retried_as_schema_repair():
     assert "2,800 tokens" in caught.value.safe_message
     assert "6,000 tokens" in caught.value.safe_message
     assert provider.complete_calls == 0
+    assert orchestrator.budget_guard.output_tokens_count == 2800
+
+
+@pytest.mark.asyncio
+async def test_fallback_stream_output_limit_preserves_and_records_usage():
+    class EmptyTruncatedProvider:
+        provider_name = "test"
+        model = "test-model"
+
+        async def stream_complete(self, _request):
+            yield AIStreamChunk(
+                usage={"prompt_tokens": 20, "completion_tokens": 2800},
+                finish_reason="length",
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    orchestrator = ProductionQAOrchestrator(ai_provider=FallbackAIProvider(EmptyTruncatedProvider()))
+
+    with pytest.raises(AIProviderError) as caught:
+        await orchestrator.complete_streaming(
+            AICompletionRequest(prompt="analyze", max_tokens=6000),
+            timeout_seconds=2,
+        )
+
+    assert caught.value.code == "output_limit"
+    assert caught.value.input_tokens == 20
+    assert caught.value.output_tokens == 2800
+    assert orchestrator.budget_guard.input_tokens_count == 20
+    assert orchestrator.budget_guard.output_tokens_count == 2800
 
 
 @pytest.mark.asyncio
@@ -129,8 +202,11 @@ async def test_empty_stream_uses_configured_fallback_and_reports_when_unrecovere
 
 
 @pytest.mark.asyncio
-async def test_non_streaming_output_limit_has_a_distinct_provider_error(monkeypatch):
+async def test_non_streaming_assistant_output_limit_records_usage_and_uses_larger_budget(monkeypatch):
+    requested_max_tokens = []
+
     def handler(_request):
+        requested_max_tokens.append(json.loads(_request.content)["max_tokens"])
         return httpx.Response(
             200,
             json={
@@ -143,12 +219,19 @@ async def test_non_streaming_output_limit_has_a_distinct_provider_error(monkeypa
     original_client = httpx.AsyncClient
     monkeypatch.setattr("qa_core.ai.provider.httpx.AsyncClient", lambda *args, **kwargs: original_client(transport=transport))
     provider = OpenAICompatibleProvider(api_key="test-secret", base_url="https://mock-ai.local/v1", max_retries=0)
+    orchestrator = ProductionQAOrchestrator(ai_provider=provider)
 
     with pytest.raises(AIProviderError) as caught:
-        await provider.complete(AICompletionRequest(prompt="analyze", max_tokens=6000))
+        await orchestrator.assist_code_chat(action="chat", message="analyze")
 
     assert caught.value.code == "output_limit"
     assert "2,800 tokens" in caught.value.safe_message
+    assert "6,000 tokens" in caught.value.safe_message
+    assert requested_max_tokens == [6000]
+    assert caught.value.input_tokens == 20
+    assert caught.value.output_tokens == 2800
+    assert orchestrator.budget_guard.input_tokens_count == 20
+    assert orchestrator.budget_guard.output_tokens_count == 2800
 
 
 @pytest.mark.asyncio

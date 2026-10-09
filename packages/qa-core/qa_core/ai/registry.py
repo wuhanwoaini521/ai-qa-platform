@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Callable, Mapping
 
 from qa_core.ai.models import AIProviderType
@@ -30,7 +29,7 @@ class AIProviderRegistry:
 
     @classmethod
     def configure_runtime(cls, config: Mapping[str, str] | None) -> None:
-        """Set an API-managed provider configuration without changing environment fallbacks."""
+        """Set the effective provider values supplied by the infrastructure composition root."""
         cls._runtime_config = dict(config) if config is not None else None
 
     @classmethod
@@ -41,17 +40,20 @@ class AIProviderRegistry:
     @classmethod
     def _build_provider(cls, name: str | None = None, api_key: str | None = None) -> AIProvider:
         config = cls._runtime_config or {
-            "provider": os.getenv("QA_AI_PROVIDER", "fake"),
-            "api_key": os.getenv("QA_AI_API_KEY", ""),
-            "base_url": os.getenv("QA_AI_BASE_URL", "https://api.openai.com/v1"),
-            "model": os.getenv("QA_AI_MODEL", "gpt-4o-mini"),
-            "timeout": os.getenv("QA_AI_TIMEOUT", "30.0"),
-            "max_retries": os.getenv("QA_AI_MAX_RETRIES", "3"),
+            "enabled": "true",
+            "provider": "fake",
+            "api_key": "",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+            "timeout": "30.0",
+            "max_retries": "3",
         }
+        if config.get("enabled", "true").lower() != "true":
+            raise RuntimeError("AI provider is disabled by the effective AppConfig")
         provider_name = (name or config.get("provider", "fake")).lower()
 
         if provider_name in (AIProviderType.FAKE.value, "fake"):
-            return FakeAIProvider()
+            return FakeAIProvider(model=config.get("model", "gpt-4o-mini"))
 
         if provider_name in (AIProviderType.OPENAI_COMPATIBLE.value, "openai", "openai-compatible"):
             key = api_key if api_key is not None else config.get("api_key", "")

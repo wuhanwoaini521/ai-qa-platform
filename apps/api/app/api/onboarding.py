@@ -9,23 +9,18 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from project_model.models import Permission, User
+from project_model.models import Permission, TestRun, User
 from pydantic import BaseModel, Field
-from qa_core.onboarding import AllureImportReport, CollectionOutcome, RuntimeProvisioningResult, SuiteRunOutcome
-from sqlalchemy.ext.asyncio import AsyncSession
+from qa_core.onboarding import AllureImportReport, CollectionOutcome, RuntimeProvisioningResult
 
 from app.api.authz import require_permission
-from app.persistence.database import get_db
-from app.repositories.project_repo import ProjectRepository
-from app.repositories.test_run_repo import TestRunRepository
-from app.repositories.workspace_repo import WorkspaceRepository
+from app.container import get_onboarding_service
 from app.services.onboarding_service import (
     DetectionPreview,
     ImportedProject,
     OnboardingError,
     OnboardingService,
 )
-from app.settings import settings
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -42,9 +37,9 @@ class RunSelectionRequest(BaseModel):
     #: Must be set explicitly to execute tests the safety policy flags (browser/network/slow).
     allow_unsafe: bool = False
     persist: bool = True
-    #: Parallel workers for the project's own pytest-xdist (None keeps the project's configuration).
+    #: Parallel local pytest workers.
     n_workers: int | None = Field(default=None, ge=1, le=32)
-    #: Retries for the project's pytest-rerunfailures (None keeps the project's configuration).
+    #: Retries for pytest-rerunfailures.
     reruns: int | None = Field(default=None, ge=0, le=5)
 
 
@@ -57,19 +52,10 @@ class CollectionResponse(BaseModel):
 class PilotRunResponse(BaseModel):
     project_id: str
     run_id: str | None = None
-    outcome: SuiteRunOutcome
+    run: TestRun | None = None
     executed_nodeids: list[str] = Field(default_factory=list)
     rejected: list[dict] = Field(default_factory=list)
     persisted: bool = False
-
-
-def get_onboarding_service(session: AsyncSession = Depends(get_db)) -> OnboardingService:
-    return OnboardingService(
-        project_repo=ProjectRepository(session),
-        workspace_repo=WorkspaceRepository(session),
-        run_repo=TestRunRepository(session),
-        workspace_base_dir=settings.workspace_storage_dir,
-    )
 
 
 def _translate(error: OnboardingError) -> HTTPException:
@@ -167,7 +153,7 @@ async def run_selection(
     return PilotRunResponse(
         project_id=report.project_id,
         run_id=report.run_id,
-        outcome=report.outcome,
+        run=report.run,
         executed_nodeids=report.executed_nodeids,
         rejected=[verdict.model_dump() for verdict in report.rejected],
         persisted=report.persisted,

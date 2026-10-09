@@ -3,13 +3,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from project_model.models import Permission
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import require_permission
+from app.container import (
+    get_golden_demo_service,
+    get_project_knowledge_service,
+    get_requirement_lifecycle_service,
+)
 from app.event_stream import event_frame
-from app.persistence.database import get_db
 from app.services.golden_demo_service import DEMO_SOURCE, GoldenDemoService
-from app.services.project_knowledge_service import ProjectKnowledgeService
+from app.services.project_knowledge_service import ProjectKnowledgeQueryService
 from app.services.requirement_lifecycle_service import RequirementAnalysisBusy, RequirementLifecycleService
 
 router = APIRouter(tags=["QA Lifecycle"])
@@ -30,9 +33,9 @@ async def demo_catalog():
 
 
 @router.post("/projects/golden-demo/seed", dependencies=[Depends(require_permission(Permission.AUTOMATION_EDIT))])
-async def seed_demo():
+async def seed_demo(service: GoldenDemoService = Depends(get_golden_demo_service)):
     try:
-        return await GoldenDemoService().seed()
+        return await service.seed()
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
 
@@ -40,9 +43,9 @@ async def seed_demo():
 @router.post(
     "/projects/{project_id}/demo/reset", dependencies=[Depends(require_permission(Permission.AUTOMATION_EDIT))]
 )
-async def reset_demo(project_id: str):
+async def reset_demo(project_id: str, service: GoldenDemoService = Depends(get_golden_demo_service)):
     try:
-        return await GoldenDemoService().seed(reset=True, project_id=project_id)
+        return await service.seed(reset=True, project_id=project_id)
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
 
@@ -53,27 +56,31 @@ async def project_knowledge(
     focus: str | None = None,
     hops: int = Query(2, ge=0, le=2),
     requirement_id: str | None = None,
-    session: AsyncSession = Depends(get_db),
+    service: ProjectKnowledgeQueryService = Depends(get_project_knowledge_service),
 ):
     try:
-        return await ProjectKnowledgeService(session).build(
-            project_id, focus=focus, hops=hops, requirement_id=requirement_id
-        )
+        return await service.build(project_id, focus=focus, hops=hops, requirement_id=requirement_id)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 
 
 @router.get("/projects/{project_id}/knowledge/explain")
-async def explain_knowledge(project_id: str, entity_id: str, session: AsyncSession = Depends(get_db)):
+async def explain_knowledge(
+    project_id: str,
+    entity_id: str,
+    service: ProjectKnowledgeQueryService = Depends(get_project_knowledge_service),
+):
     try:
-        return await ProjectKnowledgeService(session).explain(project_id, entity_id)
+        return await service.explain(project_id, entity_id)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 
 
 @router.post("/requirements/{requirement_id}/lifecycle/analyze/stream")
-async def analyze_requirement(requirement_id: str):
-    service = RequirementLifecycleService()
+async def analyze_requirement(
+    requirement_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
     try:
         stream = service.stream(requirement_id)
         first = await anext(stream)
@@ -96,9 +103,12 @@ async def analyze_requirement(requirement_id: str):
 
 
 @router.post("/requirements/{requirement_id}/lifecycle/designs")
-async def adopt_scenarios(requirement_id: str):
+async def adopt_scenarios(
+    requirement_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
     try:
-        return await RequirementLifecycleService().adopt_designs(requirement_id)
+        return await service.adopt_designs(requirement_id)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 
@@ -106,8 +116,11 @@ async def adopt_scenarios(requirement_id: str):
 @router.post(
     "/test-designs/{design_id}/lifecycle/case", dependencies=[Depends(require_permission(Permission.TEST_CASE_WRITE))]
 )
-async def adopt_case(design_id: str):
+async def adopt_case(
+    design_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
     try:
-        return await RequirementLifecycleService().adopt_case(design_id)
+        return await service.adopt_case(design_id)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error

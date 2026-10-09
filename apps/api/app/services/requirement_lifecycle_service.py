@@ -21,16 +21,13 @@ from pydantic import ValidationError
 from qa_core.ai.models import AICompletionRequest
 from qa_core.ai.trace import make_trace_event
 from qa_core.failure.redactor import SensitiveRedactor
-from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 from qa_core.prompts import REQUIREMENT_LIFECYCLE_PROMPT
-from sqlalchemy import or_, select, update
 
-from app.persistence.database import get_session
-from app.persistence.models import ProjectORM, RequirementORM, TestCaseORM, TestDesignORM, utc_now
-from app.repositories.test_case_repo import TestCaseRepository
-from app.repositories.test_design_repo import TestDesignRepository
+from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
+from app.services.ai_runtime import build_ai_orchestrator
 from app.services.decision_service import DecisionService
-from app.services.lifecycle_validation import input_hash, validate_requirement_replacement
+from app.services.lifecycle_validation import input_hash, validate_case_model, validate_requirement_replacement
 from app.services.test_case_service import TestCaseService
 from app.services.test_design_service import TestDesignService
 
@@ -43,12 +40,16 @@ class RequirementAnalysisBusy(ValueError):
 
 
 class RequirementLifecycleService:
-    @staticmethod
-    async def recover_interrupted():
-        async with get_session() as session:
-            rows = (await session.scalars(select(RequirementORM).where(RequirementORM.qa_model.is_not(None)))).all()
+    def __init__(self, repository_scope: RepositoryScopeFactory, orchestrator=None, decisions=None):
+        self.repository_scope = repository_scope
+        self.orchestrator = orchestrator or build_ai_orchestrator()
+        self.decisions = decisions or DecisionService(repository_scope=repository_scope)
+
+    async def recover_interrupted(self):
+        async with self.repository_scope() as repositories:
+            rows = await repositories.requirements.list_with_qa_model()
             for row in rows:
-                raw = row.qa_model or {}
+                raw = row["qa_model"] or {}
                 if raw.get("history") and raw["history"][-1].get("status") == "RUNNING":
                     changed = {
                         **raw,
@@ -62,29 +63,16 @@ class RequirementLifecycleService:
                             },
                         ],
                     }
-                    row.qa_model = changed
-            await session.commit()
-
-    def __init__(self, orchestrator=None, decisions=None):
-        self.orchestrator = orchestrator or ProductionQAOrchestrator()
-        self.decisions = decisions or DecisionService()
+                    await repositories.requirements.update_qa_model(row["id"], changed)
+            await repositories.commit()
 
     async def _load(self, requirement_id):
-        async with get_session() as session:
-            row = await session.get(RequirementORM, requirement_id)
+        async with self.repository_scope() as repositories:
+            row = await repositories.requirements.get_by_id(requirement_id)
             if not row:
                 raise ValueError("Requirement not found")
-            project = await session.get(ProjectORM, row.project_id)
-            cases = list(
-                (
-                    await session.scalars(
-                        select(TestCaseORM)
-                        .where(TestCaseORM.requirement_id == requirement_id)
-                        .order_by(TestCaseORM.created_at.desc())
-                        .limit(20)
-                    )
-                ).all()
-            )
+            project = await repositories.projects.get_by_id(row.project_id)
+            cases = await repositories.test_cases.list_by_requirement(requirement_id, limit=20)
             raw = row.qa_model or {}
             document = RequirementDocument.model_validate(raw)
             if not document.criteria:
@@ -110,8 +98,9 @@ class RequirementLifecycleService:
             return row.title, row.description, row.project_id, document, raw, project_context, existing_cases
 
     async def _store(self, requirement_id, document, *, expected=None, analysis_id=None):
-        async with get_session() as session:
-            row = await session.get(RequirementORM, requirement_id)
+        async with self.repository_scope() as repositories:
+            requirements = repositories.requirements
+            row = await requirements.get_by_id(requirement_id)
             if not row:
                 raise ValueError("Requirement not found")
             if analysis_id:
@@ -130,21 +119,16 @@ class RequirementLifecycleService:
                 row.title, row.description, row.acceptance_criteria, document
             ):
                 raise RequirementAnalysisBusy("Requirement inputs changed; reload before analyzing")
-            await validate_requirement_replacement(session, requirement_id, document)
-            checked = RequirementDocument.model_validate(document.model_dump())
-            result = await session.execute(
-                update(RequirementORM)
-                .where(
-                    RequirementORM.id == requirement_id,
-                    or_(RequirementORM.qa_model == original, RequirementORM.qa_model.is_(None))
-                    if not original
-                    else RequirementORM.qa_model == original,
-                )
-                .values(qa_model=SensitiveRedactor.redact_value(checked.model_dump(mode="json")), updated_at=utc_now())
+            await validate_requirement_replacement(
+                repositories.test_cases, repositories.test_designs, requirement_id, document
             )
-            if result.rowcount != 1:
+            checked = RequirementDocument.model_validate(document.model_dump())
+            stored = await requirements.update_qa_model_if_current(
+                requirement_id, original, SensitiveRedactor.redact_value(checked.model_dump(mode="json"))
+            )
+            if not stored:
                 raise RequirementAnalysisBusy("Concurrent requirement update; result was not applied")
-            await session.commit()
+            await repositories.commit()
 
     async def stream(self, requirement_id, *, task_id=None, reserve_ai_call=None):
         title, description, project_id, document, raw, project_context, existing_cases = await self._load(
@@ -154,8 +138,8 @@ class RequirementLifecycleService:
             if datetime.fromisoformat(document.history[-1].started_at) > utc_now() - timedelta(minutes=10):
                 raise RequirementAnalysisBusy("Requirement analysis is already running")
         record = AnalysisRecord(id=uuid4().hex, status="RUNNING", started_at=utc_now().isoformat())
-        async with get_session() as session:
-            row = await session.get(RequirementORM, requirement_id)
+        async with self.repository_scope() as repositories:
+            row = await repositories.requirements.get_by_id(requirement_id)
             record.input_hash = input_hash(title, description, row.acceptance_criteria, document)
         document.history = [*document.history[-9:], record]
         await self._store(requirement_id, document, expected=raw)
@@ -274,8 +258,10 @@ class RequirementLifecycleService:
             analysis = RequirementAnalysis.model_validate(response.structured_data)
             updated = document.model_copy(deep=True, update={"analysis": analysis})
             RequirementDocument.model_validate(updated.model_dump())
-            async with get_session() as session:
-                await validate_requirement_replacement(session, requirement_id, updated)
+            async with self.repository_scope() as repositories:
+                await validate_requirement_replacement(
+                    repositories.test_cases, repositories.test_designs, requirement_id, updated
+                )
             yield await stage(
                 "semantic",
                 "AI 语义与风险分析",
@@ -441,8 +427,9 @@ class RequirementLifecycleService:
 
     async def _finish_failed(self, requirement_id, record):
         """Keep current content; only close this workflow's still-owned invocation."""
-        async with get_session() as session:
-            row = await session.get(RequirementORM, requirement_id)
+        async with self.repository_scope() as repositories:
+            requirements = repositories.requirements
+            row = await requirements.get_by_id(requirement_id)
             history = (row.qa_model or {}).get("history", []) if row else []
             if not history or history[-1]["id"] != record.id or history[-1]["status"] != "RUNNING":
                 return
@@ -460,19 +447,15 @@ class RequirementLifecycleService:
                     },
                 ],
             }
-            await session.execute(
-                update(RequirementORM)
-                .where(RequirementORM.id == requirement_id, RequirementORM.qa_model == original)
-                .values(qa_model=updated)
-            )
-            await session.commit()
+            await requirements.update_qa_model_if_current(requirement_id, original, updated)
+            await repositories.commit()
 
     async def adopt_designs(self, requirement_id):
         _, _, _, document, _, _, _ = await self._load(requirement_id)
         if not document.analysis:
             raise ValueError("Analyze this requirement before creating designs")
-        async with get_session() as session:
-            repo = TestDesignRepository(session)
+        async with self.repository_scope() as repositories:
+            repo = repositories.test_designs
             existing = await repo.list_by_requirement(requirement_id)
             result = []
             for scenario in document.analysis.scenarios:
@@ -480,9 +463,9 @@ class RequirementLifecycleService:
                 if found:
                     found.scenario_model = scenario.model_dump(mode="json")
                     found.description, found.title = scenario.intent, scenario.title
-                    item = TestDesignService(repo)._to_dto(found)
+                    item = TestDesignService(repo, repositories.requirements)._to_dto(found)
                 else:
-                    item = await TestDesignService(repo).create_test_design(
+                    item = await TestDesignService(repo, repositories.requirements).create_test_design(
                         TestDesignCreate(
                             requirement_id=requirement_id,
                             title=scenario.title,
@@ -498,22 +481,26 @@ class RequirementLifecycleService:
                         )
                     )
                 result.append(item)
-            await session.commit()
+            await repositories.commit()
             return result
 
     async def adopt_case(self, design_id):
-        async with get_session() as session:
-            design = await session.get(TestDesignORM, design_id)
+        async with self.repository_scope() as repositories:
+            design = await repositories.test_designs.get_by_id(design_id)
             if not design or not design.scenario_model:
                 raise ValueError("Select a structured test design")
-            requirement = await session.get(RequirementORM, design.requirement_id)
-            existing = await session.scalar(select(TestCaseORM).where(TestCaseORM.test_design_id == design_id))
+            requirement = await repositories.requirements.get_by_id(design.requirement_id)
+            existing = await repositories.test_cases.get_by_test_design(design_id)
             if existing:
-                return TestCaseService(TestCaseRepository(session))._to_dto(existing)
+                return TestCaseService(
+                    repositories.test_cases, repositories.requirements, repositories.test_designs
+                )._to_dto(existing)
             from project_model.lifecycle import TestScenario
 
             scenario = TestScenario.model_validate(design.scenario_model)
-            item = await TestCaseService(TestCaseRepository(session)).create_test_case(
+            data = await validate_case_model(
+                repositories.requirements,
+                repositories.test_designs,
                 TestCaseCreate(
                     project_id=requirement.project_id,
                     requirement_id=requirement.id,
@@ -537,7 +524,10 @@ class RequirementLifecycleService:
                         evidence=["Screenshot", "DOM", "Network"],
                         missing=["确认测试环境与输入数据"],
                     ),
-                )
+                ),
             )
-            await session.commit()
+            item = TestCaseService(
+                repositories.test_cases, repositories.requirements, repositories.test_designs
+            )._to_dto(await repositories.test_cases.create(data))
+            await repositories.commit()
             return item

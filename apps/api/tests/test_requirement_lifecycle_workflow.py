@@ -9,6 +9,9 @@ from app.persistence.models import RequirementORM, TaskORM
 from app.repositories.ai_repo import AIRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.task_repo import TaskRepository
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
+from app.repositories.test_case_repo import TestCaseRepository as CaseRepo
+from app.repositories.test_design_repo import TestDesignRepository as DesignRepo
 from app.services import requirement_lifecycle_service
 from app.services.golden_demo_service import DEMO_REQUIREMENT, demo_document
 from app.services.requirement_lifecycle_service import RequirementAnalysisBusy, RequirementLifecycleService
@@ -88,7 +91,7 @@ class RuntimeTestDecisions(TestDecisions):
 @pytest.mark.asyncio
 async def test_structured_analysis_preserves_history_and_detects_changed_inputs(client):
     await client.post("/api/projects/golden-demo/seed")
-    workflow = RequirementLifecycleService(TestOrchestrator(), TestDecisions())
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), TestOrchestrator(), TestDecisions())
     events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
     assert events[-1].type == "run.completed"
     assert workflow.orchestrator.streaming_calls == 1
@@ -135,10 +138,12 @@ async def test_runtime_requirement_analysis_projects_events_ai_decisions_and_evi
     monkeypatch.setattr(
         requirement_lifecycle_service,
         "RequirementLifecycleService",
-        lambda: RequirementLifecycleService(RuntimeTestOrchestrator(), RuntimeTestDecisions()),
+        lambda **kwargs: RequirementLifecycleService(
+            kwargs["repository_scope"], RuntimeTestOrchestrator(), RuntimeTestDecisions()
+        ),
     )
 
-    await task_runtime_service._execute_dag(task_id, time.monotonic())
+    await task_runtime_service.scheduler._execute_dag(task_id, time.monotonic())
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
         assert task is not None and task.status == "COMPLETED"
@@ -198,10 +203,12 @@ async def test_runtime_requirement_analysis_rejects_unstructured_output_as_recov
     monkeypatch.setattr(
         requirement_lifecycle_service,
         "RequirementLifecycleService",
-        lambda: RequirementLifecycleService(InvalidOrchestrator(), TestDecisions()),
+        lambda **kwargs: RequirementLifecycleService(
+            kwargs["repository_scope"], InvalidOrchestrator(), TestDecisions()
+        ),
     )
 
-    await task_runtime_service._execute_dag(task_id, time.monotonic())
+    await task_runtime_service.scheduler._execute_dag(task_id, time.monotonic())
     async with test_db_session() as session:
         task = await session.get(TaskORM, task_id)
         assert task is not None and task.status == "BLOCKED"
@@ -219,7 +226,9 @@ async def test_runtime_requirement_analysis_rejects_unstructured_output_as_recov
 @pytest.mark.asyncio
 async def test_fake_provider_is_explicit_and_reference_analysis_is_preserved(client):
     await client.post("/api/projects/golden-demo/seed")
-    workflow = RequirementLifecycleService(SimpleNamespace(ai_provider=FakeAIProvider()), TestDecisions())
+    workflow = RequirementLifecycleService(
+        TaskRepositoryScopeFactory(), SimpleNamespace(ai_provider=FakeAIProvider()), TestDecisions()
+    )
     events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
     assert events[-1].type == "run.failed"
     saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
@@ -240,7 +249,7 @@ async def test_invalid_provider_output_is_explicitly_failed_before_jev(client):
                 content="generic text", structured_data=None, provider="fixture_gateway", model="plain-text-only"
             )
 
-    workflow = RequirementLifecycleService(InvalidOrchestrator(), TestDecisions())
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), InvalidOrchestrator(), TestDecisions())
     events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
     saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
     latest = saved["history"][-1]
@@ -266,7 +275,7 @@ async def test_provider_output_limit_code_is_preserved_in_requirement_history(cl
                 "AI Provider 因输出长度上限提前终止；结果不完整，未作为有效分析返回。",
             )
 
-    workflow = RequirementLifecycleService(OutputLimitedOrchestrator(), TestDecisions())
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), OutputLimitedOrchestrator(), TestDecisions())
     events = [event async for event in workflow.stream(DEMO_REQUIREMENT)]
     saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
     latest = saved["history"][-1]
@@ -282,7 +291,7 @@ async def test_provider_output_limit_code_is_preserved_in_requirement_history(cl
 @pytest.mark.asyncio
 async def test_concurrent_analysis_and_edits_are_rejected_and_close_is_recorded(client, test_db_session):
     await client.post("/api/projects/golden-demo/seed")
-    workflow = RequirementLifecycleService(TestOrchestrator(), TestDecisions())
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), TestOrchestrator(), TestDecisions())
     stream = workflow.stream(DEMO_REQUIREMENT)
     await anext(stream)
     competing = workflow.stream(DEMO_REQUIREMENT)
@@ -290,9 +299,9 @@ async def test_concurrent_analysis_and_edits_are_rejected_and_close_is_recorded(
         await anext(competing)
     async with test_db_session() as session:
         with pytest.raises(ValueError, match="running"):
-            await RequirementService(RequirementRepository(session)).update_requirement(
-                DEMO_REQUIREMENT, RequirementUpdate(title="New title")
-            )
+            await RequirementService(
+                RequirementRepository(session), CaseRepo(session), DesignRepo(session)
+            ).update_requirement(DEMO_REQUIREMENT, RequirementUpdate(title="New title"))
     await stream.aclose()
     saved = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
     assert saved["history"][-1]["status"] == "FAILED"
@@ -317,10 +326,10 @@ async def test_analysis_handles_nullable_legacy_models_and_restart_recovery(clie
 
         await session.execute(text("UPDATE requirements SET qa_model = NULL WHERE id = :id"), {"id": requirement["id"]})
         await session.commit()
-    workflow = RequirementLifecycleService(TestOrchestrator(), TestDecisions())
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), TestOrchestrator(), TestDecisions())
     stream = workflow.stream(requirement["id"])
     await anext(stream)
-    await RequirementLifecycleService.recover_interrupted()
+    await RequirementLifecycleService(TaskRepositoryScopeFactory()).recover_interrupted()
     async with test_db_session() as session:
         row = await session.scalar(select(RequirementORM).where(RequirementORM.id == requirement["id"]))
         assert row.qa_model["history"][-1]["status"] == "FAILED"

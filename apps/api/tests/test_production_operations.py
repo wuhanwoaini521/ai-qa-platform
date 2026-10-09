@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from app.container import get_metrics_service
 from app.persistence.database import check_db_health
-from app.services.metrics_service import metrics_service
 from httpx import AsyncClient
 from worker.daemon import WorkerDaemon
 
@@ -64,8 +64,8 @@ async def test_database_health_check(test_db_session):  # noqa: ARG001
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_metrics_service_summary(test_db_session):  # noqa: ARG001
-    metrics_service.record_request("GET", "/api/test", 200, 0.05)
-    summary = await metrics_service.get_summary_metrics()
+    get_metrics_service().record_request("GET", "/api/test", 200, 0.05)
+    summary = await get_metrics_service().get_summary_metrics()
     assert "uptime_seconds" in summary
     assert summary["total_http_requests"] >= 1
     assert "workers_total" in summary

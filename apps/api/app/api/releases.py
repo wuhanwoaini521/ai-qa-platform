@@ -7,49 +7,11 @@ from project_model.models import (
     ReleaseGateReport,
     ReleaseUpdate,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.database import get_db
-from app.repositories.automation_binding_repo import AutomationBindingRepository
-from app.repositories.release_repo import ReleaseRepository
-from app.repositories.requirement_repo import RequirementRepository
-from app.repositories.run_history_repo import RunHistoryRepository
-from app.repositories.test_case_repo import TestCaseRepository
-from app.repositories.test_design_repo import TestDesignRepository
-from app.repositories.test_run_repo import TestRunRepository
-from app.services.quality_intelligence_service import QualityIntelligenceService
+from app.container import get_release_service
 from app.services.release_service import ReleaseService
-from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/releases", tags=["Release Management & Quality Gate"])
-
-
-def get_release_service(session: AsyncSession = Depends(get_db)) -> ReleaseService:
-    rel_repo = ReleaseRepository(session)
-    run_repo = TestRunRepository(session)
-    req_repo = RequirementRepository(session)
-    tc_repo = TestCaseRepository(session)
-    td_repo = TestDesignRepository(session)
-    binding_repo = AutomationBindingRepository(session)
-    history_repo = RunHistoryRepository(lambda: session)
-    ws_service = WorkspaceService()
-
-    quality_service = QualityIntelligenceService(
-        requirement_repo=req_repo,
-        test_case_repo=tc_repo,
-        test_design_repo=td_repo,
-        binding_repo=binding_repo,
-        test_run_repo=run_repo,
-        history_repo=history_repo,
-        workspace_service=ws_service,
-    )
-
-    return ReleaseService(
-        release_repo=rel_repo,
-        test_run_repo=run_repo,
-        quality_service=quality_service,
-        history_repo=history_repo,
-    )
 
 
 @router.get("", response_model=list[Release])

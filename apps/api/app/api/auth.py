@@ -13,20 +13,14 @@ from project_model.models import (
     User,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import get_current_user, has_permission
-from app.persistence.database import get_db
-from app.repositories.api_key_repo import ApiKeyRepository
-from app.repositories.task_repo import TaskRepository
-from app.repositories.test_run_repo import TestRunRepository
+from app.container import get_api_key_service, get_stream_resource_service
+from app.services.api_read_service import ApiKeyService, StreamResourceService
 from app.services.auth_service import AuthService
-from app.services.debug_session_service import debug_session_service
-from app.services.recorder_service import recorder_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 auth_service = AuthService()
-api_key_repo = ApiKeyRepository()
 
 
 class StreamTicketRequest(BaseModel):
@@ -38,7 +32,7 @@ class StreamTicketRequest(BaseModel):
 async def create_stream_ticket(
     payload: StreamTicketRequest,
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
+    resources: StreamResourceService = Depends(get_stream_resource_service),
 ) -> dict[str, str | int]:
     permission = {
         "run": Permission.PROJECT_READ,
@@ -50,19 +44,7 @@ async def create_stream_ticket(
     if not has_permission(user, permission):
         raise HTTPException(status_code=403, detail="Insufficient permission for this stream")
 
-    exists = False
-    if payload.kind == "run":
-        exists = await TestRunRepository(session).get_by_id(payload.resource_id) is not None
-    elif payload.kind == "task":
-        exists = await TaskRepository(session).get(payload.resource_id, str(user.id)) is not None
-    elif payload.kind == "recorder":
-        exists = await recorder_service.get(payload.resource_id, str(user.id)) is not None
-    elif payload.kind == "debug":
-        exists = await debug_session_service.get(payload.resource_id, str(user.id)) is not None
-    elif payload.kind == "lsp":
-        from app.repositories.project_repo import ProjectRepository
-
-        exists = await ProjectRepository(session).get_by_id(payload.resource_id) is not None
+    exists = await resources.exists(payload.kind, payload.resource_id, str(user.id))
     if not exists:
         raise HTTPException(status_code=404, detail="Stream resource not found")
 
@@ -101,22 +83,24 @@ async def get_current_user_profile(request: Request) -> LoginResponse:
 async def create_api_key(
     request: ApiKeyCreate,
     current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[ApiKeyService, Depends(get_api_key_service)],
 ) -> ApiKeyCreatedResponse:
-    request.user_id = current_user.id
-    return await api_key_repo.create(request)
+    return await service.create(request.model_copy(update={"user_id": current_user.id}))
 
 
 @router.get("/api-keys", response_model=list[ApiKey])
 async def list_api_keys(
     current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[ApiKeyService, Depends(get_api_key_service)],
 ) -> list[ApiKey]:
-    return await api_key_repo.list_by_user(current_user.id)
+    return await service.list_by_user(current_user.id)
 
 
 @router.delete("/api-keys/{key_id}")
 async def delete_api_key(
     key_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[ApiKeyService, Depends(get_api_key_service)],
 ) -> dict[str, bool]:
-    success = await api_key_repo.delete(key_id)
+    success = await service.delete(key_id)
     return {"success": success}

@@ -264,7 +264,7 @@ export interface RunnerProfile {
   name: string;
   type: RunnerType;
   enabled: boolean;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -274,13 +274,13 @@ export interface RunnerProfileCreate {
   name: string;
   type: RunnerType;
   enabled?: boolean;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
 }
 
 export interface RunnerProfileUpdate {
   name?: string;
   enabled?: boolean;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
 }
 
 export interface RunnerHealthStatus {
@@ -297,7 +297,7 @@ export interface ExternalArtifactReference {
   name: string;
   type: string; // ALLURE, HTML_REPORT, SCREENSHOT, TRACE, LOGS
   url: string;
-  metadata_json: Record<string, any>;
+  metadata_json: Record<string, unknown>;
   created_at: string;
 }
 
@@ -394,7 +394,7 @@ export interface TestRunCreate {
   requested_by?: string;
   runner_type?: RunnerType;
   runner_profile_id?: string | null;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
 }
 
 export type TestExecutionStatus =
@@ -444,7 +444,38 @@ export interface FailureRecord {
   created_at: string;
 }
 
-/** Body accepted by `POST /api/failures/{id}/apply-repair` (workspace_id goes in the query). */
+export type FailureRepairState =
+  | 'CREATED'
+  | 'ANALYZING'
+  | 'DECIDING'
+  | 'VERIFYING_CANDIDATE'
+  | 'PATCH_READY'
+  | 'APPLYING'
+  | 'PATCH_APPLIED'
+  | 'VERIFYING_FIX'
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'BLOCKED'
+  | 'NOT_APPLICABLE'
+  | 'ROLLED_BACK';
+
+export type FailureRepairAction = 'START_ANALYSIS' | 'APPLY' | 'VERIFY' | 'ROLLBACK' | 'RETRY' | 'CREATE_ISSUE_DRAFT';
+
+export interface FailureRepairWorkflow {
+  repair_id: string | null;
+  failure_id: string;
+  analysis_id: string | null;
+  state: FailureRepairState;
+  allowed_actions: FailureRepairAction[];
+  verification_run_id: string | null;
+  verification_run_status: string | null;
+  retry_run_id: string | null;
+  retry_run_status: string | null;
+  verified: boolean;
+  repair_proposal: Partial<LocatorRepairProposal> | null;
+}
+
+/** Body accepted by `POST /api/failures/{id}/analyses/{analysisId}/apply`. */
 export interface ApplyRepairPayload {
   file_path: string;
   old_code: string;
@@ -466,10 +497,20 @@ export interface LocatorRepairProposal {
   confidence: number | null;
   strategy: string;
   reason?: string;
+  candidate_id?: string | null;
+  provider?: string;
+  model?: string | null;
+  latency_ms?: number | null;
+  ai_provider?: string | null;
+  ai_fallback_used?: boolean;
+  verified?: boolean;
+  verification_reason?: string | null;
+  resolved_classification?: string | null;
+  decision_summary?: Record<string, unknown>;
   code_diff?: string;
   /** File the proposal targets; null when the failure has no bound workspace file. */
   file_path?: string | null;
-  /** Always false from the API: applying a repair is a separate, human-triggered call. */
+  /** Whether this locator passed Playwright verification on the reconstructed failure page. */
   applied: boolean;
   candidates?: CandidateLocator[];
   execution_trace?: AITraceEvent[];
@@ -687,6 +728,7 @@ export interface AITraceEvent {
 export type AIProviderType = 'fake' | 'openai-compatible';
 
 export interface AIProviderSettings {
+  enabled: boolean;
   max_request_tokens: number;
   max_daily_requests: number;
   max_task_calls: number;
@@ -710,6 +752,73 @@ export interface AIProviderSettingsUpdate {
   base_url: string;
   timeout: number;
   max_retries: number;
+}
+
+export interface EffectiveConfigResponse {
+  config_path: string;
+  schema_version: number;
+  source_of_truth: string;
+  restart_required_fields: string[];
+  legacy_database_settings_detected: boolean;
+  runtime_state: { ai: string; jev: string; repair: string };
+  config: {
+    ai: {
+      enabled: boolean;
+      provider: string;
+      api_key: string;
+      model: string;
+      base_url: string;
+      timeout_seconds: number;
+      retries: number;
+      budget: {
+        enabled: boolean;
+        max_request_tokens: number;
+        max_daily_requests: number;
+        max_task_calls: number;
+      };
+    };
+    jev: {
+      enabled: boolean;
+      api_key: string;
+      model: string;
+      base_url: string;
+      timeout_seconds: number;
+      retries: number;
+      minimum_confidence: number;
+      failure_policy: { allow_local_fallback: boolean };
+    };
+    repair: {
+      enabled: boolean;
+      mode: string;
+      auto_start_on_failure: boolean;
+      max_attempts: number;
+      auto_rollback: boolean;
+      require_jev: boolean;
+    };
+    browser: {
+      timeout_seconds: number;
+      navigation_timeout_seconds: number;
+      session_idle_timeout_seconds: number;
+      viewport_width: number;
+      viewport_height: number;
+    };
+    run: {
+      default_timeout_seconds: number;
+      max_parallel_runs: number;
+    };
+    pytest: {
+      workers: number;
+      timeout_seconds: number;
+      default_args: string[];
+    };
+  };
+}
+
+export interface ConfigReloadResult {
+  applied: boolean;
+  config_path: string;
+  changed: string[];
+  restart_required: string[];
 }
 
 export interface AIProviderConnectionResult {
@@ -790,6 +899,20 @@ export interface DecisionConnectionResult {
   choice?: string | null;
   model?: string | null;
   latency_ms?: number | null;
+}
+
+export interface JevRuntimeCheckResult {
+  connectivity: string;
+  runtime: string;
+  enabled: boolean;
+  api_key_configured: boolean;
+  provider: string;
+  model: string;
+  base_url_valid: boolean;
+  minimum_confidence: number;
+  budget_available: boolean;
+  latency_ms?: number | null;
+  reasons: string[];
 }
 
 export interface AIUsageSummary {
@@ -934,9 +1057,16 @@ export interface FailureAnalysisRun {
     domain?: string;
     diagnosis?: AIFailureDiagnosisResponse;
     selection?: Record<string, unknown> | null;
+    repair_state?: FailureRepairState;
+    repair_proposal?: LocatorRepairProposal | null;
+    initial_classification?: string;
+    resolved_classification?: string;
     verified?: boolean;
+    changes_applied?: boolean;
+    auto_rolled_back?: boolean;
     verification_run_id?: string;
     verification_run_status?: string;
+    verification_attempt?: number;
   };
   created_at: string;
   finished_at: string | null;
@@ -956,7 +1086,7 @@ export interface DashboardStats {
   total_runs: number;
   runs_today: number;
   tests_executed_today: number;
-  pass_rate_today: number;
+  pass_rate_today: number | null;
   total_failures: number;
   flaky_tests_count: number;
   rerun_recovery_count: number;
@@ -1386,7 +1516,7 @@ export interface SecurityAuditLogEntry {
   target_resource: string;
   ip_address: string;
   status: string;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   created_at: string;
 }
 

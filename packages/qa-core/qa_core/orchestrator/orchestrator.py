@@ -20,6 +20,7 @@ from qa_core.ai.models import (
     TestDesignGenerationResponse,
 )
 from qa_core.ai.provider import (
+    AIProviderError,
     clean_json_text,
     empty_response_error,
     is_output_limit_finish_reason,
@@ -70,7 +71,11 @@ class ProductionQAOrchestrator:
         self.last_completion = None
         self.budget_guard.check_and_record_request()
         request = request.model_copy(update={"prompt": SensitiveRedactor.redact_text(request.prompt)})
-        response = await self.ai_provider.complete(request)
+        try:
+            response = await self.ai_provider.complete(request)
+        except AIProviderError as error:
+            self.budget_guard.record_tokens(error.input_tokens, error.output_tokens)
+            raise
         if request.response_schema:
             data = (
                 response.structured_data
@@ -124,6 +129,13 @@ class ProductionQAOrchestrator:
             if not timeout.expired():
                 raise
             raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
+        except AIProviderError as error:
+            if error.code == "output_limit":
+                self.budget_guard.record_tokens(
+                    error.input_tokens if error.input_tokens is not None else input_tokens,
+                    error.output_tokens if error.output_tokens is not None else output_tokens,
+                )
+            raise
         finally:
             remaining = timeout_seconds - (time.perf_counter() - started)
             try:
@@ -135,7 +147,12 @@ class ProductionQAOrchestrator:
                 raise RuntimeError(f"AI completion timed out after {timeout_seconds:g} seconds.") from None
 
         if is_output_limit_finish_reason(finish_reason):
-            raise output_limit_error(max_tokens=request.max_tokens, output_tokens=output_tokens)
+            self.budget_guard.record_tokens(input_tokens, output_tokens)
+            raise output_limit_error(
+                max_tokens=request.max_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
         if not content.strip():
             raise empty_response_error(streamed=True)
         structured_data = None
@@ -316,7 +333,7 @@ class ProductionQAOrchestrator:
             prompt_id=FAILURE_DIAGNOSIS_PROMPT.prompt_id,
             prompt_version=FAILURE_DIAGNOSIS_PROMPT.version,
             response_schema=FailureAnalysisResponse,
-            max_tokens=2500,
+            max_tokens=5000,
             max_retries=0,
             timeout_seconds=20,
         )

@@ -1,0 +1,190 @@
+# Copy this file to config.yaml. Runtime settings and policy live here; secrets stay in the process
+# environment and are referenced with ${ENV_NAME}. For optional values use ${ENV_NAME:-}.
+version: 1
+
+# Process mode, authentication and local runtime data locations.
+app:
+  environment: development # production requires a 32+ character APP_SECRET_KEY
+  auth_required: true
+  secret_key: ${APP_SECRET_KEY:-}
+  auth_token_ttl_seconds: 604800
+  runtime_dir: ./runtime
+  workspace_storage_dir: ./runtime/workspaces
+  artifact_storage_dir: ./runtime/artifacts
+
+# Bind address and browser origins. Changing these requires an API restart.
+api:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins: [http://localhost:5173, http://127.0.0.1:5173, http://localhost:3000, http://127.0.0.1:3000]
+
+# Database connection and pool sizing. Put credentials in DATABASE_URL, never inline here.
+database:
+  url: sqlite+aiosqlite:///./runtime/ai_qa_platform.db
+  echo: false
+  pool_size: 20
+  max_overflow: 10
+  sqlite_timeout_seconds: 30
+
+# AI model runtime and request/task/run budgets. `fake` is local simulation; use a real provider and key for live calls.
+ai:
+  enabled: true
+  provider: fake # use openai-compatible for a real model
+  api_key: ${QA_AI_API_KEY:-}
+  base_url: ${QA_AI_BASE_URL:-https://api.openai.com/v1}
+  model: gpt-4o-mini
+  # Request timeout and retry count for transient provider failures.
+  timeout_seconds: 30
+  retries: 3
+  # Shared call and token ceilings used by API, decisions and task execution.
+  budget:
+    enabled: true
+    max_request_tokens: 1000000
+    max_daily_requests: 1000
+    max_task_calls: 8
+    max_requests_per_run: 50
+    max_input_tokens_per_run: 100000
+    max_output_tokens_per_run: 50000
+
+# Jev decision runtime. Minimum confidence is the trust threshold used by repair decisions.
+jev:
+  enabled: false
+  provider: jev
+  api_key: ${JEV_API_KEY:-}
+  model: jev-1.13.0
+  base_url: ${JEV_BASE_URL:-https://api.typesafe.ai/v1/systemone}
+  timeout_seconds: 20
+  retries: 1
+  minimum_confidence: 0.70
+  # A false value blocks automatic repair when Jev cannot produce an accepted decision.
+  failure_policy:
+    allow_local_fallback: false
+
+# Failure repair policy. AUTO starts after failure; ASSISTED waits for a user action; OFF disables repair.
+repair:
+  enabled: true
+  mode: "OFF" # OFF, ASSISTED or AUTO
+  auto_start_on_failure: true
+  max_attempts: 2 # Maximum automatic repair attempts.
+  auto_rollback: true
+  require_jev: true
+  require_candidate_verification: true # safety invariant; the schema rejects false.
+  rerun_exact_nodeid: true # false reruns the whole test module; its original case remains the acceptance check.
+  # Only files under these paths may be modified by repair.
+  allowed_paths: [tests/**, pages/**, helpers/**]
+  # Sensitive project files are never patch targets.
+  denied_paths: [.github/**, migrations/**, secrets/**, pyproject.toml, package-lock.json]
+
+# Managed Playwright runtime: browser context, timeouts, and optional proxy transport.
+browser:
+  headless: true
+  timeout_seconds: 30
+  navigation_timeout_seconds: 30
+  session_idle_timeout_seconds: 1800
+  viewport_width: 1280
+  viewport_height: 720
+  locale: en-US
+  timezone: UTC
+  args: [--no-sandbox, --disable-dev-shm-usage]
+  proxy_url: ${BROWSER_PROXY_URL:-}
+  proxy_bypass: ${BROWSER_PROXY_BYPASS:-}
+
+# Per-worker run timeout and parallel-run ceiling. The worker also applies its own concurrency limit.
+run:
+  default_timeout_seconds: 120
+  max_parallel_runs: 4
+
+# pytest arguments are appended to the user's own run parameters, which remain supported.
+pytest:
+  workers: 1
+  timeout_seconds: 120
+  default_args: []
+
+# Task agent execution limits and browser decision constraints.
+agent:
+  enabled: true
+  max_steps: 30
+  max_runtime_seconds: 900
+  max_retries: 2
+  browser:
+    require_jev: false
+    max_actions: 30
+    max_candidates: 10
+
+# Failure creation and captured context. Character limits bound stored evidence size.
+failure:
+  auto_create: true
+  capture_screenshot: true
+  capture_dom: true
+  capture_console: true
+  capture_network: true
+  traceback_chars: 8000
+  source_context_chars: 8000
+
+# Caps on data attached to a single failure record.
+evidence:
+  max_screenshots: 1
+  max_console_entries: 30
+  max_network_entries: 30
+  max_dom_chars: 14000
+
+# Recorder feature and semantic locator policy.
+recorder:
+  enabled: true
+  locator_strategy: semantic
+  candidate_limit: 10
+
+# Time allowed for debugger process startup, attach, and shutdown.
+debugger:
+  startup_timeout_seconds: 10
+  attach_timeout_seconds: 10
+  shutdown_grace_timeout_seconds: 3
+  shutdown_force_timeout_seconds: 2
+
+# Worker connection, identity, capabilities, queue polling, and local artifact paths.
+worker:
+  api_url: http://127.0.0.1:8000
+  auth_token: ${AI_QA_AUTH_TOKEN:-}
+  name: Runner-Node-1
+  capabilities: [playwright, chromium, firefox, webkit, pytest, python3]
+  max_concurrency: 4
+  heartbeat_interval_seconds: 10
+  poll_interval_seconds: 3
+  http_timeout_seconds: 30
+  workspace_storage_dir: ./runtime/workspaces
+  artifact_storage_dir: ./runtime/artifacts
+
+# Third-party connectors are off by default. Enable only integrations used by this deployment.
+integrations:
+  github:
+    enabled: false
+    base_url: ${GITHUB_API_BASE_URL:-https://api.github.com}
+    token: ${GITHUB_TOKEN:-}
+  jira:
+    enabled: false
+    base_url: ${JIRA_BASE_URL:-}
+    username: ${JIRA_EMAIL:-}
+    token: ${JIRA_API_TOKEN:-}
+  testrail:
+    enabled: false
+    base_url: ${TESTRAIL_BASE_URL:-}
+    username: ${TESTRAIL_EMAIL:-}
+    token: ${TESTRAIL_API_KEY:-}
+  jenkins:
+    enabled: false
+    base_url: ${JENKINS_BASE_URL:-}
+    username: ${JENKINS_USER:-}
+    token: ${JENKINS_API_TOKEN:-}
+
+# Root logger verbosity. Secret redaction remains a fixed security invariant.
+logging:
+  level: INFO
+
+# Product feature switches; these gate optional runtime capabilities.
+features:
+  ai_repair: true
+  jev_decision: true
+  auto_repair: true
+  recorder: true
+  debugger: true
+  live_browser: true

@@ -20,20 +20,9 @@ from project_model.lifecycle import (
     TestOracle,
     TestScenario,
 )
-from sqlalchemy import select
 
-from app.persistence.database import get_session
-from app.persistence.models import (
-    AutomationBindingORM,
-    ProjectORM,
-    RequirementORM,
-    TaskORM,
-    TestCaseORM,
-    TestDesignORM,
-    TestRunORM,
-    WorkspaceORM,
-    utc_now,
-)
+from app.persistence.models import utc_now
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.services.workspace_service import WorkspaceService
 
 DEMO_ID = "proj_golden_shop_v1"
@@ -235,49 +224,30 @@ def demo_document() -> RequirementDocument:
 
 
 class GoldenDemoService:
+    def __init__(self, repository_scope: RepositoryScopeFactory) -> None:
+        self.repository_scope = repository_scope
+
     async def seed(self, *, reset=False, project_id=DEMO_ID):
         if project_id != DEMO_ID:
             raise ValueError("Reset is restricted to the owned Golden Demo project")
         async with demo_lock:
-            async with get_session() as session:
-                project = await session.get(ProjectORM, DEMO_ID, with_for_update=True)
+            async with self.repository_scope() as repositories:
+                repository = repositories.golden_demo
+                project = await repository.get_project_for_update(DEMO_ID)
                 if project and project.demo_kind != DEMO_KIND:
                     raise ValueError("Reserved demo ID belongs to an unmarked project; no changes made")
+                replace_existing = project is not None
                 if project and not reset:
                     return {"project_id": DEMO_ID, "created": False, "shop_url": "/api/demo-shop/index.html"}
                 if reset and not project:
                     raise ValueError("Demo project does not exist")
-                active = await session.scalar(
-                    select(TestRunORM.id)
-                    .where(TestRunORM.project_id == DEMO_ID, TestRunORM.status.in_(["QUEUED", "RUNNING"]))
-                    .limit(1)
-                )
-                task = await session.scalar(
-                    select(TaskORM.id)
-                    .where(
-                        TaskORM.project_id == DEMO_ID,
-                        TaskORM.status.in_(
-                            [
-                                "PENDING",
-                                "PLANNING",
-                                "RUNNING",
-                                "WAITING",
-                                "VERIFYING",
-                                "RETRYING",
-                                "REPLANNING",
-                                "BLOCKED",
-                            ]
-                        ),
-                    )
-                    .limit(1)
-                )
-                if active or task:
+                if await repository.has_active_run(DEMO_ID) or await repository.has_active_task(DEMO_ID):
                     raise ValueError("Demo has an active run or task; finish or cancel it before resetting")
-                from app.services.recorder_service import recorder_service
+                from app.container import recorder_service
 
                 if any(item.project_id == DEMO_ID for item in recorder_service._sessions.values()):
                     raise ValueError("Close the demo recording browser before resetting")
-                saved_requirement = await session.get(RequirementORM, DEMO_REQUIREMENT)
+                saved_requirement = await repository.get_requirement(DEMO_REQUIREMENT)
                 if (
                     saved_requirement
                     and (saved_requirement.qa_model or {}).get("history", [])
@@ -306,40 +276,30 @@ class GoldenDemoService:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(source.read_bytes())
                 marker.write_text(json.dumps({"demo_kind": DEMO_KIND, "project_id": DEMO_ID}), encoding="utf-8")
-                if project:
-                    await session.delete(project)
-                    await session.flush()
-                project = ProjectORM(
-                    id=DEMO_ID,
-                    demo_kind=DEMO_KIND,
-                    name="Northstar · Golden Demo Shop",
-                    description="从需求、风险与场景到真实浏览器执行和定位器修复的完整 QA 生命周期。",
-                    framework_type="playwright_python",
-                )
-                session.add(project)
-                await session.flush()
-                session.add(
-                    WorkspaceORM(
-                        id=f"ws_{uuid4().hex[:12]}",
-                        project_id=DEMO_ID,
-                        path=str(destination),
-                        branch="main",
-                        status="ACTIVE",
-                    )
-                )
+                project = {
+                    "id": DEMO_ID,
+                    "demo_kind": DEMO_KIND,
+                    "name": "Northstar · Golden Demo Shop",
+                    "description": "从需求、风险与场景到真实浏览器执行和定位器修复的完整 QA 生命周期。",
+                    "framework_type": "playwright_python",
+                }
+                workspace_row = {
+                    "id": f"ws_{uuid4().hex[:12]}",
+                    "project_id": DEMO_ID,
+                    "path": str(destination),
+                    "branch": "main",
+                    "status": "ACTIVE",
+                }
                 doc = demo_document()
-                session.add(
-                    RequirementORM(
-                        id=DEMO_REQUIREMENT,
-                        project_id=DEMO_ID,
-                        title="商品搜索、规格选择与购物车验证",
-                        description="作为购物者，我希望搜索商品、查看详情、选择规格并加入购物车，确认商品、数量和金额正确。",
-                        acceptance_criteria="\n".join(f"{c.id}: {c.description}" for c in doc.criteria),
-                        qa_model=doc.model_dump(mode="json"),
-                        status="READY",
-                    )
-                )
-                await session.flush()
+                requirement_row = {
+                    "id": DEMO_REQUIREMENT,
+                    "project_id": DEMO_ID,
+                    "title": "商品搜索、规格选择与购物车验证",
+                    "description": "作为购物者，我希望搜索商品、查看详情、选择规格并加入购物车，确认商品、数量和金额正确。",
+                    "acceptance_criteria": "\n".join(f"{c.id}: {c.description}" for c in doc.criteria),
+                    "qa_model": doc.model_dump(mode="json"),
+                    "status": "READY",
+                }
                 targets = [
                     "test_search",
                     "test_product_detail",
@@ -348,21 +308,19 @@ class GoldenDemoService:
                     "test_empty_search",
                     "test_known_locator_change",
                 ]
+                test_rows = []
                 for index, scenario in enumerate(doc.analysis.scenarios, 1):
                     design_id, case_id = f"des_golden_{index:03}", f"case_golden_{index:03}"
-                    session.add(
-                        TestDesignORM(
-                            id=design_id,
-                            requirement_id=DEMO_REQUIREMENT,
-                            title=scenario.title,
-                            description=scenario.intent,
-                            category="NEGATIVE" if scenario.path_type == "negative" else "FUNCTIONAL",
-                            risk="High" if scenario.priority == "P0" else "Medium",
-                            status="READY",
-                            scenario_model=scenario.model_dump(mode="json"),
-                        )
-                    )
-                    await session.flush()
+                    design = {
+                        "id": design_id,
+                        "requirement_id": DEMO_REQUIREMENT,
+                        "title": scenario.title,
+                        "description": scenario.intent,
+                        "category": "NEGATIVE" if scenario.path_type == "negative" else "FUNCTIONAL",
+                        "risk": "High" if scenario.priority == "P0" else "Medium",
+                        "status": "READY",
+                        "scenario_model": scenario.model_dump(mode="json"),
+                    }
                     model = ModernTestModel(
                         display_id=f"TC-{index:03}",
                         intent=scenario.intent,
@@ -378,37 +336,37 @@ class GoldenDemoService:
                         evidence=["Screenshot", "DOM", "Trace", "Network"],
                         missing=[] if index <= 6 else ["未实现两次加入操作的自动化"],
                     )
-                    session.add(
-                        TestCaseORM(
-                            id=case_id,
-                            project_id=DEMO_ID,
-                            requirement_id=DEMO_REQUIREMENT,
-                            test_design_id=design_id,
-                            title=scenario.title,
-                            preconditions="本地 shop_url fixture；独立空购物车",
-                            steps=scenario.actions,
-                            expected_result="\n".join(scenario.expected_outcomes),
-                            priority=scenario.priority,
-                            automation_status="AUTOMATED" if index <= 6 else "MANUAL",
-                            test_model=model.model_dump(mode="json"),
-                            tags=["golden-demo", scenario.technique],
-                        )
-                    )
-                    await session.flush()
+                    case = {
+                        "id": case_id,
+                        "project_id": DEMO_ID,
+                        "requirement_id": DEMO_REQUIREMENT,
+                        "test_design_id": design_id,
+                        "title": scenario.title,
+                        "preconditions": "本地 shop_url fixture；独立空购物车",
+                        "steps": scenario.actions,
+                        "expected_result": "\n".join(scenario.expected_outcomes),
+                        "priority": scenario.priority,
+                        "automation_status": "AUTOMATED" if index <= 6 else "MANUAL",
+                        "test_model": model.model_dump(mode="json"),
+                        "tags": ["golden-demo", scenario.technique],
+                    }
+                    binding = None
                     if index <= 6:
                         file = "tests/test_known_locator.py" if index == 6 else "tests/test_shop.py"
-                        session.add(
-                            AutomationBindingORM(
-                                id=f"bind_golden_{index:03}",
-                                test_case_id=case_id,
-                                workspace_id=DEMO_ID,
-                                file_path=file,
-                                nodeid=f"{file}::{targets[index - 1]}",
-                                framework="playwright_python",
-                                status="ACTIVE",
-                            )
-                        )
-                await session.commit()
+                        binding = {
+                            "id": f"bind_golden_{index:03}",
+                            "test_case_id": case_id,
+                            "workspace_id": DEMO_ID,
+                            "file_path": file,
+                            "nodeid": f"{file}::{targets[index - 1]}",
+                            "framework": "playwright_python",
+                            "status": "ACTIVE",
+                        }
+                    test_rows.append((design, case, binding))
+                await repository.replace_seed(
+                    project, workspace_row, requirement_row, test_rows, replace_existing=replace_existing
+                )
+                await repositories.commit()
                 if not (destination / ".git").exists():
                     await asyncio.to_thread(workspace._initialize_git_repo, destination)
                 return {"project_id": DEMO_ID, "created": True, "shop_url": "/api/demo-shop/index.html"}

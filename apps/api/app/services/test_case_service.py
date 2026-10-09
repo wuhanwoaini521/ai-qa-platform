@@ -10,12 +10,21 @@ from project_model.models import (
 )
 
 from app.persistence.models import TestCaseORM
+from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.test_case_repo import TestCaseRepository
+from app.repositories.test_design_repo import TestDesignRepository
 
 
 class TestCaseService:
-    def __init__(self, test_case_repo: TestCaseRepository) -> None:
+    def __init__(
+        self,
+        test_case_repo: TestCaseRepository,
+        requirement_repo: RequirementRepository,
+        test_design_repo: TestDesignRepository,
+    ) -> None:
         self.test_case_repo = test_case_repo
+        self.requirement_repo = requirement_repo
+        self.test_design_repo = test_design_repo
 
     def _to_dto(self, orm: TestCaseORM) -> TestCase:
         binding = orm.__dict__.get("binding")
@@ -59,7 +68,7 @@ class TestCaseService:
     async def create_test_case(self, data: TestCaseCreate, *, case_id: str | None = None) -> TestCase:
         from app.services.lifecycle_validation import validate_case_model
 
-        data = await validate_case_model(self.test_case_repo.session, data)
+        data = await validate_case_model(self.requirement_repo, self.test_design_repo, data)
         orm = await self.test_case_repo.create(data, case_id=case_id)
         return self._to_dto(orm)
 
@@ -72,7 +81,7 @@ class TestCaseService:
         merged = TestCaseCreate.model_validate(
             {**self._to_dto(original).model_dump(), **data.model_dump(exclude_unset=True)}
         )
-        checked = await validate_case_model(self.test_case_repo.session, merged)
+        checked = await validate_case_model(self.requirement_repo, self.test_design_repo, merged)
         data = data.model_copy(update={"requirement_id": checked.requirement_id})
         orm = await self.test_case_repo.update(case_id, data)
         if not orm:

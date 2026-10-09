@@ -8,8 +8,8 @@ import pytest_asyncio
 from app.api.failures import get_failure_service
 from app.main import app
 from app.persistence.models import FailureRecordORM
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskRepositoryUnitOfWork
 from app.repositories.test_run_repo import TestRunRepository
-from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.test_run_service import TestRunService
 from app.services.workspace_service import WorkspaceService
 from project_model.models import TestRunCreate
@@ -26,7 +26,15 @@ async def failure_service(client, test_db_session):
         repository = TestRunRepository(session)
         run = await repository.create_run(TestRunCreate(project_id=project["id"], workspace_id=project["id"]))
         await session.commit()
-        await TestRunService(repository, WorkspaceRepository(session), WorkspaceService()).persist_suite_result(
+        repositories = TaskRepositoryUnitOfWork(session)
+        await TestRunService(
+            repository,
+            repositories.workspaces,
+            WorkspaceService(),
+            repository_scope=TaskRepositoryScopeFactory(),
+            repositories=repositories,
+            runner_repo=repositories.runner_profiles,
+        ).persist_suite_result(
             run.id,
             SuiteExecutionResult(
                 exit_code=1,

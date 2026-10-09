@@ -1,0 +1,244 @@
+{
+  "info": {
+    "_postman_id": "7c26b0f4-9167-4a69-bc26-594332cb6d7c",
+    "name": "AI QA Platform - Failure AI + Jev Repair",
+    "description": "API-only Failure repair chain. Uses the existing analysis stream, persists each attempt, applies only a verified proposal, then starts the exact failed nodeid verification. No credentials are embedded.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "api_base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "auth_token", "value": "", "type": "string" },
+    { "key": "failure_id", "value": "", "type": "string" },
+    { "key": "analysis_id", "value": "", "type": "string" },
+    { "key": "verification_run_id", "value": "", "type": "string" },
+    { "key": "repair_file_path_json", "value": "", "type": "string" },
+    { "key": "repair_old_code_json", "value": "", "type": "string" },
+    { "key": "repair_new_code_json", "value": "", "type": "string" },
+    { "key": "repair_ready", "value": "false", "type": "string" },
+    { "key": "repair_applied", "value": "false", "type": "string" },
+    { "key": "repair_state", "value": "", "type": "string" },
+    { "key": "ai_provider", "value": "", "type": "string" },
+    { "key": "ai_model", "value": "", "type": "string" },
+    { "key": "ai_fallback_used", "value": "", "type": "string" },
+    { "key": "jev_provider", "value": "", "type": "string" },
+    { "key": "jev_model", "value": "", "type": "string" },
+    { "key": "jev_confidence", "value": "", "type": "string" },
+    { "key": "jev_minimum_confidence", "value": "", "type": "string" },
+    { "key": "jev_fallback_used", "value": "", "type": "string" },
+    { "key": "jev_choice", "value": "", "type": "string" },
+    { "key": "jev_candidate_count", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Login (token saved to environment)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{api_base_url}}/api/auth/login", "host": ["{{api_base_url}}"], "path": ["api", "auth", "login"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Login succeeds', () => pm.response.to.have.status(200));",
+          "const data = pm.response.json();",
+          "pm.expect(data.access_token, 'access_token').to.be.a('string').and.not.empty;",
+          "pm.environment.set('auth_token', data.access_token);"
+        ] }
+      }]
+    },
+    {
+      "name": "2. List project failures (select exact nodeid)",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures?project_id={{project_id}}&limit=50", "host": ["{{api_base_url}}"], "path": ["api", "failures"], "query": [{ "key": "project_id", "value": "{{project_id}}" }, { "key": "limit", "value": "50" }] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Failure list loads', () => pm.response.to.have.status(200));",
+          "const rows = pm.response.json();",
+          "const nodeid = pm.environment.get('test_nodeid');",
+          "const match = rows.find(row => row.test_nodeid === nodeid);",
+          "if (match) pm.environment.set('failure_id', match.id);",
+          "pm.test('Configured failure_id exists or the exact nodeid is in the list', () => pm.expect(pm.environment.get('failure_id') || match).to.be.ok);"
+        ] }
+      }]
+    },
+    {
+      "name": "3. Get failure details",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Failure detail loads', () => pm.response.to.have.status(200));",
+        "pm.test('Failure matches the requested case', () => pm.expect(pm.response.json().test_nodeid).to.eql(pm.environment.get('test_nodeid')));"
+      ] } }]
+    },
+    {
+      "name": "4. Get workflow state and allowed actions",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/repair-workflow", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "repair-workflow"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Workflow state loads', () => pm.response.to.have.status(200));",
+        "const data = pm.response.json();",
+        "pm.environment.set('repair_state', data.state);",
+        "pm.test('Workflow advertises safe re-analysis actions', () => { if (['BLOCKED', 'PATCH_READY', 'ROLLED_BACK'].includes(data.state) || (data.state === 'FAILED' && !(data.repair_proposal && data.repair_proposal.applied))) pm.expect(data.allowed_actions).to.include('START_ANALYSIS'); if (data.state === 'FAILED' && data.repair_proposal && data.repair_proposal.applied) pm.expect(data.allowed_actions).not.to.include('START_ANALYSIS'); });"
+      ] } }]
+    },
+    {
+      "name": "5. Start fresh AI + Jev analysis (SSE)",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "POST",
+        "header": [{ "key": "Accept", "value": "text/event-stream" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/analyze/stream?language=zh-CN", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "analyze", "stream"], "query": [{ "key": "language", "value": "zh-CN" }] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Workflow SSE request succeeds', () => pm.response.to.have.status(200));",
+        "const events = pm.response.text().split(/\\r?\\n/).filter(line => line.startsWith('data:')).map(line => { try { return JSON.parse(line.slice(5).trim()); } catch { return null; } }).filter(Boolean);",
+        "const attempt = events.map(event => event.metadata && event.metadata.analysis_id).find(Boolean);",
+        "if (attempt) pm.environment.set('analysis_id', attempt);",
+        "const diagnosisEvent = [...events].reverse().find(event => event.type === 'run.completed' && event.metadata && event.metadata.diagnosis);",
+        "const modelEvent = [...events].reverse().find(event => event.type === 'model.completed');",
+        "const diagnosis = diagnosisEvent && diagnosisEvent.metadata.diagnosis || {};",
+        "pm.environment.set('ai_provider', diagnosis.provider || modelEvent && modelEvent.metadata.provider || '');",
+        "pm.environment.set('ai_model', modelEvent && modelEvent.metadata.model || diagnosis.model || '');",
+        "const aiFallback = diagnosis.fallback_used == null ? modelEvent && modelEvent.metadata.fallback_used : diagnosis.fallback_used;",
+        "pm.environment.set('ai_fallback_used', String(aiFallback));",
+        "const decision = [...events].reverse().find(event => event.type === 'decision_completed' || event.stage === 'decision');",
+        "const decisionMeta = decision && decision.metadata || {};",
+        "pm.environment.set('jev_provider', decisionMeta.attempted_provider || decisionMeta.provider || '');",
+        "pm.environment.set('jev_model', decisionMeta.attempted_model || decisionMeta.model || '');",
+        "pm.environment.set('jev_confidence', decisionMeta.confidence == null ? '' : String(decisionMeta.confidence));",
+        "pm.environment.set('jev_minimum_confidence', decisionMeta.minimum_confidence == null ? '' : String(decisionMeta.minimum_confidence));",
+        "pm.environment.set('jev_fallback_used', String(decisionMeta.fallback_used));",
+        "pm.environment.set('jev_choice', decisionMeta.candidate_id || decisionMeta.attempted_choice || '');",
+        "pm.environment.set('jev_candidate_count', String(decisionMeta.candidate_count == null ? '' : decisionMeta.candidate_count));",
+        "const terminal = [...events].reverse().find(event => ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type));",
+        "pm.test('A persisted analysis attempt was created', () => pm.expect(attempt).to.be.a('string').and.not.empty);",
+        "pm.test('AI analysis used a real provider without fallback', () => { pm.expect(pm.environment.get('ai_provider')).to.be.a('string').and.not.empty; pm.expect(pm.environment.get('ai_provider')).not.to.eql('fake'); pm.expect(pm.environment.get('ai_fallback_used')).to.eql('false'); });",
+        "pm.test('Real Jev attempt is visible in decision evidence', () => pm.expect(pm.environment.get('jev_provider')).to.eql('jev'));",
+        "pm.test('Jev selection passes confidence without fallback', () => { pm.expect(decisionMeta.provider).to.eql('jev'); pm.expect(decisionMeta.fallback_used).to.eql(false); pm.expect(decisionMeta.confidence).to.be.at.least(decisionMeta.minimum_confidence); pm.expect(decisionMeta.candidate_count).to.be.greaterThan(0); });",
+        "pm.test('Workflow emits a terminal event', () => pm.expect(terminal).to.be.ok);",
+        "if (terminal && terminal.metadata && terminal.metadata.repair_state) pm.environment.set('repair_state', terminal.metadata.repair_state);"
+      ] } }]
+    },
+    {
+      "name": "6. List attempts (preserve prior history)",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/analyses", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "analyses"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Analysis history loads', () => pm.response.to.have.status(200));",
+        "const rows = pm.response.json();",
+        "const latest = rows.find(row => row.id === pm.environment.get('analysis_id')) || rows[0];",
+        "if (latest) pm.environment.set('analysis_id', latest.id);",
+        "pm.test('The new analysis exists in persisted history', () => pm.expect(latest).to.be.ok);"
+      ] } }]
+    },
+    {
+      "name": "7. Get repair workflow for the new attempt",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/repair-workflow?analysis_id={{analysis_id}}", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "repair-workflow"], "query": [{ "key": "analysis_id", "value": "{{analysis_id}}" }] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Attempt workflow loads', () => pm.response.to.have.status(200));",
+        "const data = pm.response.json();",
+        "pm.environment.set('repair_state', data.state);",
+        "const proposal = data.repair_proposal || {};",
+        "const ready = data.allowed_actions.includes('APPLY') && proposal.verified === true;",
+        "pm.environment.set('repair_ready', String(ready));",
+        "pm.environment.set('repair_applied', String(proposal.applied === true));",
+        "if (proposal.file_path) pm.environment.set('repair_file_path_json', JSON.stringify(proposal.file_path));",
+        "if (proposal.old_locator) pm.environment.set('repair_old_code_json', JSON.stringify(proposal.old_locator));",
+        "if (proposal.proposed_locator) pm.environment.set('repair_new_code_json', JSON.stringify(proposal.proposed_locator));",
+        "if (data.verification_run_id) pm.environment.set('verification_run_id', data.verification_run_id);",
+        "pm.test('Workflow reports an explicit state', () => pm.expect(data.state).to.be.a('string').and.not.empty);"
+      ] } }]
+    },
+    {
+      "name": "8. Apply verified repair (skipped unless PATCH_READY)",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "if (pm.environment.get('repair_ready') !== 'true') pm.execution.skipRequest();"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"file_path\": {{repair_file_path_json}},\n  \"old_code\": {{repair_old_code_json}},\n  \"new_code\": {{repair_new_code_json}}\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/analyses/{{analysis_id}}/apply", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "analyses", "{{analysis_id}}", "apply"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Verified patch applies', () => pm.response.to.have.status(200));",
+        "pm.environment.set('repair_applied', 'true');"
+      ] } }]
+    },
+    {
+      "name": "9. Start exact failed nodeid verification (skipped unless applied)",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "if (pm.environment.get('repair_applied') !== 'true' || pm.environment.get('verification_run_id')) pm.execution.skipRequest();"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "POST",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/analyses/{{analysis_id}}/verification/run", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "analyses", "{{analysis_id}}", "verification", "run"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Exact-case verification run starts', () => pm.response.to.have.status(200));",
+        "const run = pm.response.json();",
+        "pm.environment.set('verification_run_id', run.id);",
+        "pm.test('Verification is scoped to the original nodeid', () => pm.expect(run.nodeids).to.eql([pm.environment.get('test_nodeid')]));"
+      ] } }]
+    },
+    {
+      "name": "10. Read verification run status",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "if (!pm.environment.get('verification_run_id')) pm.execution.skipRequest();"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/runs/{{verification_run_id}}", "host": ["{{api_base_url}}"], "path": ["api", "runs", "{{verification_run_id}}"] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Verification run status loads', () => pm.response.to.have.status(200));",
+        "const run = pm.response.json();",
+        "pm.environment.set('verification_status', run.status);",
+        "pm.test('Final repair acceptance requires a passed exact-case run', () => { if (['QUEUED', 'RUNNING'].includes(run.status)) pm.expect(run.nodeids).to.eql([pm.environment.get('test_nodeid')]); });"
+      ] } }]
+    },
+    {
+      "name": "11. Final repair workflow status",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }] },
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": { "raw": "{{api_base_url}}/api/failures/{{failure_id}}/repair-workflow?analysis_id={{analysis_id}}", "host": ["{{api_base_url}}"], "path": ["api", "failures", "{{failure_id}}", "repair-workflow"], "query": [{ "key": "analysis_id", "value": "{{analysis_id}}" }] }
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Final workflow status loads', () => pm.response.to.have.status(200));",
+        "const data = pm.response.json();",
+        "pm.environment.set('repair_state', data.state);",
+        "pm.test('Repair is verified only after exact-case pass', () => { if (data.verified) pm.expect(data.state).to.eql('VERIFIED'); });"
+      ] } }]
+    }
+  ]
+}

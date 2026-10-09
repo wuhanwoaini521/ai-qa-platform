@@ -1,7 +1,16 @@
 import asyncio
 
 import pytest
+from app.adapters.persistence.sqlalchemy_health_probe import SqlAlchemyDatabaseHealthProbe
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.platform_health_service import PlatformHealthService
+
+
+def _health_service() -> PlatformHealthService:
+    return PlatformHealthService(
+        repository_scope=TaskRepositoryScopeFactory(),
+        database_health_probe=SqlAlchemyDatabaseHealthProbe(),
+    )
 
 
 @pytest.mark.asyncio
@@ -16,7 +25,7 @@ async def test_database_health_compares_applied_migration_revision(test_db_sessi
     async with database.engine.begin() as connection:
         await connection.run_sync(lambda conn: MigrationContext.configure(conn).stamp(script_directory, head_revision))
 
-    result = await PlatformHealthService()._database()
+    result = await _health_service()._database()
 
     assert result["status"] == "ok"
     assert result["current_revision"] == result["head_revision"]
@@ -24,7 +33,7 @@ async def test_database_health_compares_applied_migration_revision(test_db_sessi
 
 @pytest.mark.asyncio
 async def test_health_is_cached_and_component_failure_does_not_hide_other_results(monkeypatch):
-    service = PlatformHealthService()
+    service = _health_service()
     calls = []
 
     async def good(**_kwargs):
@@ -48,7 +57,7 @@ async def test_health_is_cached_and_component_failure_does_not_hide_other_result
 
 @pytest.mark.asyncio
 async def test_missing_remote_worker_uses_local_execution_health(test_db_session):
-    result = await PlatformHealthService()._worker()
+    result = await _health_service()._worker()
     assert result["status"] == "ok"
     assert result["operational_state"] == "LOCAL_EXECUTION_AVAILABLE"
 
@@ -69,14 +78,14 @@ async def test_ai_health_uses_shared_status(monkeypatch):
         )
 
     monkeypatch.setattr(AISettingsService, "get_status", status)
-    result = await PlatformHealthService()._ai()
+    result = await _health_service()._ai()
     assert result["status"] == "warning"
     assert result["operational_state"] == "FALLBACK_ONLY"
 
 
 @pytest.mark.asyncio
 async def test_health_coroutines_run_independently(monkeypatch):
-    service = PlatformHealthService()
+    service = _health_service()
     started = set()
 
     async def probe(name):

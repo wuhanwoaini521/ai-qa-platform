@@ -13,6 +13,7 @@ from app.persistence.models import AutomationBindingORM
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.workspace_repo import WorkspaceRepository
+from app.services.ai_runtime import build_ai_orchestrator
 from app.services.operation_trace import trace_progress
 from app.services.workspace_service import WorkspaceService
 
@@ -85,8 +86,6 @@ class AutomationBindingService:
         from uuid import uuid4
 
         from qa_core.ai.context import ContextSelector
-        from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
-
         # Filesystem workspaces use the project key, not WorkspaceORM's separate row ID.
         workspace_key = test_case.project_id
         root = self.workspace_service.get_workspace_dir(workspace_key)
@@ -94,7 +93,7 @@ class AutomationBindingService:
         default_path = f"tests/test_case_{test_case.id.replace('-', '')[:12]}_{uuid4().hex[:6]}.py"
         await trace_progress("context.loaded", "用例、工作区与项目上下文已加载")
         await trace_progress("model.started", "生成自动化草稿")
-        result = await ProductionQAOrchestrator().assist_code_chat(
+        result = await build_ai_orchestrator().assist_code_chat(
             action="generate_test",
             message=(
                 "Generate a complete executable pytest test for the supplied case, using project fixtures "

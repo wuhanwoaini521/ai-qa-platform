@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from app.container import get_metrics_service
 from app.repositories.job_repo import JobRepository
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.worker_repo import WorkerRepository
 from app.services.job_queue_service import JobQueueService
-from app.services.metrics_service import metrics_service
 from httpx import AsyncClient
 from project_model import models as pm
 
@@ -29,7 +30,7 @@ async def test_metrics_counters_reflect_registered_workers_and_job_states(client
         await session.commit()
         run_id = run.id
 
-    queue = JobQueueService(job_repo=JobRepository(test_db_session))
+    queue = JobQueueService(repository_scope=TaskRepositoryScopeFactory(), job_repo=JobRepository(test_db_session))
     await queue.enqueue_job(
         run_id=run_id, project_id=project_id, workspace_id="ws-metrics", nodeids=["tests/test_a.py::test_a"]
     )
@@ -42,7 +43,7 @@ async def test_metrics_counters_reflect_registered_workers_and_job_states(client
     await queue.complete_job(completed_job.id, duration_ms=42.0)
     await queue.fail_job(failed_job.id, error_message="boom")
 
-    summary = await metrics_service.get_summary_metrics()
+    summary = await get_metrics_service().get_summary_metrics()
     assert summary["workers_total"] == 2
     assert summary["workers_online"] == 2
     assert summary["workers_busy"] == 1

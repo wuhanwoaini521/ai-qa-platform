@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from platform_config import AppConfig, ConfigManager
 from qa_core.execution.pytest_runner import PytestRunner
 from qa_core.onboarding.contract import venv_interpreter
 
@@ -32,25 +33,26 @@ class WorkerDaemon:
         worker_name: str | None = None,
         capabilities: list[str] | None = None,
         max_concurrency: int | None = None,
-        heartbeat_interval: float = 10.0,
-        poll_interval: float = 3.0,
+        heartbeat_interval: float | None = None,
+        poll_interval: float | None = None,
     ) -> None:
-        self.api_url = (api_url or os.getenv("AI_QA_API_URL", "http://127.0.0.1:8000")).rstrip("/")
+        self.config_manager = ConfigManager()
+        self.config: AppConfig = self.config_manager.get()
+        worker_config = self.config.worker
+        self.api_url = (api_url or worker_config.api_url).rstrip("/")
         self.worker_id = worker_id or os.getenv("WORKER_ID", f"worker-{socket.gethostname()}-{uuid.uuid4().hex[:6]}")
-        self.worker_name = worker_name or os.getenv("WORKER_NAME", f"Runner-{platform.node()}")
+        self.worker_name = worker_name or worker_config.name or f"Runner-{platform.node()}"
 
-        default_caps = ["playwright", "chromium", "firefox", "webkit", "pytest", "python3"]
-        env_caps = os.getenv("WORKER_CAPABILITIES")
-        self.capabilities = capabilities or (env_caps.split(",") if env_caps else default_caps)
-        self.max_concurrency = max_concurrency or int(os.getenv("MAX_CONCURRENCY", "4"))
+        self.capabilities = capabilities or list(worker_config.capabilities)
+        self.max_concurrency = max_concurrency or min(worker_config.max_concurrency, self.config.run.max_parallel_runs)
 
-        self.heartbeat_interval = heartbeat_interval
-        self.poll_interval = poll_interval
+        self.heartbeat_interval = heartbeat_interval or worker_config.heartbeat_interval_seconds
+        self.poll_interval = poll_interval or worker_config.poll_interval_seconds
 
         self._running = False
         self._running_jobs: set[str] = set()
         self._http_client: httpx.AsyncClient | None = None
-        self._runner = PytestRunner()
+        self._runner = PytestRunner(default_timeout_sec=self.config.pytest.timeout_seconds)
         self._heartbeat_task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
 
@@ -58,7 +60,7 @@ class WorkerDaemon:
         """Start the worker daemon lifecycle."""
         self._running = True
         headers: dict[str, str] = {}
-        token = os.getenv("AI_QA_AUTH_TOKEN", "").strip()
+        token = self.config.worker.auth_token.get_secret_value().strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
         else:
@@ -66,7 +68,11 @@ class WorkerDaemon:
                 "AI_QA_AUTH_TOKEN is not set: the API rejects worker requests with 401 unless "
                 "AUTH_REQUIRED=false. Create an API key (Security -> API Keys) and export it."
             )
-        self._http_client = httpx.AsyncClient(base_url=self.api_url, timeout=30.0, headers=headers)
+        self._http_client = httpx.AsyncClient(
+            base_url=self.api_url,
+            timeout=self.config.worker.http_timeout_seconds,
+            headers=headers,
+        )
 
         logger.info(
             "Starting worker %s (Name: %s, Capabilities: %s, Concurrency: %d, API: %s)",
@@ -203,12 +209,12 @@ class WorkerDaemon:
             run_response = await self._http_client.get(f"/api/runs/{job_data['run_id']}")
             run_response.raise_for_status()
             run = run_response.json()
-            workspace_root = Path(os.getenv("WORKSPACE_STORAGE_DIR", "runtime/workspaces")).resolve()
+            workspace_root = self.config.worker.workspace_storage_dir.resolve()
             workspace_dir = (workspace_root / job_data["workspace_id"]).resolve()
             if not workspace_dir.is_relative_to(workspace_root):
                 raise ValueError("Invalid workspace ID")
             project_interpreter = venv_interpreter(workspace_dir / ".qa-platform-runtime")
-            artifact_root = Path(os.getenv("ARTIFACT_STORAGE_DIR", "runtime/artifacts")).resolve()
+            artifact_root = self.config.worker.artifact_storage_dir.resolve()
             artifact_dir = artifact_root / job_data["run_id"]
             artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -227,6 +233,9 @@ class WorkerDaemon:
                     environment={**run["environment"], "QA_ARTIFACT_DIR": str(artifact_dir)},
                     interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
                     on_log=send_log,
+                    extra_pytest_args=self.config.pytest.default_args,
+                    parallel_workers=self.config.pytest.workers,
+                    timeout_sec=self.config.pytest.timeout_seconds,
                 )
             )
             cancellation_task = asyncio.create_task(self._watch_job_cancellation(job_id))

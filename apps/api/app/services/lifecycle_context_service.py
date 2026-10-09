@@ -5,16 +5,17 @@ import json
 from project_model.lifecycle import ModernTestModel, RequirementDocument
 from qa_core.failure.redactor import SensitiveRedactor
 
-from app.persistence.database import get_session
-from app.persistence.models import RequirementORM, TestCaseORM
+from app.ports.repository_scope import RepositoryScopeFactory
 
 
-async def lifecycle_context(project_id, case_id=None, requirement_id=None):
+async def lifecycle_context(repository_scope: RepositoryScopeFactory, project_id, case_id=None, requirement_id=None):
     if not case_id and not requirement_id:
         return ""
-    async with get_session() as session:
+    async with repository_scope() as repositories:
+        cases = repositories.test_cases
+        requirements = repositories.requirements
         result = {"source": "persisted_qa_entities", "references": []}
-        case = await session.get(TestCaseORM, case_id) if case_id else None
+        case = await cases.get_by_id(case_id) if case_id else None
         if case_id and (not case or case.project_id != project_id):
             raise ValueError("Test case does not belong to this project")
         if case:
@@ -33,7 +34,7 @@ async def lifecycle_context(project_id, case_id=None, requirement_id=None):
                 "steps": case.steps[:20],
             }
             result["references"].append(case.id)
-        requirement = await session.get(RequirementORM, requirement_id) if requirement_id else None
+        requirement = await requirements.get_by_id(requirement_id) if requirement_id else None
         if requirement_id and (not requirement or requirement.project_id != project_id):
             raise ValueError("Requirement does not belong to this project")
         if requirement:

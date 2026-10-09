@@ -5,6 +5,7 @@ import { AutomationStatus, Project, TestCaseCreate, TestCasePriority } from '../
 interface TestCaseFormModalProps {
   isOpen: boolean;
   projects: Project[];
+  workspaceMode?: boolean;
   formData: TestCaseCreate;
   setFormData: React.Dispatch<React.SetStateAction<TestCaseCreate>>;
   stepsText: string;
@@ -15,10 +16,14 @@ interface TestCaseFormModalProps {
   onClose: () => void;
 }
 
-export function useTestCaseFormModal(defaultProjectId: string) {
+export function useTestCaseFormModal(
+  defaultProjectId: string,
+  initialRequirementId?: string | null,
+) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState<TestCaseCreate>({
     project_id: defaultProjectId,
+    requirement_id: initialRequirementId,
     title: '',
     preconditions: '',
     steps: [],
@@ -31,7 +36,19 @@ export function useTestCaseFormModal(defaultProjectId: string) {
   const [tagsText, setTagsText] = useState('');
 
   const open = (projectId: string) => {
-    setFormData({ ...formData, project_id: projectId });
+    setFormData({
+      project_id: projectId,
+      requirement_id: initialRequirementId,
+      title: '',
+      preconditions: '',
+      steps: [],
+      expected_result: '',
+      priority: 'P1',
+      automation_status: 'MANUAL',
+      tags: [],
+    });
+    setStepsText('');
+    setTagsText('');
     setIsOpen(true);
   };
 
@@ -40,6 +57,7 @@ export function useTestCaseFormModal(defaultProjectId: string) {
   const reset = () => {
     setFormData({
       project_id: defaultProjectId,
+      requirement_id: initialRequirementId,
       title: '',
       preconditions: '',
       steps: [],
@@ -69,6 +87,7 @@ export function useTestCaseFormModal(defaultProjectId: string) {
 export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
   isOpen,
   projects,
+  workspaceMode = false,
   formData,
   setFormData,
   stepsText,
@@ -83,12 +102,13 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
     <>
       {isOpen && (
         <div className="modal-overlay">
-          <div className="modal-dialog">
+          <div className="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="test-case-form-title">
             <form onSubmit={handleCreateTestCase}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('formTitle')}</h3>
+                <h3 id="test-case-form-title" style={{ fontSize: '15px', fontWeight: 700 }}>{t('formTitle')}</h3>
                 <button
                   type="button"
+                  aria-label={t('common:close')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
                   onClick={onClose}
                 >
@@ -97,9 +117,11 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">{t('formProject')}</label>
+                  <label className="form-label" htmlFor="test-case-project">{t('formProject')}</label>
                   <select
+                    id="test-case-project"
                     className="form-control"
+                    disabled={workspaceMode}
                     value={formData.project_id}
                     onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
                   >
@@ -112,8 +134,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('formCaseTitle')}</label>
+                  <label className="form-label" htmlFor="test-case-title">{t('formCaseTitle')}</label>
                   <input
+                    id="test-case-title"
                     type="text"
                     required
                     className="form-control"
@@ -125,8 +148,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">{t('common:priority')}</label>
+                    <label className="form-label" htmlFor="test-case-priority">{t('common:priority')}</label>
                     <select
+                      id="test-case-priority"
                       className="form-control"
                       value={formData.priority}
                       onChange={(e) =>
@@ -141,8 +165,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{t('formAutomationStatus')}</label>
+                    <label className="form-label" htmlFor="test-case-automation-status">{t('formAutomationStatus')}</label>
                     <select
+                      id="test-case-automation-status"
                       className="form-control"
                       value={formData.automation_status}
                       onChange={(e) =>
@@ -160,8 +185,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('formPreconditions')}</label>
+                  <label className="form-label" htmlFor="test-case-preconditions">{t('formPreconditions')}</label>
                   <input
+                    id="test-case-preconditions"
                     type="text"
                     className="form-control"
                     placeholder={t('formPreconditionsPlaceholder')}
@@ -171,8 +197,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('formSteps')}</label>
+                  <label className="form-label" htmlFor="test-case-steps">{t('formSteps')}</label>
                   <textarea
+                    id="test-case-steps"
                     rows={4}
                     className="form-control"
                     placeholder={t('formStepsPlaceholder')}
@@ -182,8 +209,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('formExpectedResult')}</label>
+                  <label className="form-label" htmlFor="test-case-expected-result">{t('formExpectedResult')}</label>
                   <textarea
+                    id="test-case-expected-result"
                     rows={2}
                     className="form-control"
                     placeholder={t('formExpectedResultPlaceholder')}
@@ -193,8 +221,9 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('formTags')}</label>
+                  <label className="form-label" htmlFor="test-case-tags">{t('formTags')}</label>
                   <input
+                    id="test-case-tags"
                     type="text"
                     className="form-control"
                     placeholder={t('formTagsPlaceholder')}

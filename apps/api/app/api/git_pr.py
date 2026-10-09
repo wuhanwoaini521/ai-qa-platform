@@ -17,14 +17,7 @@ from project_model.models import (
     PullRequestInfo,
 )
 
-from app.persistence.database import get_db
-from app.repositories.automation_binding_repo import AutomationBindingRepository
-from app.repositories.project_repo import ProjectRepository
-from app.repositories.requirement_repo import RequirementRepository
-from app.repositories.run_history_repo import RunHistoryRepository
-from app.repositories.test_case_repo import TestCaseRepository
-from app.repositories.test_run_repo import TestRunRepository
-from app.repositories.workspace_repo import WorkspaceRepository
+from app.container import get_pr_service
 from app.services.pr_service import PullRequestService
 from app.services.workspace_service import WorkspaceService
 
@@ -33,20 +26,6 @@ router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["Git & PR Workflow
 
 def get_workspace_service() -> WorkspaceService:
     return WorkspaceService()
-
-
-def get_pr_service(db=Depends(get_db)) -> PullRequestService:
-    ws_service = WorkspaceService()
-    return PullRequestService(
-        workspace_service=ws_service,
-        workspace_repo=WorkspaceRepository(db),
-        project_repo=ProjectRepository(db),
-        requirement_repo=RequirementRepository(db),
-        test_case_repo=TestCaseRepository(db),
-        binding_repo=AutomationBindingRepository(db),
-        test_run_repo=TestRunRepository(db),
-        run_history_repo=RunHistoryRepository(db),
-    )
 
 
 # --- Git Endpoints ---

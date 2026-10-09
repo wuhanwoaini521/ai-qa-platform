@@ -32,6 +32,7 @@ from app.api import (
     recorder_router,
     releases_router,
     requirements_router,
+    settings_router,
     runners_router,
     runs_router,
     tasks_router,
@@ -49,9 +50,7 @@ from app.api.language_service import router as language_service_router
 from app.api.lifecycle import router as lifecycle_router
 from app.api.runtime import router as runtime_router
 from app.persistence.database import engine, init_db
-from app.services.ai_settings_service import AISettingsService
-from app.services.metrics_service import metrics_service
-from app.settings import settings
+from app.settings import config_manager, get_config
 
 logger = logging.getLogger("app.startup")
 
@@ -84,7 +83,9 @@ class RequestMetricsMiddleware:
             await self.app(scope, receive, send_with_request_id)
         finally:
             request_id_context.reset(token)
-            metrics_service.record_request(
+            from app.container import get_metrics_service
+
+            get_metrics_service().record_request(
                 method=scope.get("method", ""),
                 path=scope.get("path", ""),
                 status_code=status_code,
@@ -94,7 +95,7 @@ class RequestMetricsMiddleware:
 
 async def _recover_stale_runs() -> list[str]:
     """Recovery uses the application's own session factory, independent of the request lifecycle."""
-    from app.api.runs import open_run_service
+    from app.container import open_run_service
 
     async with open_run_service() as service:
         return await service.recover_stale_runs()
@@ -102,18 +103,29 @@ async def _recover_stale_runs() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    config = get_config()
+    logging.getLogger().setLevel(config.logging.level)
+    logger.info(
+        "Config loaded path=%s AI enabled=%s provider=%s model=%s Jev enabled=%s model=%s Repair mode=%s require_jev=%s",
+        config_manager.path,
+        config.ai.enabled,
+        config.ai.provider,
+        config.ai.model,
+        config.jev.enabled,
+        config.jev.model,
+        config.repair.mode,
+        config.repair.require_jev,
+    )
     # Initialize database tables
     await init_db()
-    from app.repositories.failure_analysis_repo import FailureAnalysisRepository
+    from app.container import get_requirement_lifecycle_service, recover_failure_analyses
 
-    await FailureAnalysisRepository().recover_interrupted()
-    from app.services.requirement_lifecycle_service import RequirementLifecycleService
+    await recover_failure_analyses()
 
-    await RequirementLifecycleService.recover_interrupted()
-    try:
-        await AISettingsService().load_runtime_config()
-    except Exception as error:  # AI config must not prevent core API startup
-        logger.warning("Persisted AI provider settings could not be loaded: %s", error)
+    await get_requirement_lifecycle_service().recover_interrupted()
+    from app.container import get_ai_settings_service
+
+    await get_ai_settings_service().load_runtime_config()
     # Close runs abandoned by a previous process: without this a crashed run stays RUNNING forever
     # and every pass-rate and coverage figure built on it stays wrong.
     try:
@@ -127,9 +139,9 @@ async def lifespan(app: FastAPI):
     task_runtime = task_runtime_service
     app.state.task_runtime = task_runtime
     await task_runtime.start()
-    from app.services.platform_health_service import platform_health_service
+    from app.container import get_platform_health_service
 
-    readiness_task = asyncio.create_task(platform_health_service.check(refresh=True))
+    readiness_task = asyncio.create_task(get_platform_health_service().check(refresh=True))
     app.state.readiness_task = readiness_task
     try:
         yield
@@ -138,8 +150,8 @@ async def lifespan(app: FastAPI):
             readiness_task.cancel()
         await asyncio.gather(readiness_task, return_exceptions=True)
         await task_runtime.stop()
+        from app.container import recorder_service
         from app.services.debug_session_service import debug_session_service
-        from app.services.recorder_service import recorder_service
 
         await recorder_service.close_all()
         await debug_session_service.close_all()
@@ -162,7 +174,7 @@ app.add_exception_handler(RequestValidationError, validation_error)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=get_config().api.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -196,6 +208,7 @@ app.include_router(testrail_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(quality_router, prefix="/api")
 app.include_router(releases_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(runners_router, prefix="/api")

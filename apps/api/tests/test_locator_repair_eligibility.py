@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 from app.api.failures import get_failure_service
 from app.main import app
-from app.persistence.models import FailureRecordORM
+from app.persistence.models import FailureAnalysisORM, FailureRecordORM
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.failure_service import FailureService
 from project_model.models import RunStatus, TestRunCreate
@@ -89,7 +91,8 @@ async def test_inapplicable_repairs_are_rejected_before_ai_or_workspace_changes(
             "new_code": "assert 1 == 1",
         },
     )
-    assert applied.status_code == 422, applied.text
+    assert applied.status_code == 400, applied.text
+    assert "No repair analysis exists" in applied.json()["detail"]
     assert not calls
     file = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_x.py"})
     assert file.json()["content"] == original
@@ -100,7 +103,7 @@ async def test_inapplicable_repairs_are_rejected_before_ai_or_workspace_changes(
 
 @pytest.mark.asyncio
 async def test_legacy_assertion_proposals_are_not_exposed_as_repairs(client, test_db_session):
-    _, failure_id, _ = await seed_failure(
+    project_id, failure_id, content = await seed_failure(
         client,
         test_db_session,
         category="LOCATOR_CHANGED",
@@ -139,16 +142,47 @@ async def test_real_locator_failure_without_candidate_does_not_create_noop_propo
 
 @pytest.mark.asyncio
 async def test_noop_patch_is_rejected_even_for_locator_failure(client, test_db_session):
-    _, failure_id, _ = await seed_failure(
+    project_id, failure_id, content = await seed_failure(
         client,
         test_db_session,
         category="LOCATOR_CHANGED",
         error='Timeout waiting for locator("element")',
         locator="element",
     )
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = {
+            "old_locator": "element",
+            "proposed_locator": "element",
+            "provider": "jev",
+            "ai_provider": "openai-compatible",
+            "ai_fallback_used": False,
+            "candidate_id": "candidate-1",
+            "verified": True,
+            "code_diff": "- element\n+ element",
+            "resolved_classification": "LOCATOR_CHANGED",
+            "source_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "decision_summary": {
+                "fallback_used": False,
+                "verification_source": "playwright",
+                "confidence": 0.95,
+            },
+        }
+        session.add(
+            FailureAnalysisORM(
+                id="repair-analysis-noop",
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": dict(failure.repair_proposal),
+                },
+            )
+        )
+        await session.commit()
     response = await client.post(
         f"/api/failures/{failure_id}/apply-repair",
-        params={"workspace_id": "unused"},
+        params={"workspace_id": project_id},
         json={
             "file_path": "tests/test_x.py",
             "old_code": "element",
@@ -157,3 +191,26 @@ async def test_noop_patch_is_rejected_even_for_locator_failure(client, test_db_s
     )
     assert response.status_code == 400, response.text
     assert "相同" in response.json()["detail"]
+
+
+def test_failure_locator_can_come_from_the_observed_failed_browser_action():
+    failure = type(
+        "Failure",
+        (),
+        {"error_message": "AssertionError: checkout did not complete", "stack_trace": "", "failing_locator": None},
+    )()
+    evidence = {
+        "recent_steps": [
+            {"action": "click", "locator": "#view-order", "status": "PASSED"},
+            {"action": "click", "locator": "css=#purchase-now", "status": "FAILED"},
+        ]
+    }
+    assert FailureService._observed_failed_locator(evidence) == "#purchase-now"
+    assert (
+        FailureService._require_locator_failure(
+            failure,
+            resolved_classification="LOCATOR_CHANGED",
+            observed_locator=FailureService._observed_failed_locator(evidence),
+        )
+        == "#purchase-now"
+    )

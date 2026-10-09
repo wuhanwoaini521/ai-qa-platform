@@ -67,6 +67,31 @@ class AutomationBindingRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_active_for_cases(self, test_case_ids: list[str]) -> list[AutomationBindingORM]:
+        if not test_case_ids:
+            return []
+        result = await self.session.execute(
+            select(AutomationBindingORM).where(
+                AutomationBindingORM.test_case_id.in_(test_case_ids),
+                AutomationBindingORM.status == "ACTIVE",
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_active_by_requirement(self, project_id: str, requirement_id: str) -> list[AutomationBindingORM]:
+        from app.persistence.models import TestCaseORM
+
+        result = await self.session.execute(
+            select(AutomationBindingORM)
+            .join(TestCaseORM, TestCaseORM.id == AutomationBindingORM.test_case_id)
+            .where(
+                TestCaseORM.project_id == project_id,
+                TestCaseORM.requirement_id == requirement_id,
+                AutomationBindingORM.status == "ACTIVE",
+            )
+        )
+        return list(result.scalars().all())
+
     async def delete_by_test_case_id(self, test_case_id: str) -> bool:
         existing = await self.get_by_test_case_id(test_case_id)
         if not existing:

@@ -89,11 +89,16 @@ async def test_jira_bug_draft_and_creation(client: AsyncClient):
     run_id = run_data["id"]
 
     # Wait for test run to finish
-    for _ in range(20):
+    final_status = run_data.get("status")
+    for _ in range(100):
         await asyncio.sleep(0.1)
         r = await client.get(f"/api/runs/{run_id}")
-        if r.status_code == 200 and r.json()["status"] in ("PASSED", "FAILED", "BROKEN"):
+        if r.status_code == 200:
+            final_status = r.json()["status"]
+        if final_status in ("PASSED", "FAILED", "BROKEN"):
             break
+    else:
+        pytest.fail(f"Test run {run_id} did not finish within 10 seconds (last status: {final_status})")
 
     # Check failures
     fail_resp = await client.get("/api/failures")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -18,15 +19,14 @@ from pydantic import BaseModel
 from qa_core.ai.models import AICompletionRequest, ProviderHealth
 from qa_core.ai.provider import FakeAIProvider, OpenAICompatibleProvider, clean_json_text
 from qa_core.ai.registry import AIProviderRegistry
-from sqlalchemy import select
 
-from app.persistence.database import async_session_factory
-from app.persistence.models import AIProviderConfigORM
+from app.ports.repository_scope import RepositoryScopeFactory
 from app.services.secret_store import SecretStore
-from app.settings import settings
+from app.settings import get_config
 
 _health_lock = asyncio.Lock()
 _health_cache: tuple[str, float, AIStatusResponse] | None = None
+logger = logging.getLogger("app.ai.config")
 
 
 class _StructuredOutputProbe(BaseModel):
@@ -35,60 +35,59 @@ class _StructuredOutputProbe(BaseModel):
 
 @dataclass(frozen=True)
 class AIRuntimeConfig:
+    enabled: bool
     provider: str
     api_key: str
     model: str
     base_url: str
     timeout: float
     max_retries: int
-    max_request_tokens: int = 16000
+    max_request_tokens: int = 1_000_000
     max_daily_requests: int = 1000
     max_task_calls: int = 8
+    max_requests_per_run: int = 50
+    max_input_tokens_per_run: int = 100_000
+    max_output_tokens_per_run: int = 50_000
+    budget_enabled: bool = True
 
 
 class AISettingsService:
     """Persists the normal AI provider separately from Jev and activates it for API requests."""
 
-    def __init__(self, secret_store: SecretStore | None = None) -> None:
-        self.secret_store = secret_store or SecretStore(master_key=settings.app_secret_key)
+    def __init__(
+        self, repository_scope: RepositoryScopeFactory | None = None, secret_store: SecretStore | None = None
+    ) -> None:
+        self.repository_scope = repository_scope
+        self.secret_store = secret_store or SecretStore(master_key=get_config().app.secret_key.get_secret_value())
 
     def _environment_config(self) -> AIRuntimeConfig:
+        config = get_config().ai
+        budget = config.budget
         return AIRuntimeConfig(
-            provider=settings.qa_ai_provider,
-            api_key=settings.qa_ai_api_key,
-            model=settings.qa_ai_model,
-            base_url=settings.qa_ai_base_url,
-            timeout=settings.qa_ai_timeout,
-            max_retries=settings.qa_ai_max_retries,
-        )
-
-    async def _row(self) -> AIProviderConfigORM | None:
-        async with async_session_factory() as session:
-            result = await session.execute(select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default"))
-            return result.scalar_one_or_none()
-
-    @staticmethod
-    def _config_from_row(row: AIProviderConfigORM, secret_store: SecretStore) -> AIRuntimeConfig:
-        return AIRuntimeConfig(
-            provider=row.provider,
-            api_key=secret_store.decrypt_secret(row.encrypted_api_key or ""),
-            model=row.model,
-            base_url=row.base_url,
-            timeout=row.timeout,
-            max_retries=row.max_retries,
-            max_request_tokens=row.max_request_tokens,
-            max_daily_requests=row.max_daily_requests,
-            max_task_calls=row.max_task_calls,
+            enabled=config.enabled,
+            provider=config.provider,
+            api_key=config.api_key.get_secret_value(),
+            model=config.model,
+            base_url=config.base_url,
+            timeout=config.timeout_seconds,
+            max_retries=config.retries,
+            max_request_tokens=budget.max_request_tokens,
+            max_daily_requests=budget.max_daily_requests,
+            max_task_calls=budget.max_task_calls,
+            max_requests_per_run=budget.max_requests_per_run,
+            max_input_tokens_per_run=budget.max_input_tokens_per_run,
+            max_output_tokens_per_run=budget.max_output_tokens_per_run,
+            budget_enabled=budget.enabled,
         )
 
     async def _effective_config(self) -> AIRuntimeConfig:
-        row = await self._row()
-        return self._config_from_row(row, self.secret_store) if row else self._environment_config()
+        return self._environment_config()
 
     @staticmethod
     def _response(config: AIRuntimeConfig) -> AIProviderSettingsResponse:
         masked = SecretStore.mask_secret(config.api_key)
         return AIProviderSettingsResponse(
+            enabled=config.enabled,
             provider=config.provider,
             api_key_configured=bool(config.api_key),
             api_key_masked=masked or None,
@@ -101,12 +100,12 @@ class AISettingsService:
             max_task_calls=config.max_task_calls,
         )
 
-    @staticmethod
-    def _activate(config: AIRuntimeConfig) -> None:
+    def _activate(self, config: AIRuntimeConfig) -> None:
         from app.services.ai_execution_service import AIExecutionService
 
         AIProviderRegistry.configure_runtime(
             {
+                "enabled": str(config.enabled).lower(),
                 "provider": config.provider,
                 "api_key": config.api_key,
                 "model": config.model,
@@ -121,7 +120,17 @@ class AISettingsService:
                 provider,
                 max_request_tokens=config.max_request_tokens,
                 max_daily_requests=config.max_daily_requests,
+                budget_enabled=config.budget_enabled,
+                repository_scope=self.repository_scope,
             )
+        )
+        logger.info(
+            "AI runtime activated enabled=%s provider=%s model=%s timeout_seconds=%s max_request_tokens=%s",
+            config.enabled,
+            config.provider,
+            config.model,
+            config.timeout,
+            config.max_request_tokens,
         )
 
     async def get_settings(self) -> AIProviderSettingsResponse:
@@ -130,42 +139,11 @@ class AISettingsService:
         return self._response(config)
 
     async def load_runtime_config(self) -> None:
-        """Load persisted UI settings on startup; fall back to environment defaults."""
+        """Activate the one validated AppConfig snapshot for every AI consumer."""
         self._activate(await self._effective_config())
 
     async def save(self, update: AIProviderSettingsUpdate) -> AIProviderSettingsResponse:
-        async with async_session_factory() as session:
-            result = await session.execute(select(AIProviderConfigORM).where(AIProviderConfigORM.id == "default"))
-            row = result.scalar_one_or_none()
-            current_key = (
-                self.secret_store.decrypt_secret(row.encrypted_api_key or "") if row else settings.qa_ai_api_key
-            )
-            if update.clear_api_key:
-                api_key = ""
-            elif update.api_key and update.api_key.strip():
-                api_key = update.api_key.strip()
-            else:
-                api_key = current_key
-
-            encrypted_key = self.secret_store.encrypt_secret(api_key) if api_key else None
-            if row is None:
-                row = AIProviderConfigORM(id="default")
-                session.add(row)
-            row.provider = update.provider
-            row.encrypted_api_key = encrypted_key
-            row.model = update.model.strip()
-            row.base_url = update.base_url.strip().rstrip("/")
-            row.timeout = update.timeout
-            row.max_retries = update.max_retries
-            row.max_request_tokens = update.max_request_tokens
-            row.max_daily_requests = update.max_daily_requests
-            row.max_task_calls = update.max_task_calls
-            await session.commit()
-            await session.refresh(row)
-            config = self._config_from_row(row, self.secret_store)
-
-        self._activate(config)
-        return self._response(config)
+        raise RuntimeError("AI runtime settings are managed by config/config.yaml; edit it and call reload")
 
     async def _config_for_update(self, update: AIProviderSettingsUpdate) -> AIRuntimeConfig:
         current = await self._effective_config()
@@ -175,6 +153,7 @@ class AISettingsService:
             else (update.api_key.strip() if update.api_key and update.api_key.strip() else current.api_key)
         )
         return AIRuntimeConfig(
+            enabled=current.enabled,
             provider=update.provider,
             api_key=api_key,
             model=update.model.strip(),
@@ -184,6 +163,10 @@ class AISettingsService:
             max_request_tokens=update.max_request_tokens,
             max_daily_requests=update.max_daily_requests,
             max_task_calls=update.max_task_calls,
+            max_requests_per_run=current.max_requests_per_run,
+            max_input_tokens_per_run=current.max_input_tokens_per_run,
+            max_output_tokens_per_run=current.max_output_tokens_per_run,
+            budget_enabled=current.budget_enabled,
         )
 
     async def test_connection(
@@ -193,6 +176,17 @@ class AISettingsService:
         verify_structured_output: bool = False,
     ) -> AIProviderConnectionResult:
         config = await self._config_for_update(update) if update else await self._effective_config()
+        if not config.enabled:
+            return AIProviderConnectionResult(
+                connected=False,
+                provider=config.provider,
+                status=ProviderHealth.UNAVAILABLE.value,
+                message="AI is disabled by the effective AppConfig.",
+                model=config.model,
+                streaming=False,
+                structured_output_supported=None,
+                latency_ms=0,
+            )
         started = time.perf_counter()
         streaming = False
         structured_output_supported: bool | None = None
@@ -215,7 +209,11 @@ class AISettingsService:
                 from app.services.ai_execution_service import AIExecutionService
 
                 guarded = AIExecutionService(
-                    provider, max_request_tokens=config.max_request_tokens, max_daily_requests=config.max_daily_requests
+                    provider,
+                    max_request_tokens=config.max_request_tokens,
+                    max_daily_requests=config.max_daily_requests,
+                    budget_enabled=config.budget_enabled,
+                    repository_scope=self.repository_scope,
                 )
                 try:
                     text = ""

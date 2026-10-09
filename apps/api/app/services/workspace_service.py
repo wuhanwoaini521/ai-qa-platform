@@ -25,7 +25,7 @@ from project_model.models import (
     ValidationSeverity,
 )
 
-from app.settings import settings
+from app.settings import get_config
 
 EXAMPLE_DIR = Path(__file__).resolve().parents[4] / "examples" / "quickstart"
 EXAMPLE_FILES = (
@@ -49,7 +49,7 @@ class SecurityException(Exception):
 
 class WorkspaceService:
     def __init__(self, base_dir: Path | None = None) -> None:
-        self.base_dir = (base_dir or settings.workspace_storage_dir).resolve()
+        self.base_dir = (base_dir or get_config().app.workspace_storage_dir).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.git_repo = GitRepository()
 

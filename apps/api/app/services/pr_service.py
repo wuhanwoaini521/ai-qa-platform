@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from integrations.github_adapter import (
     FakePullRequestAdapter,
     GitHubPullRequestAdapter,
@@ -23,6 +21,7 @@ from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.workspace_service import WorkspaceService
+from app.settings import get_config
 
 
 class PullRequestService:
@@ -50,9 +49,10 @@ class PullRequestService:
         if adapter is not None:
             self.adapter = adapter
         else:
-            token = os.getenv("GITHUB_TOKEN", "").strip()
-            if token:
-                self.adapter = GitHubPullRequestAdapter(token=token)
+            integration = get_config().integrations.github
+            token = integration.token.get_secret_value().strip()
+            if integration.enabled and token:
+                self.adapter = GitHubPullRequestAdapter(token=token, api_base_url=integration.base_url)
             else:
                 self.adapter = FakePullRequestAdapter()
 

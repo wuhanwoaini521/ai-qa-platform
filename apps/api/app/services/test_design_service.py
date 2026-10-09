@@ -8,12 +8,14 @@ from project_model.models import (
 )
 
 from app.persistence.models import TestDesignORM
+from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.test_design_repo import TestDesignRepository
 
 
 class TestDesignService:
-    def __init__(self, test_design_repo: TestDesignRepository) -> None:
+    def __init__(self, test_design_repo: TestDesignRepository, requirement_repo: RequirementRepository) -> None:
         self.test_design_repo = test_design_repo
+        self.requirement_repo = requirement_repo
 
     def _to_dto(self, orm: TestDesignORM) -> TestDesign:
         return TestDesign(
@@ -42,7 +44,7 @@ class TestDesignService:
     async def create_test_design(self, data: TestDesignCreate) -> TestDesign:
         from app.services.lifecycle_validation import validate_design_model
 
-        await validate_design_model(self.test_design_repo.session, data)
+        await validate_design_model(self.requirement_repo, data)
         orm = await self.test_design_repo.create(data)
         return self._to_dto(orm)
 
@@ -55,7 +57,7 @@ class TestDesignService:
         merged = TestDesignCreate.model_validate(
             {**self._to_dto(original).model_dump(), **data.model_dump(exclude_unset=True)}
         )
-        await validate_design_model(self.test_design_repo.session, merged)
+        await validate_design_model(self.requirement_repo, merged)
         orm = await self.test_design_repo.update(design_id, data)
         if not orm:
             return None

@@ -1,0 +1,312 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+
+from project_model.task_models import (
+    TaskStatus,
+    TaskStep,
+    TaskStepStatus,
+)
+
+from app.persistence.models import utc_now
+from app.ports.task_unit_of_work import TaskUnitOfWorkFactory
+from app.services.task_errors import ApprovalRequired, TaskBlocked
+from app.services.task_execution_orchestrator import TaskExecutionOrchestrator
+from app.services.task_workspace import workspace_source_snapshot
+
+logger = logging.getLogger("app.task_runtime")
+
+
+class TaskSchedulerService:
+    """Own the persisted task queue, concurrency limits and worker lifecycle."""
+
+    def __init__(
+        self,
+        execution: TaskExecutionOrchestrator,
+        *,
+        concurrency: int = 2,
+        poll_interval: float = 0.5,
+        repository_scope: TaskUnitOfWorkFactory,
+    ) -> None:
+        self.execution = execution
+        self.repository_scope = repository_scope
+        self.concurrency = max(1, concurrency)
+        self.poll_interval = poll_interval
+        self._scheduler: asyncio.Task | None = None
+        self._active: dict[str, asyncio.Task] = {}
+        self._child_runs = execution._child_runs
+        self._semaphore = asyncio.Semaphore(self.concurrency)
+        self._stopping = False
+
+    async def cancel_active(self, task_id: str, run_id: str | None = None) -> None:
+        active = self._active.get(task_id)
+        if active:
+            active.cancel()
+            await asyncio.gather(active, return_exceptions=True)
+        run_id = self._child_runs.pop(task_id, None) or run_id
+        if run_id:
+            try:
+                from app.container import open_run_service
+
+                async with open_run_service() as service:
+                    await service.cancel_run(run_id)
+            except Exception:
+                logger.warning("Could not cancel child TestRun for task %s", task_id)
+
+    async def start(self) -> None:
+        if self._scheduler is None or self._scheduler.done():
+            self._stopping = False
+            await self.recover_interrupted()
+            self._scheduler = asyncio.create_task(self._schedule_loop(), name="agent-task-scheduler")
+
+    async def stop(self) -> None:
+        self._stopping = True
+        if self._scheduler:
+            self._scheduler.cancel()
+            try:
+                await self._scheduler
+            except asyncio.CancelledError:
+                pass
+            self._scheduler = None
+        for task_id in list(self._active):
+            try:
+                row, _ = await self.execution._load(task_id)
+                run_id = (row.context or {}).get("run_id") if row else None
+                if run_id:
+                    from app.container import open_run_service
+
+                    async with open_run_service() as service:
+                        await service.cancel_run(run_id)
+            except Exception:
+                logger.warning("Could not stop child TestRun for interrupted task %s", task_id)
+        active = list(self._active.values())
+        for task in active:
+            task.cancel()
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+
+    async def recover_interrupted(self) -> list[str]:
+        """Never replay a possibly side-effecting browser, patch or subprocess step blindly."""
+        recovered: list[str] = []
+        async with self.repository_scope() as repositories:
+            repo = repositories.tasks
+            for row in await repo.unfinished():
+                steps = await repo.steps_for_task(row.id)
+                for step in steps:
+                    if step.status == TaskStepStatus.RUNNING.value:
+                        await repo.update_step(
+                            step.id,
+                            status=TaskStepStatus.FAILED.value,
+                            error="API restarted while this tool was running; inspect side effects before retrying.",
+                            finished_at=utc_now(),
+                        )
+                failure_reason = "Interrupted by API restart. Review the current workspace and explicitly replan."
+                await repo.update_task(
+                    row.id,
+                    status=TaskStatus.BLOCKED.value,
+                    failure_reason=failure_reason,
+                    finished_at=utc_now(),
+                )
+                await repo.add_event(row.id, "task.blocked", {"reason": failure_reason, "recovered": True})
+                recovered.append(row.id)
+            await repositories.commit()
+        return recovered
+
+    async def _schedule_loop(self) -> None:
+        while not self._stopping:
+            try:
+                async with self.repository_scope() as repositories:
+                    rows = await repositories.tasks.pending(limit=self.concurrency * 2)
+                    candidates = [row.id for row in rows if row.id not in self._active]
+                for task_id in candidates:
+                    if len(self._active) >= self.concurrency:
+                        break
+                    claimed = await self._claim(task_id)
+                    if claimed:
+                        task = asyncio.create_task(self._execute_task(task_id), name=f"agent-task-{task_id}")
+                        self._active[task_id] = task
+                        task.add_done_callback(lambda done, tid=task_id: self._active.pop(tid, None))
+                await asyncio.sleep(self.poll_interval)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Task scheduler iteration failed")
+                await asyncio.sleep(self.poll_interval)
+
+    async def _claim(self, task_id: str) -> bool:
+        async with self.repository_scope() as repositories:
+            repo = repositories.tasks
+            if not await repo.claim_for_execution(task_id):
+                await repositories.rollback()
+                return False
+            task = await repo.get(task_id)
+            assert task is not None
+            task_values = {"status": TaskStatus.RUNNING.value}
+            if task.started_at is None:
+                task_values["started_at"] = utc_now()
+            await repo.update_task(task_id, **task_values)
+            await repo.add_event(task_id, "task.started", {})
+            await repo.add_event(task_id, "task.planning", {"step_count": len(await repo.steps_for_task(task_id))})
+            await repositories.commit()
+            return True
+
+    async def _execute_task(self, task_id: str) -> None:
+        async with self._semaphore:
+            task, _ = await self.execution._load(task_id)
+            if not task:
+                return
+            worker_started = time.monotonic()
+            elapsed_before = max(0.0, float((task.context or {}).get("_execution_elapsed_seconds", 0)))
+            execution_started = worker_started - elapsed_before
+            try:
+                await self._execute_dag(task_id, execution_started)
+            except asyncio.CancelledError:
+                # The API lifespan owns process-level cancellation; recover_interrupted will
+                # mark the task BLOCKED on the next start if it was not user-cancelled.
+                raise
+            except Exception as error:
+                await self.execution._finish(task_id, TaskStatus.FAILED, str(error))
+            finally:
+                await self._persist_execution_elapsed(task_id, time.monotonic() - execution_started)
+
+    async def _persist_execution_elapsed(self, task_id: str, elapsed: float) -> None:
+        async with self.repository_scope() as repositories:
+            task = await repositories.tasks.get(task_id)
+            if not task:
+                return
+            context = task.context or {}
+            await repositories.tasks.update_context(
+                task_id,
+                _execution_elapsed_seconds=max(
+                    max(0.0, float(context.get("_execution_elapsed_seconds", 0))),
+                    max(0.0, elapsed),
+                ),
+            )
+            await repositories.commit()
+
+    async def _execute_dag(self, task_id: str, started: float) -> None:
+        while True:
+            task, steps = await self.execution._load(task_id)
+            if (
+                not task
+                or task.status in self.execution.TERMINAL
+                or task.status in {TaskStatus.WAITING.value, TaskStatus.PAUSED.value}
+            ):
+                return
+            if task.status == TaskStatus.PAUSING.value:
+                await self._pause_at_boundary(task_id, elapsed_seconds=time.monotonic() - started)
+                return
+            deadline = started + task.max_duration_seconds
+            if time.monotonic() >= deadline:
+                await self.execution._finish(
+                    task_id,
+                    TaskStatus.BLOCKED,
+                    "Task duration limit reached; inspect active child operations before retrying.",
+                )
+                return
+            if len(steps) > task.max_steps:
+                await self.execution._finish(task_id, TaskStatus.FAILED, "Task step limit exceeded.")
+                return
+            by_key = {step.key: step for step in steps}
+            pending = [step for step in steps if step.status == TaskStepStatus.PENDING.value]
+            if not pending:
+                if await self._pause_at_boundary(task_id, elapsed_seconds=time.monotonic() - started):
+                    return
+                verification = next(
+                    (step.outputs for step in reversed(steps) if "verified" in (step.outputs or {})),
+                    {"all_steps_terminal": True},
+                )
+                await self.execution._finish(task_id, TaskStatus.COMPLETED, None, verification=verification)
+                return
+
+            ready: list[TaskStep] = []
+            for step in pending:
+                parents = [by_key.get(key) for key in step.dependencies]
+                if any(parent is None for parent in parents):
+                    await self.execution._finish(
+                        task_id, TaskStatus.FAILED, f"Step {step.key} has an unknown dependency."
+                    )
+                    return
+                if any(
+                    parent.status in {TaskStepStatus.FAILED.value, TaskStepStatus.CANCELLED.value} for parent in parents
+                ):
+                    await self.execution._finish(
+                        task_id, TaskStatus.FAILED, f"Dependency failed before step {step.key}."
+                    )
+                    return
+                if all(
+                    parent.status in {TaskStepStatus.COMPLETED.value, TaskStepStatus.SKIPPED.value}
+                    for parent in parents
+                ):
+                    ready.append(step)
+            if not ready:
+                await self.execution._finish(
+                    task_id, TaskStatus.FAILED, "Task graph has a dependency cycle or no runnable step."
+                )
+                return
+
+            # Only explicitly marked independent steps may run concurrently. The first normal
+            # ready step preserves authored workflow order; ready parallel steps form one batch.
+            if ready[0].parallelizable:
+                batch = [step for step in ready if step.parallelizable]
+            else:
+                batch = [ready[0]]
+            results = await asyncio.gather(
+                *(self.execution._execute_step(task, step, deadline=deadline) for step in batch), return_exceptions=True
+            )
+            failed = any(
+                isinstance(result, TaskBlocked)
+                or isinstance(result, BaseException)
+                and not isinstance(result, ApprovalRequired)
+                for result in results
+            )
+            if not failed and await self._pause_at_boundary(task_id, elapsed_seconds=time.monotonic() - started):
+                return
+            for result in results:
+                if isinstance(result, ApprovalRequired):
+                    return
+                if isinstance(result, TaskBlocked):
+                    await self.execution._finish(task_id, TaskStatus.BLOCKED, str(result))
+                    return
+                if isinstance(result, BaseException):
+                    # The individual step runner already persisted its retry/failure state.
+                    await self.execution._finish(task_id, TaskStatus.FAILED, str(result))
+                    return
+
+    async def _pause_at_boundary(self, task_id: str, *, elapsed_seconds: float = 0.0) -> bool:
+        task, _ = await self.execution._load(task_id)
+        if not task or task.status != TaskStatus.PAUSING.value:
+            return False
+        snapshot = workspace_source_snapshot(task.workspace_id)
+        async with self.repository_scope() as repositories:
+            repo = repositories.tasks
+            current = await repo.get(task_id)
+            if not current or current.status in self.execution.TERMINAL or current.status != TaskStatus.PAUSING.value:
+                return False
+            context = {
+                **(current.context or {}),
+                "pause_workspace_snapshot": snapshot,
+                "_execution_elapsed_seconds": max(
+                    max(0.0, float((current.context or {}).get("_execution_elapsed_seconds", 0))),
+                    max(0.0, elapsed_seconds),
+                ),
+            }
+            await repo.update_task(
+                task_id,
+                context=context,
+                status=TaskStatus.PAUSED.value,
+                finished_at=None,
+            )
+            await repo.add_event(
+                task_id,
+                "task.paused",
+                {
+                    "boundary": "after_current_step",
+                    "step_id": current.current_step_id,
+                    "workspace_files": len(snapshot),
+                },
+            )
+            await repositories.commit()
+        return True

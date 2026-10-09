@@ -76,6 +76,18 @@ class WorkerRepository:
 
         return await self._run(session, _exec)
 
+    async def list_recent_active(self, since: datetime) -> list[WorkerORM]:
+        async def _exec(session: AsyncSession) -> list[WorkerORM]:
+            result = await session.execute(
+                select(WorkerORM).where(
+                    WorkerORM.last_heartbeat_at >= since,
+                    WorkerORM.status.in_(["ONLINE", "BUSY"]),
+                )
+            )
+            return list(result.scalars().all())
+
+        return await self._run(None, _exec)
+
     async def heartbeat(
         self,
         worker_id: str,
