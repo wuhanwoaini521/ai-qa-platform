@@ -208,9 +208,7 @@ class DecisionService:
             ):
                 error_code = "below_minimum_confidence"
             elif remote_result is not None:
-                accepted_result = remote_result.model_copy(
-                    update={"minimum_confidence": config.minimum_confidence}
-                )
+                accepted_result = remote_result.model_copy(update={"minimum_confidence": config.minimum_confidence})
                 duration = (time.perf_counter() - started) * 1000
                 await self._record(
                     decision_name=request.name,
@@ -384,7 +382,9 @@ class DecisionService:
         else:
             async with self.repository_scope() as repositories:
                 budget = await repositories.ai_budgets.get_by_day(utc_now().date().isoformat())
-        budget_available = not policy.budget_enabled or budget is None or budget.reserved_requests < policy.max_daily_requests
+        budget_available = (
+            not policy.budget_enabled or budget is None or budget.reserved_requests < policy.max_daily_requests
+        )
         parsed = urlsplit(config.base_url)
         base_url_valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname)
         reasons = []

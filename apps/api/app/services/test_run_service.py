@@ -487,9 +487,7 @@ class TestRunService:
                         else float(task.max_duration_seconds)
                     )
                     execution_timeout = (
-                        min(task_timeout, local_pytest_options.timeout_sec)
-                        if local_pytest_options
-                        else task_timeout
+                        min(task_timeout, local_pytest_options.timeout_sec) if local_pytest_options else task_timeout
                     )
             start_time = utc_now()
 

@@ -29,12 +29,145 @@ def assistant_request(action: str = "chat") -> QAChatRequest:
     )
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fake_provider_status_is_simulation_not_real_or_fallback(test_db_session):
-    from app.services.ai_settings_service import AISettingsService
+@pytest.mark.parametrize(
+    ("provider", "connection", "expected_state", "expected_legacy_status", "fallback_active"),
+    [
+        (
+            "openai-compatible",
+            {"connected": True, "status": "AVAILABLE", "streaming": True},
+            "READY",
+            "REAL_CONNECTED",
+            False,
+        ),
+        (
+            "openai-compatible",
+            {"connected": True, "status": "FALLBACK_ONLY", "streaming": False},
+            "DEGRADED",
+            "FALLBACK",
+            True,
+        ),
+        (
+            "fake",
+            {"connected": True, "status": "FALLBACK_ONLY", "streaming": False},
+            "DEGRADED",
+            "SIMULATION",
+            False,
+        ),
+        (
+            "openai-compatible",
+            {"connected": False, "status": "AUTH_ERROR", "streaming": False},
+            "UNAVAILABLE",
+            "UNAVAILABLE",
+            False,
+        ),
+    ],
+)
+async def test_provider_status_reports_real_fallback_and_simulation_distinctly(
+    monkeypatch, provider, connection, expected_state, expected_legacy_status, fallback_active
+):
+    from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
+    from project_model.models import AIProviderConnectionResult
 
-    status = await AISettingsService(repository_scope=TaskRepositoryScopeFactory()).get_status(refresh=True)
+    service = AISettingsService()
+    config = AIRuntimeConfig(
+        enabled=True,
+        provider=provider,
+        api_key="synthetic-test-key",
+        model=f"{provider}-{expected_state.lower()}",
+        base_url="https://provider.invalid/v1",
+        timeout=3,
+        max_retries=0,
+    )
+
+    async def effective_config(_self):
+        return config
+
+    async def test_connection(_self, update=None):
+        return AIProviderConnectionResult(
+            connected=connection["connected"],
+            provider=provider,
+            status=connection["status"],
+            message="synthetic health result",
+            model=config.model,
+            streaming=connection["streaming"],
+        )
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    monkeypatch.setattr(AISettingsService, "test_connection", test_connection)
+    status = await service.get_status(refresh=True)
+    assert status.operational_state == expected_state
+    assert status.status.value == expected_legacy_status
+    assert status.fallback_active is fallback_active
+    assert status.real_model_available is (expected_state == "READY")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("enabled", "api_key", "expected_state", "expected_legacy_status", "expected_health"),
+    [
+        (False, "synthetic-test-key", "DISABLED", "UNAVAILABLE", "DISABLED"),
+        (True, "", "UNCONFIGURED", "UNAVAILABLE", "UNCONFIGURED"),
+    ],
+)
+async def test_disabled_or_unconfigured_provider_does_not_probe_network(
+    monkeypatch, enabled, api_key, expected_state, expected_legacy_status, expected_health
+):
+    from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
+    from project_model.models import AIProviderRuntimeState, AIProviderStatus
+    from qa_core.ai.provider import OpenAICompatibleProvider
+
+    service = AISettingsService()
+    config = AIRuntimeConfig(
+        enabled=enabled,
+        provider="openai-compatible",
+        api_key=api_key,
+        model=f"no-probe-{expected_state.lower()}",
+        base_url="https://provider.invalid/v1",
+        timeout=3,
+        max_retries=0,
+    )
+
+    async def effective_config(_self):
+        return config
+
+    async def forbidden_probe(_self):
+        raise AssertionError("health probe must not run for a disabled or unconfigured provider")
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    monkeypatch.setattr(OpenAICompatibleProvider, "check_health", forbidden_probe)
+    status = await service.get_status(refresh=True)
+    assert status.operational_state == expected_state
+    assert status.status == AIProviderRuntimeState.UNAVAILABLE
+    assert status.health_status == AIProviderStatus(expected_health)
+    assert status.real_model_available is False
+    assert status.fallback_active is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_fake_provider_status_is_simulation_not_real_or_fallback(monkeypatch):
+    from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
+
+    config = AIRuntimeConfig(
+        enabled=True,
+        provider="fake",
+        api_key="",
+        model="test-fake-model",
+        base_url="https://fake.invalid/v1",
+        timeout=3,
+        max_retries=0,
+    )
+
+    async def effective_config(_self):
+        return config
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    status = await AISettingsService().get_status(refresh=True)
     assert status.status == "SIMULATION"
+    assert status.operational_state == "DEGRADED"
     assert status.provider == "fake"
     assert status.real_model_available is False
     assert status.streaming is False
@@ -42,17 +175,24 @@ async def test_fake_provider_status_is_simulation_not_real_or_fallback(test_db_s
     assert status.failure_reason == "fake_provider_selected"
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_status_is_shared_and_requires_streamed_model_response(test_db_session, monkeypatch):
+async def test_status_is_shared_and_requires_streamed_model_response(monkeypatch):
     from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
     from project_model.models import AIProviderConnectionResult
 
-    service = AISettingsService(repository_scope=TaskRepositoryScopeFactory())
+    service = AISettingsService()
     calls = []
 
     async def config(_self):
         return AIRuntimeConfig(
-            "openai-compatible", "synthetic-key", "synthetic-model", "https://provider.invalid/v1", 3, 0
+            enabled=True,
+            provider="openai-compatible",
+            api_key="synthetic-key",
+            model="synthetic-model",
+            base_url="https://provider.invalid/v1",
+            timeout=3,
+            max_retries=0,
         )
 
     async def probe(_self, update=None):
@@ -69,7 +209,7 @@ async def test_status_is_shared_and_requires_streamed_model_response(test_db_ses
     monkeypatch.setattr(AISettingsService, "_effective_config", config)
     monkeypatch.setattr(AISettingsService, "test_connection", probe)
     status = await service.get_status(refresh=True)
-    assert status.operational_state == "REAL_AVAILABLE"
+    assert status.operational_state == "READY"
     assert (await AIService(settings_service=service).get_status()) == status
     assert len(calls) == 1
 
@@ -166,7 +306,7 @@ async def test_qa_assistant_stream_raises_clear_error_for_truncated_answer():
     assert provider.request.max_tokens == 6000
     assert failed.title == "AI 输出不完整"
     assert "本次已生成 2,000 tokens" in failed.message
-    assert "请求上限为 6,000 tokens" in failed.message
+    assert "应用请求输出上限为 6,000 tokens" in failed.message
     assert failed.metadata["failure_reason"] == "output_limit"
     assert not any(event.type == "run.completed" for event in events)
     assert budget_guard.output_tokens_count == 2000
@@ -196,7 +336,7 @@ async def test_qa_assistant_fallback_stream_records_usage_when_truncated_without
 
     failed = next(event for event in events if event.type == "run.failed")
     assert "本次已生成 2,800 tokens" in failed.message
-    assert "请求上限为 6,000 tokens" in failed.message
+    assert "应用请求输出上限为 6,000 tokens" in failed.message
     assert failed.metadata["failure_reason"] == "output_limit"
     assert budget_guard.input_tokens_count == 20
     assert budget_guard.output_tokens_count == 2800

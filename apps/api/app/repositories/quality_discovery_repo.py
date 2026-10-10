@@ -13,9 +13,7 @@ class QualityDiscoveryRepository:
         self.session = session
 
     async def get(self, run_id: str) -> QualityDiscoveryRunORM | None:
-        result = await self.session.execute(
-            select(QualityDiscoveryRunORM).where(QualityDiscoveryRunORM.id == run_id)
-        )
+        result = await self.session.execute(select(QualityDiscoveryRunORM).where(QualityDiscoveryRunORM.id == run_id))
         return result.scalar_one_or_none()
 
     async def list_by_project(self, project_id: str, limit: int = 25) -> list[QualityDiscoveryRunORM]:
@@ -50,7 +48,15 @@ class QualityDiscoveryRepository:
             allowed_domains=allowed_domains,
             status="QUEUED",
             progress={"states": 0, "actions": 0, "features": 0},
-            result={"requirements": [], "states": [], "edges": [], "actions": [], "features": [], "gaps": [], "coverage": []},
+            result={
+                "requirements": [],
+                "states": [],
+                "edges": [],
+                "actions": [],
+                "features": [],
+                "gaps": [],
+                "coverage": [],
+            },
             created_at=now,
             updated_at=now,
         )

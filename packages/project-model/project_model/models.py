@@ -566,11 +566,21 @@ class FailureRepairWorkflow(BaseModel):
 # --- Phase 5: Production AI Models ---
 class AIProviderStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
+    DEGRADED = "DEGRADED"
+    UNCONFIGURED = "UNCONFIGURED"
     DISABLED = "DISABLED"
     AUTH_ERROR = "AUTH_ERROR"
     RATE_LIMITED = "RATE_LIMITED"
     TIMEOUT = "TIMEOUT"
     UNAVAILABLE = "UNAVAILABLE"
+
+
+class AIProviderOperationalState(str, Enum):
+    READY = "READY"
+    DEGRADED = "DEGRADED"
+    UNCONFIGURED = "UNCONFIGURED"
+    UNAVAILABLE = "UNAVAILABLE"
+    DISABLED = "DISABLED"
 
 
 class AIProviderRuntimeState(str, Enum):
@@ -590,7 +600,7 @@ class AIStatusResponse(BaseModel):
     fallback_active: bool = False
     failure_reason: str | None = None
     health_status: AIProviderStatus = AIProviderStatus.UNAVAILABLE
-    operational_state: str = "UNAVAILABLE"
+    operational_state: AIProviderOperationalState = AIProviderOperationalState.UNAVAILABLE
     streaming: bool = False
     latency_ms: float | None = None
     checked_at: datetime | None = None
@@ -1470,6 +1480,7 @@ class ExecutionJobCreate(ExecutionJobBase):
 class ClaimJobRequest(EntityBase):
     worker_id: str
     browser: str = "chromium"
+    browsers: list[str] = Field(default_factory=list, max_length=10)
 
 
 class CompleteJobRequest(EntityBase):
@@ -1478,6 +1489,7 @@ class CompleteJobRequest(EntityBase):
 
 class FailJobRequest(EntityBase):
     error_message: str
+    worker_id: str | None = None
 
 
 class ExecutionJob(ExecutionJobBase):

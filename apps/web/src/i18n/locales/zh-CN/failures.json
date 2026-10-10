@@ -198,6 +198,7 @@
     "originalDiagnosis": "展开 AI 原始分析与建议",
     "localDecisionFallback": "Jev 本次未成功采用（原因：{{reason}}），系统使用本地规则选择候选；仍以原失败用例复测结果为准。",
     "localDecisionLowConfidence": "Jev 本次置信度为 {{confidence}}，低于配置的最低阈值",
+    "decisionBlocked": "修复已阻止：{{reason}}。未应用代码修改，也未启动验证运行。",
     "localEvidenceDecision": "Jev 未提供可采纳决策；本地规则选择了失败时捕获的控件，定位器已通过可见性、可用性和唯一性检查。最终修复仍需原用例复测通过。"
   },
   "patchAwaitingVerification": "补丁已应用 · 待复测",

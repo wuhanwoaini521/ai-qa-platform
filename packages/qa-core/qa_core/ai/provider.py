@@ -63,9 +63,7 @@ def output_limit_error(
 ) -> AIProviderError:
     generated = f"本次已生成 {output_tokens:,} tokens；" if output_tokens is not None else ""
     requested_limit = (
-        f"应用请求输出上限为 {max_tokens:,} tokens；"
-        if max_tokens is not None
-        else "本次请求未设置应用侧输出上限；"
+        f"应用请求输出上限为 {max_tokens:,} tokens；" if max_tokens is not None else "本次请求未设置应用侧输出上限；"
     )
     return AIProviderError(
         "output_limit",

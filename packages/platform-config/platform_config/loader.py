@@ -26,6 +26,23 @@ _SECRET_PATHS = {
     "integrations.jenkins.token",
 }
 
+_ENVIRONMENT_OVERRIDES = {
+    "ai.enabled": "QA_AI_ENABLED",
+    "ai.provider": "QA_AI_PROVIDER",
+    "ai.api_key": "QA_AI_API_KEY",
+    "ai.base_url": "QA_AI_BASE_URL",
+    "ai.model": "QA_AI_MODEL",
+    "ai.timeout_seconds": "QA_AI_TIMEOUT_SECONDS",
+    "ai.retries": "QA_AI_MAX_RETRIES",
+    "jev.enabled": "JEV_ENABLED",
+    "jev.api_key": "JEV_API_KEY",
+    "jev.base_url": "JEV_BASE_URL",
+    "jev.model": "JEV_MODEL",
+    "jev.timeout_seconds": "JEV_TIMEOUT_SECONDS",
+    "jev.retries": "JEV_RETRIES",
+    "jev.minimum_confidence": "JEV_MINIMUM_CONFIDENCE",
+}
+
 
 class ConfigLoadError(ValueError):
     pass
@@ -59,7 +76,9 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
 def _interpolate(value: Any, *, config_path: Path, source_map: dict[str, str], prefix: str = "") -> Any:
     if isinstance(value, dict):
         return {
-            key: _interpolate(item, config_path=config_path, source_map=source_map, prefix=f"{prefix}.{key}" if prefix else str(key))
+            key: _interpolate(
+                item, config_path=config_path, source_map=source_map, prefix=f"{prefix}.{key}" if prefix else str(key)
+            )
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -82,6 +101,24 @@ def _interpolate(value: Any, *, config_path: Path, source_map: dict[str, str], p
     return _ENV_PATTERN.sub(replace, value)
 
 
+def _apply_environment_overrides(expanded: dict[str, Any], source_map: dict[str, str]) -> dict[str, Any]:
+    """Apply documented process-environment overrides before schema validation."""
+    for field_path, environment_name in _ENVIRONMENT_OVERRIDES.items():
+        if environment_name not in os.environ:
+            continue
+        current = expanded
+        parts = field_path.split(".")
+        for part in parts[:-1]:
+            nested = current.get(part)
+            if not isinstance(nested, dict):
+                nested = {}
+                current[part] = nested
+            current = nested
+        current[parts[-1]] = os.environ[environment_name]
+        source_map[field_path] = f"env:{environment_name}"
+    return expanded
+
+
 def _validate_secret_references(raw: dict[str, Any], config_path: Path) -> None:
     for path, value in _flatten(raw).items():
         if path not in _SECRET_PATHS or value in (None, ""):
@@ -94,7 +131,9 @@ def _validate_secret_references(raw: dict[str, Any], config_path: Path) -> None:
 
         parsed = urlsplit(database_url)
         if parsed.username or parsed.password:
-            raise ConfigLoadError(f"database.url must reference an environment variable for credentials in {config_path}")
+            raise ConfigLoadError(
+                f"database.url must reference an environment variable for credentials in {config_path}"
+            )
 
 
 def _model_sources(config: AppConfig, raw_sources: dict[str, str]) -> dict[str, str]:
@@ -111,34 +150,36 @@ def _model_sources(config: AppConfig, raw_sources: dict[str, str]) -> dict[str, 
 class ConfigManager:
     """Loads one immutable config per process and swaps validated reloads atomically."""
 
-    RESTART_REQUIRED_FIELDS = frozenset({
-        "api.host",
-        "api.port",
-        "api.cors_origins",
-        "app.runtime_dir",
-        "app.workspace_storage_dir",
-        "app.artifact_storage_dir",
-        "app.secret_key",
-        "database.url",
-        "database.echo",
-        "database.pool_size",
-        "database.max_overflow",
-        "database.sqlite_timeout_seconds",
-        "worker.api_url",
-        "worker.auth_token",
-        "worker.name",
-        "worker.capabilities",
-        "worker.max_concurrency",
-        "worker.heartbeat_interval_seconds",
-        "worker.poll_interval_seconds",
-        "worker.http_timeout_seconds",
-        "worker.workspace_storage_dir",
-        "worker.artifact_storage_dir",
-        "run.max_parallel_runs",
-        "pytest.workers",
-        "pytest.timeout_seconds",
-        "pytest.default_args",
-    })
+    RESTART_REQUIRED_FIELDS = frozenset(
+        {
+            "api.host",
+            "api.port",
+            "api.cors_origins",
+            "app.runtime_dir",
+            "app.workspace_storage_dir",
+            "app.artifact_storage_dir",
+            "app.secret_key",
+            "database.url",
+            "database.echo",
+            "database.pool_size",
+            "database.max_overflow",
+            "database.sqlite_timeout_seconds",
+            "worker.api_url",
+            "worker.auth_token",
+            "worker.name",
+            "worker.capabilities",
+            "worker.max_concurrency",
+            "worker.heartbeat_interval_seconds",
+            "worker.poll_interval_seconds",
+            "worker.http_timeout_seconds",
+            "worker.workspace_storage_dir",
+            "worker.artifact_storage_dir",
+            "run.max_parallel_runs",
+            "pytest.workers",
+            "pytest.timeout_seconds",
+            "pytest.default_args",
+        }
+    )
 
     def __init__(self, path: Path | str | None = None) -> None:
         self.path = find_config_path(path)
@@ -158,6 +199,7 @@ class ConfigManager:
         _validate_secret_references(raw, self.path)
         source_map: dict[str, str] = {path: f"config:{self.path}" for path in _flatten(raw)}
         expanded = _interpolate(raw, config_path=self.path, source_map=source_map)
+        expanded = _apply_environment_overrides(expanded, source_map)
         try:
             config = AppConfig.model_validate(expanded)
         except ValidationError as error:

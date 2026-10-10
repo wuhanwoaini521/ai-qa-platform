@@ -491,6 +491,12 @@ async def test_browser_agent_reports_navigation_cause_and_closes_owned_browser(t
         def is_closed(self):
             return False
 
+        def set_default_timeout(self, _timeout):
+            return None
+
+        def set_default_navigation_timeout(self, _timeout):
+            return None
+
         async def goto(self, *_args, **_kwargs):
             raise RuntimeError(
                 "Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://shop.example/products?token=private-value"

@@ -46,6 +46,7 @@ from qa_core.prompts import (
 )
 
 FAILURE_DIAGNOSIS_TIMEOUT_SECONDS = 120.0
+CODE_ASSISTANT_MAX_OUTPUT_TOKENS = 6000
 
 
 def _supports_native_streaming(provider) -> bool:
@@ -447,6 +448,7 @@ class ProductionQAOrchestrator:
             system_instruction=CODE_ASSISTANT_PROMPT.system_instruction,
             prompt_id=CODE_ASSISTANT_PROMPT.prompt_id,
             prompt_version=CODE_ASSISTANT_PROMPT.version,
+            max_tokens=CODE_ASSISTANT_MAX_OUTPUT_TOKENS,
             response_schema=CodeAssistantResponse,
         )
         res = await self.complete(req)

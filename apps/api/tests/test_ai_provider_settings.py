@@ -4,8 +4,7 @@ from dataclasses import replace
 
 import pytest
 from app.persistence.models import AIProviderConfigORM
-from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
-from app.services.ai_settings_service import AISettingsService
+from app.services.ai_settings_service import AIRuntimeConfig, AISettingsService
 from project_model.models import AIProviderConnectionResult
 from qa_core.ai.models import AICompletionResponse, AIStreamChunk, ProviderHealth, ProviderHealthStatus
 from qa_core.ai.provider import AIProviderError, FallbackAIProvider, OpenAICompatibleProvider
@@ -13,12 +12,13 @@ from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_unavailable_real_model_does_not_claim_an_active_fallback(monkeypatch):
     service = AISettingsService()
 
     async def config():
-        return replace(service._environment_config(), provider="openai-compatible", api_key="")
+        return replace(service._environment_config(), provider="openai-compatible", api_key="synthetic-key")
 
     async def disconnected():
         return AIProviderConnectionResult(
@@ -52,40 +52,98 @@ def payload(**overrides):
     }
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ai_provider_settings_are_encrypted_and_activated(client, test_db_session):
+async def test_ai_status_api_reports_unconfigured_without_network_probe(client, monkeypatch):
+    config = AIRuntimeConfig(
+        enabled=True,
+        provider="openai-compatible",
+        api_key="",
+        model="test-model",
+        base_url="https://provider.invalid/v1",
+        timeout=12,
+        max_retries=1,
+    )
+
+    async def effective_config(_self):
+        return config
+
+    async def forbidden_probe(_self):
+        raise AssertionError("unconfigured provider must not be probed")
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    monkeypatch.setattr(OpenAICompatibleProvider, "check_health", forbidden_probe)
+
+    response = await client.get("/api/ai/status")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["operational_state"] == "UNCONFIGURED"
+    assert response.json()["health_status"] == "UNCONFIGURED"
+    assert response.json()["fallback_active"] is False
+    assert response.json()["real_model_available"] is False
+    assert '"api_key"' not in response.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ai_provider_settings_are_runtime_managed_and_not_persisted(client, test_db_session, monkeypatch):
+    configured = AIRuntimeConfig(
+        enabled=True,
+        provider="openai-compatible",
+        api_key="synthetic-runtime-key",
+        model="configured-model",
+        base_url="https://configured.invalid/v1",
+        timeout=12,
+        max_retries=1,
+    )
+
+    async def effective_config(_self):
+        return configured
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
     AIProviderRegistry.reset()
     try:
         initial = await client.get("/api/ai/settings")
         assert initial.status_code == 200
-        assert initial.json()["provider"] == "fake"
+        assert initial.json()["provider"] == configured.provider
+        assert initial.json()["model"] == configured.model
+        assert initial.json()["api_key_configured"] is True
+        assert "synthetic-runtime-key" not in initial.text
 
-        saved = await client.put("/api/ai/settings", json=payload())
-        assert saved.status_code == 200, saved.text
-        assert saved.json()["api_key_configured"] is True
-        assert "normal-ai-secret" not in saved.text
+        rejected = await client.put("/api/ai/settings", json=payload())
+        assert rejected.status_code == 409, rejected.text
+        assert "normal-ai-secret" not in rejected.text
 
-        provider = AIProviderRegistry.get_provider()
-        assert isinstance(provider.inner, FallbackAIProvider)
-        assert provider.primary.api_key == "normal-ai-secret"
-        assert provider.primary.model == "test-model"
+        active = AIProviderRegistry.get_provider()
+        assert isinstance(active.inner, FallbackAIProvider)
+        assert active.primary.api_key == configured.api_key
+        assert active.primary.model == configured.model
 
         async with test_db_session() as session:
-            row = (await session.execute(select(AIProviderConfigORM))).scalar_one()
-            assert row.encrypted_api_key and row.encrypted_api_key.startswith("enc_")
-            assert "normal-ai-secret" not in row.encrypted_api_key
-
-        AIProviderRegistry.reset()
-        await AISettingsService(repository_scope=TaskRepositoryScopeFactory()).load_runtime_config()
-        restored = AIProviderRegistry.get_provider()
-        assert isinstance(restored.inner, FallbackAIProvider)
-        assert restored.primary.api_key == "normal-ai-secret"
+            row = (await session.execute(select(AIProviderConfigORM))).scalar_one_or_none()
+            assert row is None
     finally:
         AIProviderRegistry.reset()
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(client, role_client, monkeypatch):
+    configured = AIRuntimeConfig(
+        enabled=True,
+        provider="openai-compatible",
+        api_key="synthetic-runtime-key",
+        model="configured-model",
+        base_url="https://configured.invalid/v1",
+        timeout=12,
+        max_retries=1,
+    )
+
+    async def effective_config(_self):
+        return configured
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+
     async def healthy(self):
         return ProviderHealthStatus(
             provider="openai-compatible",
@@ -122,13 +180,16 @@ async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(clien
 
     saved = await client.get("/api/ai/settings")
     assert saved.status_code == 200
-    assert saved.json()["provider"] == "fake"
+    assert saved.json()["provider"] == configured.provider
+    assert saved.json()["model"] == configured.model
+    assert saved.json()["base_url"] == configured.base_url
 
     async with role_client("QA_ENGINEER") as engineer:
         denied = await engineer.put("/api/ai/settings", json=payload())
         assert denied.status_code == 403
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ai_connection_reports_safe_provider_probe_error(client, monkeypatch):
     async def healthy(self):

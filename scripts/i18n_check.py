@@ -37,8 +37,13 @@ def source_keys(web_root: Path) -> set[tuple[str, str]]:
     for path in web_root.rglob("*.tsx"):
         if any(part in {"node_modules", "dist", ".vite"} for part in path.parts):
             continue
+        source = path.read_text(encoding="utf-8", errors="replace")
         for pattern in (TRANSLATION_CALL, RENDER_TRANSLATION_CALL):
-            for match in pattern.finditer(path.read_text(encoding="utf-8", errors="replace")):
+            for match in pattern.finditer(source):
+                # Dynamic expressions such as t('result.state.' + status) cannot be
+                # validated as literal keys; the resource still defines those prefixes.
+                if re.match(r"\s*\+", source[match.end() :]):
+                    continue
                 reference = match.group(1)
                 if ":" in reference:
                     namespace, _, key = reference.partition(":")

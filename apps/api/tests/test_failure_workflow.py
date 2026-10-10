@@ -254,9 +254,7 @@ async def test_failed_analysis_does_not_remain_in_analyzing_repair_state(client,
         await session.commit()
 
     async with test_db_session() as session:
-        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(
-            failure_id, analysis_id
-        )
+        state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id, analysis_id)
 
     assert state.state == "BLOCKED"
     assert state.allowed_actions == ["START_ANALYSIS"]
@@ -703,10 +701,7 @@ async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_
             run_service=runs,
             auto_repair_mode="AUTO",
         )
-        events = [
-            event
-            async for event in workflow.stream(failure_id)
-        ]
+        events = [event async for event in workflow.stream(failure_id)]
         verification_monitors = tuple(workflow._verification_monitors)
 
     completed = next(event for event in events if event.type == "run.completed")
@@ -759,9 +754,7 @@ async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_
     run_response = await client.get(f"/api/runs/{run_id}")
     assert run_response.status_code == 200, run_response.text
     assert run_response.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
-    source_response = await client.get(
-        f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"}
-    )
+    source_response = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
     assert source_response.status_code == 200, source_response.text
     repaired_source = source_response.json()["content"]
     assert 'page.locator("#checkout").click()' not in repaired_source

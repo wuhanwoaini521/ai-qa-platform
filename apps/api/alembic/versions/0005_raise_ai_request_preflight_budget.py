@@ -16,20 +16,8 @@ depends_on = None
 def upgrade():
     # Existing 16k values were the old application default. Preserve any custom
     # budgets while removing that default ceiling for long-context models.
-    op.execute(
-        sa.text(
-            "UPDATE ai_provider_configs "
-            "SET max_request_tokens = 1000000 "
-            "WHERE max_request_tokens = 16000"
-        )
-    )
+    op.execute(sa.text("UPDATE ai_provider_configs SET max_request_tokens = 1000000 WHERE max_request_tokens = 16000"))
 
 
 def downgrade():
-    op.execute(
-        sa.text(
-            "UPDATE ai_provider_configs "
-            "SET max_request_tokens = 16000 "
-            "WHERE max_request_tokens = 1000000"
-        )
-    )
+    op.execute(sa.text("UPDATE ai_provider_configs SET max_request_tokens = 16000 WHERE max_request_tokens = 1000000"))

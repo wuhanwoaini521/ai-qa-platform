@@ -33,12 +33,18 @@ class FailureEvidenceService:
             }.items()
             if value
         }
-        console = SensitiveRedactor.redact_value(
-            (record.console_logs or page.get("console_logs") or [])[-evidence_policy.max_console_entries :]
-        ) if failure_policy.capture_console and evidence_policy.max_console_entries else []
-        network = SensitiveRedactor.redact_value(
-            (page.get("network_logs") or [])[-evidence_policy.max_network_entries :]
-        ) if failure_policy.capture_network and evidence_policy.max_network_entries else []
+        console = (
+            SensitiveRedactor.redact_value(
+                (record.console_logs or page.get("console_logs") or [])[-evidence_policy.max_console_entries :]
+            )
+            if failure_policy.capture_console and evidence_policy.max_console_entries
+            else []
+        )
+        network = (
+            SensitiveRedactor.redact_value((page.get("network_logs") or [])[-evidence_policy.max_network_entries :])
+            if failure_policy.capture_network and evidence_policy.max_network_entries
+            else []
+        )
         missing = [
             key
             for key, present in {
@@ -61,7 +67,9 @@ class FailureEvidenceService:
             nodeid=record.test_nodeid,
             failure_kind=FailureClassifier.failure_kind(error, record.stack_trace or ""),
             error=error,
-            traceback=(SensitiveRedactor.redact_text(record.stack_trace or "")[-traceback_limit:] if traceback_limit else ""),
+            traceback=(
+                SensitiveRedactor.redact_text(record.stack_trace or "")[-traceback_limit:] if traceback_limit else ""
+            ),
             assertion=error if "assert" in error.lower() else "",
             stdout=SensitiveRedactor.redact_text(run.log_output or "")[-4000:] if run else "",
             page_url=SensitiveRedactor.redact_url((browser or {}).get("current_url") or str(page.get("url") or "")),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 
 import pytest
 from app.services.python_language_service import PythonLanguageService
@@ -8,6 +9,15 @@ from app.services.python_language_service import PythonLanguageService
 
 @pytest.mark.asyncio
 async def test_real_language_server_hover_definition_references_and_diagnostics(tmp_path):
+    missing = []
+    for module in ("basedpyright", "nodejs_wheel.executable"):
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            missing.append(module)
+    if missing:
+        pytest.skip(f"BLOCKED: real Python language server dependencies unavailable: {', '.join(missing)}")
+
     (tmp_path / "helpers.py").write_text(
         'def greet(name: str) -> str:\n    """Return a greeting."""\n    return name\n', encoding="utf-8"
     )

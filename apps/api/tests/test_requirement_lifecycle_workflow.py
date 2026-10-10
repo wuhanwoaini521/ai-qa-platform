@@ -176,9 +176,7 @@ async def test_runtime_requirement_analysis_projects_events_ai_decisions_and_evi
 
 
 @pytest.mark.asyncio
-async def test_runtime_requirement_analysis_can_run_without_explicit_criteria(
-    client, test_db_session, monkeypatch
-):
+async def test_runtime_requirement_analysis_can_run_without_explicit_criteria(client, test_db_session, monkeypatch):
     project = (
         await client.post("/api/projects", json={"name": "No criteria project", "bootstrap_workspace": False})
     ).json()

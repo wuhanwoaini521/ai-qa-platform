@@ -67,8 +67,8 @@ Key variables to configure in `.env`:
 | `AI_QA_AUTH_TOKEN` | Bearer token a distributed worker presents to the API | an API key created in the UI |
 | `AUTH_REQUIRED` | Require a bearer token on every non-probe route | `true` |
 | `APP_SECRET_KEY` | HMAC secret used to sign session tokens and encrypt stored secrets | 64-char random hex (`openssl rand -hex 32`) |
-| `QA_AI_PROVIDER` | Active LLM inference provider | `fake` (default) or `openai-compatible` |
-| `QA_AI_API_KEY` / `QA_AI_BASE_URL` / `QA_AI_MODEL` | Provider credentials and endpoint | provider-specific |
+| `QA_AI_ENABLED`, `QA_AI_PROVIDER`, `QA_AI_API_KEY`, `QA_AI_BASE_URL`, `QA_AI_MODEL`, `QA_AI_TIMEOUT_SECONDS`, `QA_AI_MAX_RETRIES` | AI provider enablement, endpoint, model and request policy (environment overrides YAML) | Defaults match `config/config.yaml`; supply the provider key securely |
+| `JEV_ENABLED`, `JEV_API_KEY`, `JEV_BASE_URL`, `JEV_MODEL`, `JEV_TIMEOUT_SECONDS`, `JEV_RETRIES`, `JEV_MINIMUM_CONFIDENCE` | Jev decision provider policy (environment overrides YAML) | Defaults match `config/config.yaml`; supply the Jev key securely |
 | `GITHUB_TOKEN`, `JIRA_*`, `TESTRAIL_*`, `JENKINS_*` | Integration credentials (each integration falls back to a dry-run adapter when unset) | optional |
 | `MAX_CONCURRENCY` | Maximum concurrent tests per worker node | `4` - `8` (based on CPU/RAM) |
 

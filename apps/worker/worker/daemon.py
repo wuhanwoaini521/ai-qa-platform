@@ -7,7 +7,6 @@ import platform
 import socket
 import sys
 import uuid
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -43,22 +42,37 @@ class WorkerDaemon:
         self.worker_id = worker_id or os.getenv("WORKER_ID", f"worker-{socket.gethostname()}-{uuid.uuid4().hex[:6]}")
         self.worker_name = worker_name or worker_config.name or f"Runner-{platform.node()}"
 
-        self.capabilities = capabilities or list(worker_config.capabilities)
-        self.max_concurrency = max_concurrency or min(worker_config.max_concurrency, self.config.run.max_parallel_runs)
+        self.capabilities = list(worker_config.capabilities if capabilities is None else capabilities)
+        self.browser_capabilities = [
+            capability for capability in self.capabilities if capability in {"chromium", "firefox", "webkit"}
+        ]
+        self.max_concurrency = (
+            max_concurrency
+            if max_concurrency is not None
+            else min(worker_config.max_concurrency, self.config.run.max_parallel_runs)
+        )
+        if self.max_concurrency < 1:
+            raise ValueError("max_concurrency must be at least 1")
 
-        self.heartbeat_interval = heartbeat_interval or worker_config.heartbeat_interval_seconds
-        self.poll_interval = poll_interval or worker_config.poll_interval_seconds
+        self.heartbeat_interval = (
+            heartbeat_interval if heartbeat_interval is not None else worker_config.heartbeat_interval_seconds
+        )
+        self.poll_interval = poll_interval if poll_interval is not None else worker_config.poll_interval_seconds
 
         self._running = False
         self._running_jobs: set[str] = set()
+        self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._http_client: httpx.AsyncClient | None = None
         self._runner = PytestRunner(default_timeout_sec=self.config.pytest.timeout_seconds)
         self._heartbeat_task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
 
     async def start(self) -> None:
-        """Start the worker daemon lifecycle."""
-        self._running = True
+        """Register this worker before starting its heartbeat and bounded claim loop."""
+        if self._running:
+            return
+        if self._http_client is not None:
+            raise RuntimeError("Worker HTTP client is already open")
         headers: dict[str, str] = {}
         token = self.config.worker.auth_token.get_secret_value().strip()
         if token:
@@ -83,34 +97,51 @@ class WorkerDaemon:
             self.api_url,
         )
 
-        # 1. Register with API
-        await self._register()
+        try:
+            await self._register()
+        except Exception:
+            client, self._http_client = self._http_client, None
+            if client is not None:
+                await client.aclose()
+            raise
 
-        # 2. Launch concurrent loops
-        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        self._poll_task = asyncio.create_task(self._job_claim_loop())
+        self._running = True
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(), name=f"worker-heartbeat-{self.worker_id}")
+        self._poll_task = asyncio.create_task(self._job_claim_loop(), name=f"worker-poll-{self.worker_id}")
 
     async def stop(self) -> None:
-        """Gracefully stop the worker daemon."""
+        """Stop claiming work, cancel active subprocesses, then mark offline and close HTTP."""
+        if not self._running and self._http_client is None:
+            return
         logger.info("Stopping worker daemon %s...", self.worker_id)
         self._running = False
 
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
-        if self._poll_task:
-            self._poll_task.cancel()
+        loop_tasks = [task for task in (self._heartbeat_task, self._poll_task) if task is not None]
+        for task in loop_tasks:
+            task.cancel()
+        if loop_tasks:
+            await asyncio.gather(*loop_tasks, return_exceptions=True)
+        self._heartbeat_task = None
+        self._poll_task = None
 
-        if self._http_client:
+        job_tasks = list(self._job_tasks.values())
+        for task in job_tasks:
+            task.cancel()
+        if job_tasks:
+            await asyncio.gather(*job_tasks, return_exceptions=True)
+        self._job_tasks.clear()
+        self._running_jobs.clear()
+
+        client, self._http_client = self._http_client, None
+        if client:
             try:
-                # Deregister / mark worker offline
-                await self._http_client.post(
+                await client.post(
                     f"/api/workers/{self.worker_id}/heartbeat",
                     json={"status": "OFFLINE", "current_load": 0},
                 )
-            except Exception:
-                pass
-            await self._http_client.aclose()
-
+            except Exception as exc:
+                logger.warning("Could not mark worker %s offline: %s", self.worker_id, exc)
+            await client.aclose()
         logger.info("Worker daemon %s stopped.", self.worker_id)
 
     def _local_ip(self) -> str:
@@ -120,28 +151,27 @@ class WorkerDaemon:
             return "127.0.0.1"
 
     async def _register(self) -> None:
-        """Register worker node in the platform worker registry."""
-        try:
-            assert self._http_client is not None
-            resp = await self._http_client.post(
-                "/api/workers",
-                json={
-                    "hostname": self.worker_name,
-                    "ip_address": self._local_ip(),
-                    # The API matches jobs by browser, so runner capabilities are reported as browsers.
-                    "browsers": self.capabilities,
-                    "os": platform.system().lower(),
-                    "max_concurrency": self.max_concurrency,
-                    "tags": [f"worker_id:{self.worker_id}"],
-                },
-            )
-            if resp.status_code in (200, 201):
-                self.worker_id = resp.json()["id"]
-                logger.info("Worker registered successfully: %s", resp.json())
-            else:
-                logger.warning("Registration response: %d %s", resp.status_code, resp.text)
-        except Exception as exc:
-            logger.error("Failed to register worker %s: %s", self.worker_id, exc)
+        """Register only actual browser engines; fail startup if the API rejects registration."""
+        assert self._http_client is not None
+        response = await self._http_client.post(
+            "/api/workers",
+            json={
+                "hostname": self.worker_name,
+                "ip_address": self._local_ip(),
+                "browsers": self.browser_capabilities,
+                "os": platform.system().lower(),
+                "max_concurrency": self.max_concurrency,
+                "tags": [f"worker_id:{self.worker_id}", *[f"capability:{item}" for item in self.capabilities]],
+            },
+        )
+        if response.status_code not in (200, 201):
+            raise RuntimeError(f"Worker registration failed with HTTP {response.status_code}")
+        data = response.json()
+        registered_id = data.get("id")
+        if not isinstance(registered_id, str) or not registered_id:
+            raise RuntimeError("Worker registration response did not contain an ID")
+        self.worker_id = registered_id
+        logger.info("Worker registered successfully: %s", self.worker_id)
 
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeats to maintain active status and report node load."""
@@ -165,37 +195,84 @@ class WorkerDaemon:
                 logger.warning("Heartbeat failed: %s", exc)
 
     async def _job_claim_loop(self) -> None:
-        """Continuously poll the central job queue to claim and execute matching jobs."""
+        """Continuously claim work while enforcing the advertised per-process capacity."""
         while self._running:
             try:
+                for job_id, task in list(self._job_tasks.items()):
+                    if not task.done():
+                        continue
+                    self._job_tasks.pop(job_id, None)
+                    if not task.cancelled() and (error := task.exception()) is not None:
+                        logger.error("Worker job task %s exited unexpectedly: %s", job_id, error)
+
+                if len(self._job_tasks) >= self.max_concurrency:
+                    await asyncio.wait(
+                        self._job_tasks.values(),
+                        timeout=self.poll_interval,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    continue
+
                 job = await self._claim_job()
                 if job:
-                    self._running_jobs.add(job["id"])
-                    try:
-                        await self._process_job(job)
-                    finally:
-                        self._running_jobs.discard(job["id"])
+                    job_id = str(job["id"])
+                    if job_id in self._job_tasks:
+                        logger.error("API returned already-active job %s; refusing duplicate execution", job_id)
+                        await asyncio.sleep(self.poll_interval)
+                        continue
+                    self._running_jobs.add(job_id)
+                    task = asyncio.create_task(self._run_claimed_job(job), name=f"worker-job-{job_id}")
+                    self._job_tasks[job_id] = task
                 else:
                     await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 break
-            except Exception as exc:
-                logger.exception("Error in job claim loop: %s", exc)
+            except Exception:
+                logger.exception("Error in job claim loop")
                 await asyncio.sleep(self.poll_interval)
 
+    async def _run_claimed_job(self, job: dict[str, Any]) -> None:
+        job_id = str(job["id"])
+        try:
+            await self._process_job(job)
+        finally:
+            self._running_jobs.discard(job_id)
+
     async def _claim_job(self) -> dict[str, Any] | None:
+        if not self.browser_capabilities:
+            logger.warning("Worker has no supported browser capability; no jobs can be claimed")
+            return None
         try:
             assert self._http_client is not None
-            resp = await self._http_client.post(
+            response = await self._http_client.post(
                 "/api/jobs/claim",
-                json={"worker_id": self.worker_id, "browser": "chromium"},
+                json={"worker_id": self.worker_id, "browsers": self.browser_capabilities},
             )
-            if resp.status_code == 200:
-                data = resp.json()
+            if response.status_code == 200:
+                data = response.json()
                 if data:
-                    logger.info("Claimed job: %s", data.get("id"))
+                    browser = data.get("browser")
+                    if browser not in self.browser_capabilities:
+                        logger.error("API assigned job %s outside declared browser capabilities", data.get("id"))
+                        try:
+                            failed = await self._http_client.post(
+                                f"/api/jobs/{data['id']}/fail",
+                                json={
+                                    "worker_id": self.worker_id,
+                                    "error_message": "API assigned a job outside the worker's declared browser capabilities.",
+                                },
+                            )
+                            failed.raise_for_status()
+                        except Exception as error:
+                            logger.warning("Could not return incompatible job %s: %s", data.get("id"), error)
+                        return None
+                    logger.info("Claimed job: %s (%s)", data.get("id"), browser)
                     return data
+            elif response.status_code not in (204,):
+                logger.warning("Job claim returned HTTP %d", response.status_code)
             return None
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.debug("Job claim poll failed: %s", exc)
             return None
@@ -230,7 +307,11 @@ class WorkerDaemon:
                     workspace_dir=workspace_dir,
                     nodeids=job_data["nodeids"],
                     markers=run["markers"],
-                    environment={**run["environment"], "QA_ARTIFACT_DIR": str(artifact_dir)},
+                    environment={
+                        **run["environment"],
+                        "QA_ARTIFACT_DIR": str(artifact_dir),
+                        "QA_BROWSER": str(job_data.get("browser", "chromium")),
+                    },
                     interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
                     on_log=send_log,
                     extra_pytest_args=self.config.pytest.default_args,
@@ -267,14 +348,30 @@ class WorkerDaemon:
 
         except asyncio.CancelledError:
             logger.info("Worker is shutting down while processing job %s", job_id)
-            return
+            if self._http_client is not None:
+                try:
+                    response = await self._http_client.post(
+                        f"/api/jobs/{job_id}/fail",
+                        json={
+                            "worker_id": self.worker_id,
+                            "error_message": "Worker shut down before the job completed.",
+                        },
+                    )
+                    response.raise_for_status()
+                except Exception as exc:
+                    logger.warning("Could not report interrupted job %s: %s", job_id, exc)
+            raise
         except Exception as exc:
             logger.exception("Failed to execute job %s: %s", job_id, exc)
             if self._http_client is not None:
                 try:
-                    await self._http_client.post(f"/api/jobs/{job_id}/fail", json={"error_message": str(exc)})
-                except Exception:
-                    pass
+                    response = await self._http_client.post(
+                        f"/api/jobs/{job_id}/fail",
+                        json={"worker_id": self.worker_id, "error_message": str(exc)},
+                    )
+                    response.raise_for_status()
+                except Exception as report_error:
+                    logger.warning("Could not report job failure %s: %s", job_id, report_error)
 
     async def _watch_job_cancellation(self, job_id: str) -> bool:
         """Poll the durable job state so an API cancellation stops the local pytest process."""

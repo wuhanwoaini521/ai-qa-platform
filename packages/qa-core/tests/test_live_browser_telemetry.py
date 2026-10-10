@@ -79,6 +79,7 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
                 "QA_PLATFORM_LIVE_BROWSER_LOG": str(telemetry),
                 "QA_ARTIFACT_DIR": str(artifacts),
                 "WEBSITE_URL": url,
+                "QA_EVIDENCE_MAX_NETWORK_ENTRIES": "100",
             },
             browser_event_path=telemetry,
             on_browser_event=observe,

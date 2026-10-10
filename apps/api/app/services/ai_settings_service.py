@@ -9,6 +9,7 @@ from typing import Literal
 
 from project_model.models import (
     AIProviderConnectionResult,
+    AIProviderOperationalState,
     AIProviderRuntimeState,
     AIProviderSettingsResponse,
     AIProviderSettingsUpdate,
@@ -52,7 +53,7 @@ class AIRuntimeConfig:
 
 
 class AISettingsService:
-    """Persists the normal AI provider separately from Jev and activates it for API requests."""
+    """Expose the effective AI policy and activate it for API requests without persisting secrets."""
 
     def __init__(
         self, repository_scope: RepositoryScopeFactory | None = None, secret_store: SecretStore | None = None
@@ -143,7 +144,7 @@ class AISettingsService:
         self._activate(await self._effective_config())
 
     async def save(self, update: AIProviderSettingsUpdate) -> AIProviderSettingsResponse:
-        raise RuntimeError("AI runtime settings are managed by config/config.yaml; edit it and call reload")
+        raise RuntimeError("AI runtime settings are managed by environment/config/config.yaml; edit it and call reload")
 
     async def _config_for_update(self, update: AIProviderSettingsUpdate) -> AIRuntimeConfig:
         current = await self._effective_config()
@@ -180,8 +181,19 @@ class AISettingsService:
             return AIProviderConnectionResult(
                 connected=False,
                 provider=config.provider,
-                status=ProviderHealth.UNAVAILABLE.value,
-                message="AI is disabled by the effective AppConfig.",
+                status=ProviderHealth.DISABLED.value,
+                message="AI is disabled by the effective AppConfig; no provider request was made.",
+                model=config.model,
+                streaming=False,
+                structured_output_supported=None,
+                latency_ms=0,
+            )
+        if config.provider != "fake" and not config.api_key:
+            return AIProviderConnectionResult(
+                connected=False,
+                provider=config.provider,
+                status="UNCONFIGURED",
+                message="AI API key is not configured; no provider request was made.",
                 model=config.model,
                 streaming=False,
                 structured_output_supported=None,
@@ -281,27 +293,65 @@ class AISettingsService:
             if not refresh and _health_cache and _health_cache[0] == key and time.monotonic() < _health_cache[1]:
                 return _health_cache[2].model_copy()
             connection = await self.test_connection()
-            real = connection.connected and connection.streaming and config.provider != "fake"
             simulated = config.provider == "fake"
+            fallback_active = not simulated and connection.status == ProviderHealth.FALLBACK_ONLY.value
+            real = (
+                config.enabled
+                and bool(config.api_key)
+                and connection.connected
+                and connection.streaming
+                and not simulated
+                and not fallback_active
+            )
+            if not config.enabled:
+                operational_state = AIProviderOperationalState.DISABLED
+                failure_reason = "ai_disabled"
+            elif not simulated and not config.api_key:
+                operational_state = AIProviderOperationalState.UNCONFIGURED
+                failure_reason = "missing_api_key"
+            elif real:
+                operational_state = AIProviderOperationalState.READY
+                failure_reason = None
+            elif simulated or fallback_active:
+                operational_state = AIProviderOperationalState.DEGRADED
+                failure_reason = "fake_provider_selected" if simulated else "fallback_provider_active"
+            else:
+                operational_state = AIProviderOperationalState.UNAVAILABLE
+                failure_reason = "provider_probe_failed"
+
+            legacy_status = (
+                AIProviderRuntimeState.REAL_CONNECTED
+                if operational_state == AIProviderOperationalState.READY
+                else AIProviderRuntimeState.SIMULATION
+                if simulated
+                else AIProviderRuntimeState.FALLBACK
+                if fallback_active
+                else AIProviderRuntimeState.UNAVAILABLE
+            )
+            health_status = (
+                AIProviderStatus.AVAILABLE
+                if operational_state == AIProviderOperationalState.READY
+                else AIProviderStatus.DEGRADED
+                if operational_state == AIProviderOperationalState.DEGRADED
+                else AIProviderStatus.UNCONFIGURED
+                if operational_state == AIProviderOperationalState.UNCONFIGURED
+                else AIProviderStatus.DISABLED
+                if operational_state == AIProviderOperationalState.DISABLED
+                else AIProviderStatus(connection.status)
+                if connection.status in AIProviderStatus._value2member_map_
+                else AIProviderStatus.UNAVAILABLE
+            )
             status = AIStatusResponse(
                 provider=config.provider,
                 model=config.model,
                 base_url=config.base_url,
-                status=AIProviderRuntimeState.REAL_CONNECTED
-                if real
-                else AIProviderRuntimeState.SIMULATION
-                if simulated
-                else AIProviderRuntimeState.UNAVAILABLE,
+                status=legacy_status,
                 message=connection.message,
                 real_model_available=real,
-                fallback_active=False,
-                failure_reason=None if real else "fake_provider_selected" if simulated else "provider_probe_failed",
-                health_status=AIProviderStatus.AVAILABLE
-                if real
-                else AIProviderStatus.DISABLED
-                if simulated
-                else AIProviderStatus.UNAVAILABLE,
-                operational_state="REAL_AVAILABLE" if real else "SIMULATION" if simulated else "UNAVAILABLE",
+                fallback_active=fallback_active,
+                failure_reason=failure_reason,
+                health_status=health_status,
+                operational_state=operational_state,
                 streaming=connection.streaming,
                 latency_ms=connection.latency_ms,
                 checked_at=connection.checked_at,

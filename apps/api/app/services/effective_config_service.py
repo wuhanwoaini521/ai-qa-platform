@@ -18,8 +18,7 @@ class EffectiveConfigService:
         if self.repository_scope is not None:
             async with self.repository_scope() as repositories:
                 legacy_db_settings_detected = bool(
-                    await repositories.provider_settings.get_default()
-                    or await repositories.decision_settings.get_jev()
+                    await repositories.provider_settings.get_default() or await repositories.decision_settings.get_jev()
                 )
 
         ai_status = (
@@ -42,7 +41,9 @@ class EffectiveConfigService:
             "DISABLED"
             if not config.repair.enabled or not config.features.ai_repair or config.repair.mode == "OFF"
             else "READY_CONFIGURED"
-            if config.ai.enabled and config.ai.provider != "fake" and config.ai.api_key.get_secret_value()
+            if config.ai.enabled
+            and config.ai.provider != "fake"
+            and config.ai.api_key.get_secret_value()
             and (not config.repair.require_jev or jev_status == "READY_CONFIGURED")
             else "BLOCKED"
         )

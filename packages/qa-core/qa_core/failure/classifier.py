@@ -100,7 +100,7 @@ class FailureClassifier:
             ]
         ):
             locator_match = re.search(
-                r'''(?i)\blocator\(("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\)''',
+                r"""(?i)\blocator\(("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\)""",
                 error_message,
             )
             try:

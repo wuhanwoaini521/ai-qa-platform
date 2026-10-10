@@ -173,7 +173,14 @@ def test_task_capabilities_depend_on_execution_ports_not_task_runtime_facade():
         if path.name in {"task_runtime_service.py", "task_execution_ports.py"}:
             continue
         source = path.read_text(encoding="utf-8")
-        if "self.runtime" in source:
+        tree = ast.parse(source, filename=str(path))
+        if any(
+            isinstance(node, ast.Attribute)
+            and node.attr == "runtime"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "self"
+            for node in ast.walk(tree)
+        ):
             violations.append(f"{path.relative_to(ROOT)} still depends on the TaskRuntime facade")
     runtime = (service_root / "task_runtime_service.py").read_text(encoding="utf-8")
     if "TaskBrowserExecutor(self)" in runtime:

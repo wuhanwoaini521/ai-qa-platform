@@ -217,7 +217,9 @@ async def test_non_streaming_assistant_output_limit_records_usage_and_uses_large
 
     transport = httpx.MockTransport(handler)
     original_client = httpx.AsyncClient
-    monkeypatch.setattr("qa_core.ai.provider.httpx.AsyncClient", lambda *args, **kwargs: original_client(transport=transport))
+    monkeypatch.setattr(
+        "qa_core.ai.provider.httpx.AsyncClient", lambda *args, **kwargs: original_client(transport=transport)
+    )
     provider = OpenAICompatibleProvider(api_key="test-secret", base_url="https://mock-ai.local/v1", max_retries=0)
     orchestrator = ProductionQAOrchestrator(ai_provider=provider)
 
@@ -353,9 +355,7 @@ async def test_openai_compatible_provider_streams_sse_chunks(monkeypatch):
     provider = OpenAICompatibleProvider(api_key="test-secret", model="stream-model", max_retries=0)
     chunks = [
         chunk
-        async for chunk in provider.stream_complete(
-            AICompletionRequest(prompt="say hello", thinking_mode="disabled")
-        )
+        async for chunk in provider.stream_complete(AICompletionRequest(prompt="say hello", thinking_mode="disabled"))
     ]
 
     assert captured["json"]["stream"] is True

@@ -175,7 +175,9 @@ class EvidenceSettings(ConfigSection):
 
 class RecorderSettings(ConfigSection):
     enabled: bool = True
-    locator_strategy: Literal["semantic", "role", "test_id", "label", "placeholder", "text", "css", "xpath"] = "semantic"
+    locator_strategy: Literal["semantic", "role", "test_id", "label", "placeholder", "text", "css", "xpath"] = (
+        "semantic"
+    )
     candidate_limit: int = Field(default=10, ge=1, le=100)
 
 
@@ -190,7 +192,9 @@ class WorkerSettings(ConfigSection):
     api_url: str = "http://127.0.0.1:8000"
     auth_token: SecretStr = SecretStr("")
     name: str = "Runner-Node-1"
-    capabilities: list[str] = Field(default_factory=lambda: ["playwright", "chromium", "firefox", "webkit", "pytest", "python3"])
+    capabilities: list[str] = Field(
+        default_factory=lambda: ["playwright", "chromium", "firefox", "webkit", "pytest", "python3"]
+    )
     max_concurrency: int = Field(default=4, ge=1, le=256)
     heartbeat_interval_seconds: float = Field(default=10.0, gt=0, le=3600)
     poll_interval_seconds: float = Field(default=3.0, gt=0, le=3600)

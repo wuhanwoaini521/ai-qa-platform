@@ -50,14 +50,16 @@ class FailureAnalysisRepository:
             raise ValueError("Analysis record not found")
         serialized_event = SensitiveRedactor.redact_value(event.model_dump(mode="json"))
         verification_run_id = (serialized_event.get("metadata") or {}).get("verification_run_id")
-        run_scoped = event.type in {"verification.started", "verification.completed", "repair.failed", "repair.verified"}
+        run_scoped = event.type in {
+            "verification.started",
+            "verification.completed",
+            "repair.failed",
+            "repair.verified",
+        }
         duplicate = bool(serialized_event.get("step_id")) and any(
             existing.get("type") == serialized_event.get("type")
             and existing.get("step_id") == serialized_event.get("step_id")
-            and (
-                not run_scoped
-                or (existing.get("metadata") or {}).get("verification_run_id") == verification_run_id
-            )
+            and (not run_scoped or (existing.get("metadata") or {}).get("verification_run_id") == verification_run_id)
             for existing in row.events
         )
         rolled_back = (row.result or {}).get("repair_state") == "ROLLED_BACK"

@@ -145,6 +145,7 @@ export const FailureWorkflowPanel: React.FC<{
       ? t('workflow.localDecisionLowConfidence', { confidence: selection.confidence.toFixed(2) })
       : decisionFallbackReason;
   const localDecisionFallback = /local[- ]strategy|local strategy/i.test(decisionEngine);
+  const trustedDecisionBlocked = decisionEngine.toLowerCase() === 'blocked' && decisionFallbackReason !== 'unknown';
   const changesApplied = typeof selectedResult?.changes_applied === 'boolean'
     ? selectedResult.changes_applied
     : suggestionEvent?.metadata.changes_applied === true;
@@ -271,6 +272,11 @@ export const FailureWorkflowPanel: React.FC<{
                 capturedEvidenceVerified ? 'workflow.localEvidenceDecision' : 'workflow.localDecisionFallback',
                 { reason: decisionFallbackReasonLabel },
               )}
+            </p>
+          )}
+          {trustedDecisionBlocked && (
+            <p className="failure-workflow-fallback-note" role="status">
+              {t('workflow.decisionBlocked', { reason: decisionFallbackReasonLabel })}
             </p>
           )}
           {(recommendations.length > 0 || (locatorTimeout && Boolean(observedCartLocator))) && (

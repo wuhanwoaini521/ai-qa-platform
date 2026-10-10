@@ -43,8 +43,10 @@ class JobQueueService:
         )
         return await self.job_repo.create_job(create_req)
 
-    async def dispatch_next_job(self, worker_id: str, browser: str = "chromium") -> ExecutionJob | None:
-        return await self.job_repo.claim_next_job(worker_id=worker_id, browser=browser)
+    async def dispatch_next_job(
+        self, worker_id: str, browser: str = "chromium", browsers: list[str] | None = None
+    ) -> ExecutionJob | None:
+        return await self.job_repo.claim_next_job(worker_id=worker_id, browser=browser, browsers=browsers)
 
     async def get_job(self, job_id: str) -> ExecutionJob:
         job = await self.job_repo.get_by_id(job_id)
@@ -112,7 +114,13 @@ class JobQueueService:
             raise JobNotFoundError(job_id)
         return completed
 
-    async def fail_job(self, job_id: str, error_message: str) -> ExecutionJob | None:
+    async def fail_job(self, job_id: str, error_message: str, worker_id: str | None = None) -> ExecutionJob | None:
+        job = await self.get_job(job_id)
+        if job.status in (JobStatus.ASSIGNED, JobStatus.RUNNING):
+            if not worker_id or job.assigned_worker_id != worker_id:
+                raise JobAssignmentConflict(job_id)
+        elif worker_id is not None and job.assigned_worker_id != worker_id:
+            raise JobAssignmentConflict(job_id)
         return await self.job_repo.update_job_status(
             job_id=job_id, status=JobStatus.FAILED, error_message=error_message
         )

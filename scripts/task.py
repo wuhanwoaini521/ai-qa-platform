@@ -326,8 +326,8 @@ def task_test() -> int:
         log("Skipping the PostgreSQL lane: set AI_QA_TEST_DATABASE_URL to a PostgreSQL URL to run it.")
         log("  e.g. AI_QA_TEST_DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/postgres'")
 
-    log("Running frontend typecheck, lint & build...")
-    for step in (("typecheck",), ("lint",), ("build",)):
+    log("Running frontend unit tests, typecheck, lint & build...")
+    for step in (("test",), ("typecheck",), ("lint",), ("build",)):
         if pnpm("--filter", "@ai-qa/web", *step) != 0:
             return 1
 

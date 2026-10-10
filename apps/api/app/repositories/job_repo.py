@@ -92,23 +92,40 @@ class JobRepository:
         return await self._run(session, _exec)
 
     async def claim_next_job(
-        self, worker_id: str, browser: str = "chromium", session: AsyncSession | None = None
+        self,
+        worker_id: str,
+        browser: str = "chromium",
+        browsers: list[str] | None = None,
+        session: AsyncSession | None = None,
     ) -> ExecutionJob | None:
         async def _exec(s: AsyncSession) -> ExecutionJob | None:
+            stmt = select(ExecutionJobORM).where(ExecutionJobORM.status == JobStatus.QUEUED.value)
+            supported_browsers = list(dict.fromkeys(browsers or [browser]))
+            stmt = stmt.where(ExecutionJobORM.browser.in_(supported_browsers))
             stmt = (
-                select(ExecutionJobORM)
-                .where(ExecutionJobORM.status == "QUEUED", ExecutionJobORM.browser == browser)
-                .order_by(ExecutionJobORM.priority.desc(), ExecutionJobORM.created_at.asc())
+                stmt.order_by(ExecutionJobORM.priority.desc(), ExecutionJobORM.created_at.asc())
                 .limit(1)
+                .with_for_update(skip_locked=True)
             )
-            res = await s.execute(stmt)
-            orm = res.scalar_one_or_none()
-            if not orm:
+            result = await s.execute(stmt)
+            orm = result.scalar_one_or_none()
+            if orm is None:
                 return None
-            orm.status = "ASSIGNED"
-            orm.assigned_worker_id = worker_id
-            orm.started_at = utc_now()
-            orm.updated_at = utc_now()
+
+            claimed_at = utc_now()
+            claim = await s.execute(
+                update(ExecutionJobORM)
+                .where(ExecutionJobORM.id == orm.id, ExecutionJobORM.status == JobStatus.QUEUED.value)
+                .values(
+                    status=JobStatus.ASSIGNED.value,
+                    assigned_worker_id=worker_id,
+                    started_at=claimed_at,
+                    updated_at=claimed_at,
+                )
+            )
+            if claim.rowcount != 1:
+                await s.rollback()
+                return None
             await s.commit()
             await s.refresh(orm)
             return self._to_model(orm)

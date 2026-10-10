@@ -58,7 +58,9 @@ def browser_test_url():
                 body = b"self.addEventListener('fetch', event => event.respondWith(fetch(event.request)));"
                 content_type = "application/javascript"
             elif self.path.endswith(".png"):
-                body = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1WQAAAAASUVORK5CYII=")
+                body = base64.b64decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1WQAAAAASUVORK5CYII="
+                )
                 content_type = "image/png"
             else:
                 body = (
@@ -128,9 +130,12 @@ async def test_browser_runtime_create_restore_snapshot_verify_action_and_close(b
         color_locator = {"kind": "role", "value": "combobox", "name": "Color", "exact": True}
         assert (await runtime.verify_locator(created.id, color_locator, {"action": "select"}))["verified"] is True
         await runtime.execute_action(created.id, color_locator, {"type": "select", "value": "red"})
-        assert next(control for control in (await runtime.snapshot(created.id)).controls if control["name"] == "Color")[
-            "value"
-        ] == "red"
+        assert (
+            next(control for control in (await runtime.snapshot(created.id)).controls if control["name"] == "Color")[
+                "value"
+            ]
+            == "red"
+        )
 
         candidate = {"kind": "role", "value": "button", "name": "Continue", "exact": True}
         verification = await runtime.verify_locator(created.id, candidate, {"action": "click"})

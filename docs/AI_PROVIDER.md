@@ -25,20 +25,32 @@ The platform supports pluggable AI providers implementing the `AIProvider` Proto
 ## 2. Configuration & Environment Variables
 
 ```bash
-# Provider Selection
-AI_PROVIDER_TYPE=openai_compatible  # or fake, fallback
+QA_AI_ENABLED=true
+QA_AI_PROVIDER=openai-compatible  # or fake
+QA_AI_API_KEY=                 # injected secret; never put a real value in YAML
+QA_AI_BASE_URL=https://api.deepseek.com
+QA_AI_MODEL=deepseek-flash
+QA_AI_TIMEOUT_SECONDS=30
+QA_AI_MAX_RETRIES=3
 
-# OpenAI / Compatible API Settings
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-AI_REQUEST_TIMEOUT_SECONDS=30
-AI_MAX_RETRIES=3
-
-# Budget Guards
-AI_MAX_REQUESTS_PER_RUN=25
-AI_MAX_TOKENS_PER_RUN=50000
+JEV_ENABLED=true
+JEV_API_KEY=                   # injected secret; never put a real value in YAML
+JEV_BASE_URL=https://api.typesafe.ai/v1/systemone
+JEV_MODEL=jev-1.13.0
+JEV_TIMEOUT_SECONDS=20
+JEV_RETRIES=1
+JEV_MINIMUM_CONFIDENCE=0.70
 ```
+
+For these provider fields, process environment (including repository-root `.env` in local development)
+overrides YAML; YAML values override safe schema defaults. Compose forwards the same variables to the API.
+Unset overrides leave the committed YAML provider/model policy in place. Credential values are never
+included in effective-config or health responses.
+
+Health is reported independently from provider response provenance: `READY` requires a successful
+real streamed response; `DEGRADED` means simulation or fallback is in use; `UNCONFIGURED` means a
+required API key is absent; `DISABLED` means the provider is switched off; `UNAVAILABLE` means a
+configured provider could not complete its real probe. A Fake provider can never report `READY`.
 
 ### OpenCode-compatible gateways
 

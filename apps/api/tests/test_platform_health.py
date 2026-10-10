@@ -73,14 +73,14 @@ async def test_ai_health_uses_shared_status(monkeypatch):
             status="SIMULATION",
             model="fake-qa-model",
             message="offline",
-            operational_state="FALLBACK_ONLY",
+            operational_state="DEGRADED",
             real_model_available=False,
         )
 
     monkeypatch.setattr(AISettingsService, "get_status", status)
     result = await _health_service()._ai()
     assert result["status"] == "warning"
-    assert result["operational_state"] == "FALLBACK_ONLY"
+    assert result["operational_state"] == "DEGRADED"
 
 
 @pytest.mark.asyncio

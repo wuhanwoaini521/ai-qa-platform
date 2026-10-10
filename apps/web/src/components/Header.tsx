@@ -79,9 +79,11 @@ export const Header: React.FC<HeaderProps> = ({
   }, [panelOpen]);
 
   const aiState =
-    aiStatus?.status === 'REAL_CONNECTED'
+    aiStatus?.operational_state === 'READY'
       ? 'ok'
-      : aiStatus?.status === 'UNAVAILABLE'
+      : aiStatus?.operational_state === 'UNAVAILABLE'
+        || aiStatus?.operational_state === 'UNCONFIGURED'
+        || aiStatus?.operational_state === 'DISABLED'
         ? 'bad'
         : 'warn';
 
@@ -155,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {t('aiProvider')}
                   </dt>
                   <dd>
-                    {aiStatus ? `${aiStatus.provider} · ${aiStatus.status}` : t('unknown')}
+                    {aiStatus ? `${aiStatus.provider} · ${aiStatus.operational_state}` : t('unknown')}
                   </dd>
                 </div>
                 <div className="topbar-status-item">

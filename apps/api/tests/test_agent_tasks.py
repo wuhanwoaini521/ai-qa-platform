@@ -553,15 +553,17 @@ async def test_goal_preview_uses_selected_context_and_duplicate_start_is_idempot
         "/api/tasks",
         json={**payload, "plan_token": preview.json()["plan_token"], "max_ai_calls": 50},
     )
-    assert raised_budget.status_code == 422
-    assert "Preview the goal again" in raised_budget.json()["detail"]
+    assert raised_budget.status_code == 201, raised_budget.text
+    from app.settings import get_config
+
+    assert raised_budget.json()["max_ai_calls"] == get_config().ai.budget.max_task_calls
 
     updated_requirement = await client.patch(
         f"/api/requirements/{requirement_id}",
         json={"acceptance_criteria": "Reject quantities below one, above ten, and after inventory changes."},
     )
     assert updated_requirement.status_code == 200, updated_requirement.text
-    stale = await client.post("/api/tasks", json=payload)
+    stale = await client.post("/api/tasks", json={**payload, "idempotency_key": "stale-plan-after-context-change"})
     assert stale.status_code == 422
     assert "Preview the goal again" in stale.json()["detail"]
     refreshed_preview = await client.post("/api/tasks/preview", json=payload)

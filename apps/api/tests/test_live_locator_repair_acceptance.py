@@ -5,7 +5,6 @@ import json
 import os
 import re
 import socket
-import sqlite3
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,14 +13,12 @@ from threading import Thread
 from urllib.request import urlopen
 
 import pytest
-from app.persistence.models import AIProviderConfigORM, DecisionProviderConfigORM
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.ai_settings_service import AISettingsService
 from app.services.decision_settings_service import DecisionSettingsService
 from app.services.workspace_service import WorkspaceService
 from app.settings import settings
 from qa_core.ai.registry import AIProviderRegistry
-from sqlalchemy.engine import make_url
 
 
 @pytest.fixture
@@ -62,11 +59,13 @@ async def test_live_ai_jev_locator_auto_repair_and_exact_rerun(
     if os.getenv("AI_QA_RUN_LIVE_JEV_ACCEPTANCE") != "1":
         pytest.skip("set AI_QA_RUN_LIVE_JEV_ACCEPTANCE=1 to run the real-provider acceptance")
 
-    live_ai, live_jev = _load_live_provider_rows()
-    if live_ai["provider"] == "fake" or not live_ai["encrypted_api_key"]:
-        pytest.skip("a real AI provider and stored key are required for this acceptance")
-    if not live_jev["enabled"] or not live_jev["encrypted_api_key"]:
-        pytest.skip("enabled Jev runtime and stored key are required for this acceptance")
+    repository_scope = TaskRepositoryScopeFactory()
+    ai_config = await AISettingsService(repository_scope)._effective_config()
+    decision_config = await DecisionSettingsService(repository_scope).get_runtime_config()
+    if ai_config.provider == "fake" or not ai_config.api_key:
+        pytest.skip("a real AI provider and configured key are required for this acceptance")
+    if not decision_config.enabled or not decision_config.api_key:
+        pytest.skip("enabled Jev runtime and configured key are required for this acceptance")
 
     monkeypatch.setattr(settings, "failure_auto_repair_mode", "AUTO")
 
@@ -76,16 +75,6 @@ async def test_live_ai_jev_locator_auto_repair_and_exact_rerun(
     settings.artifact_storage_dir = tmp_path / "artifacts"
     settings.artifact_storage_dir.mkdir(parents=True, exist_ok=True)
     try:
-        async with test_db_session() as session:
-            session.add(AIProviderConfigORM(id="default", **live_ai))
-            session.add(DecisionProviderConfigORM(provider="jev", **live_jev))
-            await session.commit()
-
-        repository_scope = TaskRepositoryScopeFactory()
-        decision_config = await DecisionSettingsService(repository_scope).get_runtime_config()
-        ai_config = await AISettingsService(repository_scope)._effective_config()
-        if not decision_config.api_key or not ai_config.api_key:
-            pytest.skip("stored provider keys could not be decrypted with the current app secret")
         await AISettingsService(repository_scope).load_runtime_config()
 
         html = (
@@ -103,7 +92,7 @@ PAGE_URL = {page_url!r}
 
 def test_workflow():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True, channel="chrome")
         page = browser.new_page()
         try:
             page.goto(PAGE_URL, wait_until="domcontentloaded")
@@ -326,7 +315,9 @@ def test_workflow():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_live_ai_jev_failure_repair_through_browser_ui(client, test_db_session, tmp_path, local_http_url):
+async def test_live_ai_jev_failure_repair_through_browser_ui(
+    client, test_db_session, tmp_path, local_http_url, monkeypatch
+):
     """Drive diagnosis, apply, and verification through the real React UI and API."""
     if os.getenv("AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE") != "1":
         pytest.skip("set AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE=1 to run the real browser acceptance")
@@ -334,12 +325,23 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(client, test_db_ses
     from playwright.async_api import async_playwright
     from uvicorn import Config, Server
 
-    live_ai, live_jev = _load_live_provider_rows()
-    if live_ai["provider"] == "fake" or not live_ai["encrypted_api_key"]:
-        pytest.skip("a real AI provider and stored key are required for this acceptance")
-    if not live_jev["enabled"] or not live_jev["encrypted_api_key"]:
-        pytest.skip("enabled Jev runtime and stored key are required for this acceptance")
+    repository_scope = TaskRepositoryScopeFactory()
+    ai_config = await AISettingsService(repository_scope)._effective_config()
+    decision_config = await DecisionSettingsService(repository_scope).get_runtime_config()
+    if ai_config.provider == "fake" or not ai_config.api_key:
+        pytest.skip("a real AI provider and configured key are required for this acceptance")
+    if not decision_config.enabled or not decision_config.api_key:
+        pytest.skip("enabled Jev runtime and configured key are required for this acceptance")
 
+    import app.settings as settings_module
+
+    current_config = settings_module.get_config()
+    repair_config = current_config.repair.model_copy(update={"mode": "AUTO", "auto_start_on_failure": False})
+    monkeypatch.setattr(
+        settings_module.config_manager,
+        "_config",
+        current_config.model_copy(update={"repair": repair_config}),
+    )
     original_runtime = AIProviderRegistry._runtime_config
     original_middleware = AIProviderRegistry._middleware
     original_artifact_dir = settings.artifact_storage_dir
@@ -350,16 +352,6 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(client, test_db_ses
     vite_process = None
     browser = None
     try:
-        async with test_db_session() as session:
-            session.add(AIProviderConfigORM(id="default", **live_ai))
-            session.add(DecisionProviderConfigORM(provider="jev", **live_jev))
-            await session.commit()
-
-        repository_scope = TaskRepositoryScopeFactory()
-        decision_config = await DecisionSettingsService(repository_scope).get_runtime_config()
-        ai_config = await AISettingsService(repository_scope)._effective_config()
-        if not decision_config.api_key or not ai_config.api_key:
-            pytest.skip("stored provider keys could not be decrypted with the current app secret")
         await AISettingsService(repository_scope).load_runtime_config()
 
         html = (
@@ -376,7 +368,7 @@ PAGE_URL = {page_url!r}
 
 def test_workflow():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True, channel="chrome")
         page = browser.new_page()
         try:
             page.goto(PAGE_URL, wait_until="domcontentloaded")
@@ -449,6 +441,12 @@ def test_workflow():
             assert response.status_code == 200, response.text
             original_run = response.json()
         assert original_run["status"] == "FAILED", original_run
+        browser_sessions = original_run.get("browser_sessions") or []
+        assert any(
+            session.get("page_evidence", {}).get("controls")
+            for session in browser_sessions
+            if isinstance(session.get("page_evidence"), dict)
+        ), browser_sessions
         failures_response = await client.get(f"/api/failures?project_id={project_id}")
         assert failures_response.status_code == 200, failures_response.text
         failure = next(item for item in failures_response.json() if item["run_id"] == original_run["id"])
@@ -495,7 +493,7 @@ def test_workflow():
 
         token = client.headers["Authorization"].removeprefix("Bearer ")
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(headless=True, channel="chrome")
             page = await browser.new_page()
             page.set_default_timeout(180_000)
             await page.add_init_script(
@@ -547,10 +545,80 @@ def test_workflow():
             assert analysis_id, "The browser flow did not create an analysis"
             proposal = state.get("repair_proposal") or {}
             decision_summary = proposal.get("decision_summary") or {}
+            result = candidate.get("result") or {}
+            diagnosis = result.get("diagnosis") or {}
+            selection = result.get("selection") or {}
+            print(
+                "REAL_AI_JEV_BROWSER_ACCEPTANCE="
+                + json.dumps(
+                    {
+                        "analysis_status": candidate.get("status"),
+                        "workflow_state": state.get("state"),
+                        "repair_state": result.get("repair_state"),
+                        "resolved_classification": result.get("resolved_classification"),
+                        "ai_provider": diagnosis.get("provider"),
+                        "ai_model": diagnosis.get("model"),
+                        "ai_fallback_used": diagnosis.get("fallback_used"),
+                        "jev_provider": proposal.get("provider") or decision_summary.get("provider"),
+                        "jev_fallback_used": proposal.get("ai_fallback_used"),
+                        "verification_run_status": state.get("verification_run_status"),
+                        "proposal_present": bool(proposal),
+                        "selection": {
+                            key: selection.get(key)
+                            for key in ("provider", "fallback_reason", "selected_candidate", "confidence")
+                        },
+                        "decision_events": [
+                            {
+                                "status": event.get("status"),
+                                "message": event.get("message"),
+                                "metadata": {
+                                    key: (event.get("metadata") or {}).get(key)
+                                    for key in ("provider", "fallback_reason", "selected_candidate", "confidence")
+                                },
+                            }
+                            for event in candidate.get("events", [])
+                            if event.get("type") == "decision.completed"
+                        ],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
             assert "APPLY" not in state.get("allowed_actions", []), state
             if state["state"] == "BLOCKED":
                 if not proposal:
-                    assert candidate["status"] == "FAILED", candidate
+                    selection = candidate.get("result", {}).get("selection") or {}
+                    if selection.get("fallback_reason") == "below_minimum_confidence":
+                        confidence = selection.get("confidence")
+                        assert candidate["status"] == "COMPLETED", candidate
+                        assert candidate["result"].get("repair_state") == "BLOCKED", candidate
+                        assert isinstance(confidence, (int, float))
+                        assert confidence < decision_config.minimum_confidence, selection
+                        assert state.get("verification_run_id") is None, state
+                        assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
+                        fallback_note = page.locator(".failure-workflow-fallback-note")
+                        await fallback_note.wait_for(state="visible", timeout=30_000)
+                        fallback_text = await fallback_note.inner_text()
+                        assert (
+                            f"Jev confidence was {confidence:.2f}" in fallback_text
+                            or f"Jev 本次置信度为 {confidence:.2f}" in fallback_text
+                        ), fallback_text
+                        return
+                    assert candidate["status"] == "FAILED", {
+                        "status": candidate["status"],
+                        "repair_state": candidate.get("result", {}).get("repair_state"),
+                        "initial_classification": candidate.get("result", {}).get("initial_classification"),
+                        "resolved_classification": candidate.get("result", {}).get("resolved_classification"),
+                        "selection": candidate.get("result", {}).get("selection"),
+                        "events": [
+                            {key: event.get(key) for key in ("type", "stage", "status", "message")}
+                            for event in candidate.get("events", [])
+                        ],
+                        "workflow_state": {
+                            key: state.get(key)
+                            for key in ("state", "block_reason", "allowed_actions", "verification_run_id")
+                        },
+                    }
                     assert any(event["type"] == "run.failed" for event in candidate["events"]), candidate
                     assert state.get("verification_run_id") is None, state
                     assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
@@ -561,7 +629,7 @@ def test_workflow():
                 assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
                 if fallback_reason == "below_minimum_confidence":
                     confidence = decision_summary.get("confidence")
-                    assert confidence is not None and confidence < live_jev["minimum_confidence"], decision_summary
+                    assert confidence is not None and confidence < decision_config.minimum_confidence, decision_summary
                     fallback_note = page.locator(".failure-workflow-fallback-note")
                     await fallback_note.wait_for(state="visible", timeout=30_000)
                     fallback_text = await fallback_note.inner_text()
@@ -606,15 +674,19 @@ def test_workflow():
                         re.I,
                     )
                 ).wait_for(state="visible", timeout=30_000)
-                await page.locator(".failure-workflow-result-status").get_by_text(
-                    re.compile(r"Retest: Retest did not pass|复测状态：实际复测未通过", re.I)
-                ).wait_for(state="visible", timeout=30_000)
+                await (
+                    page.locator(".failure-workflow-result-status")
+                    .get_by_text(re.compile(r"Retest: Retest did not pass|复测状态：实际复测未通过", re.I))
+                    .wait_for(state="visible", timeout=30_000)
+                )
                 return
             assert state["state"] == "VERIFIED" and state["verified"] is True, state
             assert state["verification_run_status"] == "PASSED", state
-            await page.locator(".failure-workflow-result-status").get_by_text(
-                re.compile(r"Retest: Actual verification passed|复测状态：实际复测已通过", re.I)
-            ).wait_for(state="visible", timeout=30_000)
+            await (
+                page.locator(".failure-workflow-result-status")
+                .get_by_text(re.compile(r"Retest: Actual verification passed|复测状态：实际复测已通过", re.I))
+                .wait_for(state="visible", timeout=30_000)
+            )
             assert await page.get_by_role("button", name=re.compile(r"Apply repair|应用修复", re.I)).count() == 0
             history = await client.get(f"/api/failures/{failure['id']}/analyses")
             assert history.status_code == 200, history.text
@@ -628,6 +700,21 @@ def test_workflow():
             } <= recorded_types
             assert 'page.locator("#purchase-now")' not in await WorkspaceService().read_file(
                 project_id, "tests/test_workflow.py"
+            )
+            print(
+                "REAL_AI_JEV_BROWSER_VERIFICATION="
+                + json.dumps(
+                    {
+                        "workflow_state": state["state"],
+                        "verified": state["verified"],
+                        "verification_run_status": state["verification_run_status"],
+                        "ai_provider": diagnosis.get("provider"),
+                        "ai_fallback_used": diagnosis.get("fallback_used"),
+                        "jev_provider": proposal.get("provider"),
+                        "jev_fallback_used": proposal.get("ai_fallback_used"),
+                    },
+                    sort_keys=True,
+                )
             )
 
             async def show_persisted_rollback(route):
@@ -656,7 +743,9 @@ def test_workflow():
                     re.compile(r"Retest failed · repair rolled back|复测未通过 · 修复已回滚", re.I)
                 ).wait_for(state="visible", timeout=30_000)
                 await page.get_by_text(
-                    re.compile(r"Code change: Rolled back · original code restored|代码修改：已回滚，原代码已恢复", re.I)
+                    re.compile(
+                        r"Code change: Rolled back · original code restored|代码修改：已回滚，原代码已恢复", re.I
+                    )
                 ).wait_for(state="visible", timeout=30_000)
                 await page.get_by_text(
                     re.compile(
@@ -683,31 +772,3 @@ def test_workflow():
         settings.artifact_storage_dir = original_artifact_dir
         AIProviderRegistry.configure_runtime(original_runtime)
         AIProviderRegistry.set_middleware(original_middleware)
-
-
-def _load_live_provider_rows() -> tuple[dict[str, object], dict[str, object]]:
-    db_name = make_url(settings.database_url).database
-    configured_path = os.getenv("AI_QA_LIVE_CONFIG_DB") or db_name
-    if not configured_path:
-        pytest.skip("no local provider configuration database is configured")
-    database = Path(configured_path).resolve()
-    if not database.is_file():
-        pytest.skip("configured provider database is not available as a local SQLite file")
-    try:
-        connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
-        connection.row_factory = sqlite3.Row
-        ai_row = connection.execute(
-            "SELECT provider, encrypted_api_key, model, base_url, timeout, max_retries, "
-            "max_request_tokens, max_daily_requests, max_task_calls "
-            "FROM ai_provider_configs WHERE id='default'"
-        ).fetchone()
-        jev_row = connection.execute(
-            "SELECT enabled, encrypted_api_key, model, base_url, timeout, minimum_confidence "
-            "FROM decision_provider_configs WHERE provider='jev'"
-        ).fetchone()
-        connection.close()
-    except sqlite3.Error:
-        pytest.skip("local provider configuration database does not contain configured AI and Jev settings")
-    if ai_row is None or jev_row is None:
-        pytest.skip("real AI and Jev configuration rows are required")
-    return dict(ai_row), dict(jev_row)

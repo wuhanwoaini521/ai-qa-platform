@@ -198,6 +198,7 @@
     "originalDiagnosis": "Show original AI diagnosis and advice",
     "localDecisionFallback": "Jev was not accepted for this decision (reason: {{reason}}); local rules selected the candidate. The original test rerun determines whether the repair works.",
     "localDecisionLowConfidence": "Jev confidence was {{confidence}}, below the configured minimum",
+    "decisionBlocked": "Repair was blocked: {{reason}}. No code change was applied and no verification run was started.",
     "localEvidenceDecision": "Jev did not provide an accepted decision; local ranking selected a control captured during the failed run, and the locator matched a visible, enabled and unique control. The original test must still pass to verify the repair."
   },
   "patchAwaitingVerification": "Patch applied · Rerun pending",

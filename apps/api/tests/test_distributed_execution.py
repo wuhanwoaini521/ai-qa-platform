@@ -108,11 +108,30 @@ async def test_job_queue_and_dispatch(test_db_session):
     assert claimed.assigned_worker_id == worker_id
     assert claimed.status == JobStatus.ASSIGNED
 
+    from app.services.job_queue_service import JobAssignmentConflict
+
+    with pytest.raises(JobAssignmentConflict):
+        await job_service.fail_job(job.id, error_message="wrong worker", worker_id="not-the-owner")
+
     # 3. Complete job
     completed = await job_service.complete_job(job.id, duration_ms=1250.0)
     assert completed is not None
     assert completed.status == JobStatus.COMPLETED
     assert completed.duration_ms == 1250.0
+
+    firefox_job = await job_service.enqueue_job(
+        run_id=run_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        nodeids=["tests/test_auth.py::test_firefox"],
+        browser="firefox",
+        priority=25,
+    )
+    assert await job_service.dispatch_next_job(worker_id=worker_id, browsers=["chromium"]) is None
+    claimed_firefox = await job_service.dispatch_next_job(worker_id=worker_id, browsers=["chromium", "firefox"])
+    assert claimed_firefox is not None
+    assert claimed_firefox.id == firefox_job.id
+    assert claimed_firefox.browser == "firefox"
 
 
 @pytest.mark.asyncio

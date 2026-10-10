@@ -837,9 +837,7 @@ async def _store_verified_repair(
     old_locator: str,
     new_locator: str,
 ):
-    source_response = await client.get(
-        f"/api/workspaces/{project_id}/file", params={"path": file_path}
-    )
+    source_response = await client.get(f"/api/workspaces/{project_id}/file", params={"path": file_path})
     assert source_response.status_code == 200, source_response.text
     source_sha256 = hashlib.sha256(source_response.json()["content"].encode("utf-8")).hexdigest()
     async with test_db_session() as session:
@@ -925,8 +923,14 @@ async def test_locator_repair_requires_observed_candidates(client: AsyncClient, 
 
 @pytest.mark.integration
 async def test_repair_proposal_blocks_without_trusted_jev_even_with_saved_diagnosis(
-    client: AsyncClient, test_db_session
+    client: AsyncClient, test_db_session, monkeypatch
 ):
+    import app.settings as settings_module
+
+    config = settings_module.get_config()
+    jev_config = config.jev.model_copy(update={"enabled": False})
+    monkeypatch.setattr(settings_module.config_manager, "_config", config.model_copy(update={"jev": jev_config}))
+
     locator = '[data-testid="legacy-add-cart"]'
     project_id, failure_id = await _seed_locator_failure(
         client,
@@ -1325,9 +1329,7 @@ async def test_failed_suite_schedules_auto_repair_by_mode_and_skips_repair_runs(
             )
         )
         await session.commit()
-        await service.persist_suite_result(
-            repair_rerun.id, suite, workspace_id=project_id, workspace_dir=workspace_dir
-        )
+        await service.persist_suite_result(repair_rerun.id, suite, workspace_id=project_id, workspace_dir=workspace_dir)
 
     assert len(schedules) == expected_schedules
     if expected_schedules:

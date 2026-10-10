@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from project_model.models import Breakpoint, DebugSessionBootstrap
+
 from app.settings import get_config
 
 ALLOWED_DAP_COMMANDS = frozenset(
@@ -89,7 +90,9 @@ class DebugSessionService:
     """Owns a single debugpy DAP adapter per authenticated debug session."""
 
     def __init__(self, adapter_interpreter: Path | None = None) -> None:
-        self.adapter_interpreter = (adapter_interpreter or Path(sys.executable)).resolve()
+        # Preserve virtual-environment symlinks: resolving .venv/bin/python escapes the venv and
+        # can make debugpy/pytest disappear from the adapter subprocess.
+        self.adapter_interpreter = Path(os.path.abspath(adapter_interpreter or Path(sys.executable)))
         self._sessions: dict[str, DebugSession] = {}
         self._lock = asyncio.Lock()
 
@@ -105,9 +108,11 @@ class DebugSessionService:
     ) -> DebugSessionBootstrap:
         root = workspace_dir.resolve()
         normalized_nodeid = validate_debug_nodeid(root, nodeid)
-        interpreter = (
-            target_interpreter if target_interpreter and target_interpreter.is_file() else Path(sys.executable)
-        ).resolve()
+        interpreter = Path(
+            os.path.abspath(
+                target_interpreter if target_interpreter and target_interpreter.is_file() else sys.executable
+            )
+        )
         session_id = str(uuid4())
         process_options: dict[str, Any] = {
             "cwd": str(root),
@@ -333,15 +338,11 @@ class DebugSessionService:
             except (BrokenPipeError, ConnectionError, RuntimeError):
                 pass
             try:
-                await asyncio.wait_for(
-                    process.wait(), timeout=get_config().debugger.shutdown_grace_timeout_seconds
-                )
+                await asyncio.wait_for(process.wait(), timeout=get_config().debugger.shutdown_grace_timeout_seconds)
             except asyncio.TimeoutError:
                 process.terminate()
                 try:
-                    await asyncio.wait_for(
-                        process.wait(), timeout=get_config().debugger.shutdown_force_timeout_seconds
-                    )
+                    await asyncio.wait_for(process.wait(), timeout=get_config().debugger.shutdown_force_timeout_seconds)
                 except asyncio.TimeoutError:
                     process.kill()
                     await process.wait()

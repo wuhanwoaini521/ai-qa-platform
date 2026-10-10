@@ -1499,7 +1499,9 @@ class TaskBrowserExecutor:
                     "ai_input_tokens": ai_info["input_tokens"],
                     "ai_output_tokens": ai_info["output_tokens"],
                     "confidence": jev_result.confidence if decision_provider == "jev" and jev_result else None,
-                    "minimum_confidence": jev_result.minimum_confidence if decision_provider == "jev" and jev_result else None,
+                    "minimum_confidence": jev_result.minimum_confidence
+                    if decision_provider == "jev" and jev_result
+                    else None,
                     "scores": jev_result.probabilities if decision_provider == "jev" and jev_result else {},
                     "latency_ms": jev_latency if jev_needed else 0.0,
                     "model": jev_result.model if decision_provider == "jev" and jev_result else None,

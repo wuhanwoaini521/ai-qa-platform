@@ -546,7 +546,9 @@ class FailureService:
         excluded = {item.strip() for item in (exclude_locators or []) if item.strip()}
         ranked = [candidate for candidate in ranked if candidate["locator"] not in excluded]
         if not ranked and excluded:
-            raise LocatorRepairNotApplicableError("REPAIR_CANDIDATES_EXHAUSTED: prior failed locator candidates were excluded.")
+            raise LocatorRepairNotApplicableError(
+                "REPAIR_CANDIDATES_EXHAUSTED: prior failed locator candidates were excluded."
+            )
         verification_session = None
         live_page_available = False
         if ranked and current_url:
@@ -577,8 +579,7 @@ class FailureService:
                     case_execution_id=evidence_execution_id,
                     step_id=f"repair:{failure_id}",
                     require_jev=(
-                        get_config().repair.require_jev
-                        or not get_config().jev.failure_policy.allow_local_fallback
+                        get_config().repair.require_jev or not get_config().jev.failure_policy.allow_local_fallback
                     ),
                 )
             except Exception as error:
@@ -883,22 +884,26 @@ class FailureService:
             if not isinstance(observed_candidates, list):
                 continue
             matching_control = any(
-                isinstance(observed, dict)
-                and cls._candidate_matches_observed_alias(candidate, observed)
+                isinstance(observed, dict) and cls._candidate_matches_observed_alias(candidate, observed)
                 for observed in observed_candidates
             )
             if matching_control:
                 matches += 1
                 if matches > 1 or control.get("visible") is not True or control.get("enabled") is not True:
                     return False
-                if action in {"click", "double_click"} and control.get("tag") not in {
-                    "button",
-                    "a",
-                    "input",
-                    "textarea",
-                    "select",
-                    "summary",
-                } and control.get("role") not in {"button", "link", "menuitem"}:
+                if (
+                    action in {"click", "double_click"}
+                    and control.get("tag")
+                    not in {
+                        "button",
+                        "a",
+                        "input",
+                        "textarea",
+                        "select",
+                        "summary",
+                    }
+                    and control.get("role") not in {"button", "link", "menuitem"}
+                ):
                     return False
         return matches == 1
 

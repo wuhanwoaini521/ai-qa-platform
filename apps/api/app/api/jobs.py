@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest
+from project_model.models import ClaimJobRequest, CompleteJobRequest, ExecutionJob, FailJobRequest, JobStatus
 from pydantic import BaseModel
 from qa_core.execution.models import SuiteExecutionResult
 from qa_core.failure.redactor import SensitiveRedactor
@@ -58,7 +58,11 @@ async def get_job(job_id: str, service: JobQueueService = Depends(get_job_queue_
 async def claim_next_job(
     request: ClaimJobRequest, service: JobQueueService = Depends(get_job_queue_service)
 ) -> ExecutionJob | None:
-    return await service.dispatch_next_job(worker_id=request.worker_id, browser=request.browser)
+    return await service.dispatch_next_job(
+        worker_id=request.worker_id,
+        browser=request.browser,
+        browsers=request.browsers or None,
+    )
 
 
 @router.post("/{job_id}/log")
@@ -102,7 +106,16 @@ async def fail_job(
     job_id: str, request: FailJobRequest, service: JobQueueService = Depends(get_job_queue_service)
 ) -> ExecutionJob:
     safe_error = SensitiveRedactor.redact_text(request.error_message)
-    job = await service.fail_job(job_id, error_message=safe_error)
+    try:
+        current = await service.get_job(job_id)
+        terminal = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+        if current.status not in terminal and not request.worker_id:
+            raise JobAssignmentConflict(job_id)
+        job = await service.fail_job(job_id, error_message=safe_error, worker_id=request.worker_id)
+    except JobAssignmentConflict:
+        raise HTTPException(status_code=409, detail="Job is not assigned to this worker")
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     await service.mark_run_error(job.run_id, safe_error)

@@ -87,12 +87,31 @@ async def test_effective_config_api_redacts_secrets_and_reload_is_atomic(client,
     import app.services.effective_config_service as effective_config_module
     import app.settings as settings_module
 
+    for name in (
+        "QA_AI_ENABLED",
+        "QA_AI_PROVIDER",
+        "QA_AI_API_KEY",
+        "QA_AI_BASE_URL",
+        "QA_AI_MODEL",
+        "QA_AI_TIMEOUT_SECONDS",
+        "QA_AI_MAX_RETRIES",
+        "JEV_ENABLED",
+        "JEV_API_KEY",
+        "JEV_BASE_URL",
+        "JEV_MODEL",
+        "JEV_TIMEOUT_SECONDS",
+        "JEV_RETRIES",
+        "JEV_MINIMUM_CONFIDENCE",
+    ):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("QA_CONFIG_API_TEST_SECRET", "must-not-be-returned")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql+asyncpg://database-user:database-password@db.example/qa?password=query-password",
     )
-    config_path = tmp_path / "config.yaml"
+    config_dir = tmp_path / "isolated"
+    config_dir.mkdir()
+    config_path = config_dir / "config.yaml"
     config_path.write_text(
         """version: 1
 database:
@@ -109,6 +128,10 @@ ai:
     monkeypatch.setattr(settings_module, "config_manager", manager)
     monkeypatch.setattr(api_settings_module, "config_manager", manager)
     monkeypatch.setattr(effective_config_module, "config_manager", manager)
+
+    login = await client.post("/api/auth/login", json={"email": "admin@ai-qa.local", "password": "adminpassword"})
+    assert login.status_code == 200, login.text
+    client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
 
     effective_response = await client.get("/api/settings/effective")
     assert effective_response.status_code == 200, effective_response.text

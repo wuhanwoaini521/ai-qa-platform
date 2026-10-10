@@ -35,7 +35,19 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-exclude = ["runtime", "**/runtime/**", ".tmp-runtime-*", "**/.tmp-runtime-*", "**/.tmp-runtime-*/**", ".tmp-codex-*", "**/.tmp-codex-*"]
+exclude = [
+    "runtime",
+    "**/runtime/**",
+    ".tmp-runtime-*",
+    "**/.tmp-runtime-*",
+    "**/.tmp-runtime-*/**",
+    ".tmp-codex-*",
+    "**/.tmp-codex-*",
+    ".agents",
+    "**/.agents/**",
+    ".ai-runs",
+    "**/.ai-runs/**",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]

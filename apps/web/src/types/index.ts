@@ -775,6 +775,8 @@ export interface QAChatResponse {
 
 export type AIProviderHealth =
   | 'AVAILABLE'
+  | 'DEGRADED'
+  | 'UNCONFIGURED'
   | 'FALLBACK_ONLY'
   | 'DISABLED'
   | 'AUTH_ERROR'
@@ -783,7 +785,7 @@ export type AIProviderHealth =
   | 'UNAVAILABLE';
 
 export interface AIStatusResponse {
-  operational_state: 'REAL_AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
+  operational_state: 'READY' | 'DEGRADED' | 'UNCONFIGURED' | 'UNAVAILABLE' | 'DISABLED';
   streaming: boolean;
   latency_ms?: number | null;
   checked_at: string;

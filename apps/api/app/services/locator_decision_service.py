@@ -11,13 +11,13 @@ from uuid import uuid4
 from project_model.models import DecisionOption, DecisionRequest
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.failure.redactor import SensitiveRedactor
-from app.settings import get_config
 from qa_core.healing.locator_intelligence import rank_locator_candidates
 
 from app.ports.browser_runtime import BrowserRuntime
 from app.ports.repository_scope import RepositoryScopeFactory
 from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
+from app.settings import get_config
 
 _METHODS = {
     "role": "get_by_role",
@@ -67,9 +67,7 @@ _GENERIC_TARGET_TOKENS = {
 
 def _locator_tokens(value: str) -> set[str]:
     return {
-        token.lower()
-        for token in re.findall(r"[\w]+", value)
-        if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
+        token.lower() for token in re.findall(r"[\w]+", value) if len(token) > 2 and token.lower() not in _LOCATOR_NOISE
     }
 
 
@@ -321,12 +319,8 @@ class LocatorDecisionService:
         selected_id = str(decision.choice) if actual_jev else None
         selected = candidate_by_id.get(selected_id) if selected_id else None
         engine = "Jev" if selected is not None and actual_jev else "BLOCKED" if require_jev else "Local Strategy"
-        attempted_provider = (
-            (decision.attempted_provider or decision.provider) if decision else None
-        )
-        attempted_model = (
-            (decision.attempted_model or decision.model) if decision else None
-        )
+        attempted_provider = (decision.attempted_provider or decision.provider) if decision else None
+        attempted_model = (decision.attempted_model or decision.model) if decision else None
         attempted_choice = decision.attempted_choice if decision else None
         minimum_confidence = decision.minimum_confidence if decision else None
         if selected is None and candidates and not require_jev:
@@ -335,7 +329,11 @@ class LocatorDecisionService:
 
         await emit(
             "decision_completed",
-            "Jev selected candidate" if engine == "Jev" else "Repair decision blocked" if require_jev else "Local Strategy selected candidate",
+            "Jev selected candidate"
+            if engine == "Jev"
+            else "Repair decision blocked"
+            if require_jev
+            else "Local Strategy selected candidate",
             stage="decision",
             message=(selected["locator"] if selected else "No usable candidate")
             + (f" · {latency_ms:.1f} ms" if engine == "Jev" else ""),

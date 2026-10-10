@@ -21,8 +21,8 @@ from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 from app.persistence.models import utc_now
 from app.ports.repository_scope import RepositoryScopeFactory
 from app.repositories.ai_repo import AIRepository
-from app.services.lifecycle_context_service import lifecycle_context
 from app.services.ai_runtime import build_ai_orchestrator
+from app.services.lifecycle_context_service import lifecycle_context
 
 logger = logging.getLogger("app.ai")
 

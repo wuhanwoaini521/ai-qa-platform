@@ -51,6 +51,8 @@ def _repair_verification_nodeids(test_nodeid: str) -> list[str]:
     if get_config().repair.rerun_exact_nodeid:
         return [test_nodeid]
     return [test_nodeid.split("::", 1)[0]]
+
+
 logger = logging.getLogger(__name__)
 _verification_reconciliation_locks: dict[str, tuple[asyncio.Lock, int]] = {}
 _verification_reconciliation_locks_guard = asyncio.Lock()
@@ -88,7 +90,9 @@ class FailureWorkflowService:
         self.decisions = decision_service or LocatorDecisionService(repository_scope=repository_scope)
         self.run_service = run_service
         self.repository_scope = repository_scope or failure_service.repository_scope
-        configured_mode = get_config().repair.mode if get_config().repair.enabled and get_config().features.auto_repair else "OFF"
+        configured_mode = (
+            get_config().repair.mode if get_config().repair.enabled and get_config().features.auto_repair else "OFF"
+        )
         self.auto_repair_mode = (auto_repair_mode or configured_mode).upper()
         self._verification_monitors: set[asyncio.Task[None]] = set()
         if self.repository_scope is None:
@@ -156,7 +160,12 @@ class FailureWorkflowService:
         ai_settings = AISettingsService(self.repository_scope)
         ai_config = await ai_settings._effective_config()
         if not ai_config.enabled or ai_config.provider == "fake" or not ai_config.api_key.strip():
-            return {"ready": False, "reason": "AI_RUNTIME_NOT_READY", "ai_provider": ai_config.provider, "ai_model": ai_config.model}
+            return {
+                "ready": False,
+                "reason": "AI_RUNTIME_NOT_READY",
+                "ai_provider": ai_config.provider,
+                "ai_model": ai_config.model,
+            }
 
         async with self.repository_scope() as repositories:
             budget = await repositories.ai_budgets.get_by_day(datetime.now(timezone.utc).date().isoformat())
@@ -307,8 +316,12 @@ class FailureWorkflowService:
                                         "execution_id": failed_case.execution_id,
                                         "failure_evidence": {
                                             "classification": failed_case.classification,
-                                            "error": SensitiveRedactor.redact_text(failed_case.error_message or "")[:2000],
-                                            "traceback": SensitiveRedactor.redact_text(failed_case.stack_trace or "")[-5000:],
+                                            "error": SensitiveRedactor.redact_text(failed_case.error_message or "")[
+                                                :2000
+                                            ],
+                                            "traceback": SensitiveRedactor.redact_text(failed_case.stack_trace or "")[
+                                                -5000:
+                                            ],
                                             "verification_run_id": run_id,
                                         },
                                         "excluded_candidate_ids": [proposal["candidate_id"]]
@@ -903,7 +916,9 @@ class FailureWorkflowService:
             await self._history_append(analysis_id, event, result=result)
             await queue.put(event)
 
-        async def step(key: str, status: str, message: str, *, _persisted_result: dict[str, Any] | None = None, **metadata):
+        async def step(
+            key: str, status: str, message: str, *, _persisted_result: dict[str, Any] | None = None, **metadata
+        ):
             nonlocal active_stage
             duration = None
             if status == "RUNNING":
@@ -1499,9 +1514,7 @@ class FailureWorkflowService:
                         await step(
                             "suggestion",
                             "FAILED" if result["auto_rolled_back"] else "COMPLETED",
-                            "复测未通过，补丁已自动回滚"
-                            if result["auto_rolled_back"]
-                            else "定位器补丁已自动应用",
+                            "复测未通过，补丁已自动回滚" if result["auto_rolled_back"] else "定位器补丁已自动应用",
                             candidate_verified=True,
                             changes_applied=patch_still_applied,
                             automatic=True,

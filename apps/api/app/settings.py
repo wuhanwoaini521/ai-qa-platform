@@ -104,5 +104,9 @@ class _SettingsCompatibilityView:
 settings = _SettingsCompatibilityView()
 
 # Preserve the previous import-time directory setup, now based on the single AppConfig snapshot.
-for _path in (get_config().app.runtime_dir, get_config().app.workspace_storage_dir, get_config().app.artifact_storage_dir):
+for _path in (
+    get_config().app.runtime_dir,
+    get_config().app.workspace_storage_dir,
+    get_config().app.artifact_storage_dir,
+):
     Path(_path).mkdir(parents=True, exist_ok=True)

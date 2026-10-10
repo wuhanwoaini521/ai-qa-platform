@@ -42,9 +42,11 @@ The authenticated Settings API exposes `GET /api/settings/effective`, `GET /api/
 
 AI/Jev Settings endpoints are read-only runtime views. Their legacy write endpoints return `409`; old AI/Jev ORM rows are detected and shown as migration notices, but are never used as runtime fallback. The database tables are retained for history. There is no automatic legacy-secret migration: copy non-secret policy to YAML and move secrets to environment variables before removing old rows manually.
 
-## Environment values that remain
+## Environment precedence
 
-Only deployment inputs and secret values feed the loader: API bind address/port, database URL, app/provider/integration/proxy credentials or URLs, and worker API URL/token/name. The worker ID is a deployment identity; if unset, it is generated per process.
+The provider runtime uses this precedence: process environment (including the repository-root `.env` loaded for local development) > `config/config.yaml` > typed schema defaults. The canonical overrides are `QA_AI_ENABLED`, `QA_AI_PROVIDER`, `QA_AI_API_KEY`, `QA_AI_BASE_URL`, `QA_AI_MODEL`, `QA_AI_TIMEOUT_SECONDS`, `QA_AI_MAX_RETRIES`, and `JEV_ENABLED`, `JEV_API_KEY`, `JEV_BASE_URL`, `JEV_MODEL`, `JEV_TIMEOUT_SECONDS`, `JEV_RETRIES`, `JEV_MINIMUM_CONFIDENCE`. Empty/unset optional secrets remain unconfigured; no health response treats a missing credential as a successful real provider.
+
+Other environment values are explicit interpolation inputs in the YAML: API bind address/port, database URL, app/provider/integration/proxy credentials or URLs, and worker API URL/token/name. The worker ID is a deployment identity; if unset, it is generated per process. Docker Compose forwards all provider overrides and uses defaults matching the committed YAML.
 
 Other environment reads are execution context rather than a second platform config: `PYTEST_XDIST_WORKER`, `PYTHONPATH`, `QA_ARTIFACT_DIR` and the live-browser event path identify a pytest child process; the onboarding collector passes selected environment into the imported project's own tools; API test fixtures use `AI_QA_TEST_DATABASE_URL`; user-authored pytest code may read its own environment. Browser proxy variables passed to a child are derived from `config/config.yaml` before the process starts.
 

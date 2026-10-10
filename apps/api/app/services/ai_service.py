@@ -11,7 +11,6 @@ from project_model.models import (
     TestCaseGenerationItem,
     TestDesignSuggestion,
 )
-from qa_core.ai.budget import AIBudgetGuard
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 
 from app.persistence.models import utc_now
