@@ -53,6 +53,7 @@ from app.services.pr_service import PullRequestService
 from app.services.project_knowledge_service import ProjectKnowledgeQueryService
 from app.services.project_service import ProjectService
 from app.services.qa_assistant_service import QAAssistantService
+from app.services.quality_discovery_service import QualityDiscoveryService
 from app.services.quality_intelligence_service import QualityIntelligenceService
 from app.services.recorder_service import BrowserRecorderService
 from app.services.recorder_workflow_service import RecorderWorkflowService
@@ -344,6 +345,22 @@ def get_project_knowledge_service(session: AsyncSession = Depends(get_db)) -> Pr
     return ProjectKnowledgeQueryService(session)
 
 
+_quality_discovery_service: QualityDiscoveryService | None = None
+
+
+def get_quality_discovery_service() -> QualityDiscoveryService:
+    global _quality_discovery_service
+    if _quality_discovery_service is None:
+        scope = get_repository_scope_factory()
+        _quality_discovery_service = QualityDiscoveryService(
+            async_session_factory,
+            browser_runtime=get_browser_runtime(),
+            decisions=DecisionService(repository_scope=scope),
+            workspace_service=WorkspaceService(),
+        )
+    return _quality_discovery_service
+
+
 _task_runtime_service: TaskRuntimeService | None = None
 
 
@@ -353,6 +370,7 @@ def get_task_runtime_service() -> TaskRuntimeService:
         _task_runtime_service = TaskRuntimeService(
             repository_scope=TaskRepositoryScopeFactory(),
             browser_runtime=get_browser_runtime(),
+            recorder_session_resolver=recorder_service.get,
         )
     return _task_runtime_service
 

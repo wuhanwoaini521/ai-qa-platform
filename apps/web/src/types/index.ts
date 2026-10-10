@@ -211,6 +211,95 @@ export interface GenerateAutomationResponse {
   page_objects: string[];
 }
 
+export type QualityDiscoveryMode = 'EXPLORE' | 'VALIDATE' | 'AUDIT';
+export type QualityDiscoveryStatus =
+  | 'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'STOPPED' | 'BUDGET_EXHAUSTED';
+
+export interface QualityDiscoveryFeature {
+  feature_id: string;
+  name: string;
+  description: string;
+  page?: string;
+  status: 'OBSERVED' | 'VERIFIED' | 'INFERRED';
+  confidence?: number;
+  mapping_confidence?: number;
+  mapping_status?: string;
+  trust?: string;
+  evidence_ids: string[];
+  requirement_ids: string[];
+  state_ids?: string[];
+  page_type?: string;
+  test_case_ids?: string[];
+  test_case_candidates?: Array<{ test_case_id: string; title: string; mapping_confidence: number; mapping_status: string }>;
+  coverage_status?: string;
+  automation?: Array<{
+    test_case_id: string;
+    test_case_title: string;
+    automation_binding_id: string | null;
+    nodeid: string | null;
+    automation_status: string;
+    last_run_status: string | null;
+    last_run_id?: string | null;
+    file_path?: string | null;
+    test_name?: string | null;
+    markers?: string[];
+    failure_summary?: string | null;
+    mapping_confidence: number;
+    mapping_status: string;
+  }>;
+  automation_candidates?: Array<{ nodeid: string; file_path: string; test_name: string; markers: string[]; linked_test_case_id?: string | null; linked_requirement_id?: string | null; mapping_confidence: number }>;
+}
+
+export interface QualityDiscoveryGap {
+  id: string;
+  category: string;
+  item_id: string;
+  title: string;
+  risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  confidence: number;
+  evidence_ids: string[];
+  suggested_action: string;
+  requirement?: string | null;
+  expected?: string[];
+  observed?: string | null;
+}
+
+export interface QualityDiscoveryRun {
+  id: string;
+  project_id: string;
+  mode: QualityDiscoveryMode;
+  start_url: string;
+  requirement_id: string | null;
+  status: QualityDiscoveryStatus;
+  error: string | null;
+  progress: { states: number; actions: number; features: number };
+  result: {
+    requirements?: Array<Record<string, unknown>>;
+    states?: Array<Record<string, unknown>>;
+    edges?: Array<Record<string, unknown>>;
+    actions?: Array<Record<string, unknown>>;
+    features?: QualityDiscoveryFeature[];
+    gaps?: QualityDiscoveryGap[];
+    coverage?: Array<Record<string, unknown>>;
+    journeys?: Array<{ journey_id: string; steps: Array<{ state_id: string; title: string; url?: string; page_type?: string; action?: string | null; evidence_ids?: string[] }> }>;
+    functional_spec?: { title: string; generated_at: string; source_of_truth: string; disclaimer: string; features: Array<Record<string, unknown>> };
+    quality_map?: Record<string, unknown>;
+    frontier?: Array<{ state_id: string; candidate_id: string; target: string; status: string; reason?: string }>;
+    requirement_drafts?: Record<string, string>;
+    workspace_tests?: Array<{ nodeid: string; test_name: string; file: string; class_name?: string | null; markers: string[]; line?: number | null; test_case_id?: string | null; requirement_id?: string | null }>;
+    requirement_model?: Record<string, unknown>;
+    gap_actions?: Record<string, Record<string, unknown>>;
+    runtime_config?: Record<string, unknown>;
+    events?: Array<{ id: string; type: string; message: string; metadata?: Record<string, unknown>; created_at: string }>;
+    ai?: { provider: string | null; model: string | null; calls: number; input_tokens: number; output_tokens: number; unknown_token_calls: number };
+    jev?: { provider: string | null; model: string | null; decisions: number; fallbacks: number };
+    decisions?: Array<{ provider?: string | null; model?: string | null; attempted_provider?: string | null; attempted_model?: string | null; confidence?: number; fallback_used?: boolean }>;
+  };
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+}
+
 export interface FileNode {
   name: string;
   path: string;

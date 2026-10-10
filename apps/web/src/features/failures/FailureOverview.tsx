@@ -56,6 +56,9 @@ export const FailureOverview: React.FC<{
   showPrimaryAction?: boolean;
   showReanalysis?: boolean;
   reanalysisPending?: boolean;
+  workflowLoading?: boolean;
+  workflowLoadError?: string;
+  onRetryWorkflowLoad?: () => void;
   reanalysisBlockedReason?: string;
   primaryReason?: string;
   onPrimaryAction: () => void;
@@ -88,6 +91,9 @@ export const FailureOverview: React.FC<{
   showPrimaryAction = true,
   showReanalysis = false,
   reanalysisPending = false,
+  workflowLoading = false,
+  workflowLoadError = '',
+  onRetryWorkflowLoad,
   reanalysisBlockedReason,
   primaryReason,
   onPrimaryAction,
@@ -143,7 +149,7 @@ export const FailureOverview: React.FC<{
     : repairProposed
       ? t('repairProposalAvailable')
       : t('repairPending');
-  const currentStage =
+  const currentStage = workflowLoadError ? null :
     primaryAction === 'CREATE_ISSUE_DRAFT'
       ? null
       : state === 'VERIFYING_FIX' || state === 'VERIFIED'
@@ -211,9 +217,13 @@ export const FailureOverview: React.FC<{
           </div>
           <div className="failure-decision-action">
             <div className="failure-state-line">
-              <span className={`failure-state-dot is-${state.toLowerCase().replaceAll('_', '-')}`} aria-hidden="true" />
-              <span>{t('diagnosisState')}: <strong>{t(`diagnosisStateLabels.${state}`)}</strong></span>
+              <span className={`failure-state-dot is-${workflowLoadError ? 'unavailable' : state.toLowerCase().replaceAll('_', '-')}`} aria-hidden="true" />
+              <span>{t('diagnosisState')}: <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : t(`diagnosisStateLabels.${state}`)}</strong></span>
             </div>
+            {workflowLoadError && <div className="failure-manual-next-step" role="status">
+              <p>{t('workflow.statusUnavailableDetail')}</p>
+              {onRetryWorkflowLoad && <button type="button" className="btn btn-secondary btn-sm" onClick={onRetryWorkflowLoad}>{t('workflow.retryStatus')}</button>}
+            </div>}
             {showPrimaryAction && (
               <>
                 <span className="failure-section-label">{t('primaryAction')}</span>
@@ -236,7 +246,7 @@ export const FailureOverview: React.FC<{
                     {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
                   </>
                 )}
-                {state === 'CREATED' && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
+                {state === 'CREATED' && !workflowLoading && !workflowLoadError && <p className="failure-analysis-hint">{t('analysisNotRun')}</p>}
               </>
             )}
             {showReanalysis && (
@@ -277,7 +287,7 @@ export const FailureOverview: React.FC<{
             <li><span>{t('failureStep')}</span><strong>{failure.test_name || failure.test_nodeid.split('::').at(-1)}</strong></li>
             <li className={currentStage === 'diagnosis' ? 'is-current' : undefined} aria-current={currentStage === 'diagnosis' ? 'step' : undefined}>
               <span>{t('diagnosisStep')}</span>
-              <strong>{t(`diagnosisStateLabels.${state}`)}</strong>
+              <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : t(`diagnosisStateLabels.${state}`)}</strong>
               {currentStage === 'diagnosis' && <small>{t('currentStage')}</small>}
             </li>
             <li className={currentStage === 'repair' ? 'is-current' : undefined} aria-current={currentStage === 'repair' ? 'step' : undefined}>

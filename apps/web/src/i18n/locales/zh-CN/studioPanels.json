@@ -1,5 +1,13 @@
 {
   "testExplorer": {
+    "openTest": "打开测试文件：{{name}}",
+    "title": "测试用例",
+    "notCollected": "尚未发现测试用例。收集后可查看当前项目中的 pytest 测试。",
+    "collectionFailed": "测试收集失败，列表尚未更新。",
+    "noTests": "没有发现 pytest 测试用例。",
+    "discover": "发现测试",
+    "refresh": "重新收集",
+    "retry": "重试",
     "collecting": "正在收集 pytest 测试...",
     "noTestsPrefix": "未在",
     "noTestsSuffix": "目录中检测到测试。",
@@ -36,6 +44,13 @@
     }
   },
   "problems": {
+    "openFile": "打开 {{file}} 第 {{line}} 行",
+    "statusNotChecked": "尚未校验",
+    "statusError": "校验失败",
+    "notChecked": "尚未运行工作区校验。选择工具栏中的“校验”查看当前状态。",
+    "validating": "正在校验工作区...",
+    "validationFailed": "工作区校验失败，无法确认当前代码状态。",
+    "retryValidation": "重试校验",
     "title": "工作区问题与校验",
     "issuesCount": "{{count}} 个问题",
     "noErrors": "0 个错误",
@@ -163,6 +178,8 @@
     "running": "正在执行测试",
     "saving": "正在保存",
     "validating": "正在校验工作区",
+    "validationFailed": "工作区校验失败",
+    "validationNotRun": "尚未校验工作区",
     "issues": "{{problemCount}} 个问题",
     "engine": "Production QA 引擎"
   }

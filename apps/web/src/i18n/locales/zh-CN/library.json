@@ -1,7 +1,7 @@
 {
-  "title": "Library",
+  "title": "测试资产库",
   "eyebrow": "查找 · 历史 · 管理",
-  "subtitle": "浏览平台中已保存的项目、需求、用例、运行和失败记录。日常工作从 Workspace 开始。",
+  "subtitle": "浏览平台中已保存的项目、需求、用例、运行和失败记录。日常工作从 QA 工作台开始。",
   "collections": "资源集合",
   "projects": "项目",
   "requirements": "需求",

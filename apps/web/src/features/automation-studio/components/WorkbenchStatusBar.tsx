@@ -1,11 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, GitBranch, Loader2, Play } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleHelp, GitBranch, Loader2, Play } from 'lucide-react';
 
 interface WorkbenchStatusBarProps {
   branch: string | null;
   problemCount: number;
   validating: boolean;
+  hasValidated: boolean;
+  validationFailed: boolean;
   runningTest: boolean;
   saving: boolean;
   activeFileName: string | null;
@@ -17,6 +19,8 @@ export const WorkbenchStatusBar: React.FC<WorkbenchStatusBarProps> = ({
   branch,
   problemCount,
   validating,
+  hasValidated,
+  validationFailed,
   runningTest,
   saving,
   activeFileName,
@@ -30,9 +34,13 @@ export const WorkbenchStatusBar: React.FC<WorkbenchStatusBarProps> = ({
       ? { className: 'is-busy', label: t('statusBar.saving'), icon: <Loader2 size={11} /> }
       : validating
         ? { className: 'is-busy', label: t('statusBar.validating'), icon: <Loader2 size={11} /> }
-        : problemCount > 0
+        : validationFailed
+          ? { className: 'is-error', label: t('statusBar.validationFailed'), icon: <AlertTriangle size={11} /> }
+          : problemCount > 0
           ? { className: 'is-error', label: t('statusBar.issues', { problemCount }), icon: <AlertTriangle size={11} /> }
-          : { className: 'is-idle', label: t('statusBar.ready'), icon: <CheckCircle2 size={11} /> };
+          : hasValidated
+            ? { className: 'is-idle', label: t('statusBar.ready'), icon: <CheckCircle2 size={11} /> }
+            : { className: 'is-idle', label: t('statusBar.validationNotRun'), icon: <CircleHelp size={11} /> };
 
   return (
     <div className="studio-statusbar">

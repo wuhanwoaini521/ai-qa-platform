@@ -1,4 +1,11 @@
 {
+  "sectionNav": {
+    "title": "设置目录",
+    "effective": "运行配置",
+    "aiHealth": "AI 与 Jev 健康",
+    "preferences": "个人偏好",
+    "jevPlayground": "Jev 决策测试"
+  },
   "title": "系统设置",
   "subtitle": "查看服务端有效配置，修改 config/config.yaml 后可在这里重新加载。",
   "saved": "设置已保存",

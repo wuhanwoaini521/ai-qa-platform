@@ -7,6 +7,7 @@ import {
   failureSourceLocation,
   failureFingerprint,
   normalizeFailureClassification,
+  observedRoleLocatorMismatch,
   primaryActionForWorkflow,
   relatedFailures,
   summarizeFailureError,
@@ -71,10 +72,32 @@ test('Raw error and stack are summarized into actionable labels and relevant fra
     'locatorTimeout',
   );
   assert.equal(summarizeFailureError('TimeoutError: waiting for navigation', 'TIMING_ISSUE'), 'timeout');
+  assert.equal(summarizeFailureError('TimeoutError: assertion state did not match', 'ASSERTION_FAILURE'), 'assertion');
   assert.deepEqual(
     extractRelevantFrames('  File "site-packages/playwright/_impl.py", line 4\n  File "C:\\project\\conftest.py", line 38'),
     ['conftest.py:38'],
   );
+});
+
+test('Role locator mismatch reports only captured controls with the same role', () => {
+  const mismatch = observedRoleLocatorMismatch(failure({
+    failing_locator: `page.get_by_role('button', name='Add to cart1')`,
+    evidence_bundle: {
+      controls: [
+        { role: 'button', name: 'Add to cart' },
+        { role: 'link', name: 'Add to cart1' },
+      ],
+    },
+  }));
+  assert.deepEqual(mismatch, {
+    role: 'button',
+    expectedName: 'Add to cart1',
+    observedNames: ['Add to cart'],
+  });
+  assert.equal(observedRoleLocatorMismatch(failure({
+    failing_locator: `page.get_by_role('button', name='Add to cart')`,
+    evidence_bundle: { controls: [{ role: 'button', name: 'Add to cart' }] },
+  })), null);
 });
 
 test('Failure source location keeps its test file and matches the stack line', () => {

@@ -133,6 +133,28 @@ class AgentSettings(ConfigSection):
     browser: AgentBrowserSettings = Field(default_factory=AgentBrowserSettings)
 
 
+class DiscoverySettings(ConfigSection):
+    enabled: bool = True
+    require_ai: bool = True
+    require_jev: bool = True
+    max_actions: int = Field(default=30, ge=1, le=300)
+    max_failures: int = Field(default=20, ge=1, le=100)
+    max_depth: int = Field(default=8, ge=1, le=32)
+    max_states: int = Field(default=100, ge=1, le=500)
+    max_runtime_minutes: int = Field(default=45, ge=1, le=240)
+    max_candidates: int = Field(default=5, ge=1, le=20)
+    screenshot: bool = True
+    capture_console: bool = True
+    capture_network: bool = True
+    safe_mode: Literal[True] = True
+    allowed_domains: list[str] = Field(default_factory=list, max_length=20)
+    state_similarity_threshold: float = Field(default=0.9, ge=0.5, le=1)
+    feature_mapping_confidence: float = Field(default=0.75, ge=0, le=1)
+    max_events: int = Field(default=500, ge=20, le=5000)
+    max_evidence_chars: int = Field(default=9000, ge=1000, le=100_000)
+    max_screenshots: int = Field(default=20, ge=0, le=200)
+
+
 class FailureSettings(ConfigSection):
     auto_create: bool = True
     capture_screenshot: bool = True
@@ -216,6 +238,7 @@ class AppConfig(ConfigSection):
     run: RunSettings = Field(default_factory=RunSettings)
     pytest: PytestSettings = Field(default_factory=PytestSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
+    discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
     failure: FailureSettings = Field(default_factory=FailureSettings)
     evidence: EvidenceSettings = Field(default_factory=EvidenceSettings)
     recorder: RecorderSettings = Field(default_factory=RecorderSettings)

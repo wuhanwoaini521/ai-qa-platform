@@ -1,8 +1,8 @@
 {
   "dashboard": "平台总览",
   "workspace": "QA 工作台",
-  "workflow": "Live Workflow",
-  "library": "Library",
+  "workflow": "任务与运行",
+  "library": "测试资产库",
   "projects": "QA 项目",
   "requirements": "需求与测试设计",
   "testCases": "测试用例",

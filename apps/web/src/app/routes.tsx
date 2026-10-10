@@ -64,6 +64,7 @@ const DashboardRoute: React.FC = () => {
     <DashboardPage
       onNavigate={nav.toTab}
       onOpenTask={(id) => navigate(`/tasks?taskId=${encodeURIComponent(id)}`)}
+      onOpenRun={nav.toRun}
       onOpenCreateProject={() => nav.toTab('projects')}
     />
   );

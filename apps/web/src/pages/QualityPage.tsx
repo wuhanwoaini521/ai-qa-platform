@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -11,6 +12,8 @@ import {
   Zap,
   Plus,
   PlayCircle,
+  ChevronDown,
+  Search,
 } from 'lucide-react';
 import {
   ImpactAnalysisResult,
@@ -20,8 +23,12 @@ import {
   QualityRiskMatrix,
   Release,
   ReleaseGateReport,
+  TestCase,
 } from '../types';
 import { api } from '../api/client';
+import { summarizeAutomationCoverage } from '../features/quality/coverageModel';
+import { buildWorkspaceHref } from '../app/workspaceContext';
+import './QualityPage.css';
 
 interface QualityPageProps {
   projects?: Project[];
@@ -38,6 +45,13 @@ export const QualityPage: React.FC<QualityPageProps> = ({
 
   // Coverage & Risks state
   const [coverage, setCoverage] = useState<QualityCoverageSummary | null>(null);
+  const [testCases, setTestCases] = useState<TestCase[] | null>(null);
+  const [coverageQuery, setCoverageQuery] = useState('');
+  const [coverageStatus, setCoverageStatus] = useState('ALL');
+  const [coverageSort, setCoverageSort] = useState<'title' | 'coverage-desc' | 'coverage-asc'>('coverage-desc');
+  const [groupCoverageByStatus, setGroupCoverageByStatus] = useState(false);
+  const [expandedCoverageId, setExpandedCoverageId] = useState<string | null>(null);
+  const [coverageSourceError, setCoverageSourceError] = useState(false);
   const [riskMatrix, setRiskMatrix] = useState<QualityRiskMatrix | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState<boolean>(true);
 
@@ -60,9 +74,20 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   const [evaluatingGateId, setEvaluatingGateId] = useState<string | null>(null);
 
   const fetchQualityData = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      setCoverage(null);
+      setTestCases(null);
+      setRiskMatrix(null);
+      setReleases([]);
+      setCoverageSourceError(false);
+      setLoadingMetrics(false);
+      return;
+    }
     try {
       setLoadingMetrics(true);
+      setCoverage(null);
+      setTestCases(null);
+      setCoverageSourceError(false);
       const [cov, risks, rels] = await Promise.all([
         api.getQualityCoverage(selectedProjectId),
         api.getQualityRiskMatrix(selectedProjectId),
@@ -71,12 +96,101 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       setCoverage(cov);
       setRiskMatrix(risks);
       setReleases(rels);
+      try {
+        setTestCases(await api.getTestCases(selectedProjectId));
+      } catch (error) {
+        console.error('Failed to fetch test case bindings for quality coverage', error);
+        setTestCases(null);
+        setCoverageSourceError(true);
+      }
     } catch (err) {
       console.error('Failed to fetch quality intelligence data', err);
+      setCoverage(null);
+      setRiskMatrix(null);
+      setReleases([]);
+      setTestCases(null);
+      setCoverageSourceError(true);
     } finally {
       setLoadingMetrics(false);
     }
   };
+
+  const automationCoverage = useMemo(
+    () => testCases ? summarizeAutomationCoverage(testCases) : null,
+    [testCases],
+  );
+  const riskWorkspaceHref = (risk: QualityRiskMatrix['risks'][number]) => {
+    const explicitCaseId = risk.id.startsWith('risk_p0_') ? risk.id.slice('risk_p0_'.length) : undefined;
+    const linkedCase = testCases?.find((item) => {
+      if (item.id === explicitCaseId) return true;
+      const nodeid = item.binding?.nodeid;
+      return Boolean(nodeid && risk.impacted_nodeids.includes(nodeid));
+    });
+    if (linkedCase) {
+      return buildWorkspaceHref({
+        projectId: selectedProjectId ?? undefined,
+        requirementId: linkedCase.requirement_id ?? undefined,
+        testCaseId: linkedCase.id,
+        stage: 'cases',
+        view: 'cases',
+      });
+    }
+    if (risk.id.startsWith('risk_fail_')) {
+      return buildWorkspaceHref({
+        projectId: selectedProjectId ?? undefined,
+        failureId: risk.id.slice('risk_fail_'.length),
+        stage: 'failure',
+        view: 'results',
+      });
+    }
+    return null;
+  };
+  const testCasesByRequirement = useMemo(() => {
+    const grouped = new Map<string, TestCase[]>();
+    for (const testCase of testCases ?? []) {
+      if (!testCase.requirement_id) continue;
+      const group = grouped.get(testCase.requirement_id) ?? [];
+      group.push(testCase);
+      grouped.set(testCase.requirement_id, group);
+    }
+    return grouped;
+  }, [testCases]);
+  const coverageStatuses = useMemo(
+    () => [...new Set((coverage?.requirement_details ?? []).map((item) => item.status))].sort(),
+    [coverage?.requirement_details],
+  );
+  const filteredCoverage = useMemo(() => {
+    const query = coverageQuery.trim().toLocaleLowerCase();
+    const rows = (coverage?.requirement_details ?? []).filter((item) => {
+      const matchesQuery = !query || `${item.title} ${item.requirement_id}`.toLocaleLowerCase().includes(query);
+      const matchesStatus = coverageStatus === 'ALL' || item.status === coverageStatus;
+      return matchesQuery && matchesStatus;
+    });
+    const percentageFor = (requirementId: string) => automationCoverage?.byRequirement.get(requirementId)?.percentage;
+    rows.sort((left, right) => {
+      if (coverageSort === 'title') return left.title.localeCompare(right.title);
+      const leftPercentage = percentageFor(left.requirement_id);
+      const rightPercentage = percentageFor(right.requirement_id);
+      if (leftPercentage === undefined && rightPercentage === undefined) return left.title.localeCompare(right.title);
+      if (leftPercentage === undefined) return 1;
+      if (rightPercentage === undefined) return -1;
+      const difference = coverageSort === 'coverage-desc'
+        ? rightPercentage - leftPercentage
+        : leftPercentage - rightPercentage;
+      return difference || left.title.localeCompare(right.title);
+    });
+    return rows;
+  }, [automationCoverage, coverage?.requirement_details, coverageQuery, coverageSort, coverageStatus]);
+  const coverageGroups = useMemo(() => {
+    if (!groupCoverageByStatus) return [{ status: '', items: filteredCoverage }];
+    const byStatus = new Map<string, typeof filteredCoverage>();
+    for (const item of filteredCoverage) {
+      const group = byStatus.get(item.status) ?? [];
+      group.push(item);
+      byStatus.set(item.status, group);
+    }
+    return [...byStatus].sort(([left], [right]) => left.localeCompare(right)).map(([status, items]) => ({ status, items }));
+  }, [filteredCoverage, groupCoverageByStatus]);
 
   useEffect(() => {
     fetchQualityData();
@@ -190,7 +304,10 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               {riskMatrix ? `${riskMatrix.overall_quality_score}/100` : '--'}
             </div>
             <div className="stat-subtitle">
-              {riskMatrix && getRiskBadge(riskMatrix.overall_risk_level, t)}
+              {riskMatrix && <>
+                {getRiskBadge(riskMatrix.overall_risk_level, t)}
+                <small className="quality-score-formula">{t('metricQualityHealthFormula')}</small>
+              </>}
             </div>
           </div>
         </div>
@@ -222,15 +339,17 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           <div className="stat-details">
             <div className="stat-title">{t('metricAutomationCoverage')}</div>
             <div className="stat-value">
-              {coverage ? `${coverage.automation_coverage_pct}%` : '--'}
+              {automationCoverage ? `${automationCoverage.percentage}%` : '--'}
             </div>
             <div className="stat-subtitle">
-              {coverage
+              {automationCoverage
                 ? t('casesAutomatedCount', {
-                    automated: coverage.automated_cases,
-                    total: coverage.total_test_cases,
+                    automated: automationCoverage.automated,
+                    total: automationCoverage.total,
                   })
-                : t('casesZero')}
+                : coverageSourceError
+                  ? t('coverageSourceUnavailable')
+                  : loadingMetrics ? t('coverageLoading') : t('casesZero')}
             </div>
           </div>
         </div>
@@ -288,8 +407,42 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <h3>{t('coverageTitle')}</h3>
             <span className="text-secondary text-sm">{t('coverageHint')}</span>
           </div>
-          <div className="table-responsive">
-            <table className="data-table">
+          {coverageSourceError && (
+            <p className="text-secondary text-sm" role="status" style={{ padding: '0 16px 12px' }}>
+              {t('coverageSourceUnavailable')}
+            </p>
+          )}
+          <div className="quality-coverage-toolbar" role="search">
+            <label className="quality-coverage-search">
+              <Search size={15} aria-hidden="true" />
+              <span className="quality-coverage-visually-hidden">{t('coverageSearchLabel')}</span>
+              <input type="search" value={coverageQuery} onChange={(event) => setCoverageQuery(event.target.value)} placeholder={t('coverageSearchPlaceholder')} />
+            </label>
+            <label className="quality-coverage-control">
+              <span>{t('coverageStatusLabel')}</span>
+              <select value={coverageStatus} onChange={(event) => setCoverageStatus(event.target.value)}>
+                <option value="ALL">{t('coverageAllStatuses')}</option>
+                {coverageStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </label>
+            <label className="quality-coverage-control">
+              <span>{t('coverageSortLabel')}</span>
+              <select value={coverageSort} onChange={(event) => setCoverageSort(event.target.value as typeof coverageSort)}>
+                <option value="coverage-desc">{t('coverageSortHighest')}</option>
+                <option value="coverage-asc">{t('coverageSortLowest')}</option>
+                <option value="title">{t('coverageSortTitle')}</option>
+              </select>
+            </label>
+            <label className="quality-coverage-group-toggle">
+              <input type="checkbox" checked={groupCoverageByStatus} onChange={(event) => setGroupCoverageByStatus(event.target.checked)} />
+              <span>{t('coverageGroupByStatus')}</span>
+            </label>
+          </div>
+          <div className="quality-coverage-count" role="status">
+            {t('coverageResultCount', { visible: filteredCoverage.length, total: coverage?.requirement_details.length ?? 0 })}
+          </div>
+          <div className="table-responsive quality-coverage-scroll">
+            <table className="data-table quality-coverage-table">
               <thead>
                 <tr>
                   <th>{t('colRequirementTitle')}</th>
@@ -301,69 +454,108 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   <th>{t('colHasAutomation')}</th>
                 </tr>
               </thead>
-              <tbody>
-                {coverage && coverage.requirement_details.length > 0 ? (
-                  coverage.requirement_details.map((item) => (
-                    <tr key={item.requirement_id}>
-                      <td style={{ fontWeight: 600 }}>{item.title}</td>
-                      <td>
-                        <span className={`status-pill status-pill-${item.status.toLowerCase()}`}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td>{item.test_design_count}</td>
-                      <td>{item.test_case_count}</td>
-                      <td>{item.automated_case_count}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div
-                            style={{
-                              width: '80px',
-                              height: '8px',
-                              backgroundColor: 'var(--border-color)',
-                              borderRadius: 'var(--r-xs)',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${item.coverage_percentage}%`,
-                                height: '100%',
-                                backgroundColor:
-                                  item.coverage_percentage >= 70
-                                    ? 'var(--accent-green)'
-                                    : item.coverage_percentage >= 40
-                                    ? 'var(--accent-amber)'
-                                    : 'var(--accent-red)',
-                              }}
-                            />
-                          </div>
-                          <span>{item.coverage_percentage}%</span>
-                        </div>
-                      </td>
-                      <td>
-                        {item.has_automation ? (
-                          <span className="status-pill status-pill-passed">{t('common:yes')}</span>
-                        ) : (
-                          <span className="status-pill status-pill-failed">{t('common:no')}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="text-center text-secondary py-4">
-                      {t('coverageEmpty')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
+              {filteredCoverage.length === 0 ? (
+                <tbody><tr><td colSpan={7} className="text-center text-secondary py-4">
+                  {coverage?.requirement_details.length ? t('coverageNoMatches') : t('coverageEmpty')}
+                </td></tr></tbody>
+              ) : coverageGroups.map(({ status, items }) => (
+                <tbody key={status || 'all'}>
+                  {status && <tr className="quality-coverage-group-row"><th colSpan={7}>{status}</th></tr>}
+                  {items.map((item) => {
+                    const requirementCoverage = automationCoverage?.byRequirement.get(item.requirement_id);
+                    const linkedCases = testCasesByRequirement.get(item.requirement_id) ?? [];
+                    const expanded = expandedCoverageId === item.requirement_id;
+                    const detailId = `coverage-detail-${item.requirement_id}`;
+                    const requirementHref = buildWorkspaceHref({
+                      projectId: selectedProjectId ?? undefined,
+                      requirementId: item.requirement_id,
+                      stage: 'requirement',
+                      view: 'requirement',
+                    });
+                    return (
+                      <React.Fragment key={item.requirement_id}>
+                        <tr>
+                          <td className="quality-coverage-title-cell">
+                            <button
+                              className="quality-coverage-expand"
+                              type="button"
+                              aria-label={t(expanded ? 'coverageCollapseDetails' : 'coverageExpandDetails', { title: item.title })}
+                              aria-expanded={expanded}
+                              aria-controls={expanded ? detailId : undefined}
+                              onClick={() => setExpandedCoverageId(expanded ? null : item.requirement_id)}
+                            >
+                              <ChevronDown size={15} aria-hidden="true" />
+                            </button>
+                            <div>
+                              <Link className="quality-coverage-link" to={requirementHref}>{item.title}</Link>
+                              <small>{item.requirement_id}</small>
+                            </div>
+                          </td>
+                          <td><span className={`status-pill status-pill-${item.status.toLowerCase()}`}>{item.status}</span></td>
+                          <td>{item.test_design_count}</td>
+                          <td>{requirementCoverage ? requirementCoverage.total : testCases ? 0 : '--'}</td>
+                          <td>{requirementCoverage ? requirementCoverage.automated : testCases ? 0 : '--'}</td>
+                          <td>
+                            <div className="quality-coverage-meter">
+                              <div className="quality-coverage-meter-track">
+                                <div
+                                  className="quality-coverage-meter-value"
+                                  style={{
+                                    width: `${testCases ? requirementCoverage?.percentage ?? 0 : 0}%`,
+                                    backgroundColor: (requirementCoverage?.percentage ?? 0) >= 70
+                                      ? 'var(--accent-green)'
+                                      : (requirementCoverage?.percentage ?? 0) >= 40
+                                        ? 'var(--accent-amber)'
+                                        : 'var(--accent-red)',
+                                  }}
+                                />
+                              </div>
+                              <span>{testCases ? `${requirementCoverage?.percentage ?? 0}%` : '--'}</span>
+                            </div>
+                          </td>
+                          <td>{testCases
+                            ? (requirementCoverage?.automated ?? 0) > 0
+                              ? <span className="status-pill status-pill-passed">{t('common:yes')}</span>
+                              : <span className="status-pill status-pill-failed">{t('common:no')}</span>
+                            : '--'}</td>
+                        </tr>
+                        {expanded && <tr className="quality-coverage-detail-row"><td colSpan={7}>
+                          <section id={detailId} className="quality-coverage-detail">
+                            <div className="quality-coverage-detail-summary">
+                              <div><span>{t('coverageRequirement')}</span><Link to={requirementHref}>{item.title}</Link></div>
+                              <div><span>{t('coverageStatusLabel')}</span><strong>{item.status}</strong></div>
+                              <div><span>{t('coverageLinkedTests', { count: linkedCases.length })}</span><strong>{item.test_case_count}</strong></div>
+                            </div>
+                            <div className="quality-coverage-linked-tests">
+                              <h4>{t('coverageLinkedTestsTitle')}</h4>
+                              {testCases === null ? <p className="text-secondary">{t('coverageSourceUnavailable')}</p>
+                                : linkedCases.length === 0 ? <p className="text-secondary">{t('coverageNoCases')}</p>
+                                  : <ul>{linkedCases.map((testCase) => (
+                                    <li key={testCase.id}>
+                                      <Link to={buildWorkspaceHref({
+                                        projectId: selectedProjectId ?? undefined,
+                                        requirementId: item.requirement_id,
+                                        testCaseId: testCase.id,
+                                        stage: 'cases',
+                                        view: 'cases',
+                                      })}>{testCase.title}</Link>
+                                      <span>{testCase.binding?.status ?? testCase.automation_status}</span>
+                                    </li>
+                                  ))}</ul>}
+                            </div>
+                          </section>
+                        </td></tr>}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              ))}
             </table>
           </div>
         </div>
       )}
 
-      {/* Tab 2: Quality Risk Matrix */}
+      {/* Tab 2: Quality Risk List */}
       {activeTab === 'risks' && (
         <div className="card">
           <div className="card-header">
@@ -372,7 +564,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
             {riskMatrix && riskMatrix.risks.length > 0 ? (
-              riskMatrix.risks.map((risk) => (
+              riskMatrix.risks.map((risk) => {
+                const riskHref = riskWorkspaceHref(risk);
+                return (
                 <div
                   key={risk.id}
                   style={{
@@ -384,7 +578,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{risk.area}</span>
+                      {riskHref
+                        ? <Link className="quality-risk-link" to={riskHref}>{risk.area}</Link>
+                        : <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{risk.area}</span>}
                       {getRiskBadge(risk.risk_level, t)}
                     </div>
                     <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
@@ -414,7 +610,8 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     </div>
                   )}
                 </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center text-secondary py-4">{t('risksEmpty')}</div>
             )}

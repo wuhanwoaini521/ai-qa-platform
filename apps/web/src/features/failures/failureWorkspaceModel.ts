@@ -44,7 +44,9 @@ export function normalizeFailureClassification(value?: string | null): string {
   return normalized || 'UNKNOWN';
 }
 
-export function failedLocatorFromFailure(failure: FailureRecord): string {
+export function failedLocatorFromFailure(
+  failure: Pick<FailureRecord, 'failing_locator' | 'error_message' | 'stack_trace'>,
+): string {
   const recorded = failure.failing_locator?.trim();
   if (recorded) return recorded;
 
@@ -70,17 +72,47 @@ export function summarizeFailureError(error = '', failureClassification?: string
   if (/BrowserType\.launch/i.test(error) && /spawn\s+EPERM/i.test(error)) {
     return 'browserLaunchEperm';
   }
-  if (
-    normalizeFailureClassification(failureClassification) === 'LOCATOR_CHANGED' &&
-    /TimeoutError|timed out|timeout/i.test(error)
-  ) {
+  const classification = normalizeFailureClassification(failureClassification);
+  const timedOut = /TimeoutError|timed out|timeout/i.test(error);
+  if (classification === 'LOCATOR_CHANGED' && timedOut) {
     return 'locatorTimeout';
   }
+  if (classification === 'ASSERTION_FAILURE' || /AssertionError|assertion failed/i.test(error)) {
+    return 'assertion';
+  }
+  if (classification === 'TIMING' && timedOut) return 'timeout';
   if (/TimeoutError|timed out|timeout/i.test(error)) return 'timeout';
-  if (/AssertionError|assertion failed/i.test(error)) return 'assertion';
   const firstLine = error.split(/\r?\n/, 1)[0]?.trim();
   if (!firstLine) return 'unknownFailure';
   return firstLine.length > 118 ? `${firstLine.slice(0, 115)}…` : firstLine;
+}
+
+export function observedRoleLocatorMismatch(
+  failure: Pick<FailureRecord, 'failing_locator' | 'error_message' | 'stack_trace' | 'evidence_bundle'>,
+): { role: string; expectedName: string; observedNames: string[] } | null {
+  const locatorEvidence = [
+    failure.failing_locator?.trim(),
+    failure.error_message,
+    failure.stack_trace,
+  ].filter(Boolean).join('\n');
+  const roleName = locatorEvidence.match(
+    /(?:get_by_role|getByRole)\(\s*['"]([^'"]+)['"]\s*,\s*(?:name\s*=\s*|\{\s*name\s*:\s*)['"]([^'"]+)['"]/i,
+  );
+  if (!roleName) return null;
+
+  const controls = failure.evidence_bundle?.controls;
+  if (!Array.isArray(controls)) return null;
+  const role = roleName[1].trim().toLowerCase();
+  const expectedName = roleName[2].trim();
+  const observedNames = controls.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const control = item as Record<string, unknown>;
+    if (String(control.role ?? '').trim().toLowerCase() !== role) return [];
+    const name = typeof control.name === 'string' ? control.name.trim() : '';
+    return name && name.toLocaleLowerCase() !== expectedName.toLocaleLowerCase() ? [name] : [];
+  });
+  const uniqueNames = [...new Set(observedNames)].slice(0, 3);
+  return uniqueNames.length ? { role, expectedName, observedNames: uniqueNames } : null;
 }
 
 export function extractRelevantFrames(stackTrace = '', limit = 3): string[] {

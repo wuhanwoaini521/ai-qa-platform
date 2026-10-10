@@ -4,6 +4,7 @@ import { Activity, Check, Globe, LayoutDashboard, Play, RefreshCw, RotateCcw, Wi
 import { SUPPORTED_LANGUAGES } from '../i18n';
 import { START_PAGE_OPTIONS, usePreferences } from '../app/Preferences';
 import { useProjectScope } from '../app/ProjectScope';
+import './SettingsPage.css';
 import { api } from '../api/client';
 import type {
   AIProviderConnectionResult,
@@ -155,7 +156,15 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <div className="page-container settings-page">
-      <section className="card" style={{ marginBottom: 16 }}>
+      <nav className="settings-nav" aria-label={t('sectionNav.title')}>
+        <span>{t('sectionNav.title')}</span>
+        <a href="#settings-effective">{t('sectionNav.effective')}</a>
+        <a href="#settings-ai-health">{t('sectionNav.aiHealth')}</a>
+        <a href="#settings-preferences">{t('sectionNav.preferences')}</a>
+        <a href="#settings-jev-playground">{t('sectionNav.jevPlayground')}</a>
+      </nav>
+      <div className="settings-main">
+      <section id="settings-effective" className="card settings-effective" style={{ marginBottom: 16 }}>
         <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <span className="card-title">{t('effective.title')}</span>
           <button type="button" className="btn btn-secondary btn-sm" disabled={reloading || loading} onClick={() => void reload()}>
@@ -237,9 +246,9 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      <AIHealthPanel onAIStatusChange={setAiStatus} />
+      <div id="settings-ai-health"><AIHealthPanel onAIStatusChange={setAiStatus} /></div>
 
-      <section className="card" style={{ marginBottom: 16 }}>
+      <section id="settings-preferences" className="card" style={{ marginBottom: 16 }}>
         <div className="card-header"><span className="card-title">{t('title')}</span></div>
         <div className="card-body">
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('subtitle')}</p>
@@ -276,7 +285,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      <section className="card" style={{ marginBottom: 16 }}>
+      <section id="settings-jev-playground" className="card" style={{ marginBottom: 16 }}>
         <div className="card-header"><span className="card-title">{t('jev.playgroundTitle')}</span></div>
         <div className="card-body">
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('jev.playgroundDescription')}</p>
@@ -289,6 +298,7 @@ export const SettingsPage: React.FC = () => {
           {decision && <pre style={{ fontSize: 12, overflow: 'auto' }}>{JSON.stringify(decision, null, 2)}</pre>}
         </div>
       </section>
+      </div>
     </div>
   );
 };

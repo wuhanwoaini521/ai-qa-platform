@@ -1,12 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bug, Play } from 'lucide-react';
+import { AlertCircle, Bug, LoaderCircle, Play, RefreshCw } from 'lucide-react';
 import { CollectedTest } from '../../../types';
 
 interface TestExplorerProps {
   tests: CollectedTest[];
   loading: boolean;
+  hasCollected: boolean;
+  collectionFailed: boolean;
   runningTest: boolean;
+  onCollect: () => void;
   onOpenFile: (path: string) => void;
   onRunTest: (nodeid: string) => void;
   onDebugTest: (nodeid: string) => void;
@@ -15,7 +18,10 @@ interface TestExplorerProps {
 export const TestExplorer: React.FC<TestExplorerProps> = ({
   tests,
   loading,
+  hasCollected,
+  collectionFailed,
   runningTest,
+  onCollect,
   onOpenFile,
   onRunTest,
   onDebugTest,
@@ -24,16 +30,21 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
 
   return (
     <div style={{ padding: '4px' }}>
-      {loading ? (
-        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-          {t('testExplorer.collecting')}
-        </div>
-      ) : tests.length === 0 ? (
-        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-          {t('testExplorer.noTestsPrefix')} <code>tests/</code> {t('testExplorer.noTestsSuffix')}
-        </div>
-      ) : (
-        tests.map((test) => (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 8px', color: 'var(--ink-muted)', fontSize: '11px' }}>
+        <strong>{t('testExplorer.title')}</strong>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onCollect} disabled={loading} aria-label={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')} title={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')}>
+          <RefreshCw size={13} aria-hidden="true" />
+          {t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')}
+        </button>
+      </div>
+      {loading && <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '16px', color: 'var(--text-muted)', fontSize: '12px' }}><LoaderCircle size={14} aria-hidden="true" />{t('testExplorer.collecting')}</div>}
+      {collectionFailed && !loading && <div role="alert" style={{ display: 'grid', gap: '8px', padding: '16px', color: 'var(--text-muted)', fontSize: '12px' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--ui-rose-strong)' }}><AlertCircle size={14} aria-hidden="true" />{t('testExplorer.collectionFailed')}</span>
+      </div>}
+      {!loading && !collectionFailed && tests.length === 0 && <div style={{ display: 'grid', justifyItems: 'start', gap: '8px', padding: '16px', color: 'var(--text-muted)', fontSize: '12px' }}>
+        <span>{t(hasCollected ? 'testExplorer.noTests' : 'testExplorer.notCollected')}</span>
+      </div>}
+      {!loading && !collectionFailed && tests.length > 0 && tests.map((test) => (
           <div
             key={test.nodeid}
             style={{
@@ -46,20 +57,28 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div
+              <button
+                type="button"
+                aria-label={t('testExplorer.openTest', { name: test.name })}
+                title={test.nodeid}
                 style={{
                   fontWeight: 600,
                   color: 'var(--ink)',
-                  cursor: 'pointer',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   maxWidth: '180px',
+                  border: 0,
+                  padding: 0,
+                  background: 'transparent',
+                  font: 'inherit',
+                  textAlign: 'left',
+                  cursor: 'pointer',
                 }}
                 onClick={() => onOpenFile(test.path)}
               >
                 {test.name}
-              </div>
+              </button>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button
                   className="btn btn-secondary btn-sm"
@@ -85,8 +104,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
               {test.path}:{test.line}
             </div>
           </div>
-        ))
-      )}
+        ))}
     </div>
   );
 };

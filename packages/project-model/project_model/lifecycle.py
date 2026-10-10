@@ -52,6 +52,44 @@ class RequirementAmbiguity(DocumentModel):
     impact: str = Field(default="", max_length=500)
 
 
+class ExpectedApplicationState(DocumentModel):
+    name: str = Field(min_length=1, max_length=120)
+    condition: str = Field(default="", max_length=500)
+    expected: str = Field(default="", max_length=500)
+
+
+class ExpectedApplicationTransition(DocumentModel):
+    source: str = Field(min_length=1, max_length=120)
+    action: str = Field(min_length=1, max_length=240)
+    target: str = Field(min_length=1, max_length=120)
+    criterion: str = Field(default="", max_length=500)
+
+
+class RequirementFeatureExpectation(DocumentModel):
+    id: str = Field(max_length=80)
+    source_id: str = Field(max_length=80)
+    feature: str = Field(min_length=1, max_length=200)
+    actors: list[str] = Field(default_factory=list, max_length=12)
+    preconditions: list[str] = Field(default_factory=list, max_length=12)
+    business_rules: list[str] = Field(default_factory=list, max_length=20)
+    actions: list[str] = Field(default_factory=list, max_length=20)
+    expected_behavior: str = Field(default="", max_length=1000)
+    expected_states: list[ExpectedApplicationState] = Field(default_factory=list, max_length=16)
+    expected_transitions: list[ExpectedApplicationTransition] = Field(default_factory=list, max_length=16)
+    negative_states: list[str] = Field(default_factory=list, max_length=12)
+    exceptions: list[str] = Field(default_factory=list, max_length=12)
+    acceptance_criteria: list[str] = Field(default_factory=list, max_length=12)
+    risk: str = Field(default="unknown", max_length=40)
+    unknown: list[str] = Field(default_factory=list, max_length=12)
+    ambiguous: bool = False
+
+
+class StructuredRequirementModel(DocumentModel):
+    source_id: str = Field(max_length=80)
+    features: list[RequirementFeatureExpectation] = Field(default_factory=list, max_length=40)
+    ambiguities: list[str] = Field(default_factory=list, max_length=20)
+
+
 class CoverageReferences(DocumentModel):
     criterion_ids: list[str] = Field(default_factory=list, max_length=30)
     rule_ids: list[str] = Field(default_factory=list, max_length=30)

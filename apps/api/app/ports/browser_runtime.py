@@ -121,6 +121,7 @@ class BrowserRuntime(Protocol):
         environment: dict[str, str] | None = None,
         headless: bool = True,
         launch_options: dict[str, Any] | None = None,
+        block_service_workers: bool = False,
     ) -> BrowserRuntimeSession: ...
 
     async def restore_session(
@@ -154,6 +155,8 @@ class BrowserRuntime(Protocol):
     async def close_session(self, session_id: str) -> None: ...
 
     async def navigate(self, session_id: str, url: str, *, timeout_ms: int = 30_000) -> int | None: ...
+
+    async def restrict_navigation(self, session_id: str, allowed_hosts: set[str]) -> None: ...
 
     async def snapshot(
         self,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Project, ProjectCreate, FrameworkType } from '../types';
 import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
@@ -29,6 +29,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [demoBusy,setDemoBusy]=useState(false);
   const [demoError,setDemoError]=useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const createProjectTriggerRef = useRef<HTMLButtonElement>(null);
+  const createProjectDialogRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState<ProjectCreate>({
     name: '',
     description: '',
@@ -38,6 +40,39 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     bootstrap_workspace: true,
   });
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const dialog = createProjectDialogRef.current;
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+    focusable()[0]?.focus();
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsModalOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      const first = items[0];
+      const last = items.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        dialog?.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeyDown);
+      createProjectTriggerRef.current?.focus();
+    };
+  }, [isModalOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,9 +101,26 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('titles:projects')}</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('subtitle')}</p>
         </div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="btn btn-secondary" disabled={demoBusy} onClick={async()=>{setDemoBusy(true);setDemoError('');try{const result=await api.seedGoldenDemo();onSelectProject(result.project_id);onRefresh();navigate(`/projects/${result.project_id}`);}catch(error){setDemoError(String(error));}finally{setDemoBusy(false);}}}>{demoBusy?lc('loading'):lc('openGoldenDemo')}</button><button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          <Plus size={16} /> {t('createProject')}
-        </button></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link className="btn btn-secondary" to="/library">{t('assetIndex')}</Link>
+          <button className="btn btn-secondary" disabled={demoBusy} onClick={async () => {
+            setDemoBusy(true);
+            setDemoError('');
+            try {
+              const result = await api.seedGoldenDemo();
+              onSelectProject(result.project_id);
+              onRefresh();
+              navigate(`/projects/${result.project_id}`);
+            } catch (error) {
+              setDemoError(String(error));
+            } finally {
+              setDemoBusy(false);
+            }
+          }}>{demoBusy ? lc('loading') : lc('openGoldenDemo')}</button>
+          <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+            <Plus size={16} /> {t('createProject')}
+          </button>
+        </div>
       </div>
       {demoError&&<p role="alert" className="lc-notice lc-error">{demoError}</p>}
 
@@ -87,7 +139,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <p style={{ fontSize: '13px', maxWidth: '400px', margin: '0 auto 16px' }}>
                 {t('emptyDescription')}
               </p>
-              <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+              <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
                 <Plus size={16} /> {t('createProject')}
               </button>
             </div>
@@ -159,12 +211,13 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
       {/* Create Project Modal */}
       {isModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-dialog">
+          <div ref={createProjectDialogRef} className="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="create-project-title" tabIndex={-1}>
             <form onSubmit={handleSubmit}>
               <div className="modal-header">
-                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>{t('modalTitle')}</h3>
+                <h3 id="create-project-title" style={{ fontSize: '15px', fontWeight: 700 }}>{t('modalTitle')}</h3>
                 <button
                   type="button"
+                  aria-label={t('common:close')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
                   onClick={() => setIsModalOpen(false)}
                 >

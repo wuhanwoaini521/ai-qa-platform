@@ -49,7 +49,7 @@ interface FailuresPageProps {
   /** Deep-link target: when set, this failure is selected once the list resolves. */
   initialFailureId?: string | null;
   /** Lets the router shell mirror row selection into the URL. */
-  onSelectFailure?: (failureId: string) => void;
+  onSelectFailure?: (failureId: string, runId: string) => void;
   /** Opens the failing test file in the Automation Studio. */
   onOpenInStudio?: (
     filePath: string,
@@ -95,9 +95,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     [],
   );
   const [repairWorkflow, setRepairWorkflow] = useState<FailureRepairWorkflow | null>(null);
+  const [repairWorkflowLoading, setRepairWorkflowLoading] = useState(false);
+  const [repairWorkflowError, setRepairWorkflowError] = useState('');
+  const [repairWorkflowLoadAttempt, setRepairWorkflowLoadAttempt] = useState(0);
   const [selectedAnalysisId, setSelectedAnalysisId] = useState('');
+  const selectedAnalysisIdRef = useRef('');
+  selectedAnalysisIdRef.current = selectedAnalysisId;
   const selectedFailureIdRef = useRef<string | null>(null);
   selectedFailureIdRef.current = selectedFailure?.id ?? null;
+  const analysisSelectionRequestRef = useRef(0);
   const diagnosisController = useRef<AbortController | null>(null);
 
   const restoreAnalysis = (analysis: FailureAnalysisRun) => {
@@ -108,31 +114,51 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   };
 
   useEffect(() => {
+    const requestId = ++analysisSelectionRequestRef.current;
+    const preferredAnalysisId = selectedAnalysisIdRef.current;
     setAnalysisHistory([]);
-    setSelectedAnalysisId('');
     setRepairWorkflow(null);
+    setRepairProposal(null);
+    setSelectedCandidate('');
+    setSemanticReview(null);
+    setRepairWorkflowError('');
+    setRepairWorkflowLoading(Boolean(selectedFailure?.id));
     if (!selectedFailure?.id) return;
     let active = true;
     void api
       .getFailureAnalyses(selectedFailure.id)
       .then(async (rows) => {
-        if (!active) return;
+        if (!active || analysisSelectionRequestRef.current !== requestId) return;
         setAnalysisHistory(rows);
-        if (rows[0] && !diagnosisController.current) restoreAnalysis(rows[0]);
-        const workflow = await api.getFailureRepairWorkflow(selectedFailure.id, rows[0]?.id);
-        if (!active) return;
-        setRepairWorkflow(workflow);
-        if (workflow.repair_proposal) {
-          setRepairProposal(workflow.repair_proposal as LocatorRepairProposal);
+        const preferredAnalysis = rows.find((item) => item.id === preferredAnalysisId) ?? rows[0];
+        if (preferredAnalysis && !diagnosisController.current) restoreAnalysis(preferredAnalysis);
+        try {
+          const workflow = await api.getFailureRepairWorkflow(selectedFailure.id, preferredAnalysis?.id);
+          if (!active || analysisSelectionRequestRef.current !== requestId) return;
+          setRepairWorkflow(workflow);
+          const proposal = workflow.repair_proposal ?? preferredAnalysis?.result.repair_proposal;
+          setRepairProposal(proposal ? proposal as LocatorRepairProposal : null);
+        } catch (error) {
+          if (active && analysisSelectionRequestRef.current === requestId) {
+            setRepairWorkflowError(String(error));
+          }
+        } finally {
+          if (active && analysisSelectionRequestRef.current === requestId) {
+            setRepairWorkflowLoading(false);
+          }
         }
       })
       .catch((error) => {
-        if (active) setDiagnosisError(String(error));
+        if (active && analysisSelectionRequestRef.current === requestId) {
+          setDiagnosisError(String(error));
+          setRepairWorkflowError(String(error));
+          setRepairWorkflowLoading(false);
+        }
       });
     return () => {
       active = false;
     };
-  }, [selectedFailure?.id]);
+  }, [selectedFailure?.id, repairWorkflowLoadAttempt]);
 
   const selectedAnalysis = analysisHistory.find(
     (item) => item.id === selectedAnalysisId,
@@ -185,6 +211,37 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const [semanticReview, setSemanticReview] =
     useState<LocatorSemanticReviewResponse | null>(null);
 
+  const handleSelectAnalysis = async (analysisId: string) => {
+    const analysis = analysisHistory.find((item) => item.id === analysisId);
+    if (!analysis || analysis.id === selectedAnalysisId) return;
+    const requestId = ++analysisSelectionRequestRef.current;
+    restoreAnalysis(analysis);
+    setRepairWorkflow(null);
+    setRepairProposal(null);
+    setSelectedCandidate('');
+    setSemanticReview(null);
+    setRepairWorkflowError('');
+    setRepairWorkflowLoading(true);
+    try {
+      const workflow = await api.getFailureRepairWorkflow(analysis.failure_id, analysis.id);
+      if (
+        analysisSelectionRequestRef.current !== requestId ||
+        selectedFailureIdRef.current !== analysis.failure_id
+      ) return;
+      setRepairWorkflow(workflow);
+      const proposal = workflow.repair_proposal ?? analysis.result.repair_proposal;
+      setRepairProposal(proposal ? proposal as LocatorRepairProposal : null);
+    } catch (error) {
+      if (analysisSelectionRequestRef.current === requestId) {
+        setRepairWorkflowError(String(error));
+      }
+    } finally {
+      if (analysisSelectionRequestRef.current === requestId) {
+        setRepairWorkflowLoading(false);
+      }
+    }
+  };
+
   // Recurrence State
   const [recurrenceList, setRecurrenceList] = useState<FailureRecurrenceItem[]>(
     [],
@@ -212,7 +269,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const locatorRepairReason = repairProposal?.verification_reason
     ? t('locatorRepairNotApplicable', { classification: repairProposal.verification_reason })
     : null;
-  const repairEligibilityMessage = repairReady
+  const repairEligibilityMessage = repairWorkflowError
+    ? t('workflow.statusUnavailableDetail')
+    : repairReady
     ? t('repairProposalNotCreated')
     : workflowActions.includes('START_ANALYSIS')
       ? t('repairUnavailableUntilDiagnosis')
@@ -220,6 +279,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const canPrepareCodeRepair = Boolean(
     selectedFailure &&
       currentProjectId &&
+      !repairWorkflowLoading &&
+      !repairWorkflowError &&
       !repairApplied &&
       !repairReady &&
       !['ANALYZING', 'DECIDING', 'VERIFYING_CANDIDATE', 'APPLYING', 'VERIFYING_FIX'].includes(diagnosisState),
@@ -369,6 +430,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     setDiagnosing(false);
     setDiagnosisEvents([]);
     setDiagnosisError('');
+    setRepairWorkflowError('');
+    setRepairWorkflowLoading(Boolean(f.id));
+    setSelectedAnalysisId('');
+    setRepairWorkflowLoadAttempt((attempt) => attempt + 1);
     setSelectedFailure(f);
     setRepairTaskId(null);
     setSourceRun(null);
@@ -382,6 +447,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     setRerunMessage(null);
     fetchRecurrence(f.id);
   };
+
+  useEffect(() => {
+    const linkedFailure = failures.find((failure) => failure.id === initialFailureId);
+    if (!linkedFailure || selectedFailure?.id === linkedFailure.id) return;
+    handleSelectFailure(linkedFailure);
+  }, [initialFailureId, failures, selectedFailure?.id, handleSelectFailure]);
 
   const fetchRecurrence = async (failureId: string) => {
     try {
@@ -800,7 +871,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     aria-current={isSelected ? 'true' : undefined}
                     onClick={() => {
                       handleSelectFailure(failure);
-                      onSelectFailure?.(failure.id);
+                      onSelectFailure?.(failure.id, failure.run_id);
                     }}
                     className={`failure-select-row${isSelected ? ' is-selected' : ''}`}
                   >
@@ -832,9 +903,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 state={diagnosisState}
                 primaryAction={primaryAction}
                 primaryDisabled={primaryActionDisabled}
-                showPrimaryAction={showFailurePrimaryAction}
+                showPrimaryAction={showFailurePrimaryAction && !repairWorkflowLoading && !repairWorkflowError}
                 showReanalysis={showReanalysis}
                 reanalysisPending={diagnosing}
+                workflowLoading={repairWorkflowLoading}
+                workflowLoadError={repairWorkflowError}
+                onRetryWorkflowLoad={() => setRepairWorkflowLoadAttempt((attempt) => attempt + 1)}
                 reanalysisBlockedReason={reanalysisBlockedReason}
                 primaryReason={primaryActionReason}
                 onPrimaryAction={handlePrimaryAction}
@@ -1201,18 +1275,17 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   classification={selectedFailure.failure_kind ?? selectedFailure.classification}
                   error={diagnosisError}
                   primaryAction={primaryAction}
-                  primaryActionDisabled={primaryActionDisabled}
+                  primaryActionDisabled={primaryActionDisabled || repairWorkflowLoading}
+                  workflowLoading={repairWorkflowLoading}
+                  workflowError={repairWorkflowError}
                   primaryActionReason={primaryActionReason}
                   primaryActionPending={diagnosing}
-                  showPrimaryAction={workflowActions.length > 0 || primaryAction === 'BLOCKED'}
+                  showPrimaryAction={!repairWorkflowError && (workflowActions.length > 0 || primaryAction === 'BLOCKED')}
                   onPrimaryAction={handlePrimaryAction}
                   onOpenStudio={onOpenInStudio ? () => void handleOpenFailureInStudio() : undefined}
                   onDebug={onOpenInStudio ? () => void handleOpenFailureInStudio(true) : undefined}
                   onCancel={handleCancelDiagnosis}
-                  onSelect={(id) => {
-                    const analysis = analysisHistory.find((item) => item.id === id);
-                    if (analysis) restoreAnalysis(analysis);
-                  }}
+                  onSelect={(id) => void handleSelectAnalysis(id)}
                 />
               )}
 

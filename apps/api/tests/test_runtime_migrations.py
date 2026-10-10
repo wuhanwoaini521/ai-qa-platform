@@ -6,7 +6,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
     with engine.begin() as connection:
         upgrade_database(connection)
-        assert len(inspect(connection).get_table_names()) == 36
+        assert len(inspect(connection).get_table_names()) == 37
         connection.execute(
             text(
                 "INSERT INTO projects (id,name,description,framework_type,default_branch,created_at,updated_at) VALUES ('p','Retain','','playwright_python','main',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"
@@ -15,7 +15,8 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004_one_running_failure_analysis"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_quality_discovery_version"
+        assert "version" in {column["name"] for column in inspect(connection).get_columns("quality_discovery_runs")}
     engine.dispose()
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 from datetime import datetime, timedelta
@@ -37,6 +38,64 @@ MIN_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS = 120.0
 
 class RequirementAnalysisBusy(ValueError):
     pass
+
+
+def _discard_unknown_analysis_references(analysis: RequirementAnalysis, document: RequirementDocument) -> int:
+    known = {
+        "criterion_ids": {item.id for item in document.criteria},
+        "rule_ids": {item.id for item in document.rules},
+        "risk_ids": {item.id for item in analysis.risks},
+        "flow_ids": {item.id for item in analysis.business_flow},
+    }
+    removed = 0
+
+    def keep_known(target, field: str, allowed: set[str]) -> None:
+        nonlocal removed
+        values = getattr(target, field)
+        valid = [value for value in values if value in allowed]
+        removed += len(values) - len(valid)
+        setattr(target, field, valid)
+
+    flow_ids = known["flow_ids"]
+    criterion_ids = known["criterion_ids"]
+    for step in analysis.business_flow:
+        keep_known(step, "next_ids", flow_ids)
+        keep_known(step, "criterion_ids", criterion_ids)
+    for risk in analysis.risks:
+        keep_known(risk, "criterion_ids", criterion_ids)
+    for scenario in analysis.scenarios:
+        for field, allowed in known.items():
+            keep_known(scenario.coverage, field, allowed)
+    if removed:
+        note = f"已忽略 {removed} 个指向不存在实体的 AI 引用；相关覆盖关系需人工复核。"
+        analysis.coverage_gaps = [*analysis.coverage_gaps, note][:30]
+    return removed
+
+
+def _validate_analysis_payload(payload) -> RequirementAnalysis:
+    value = copy.deepcopy(payload)
+    ignored_fields = 0
+    while True:
+        try:
+            analysis = RequirementAnalysis.model_validate(value)
+            break
+        except ValidationError as error:
+            extra_errors = [item for item in error.errors() if item["type"] == "extra_forbidden"]
+            if not extra_errors:
+                raise
+            for item in extra_errors:
+                current = value
+                for part in item["loc"][:-1]:
+                    current = current[part]
+                key = item["loc"][-1]
+                if not isinstance(current, dict) or key not in current:
+                    raise
+                del current[key]
+                ignored_fields += 1
+    if ignored_fields:
+        note = f"已忽略 AI 响应中的 {ignored_fields} 个非标准字段；生成内容需人工复核。"
+        analysis.coverage_gaps = [*analysis.coverage_gaps, note][:30]
+    return analysis
 
 
 class RequirementLifecycleService:
@@ -201,10 +260,12 @@ class RequirementLifecycleService:
                 "acceptance_criteria",
                 "提取验收标准与业务规则",
                 "COMPLETED",
-                f"读取 {len(document.criteria)} 条验收标准、{len(document.rules)} 条业务规则。",
+                (
+                    f"读取 {len(document.criteria)} 条验收标准、{len(document.rules)} 条业务规则。"
+                    if document.criteria
+                    else "没有预填验收标准；继续依据需求描述分析，并将不确定内容作为假设或待确认项。"
+                ),
             )
-            if not document.criteria:
-                raise ValueError("Add explicit acceptance criteria before analyzing")
             provider = getattr(self.orchestrator.ai_provider, "primary", self.orchestrator.ai_provider)
             record.provider, record.model = (
                 getattr(provider, "provider_name", "unknown"),
@@ -255,7 +316,8 @@ class RequirementLifecycleService:
             if response.provider == "fake" or response.fallback_used:
                 record.status = "FALLBACK"
                 raise ValueError("AI unavailable: simulated fallback is not an analyzed requirement")
-            analysis = RequirementAnalysis.model_validate(response.structured_data)
+            analysis = _validate_analysis_payload(response.structured_data)
+            _discard_unknown_analysis_references(analysis, document)
             updated = document.model_copy(deep=True, update={"analysis": analysis})
             RequirementDocument.model_validate(updated.model_dump())
             async with self.repository_scope() as repositories:

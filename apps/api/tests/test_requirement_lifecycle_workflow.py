@@ -176,6 +176,105 @@ async def test_runtime_requirement_analysis_projects_events_ai_decisions_and_evi
 
 
 @pytest.mark.asyncio
+async def test_runtime_requirement_analysis_can_run_without_explicit_criteria(
+    client, test_db_session, monkeypatch
+):
+    project = (
+        await client.post("/api/projects", json={"name": "No criteria project", "bootstrap_workspace": False})
+    ).json()
+    requirement = (
+        await client.post(
+            "/api/requirements",
+            json={
+                "project_id": project["id"],
+                "title": "Empty cart state",
+                "description": "When the cart has no items, show an empty-state message and a zero total.",
+            },
+        )
+    ).json()
+    created = await client.post(
+        "/api/tasks",
+        json={
+            "type": "ANALYZE_REQUIREMENT",
+            "goal": "Analyze an empty-cart requirement without supplied criteria",
+            "project_id": project["id"],
+            "inputs": {"requirement_id": requirement["id"]},
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+
+    class NoCriteriaRuntimeTestOrchestrator(RuntimeTestOrchestrator):
+        async def complete(self, request):
+            assert '"criteria": []' in request.prompt
+            assert "do not invent user-confirmed criteria" in request.system_instruction
+            await AIRepository().record_invocation(
+                task="requirement_lifecycle",
+                provider="unit_fixture",
+                model="schema_fixture",
+                task_id=request.task_id,
+                run_id=request.run_id,
+                status="SUCCESS",
+            )
+            analysis = demo_document().analysis.model_copy(deep=True)
+            for flow_step in analysis.business_flow:
+                flow_step.criterion_ids = []
+            for risk in analysis.risks:
+                risk.criterion_ids = []
+            for scenario in analysis.scenarios:
+                scenario.coverage.criterion_ids = []
+                scenario.coverage.rule_ids = []
+                scenario.coverage.risk_ids = ["RISK-UNKNOWN"]
+            payload = analysis.model_dump(mode="json")
+            payload["scenarios_note"] = "Scenarios are provisional."
+            return AICompletionResponse(
+                content="{}",
+                structured_data=payload,
+                provider="unit_fixture",
+                model="schema_fixture",
+            )
+
+    monkeypatch.setattr(
+        requirement_lifecycle_service,
+        "RequirementLifecycleService",
+        lambda **kwargs: RequirementLifecycleService(
+            kwargs["repository_scope"], NoCriteriaRuntimeTestOrchestrator(), RuntimeTestDecisions()
+        ),
+    )
+    await task_runtime_service.scheduler._execute_dag(task_id, time.monotonic())
+
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, task_id)
+        assert task is not None and task.status == "COMPLETED"
+        step = (await TaskRepository(session).steps_for_task(task_id))[0]
+        assert step.status == "COMPLETED"
+        assert step.outputs["scenario_count"] > 0
+
+    runtime = await client.get(f"/api/tasks/{task_id}/runtime")
+    assert runtime.status_code == 200, runtime.text
+    snapshot = runtime.json()
+    assert snapshot["blocking"] is None
+    assert len(snapshot["ai_invocations"]) == 3
+    criteria_event = next(
+        event
+        for event in snapshot["events"]
+        if event["type"] == "workflow.step" and event["title"] == "提取验收标准与业务规则"
+    )
+    assert "没有预填验收标准" in criteria_event["summary"]
+
+    saved = (await client.get(f"/api/requirements/{requirement['id']}")).json()["qa_model"]
+    assert saved["criteria"] == []
+    assert saved["history"][-1]["status"] == "SUCCESS"
+    assert all(not item["coverage"]["criterion_ids"] for item in saved["analysis"]["scenarios"])
+    assert all(
+        set(item["coverage"]["risk_ids"]) <= {risk["id"] for risk in saved["analysis"]["risks"]}
+        for item in saved["analysis"]["scenarios"]
+    )
+    assert any("忽略" in item for item in saved["analysis"]["coverage_gaps"])
+    assert any("非标准字段" in item for item in saved["analysis"]["coverage_gaps"])
+
+
+@pytest.mark.asyncio
 async def test_runtime_requirement_analysis_rejects_unstructured_output_as_recoverable_block(
     client, test_db_session, monkeypatch
 ):

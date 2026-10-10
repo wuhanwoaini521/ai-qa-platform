@@ -481,11 +481,16 @@ class TestRunService:
             if existing.task_id:
                 task = await task_repo.get_by_id(existing.task_id)
                 if task:
-                    execution_timeout = min(get_config().pytest.timeout_seconds, (
+                    task_timeout = (
                         max(0.01, execution_deadline - time.monotonic())
                         if execution_deadline is not None
                         else float(task.max_duration_seconds)
-                    ))
+                    )
+                    execution_timeout = (
+                        min(task_timeout, local_pytest_options.timeout_sec)
+                        if local_pytest_options
+                        else task_timeout
+                    )
             start_time = utc_now()
 
             started = await run_repo.transition_run_status(

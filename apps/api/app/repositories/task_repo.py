@@ -444,14 +444,32 @@ class TaskRepository:
         )
         return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
-    async def pending(self, limit: int = 100) -> list[TaskRecord]:
+    async def pending(self, limit: int = 100, runtime_instance_id: str | None = None) -> list[TaskRecord]:
         stmt = (
             select(TaskORM)
             .where(TaskORM.status.in_(["PENDING", "REPLANNING"]))
-            .order_by(TaskORM.created_at)
-            .limit(limit)
+            .order_by(TaskORM.created_at, TaskORM.id)
         )
-        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
+        if not runtime_instance_id:
+            rows = await self.session.execute(stmt.limit(limit))
+            return [TaskRecord.from_record(row) for row in rows.scalars()]
+
+        matching: list[TaskRecord] = []
+        offset = 0
+        page_size = max(100, limit)
+        while len(matching) < limit:
+            rows = await self.session.execute(stmt.offset(offset).limit(page_size))
+            page = list(rows.scalars())
+            if not page:
+                break
+            offset += len(page)
+            for row in page:
+                affinity = (row.context or {}).get("_recorder_runtime_id")
+                if affinity is None or affinity == runtime_instance_id:
+                    matching.append(TaskRecord.from_record(row))
+                    if len(matching) == limit:
+                        break
+        return matching
 
     async def steps_for_task(self, task_id: str) -> list[TaskStep]:
         stmt = select(TaskStepORM).where(TaskStepORM.task_id == task_id)

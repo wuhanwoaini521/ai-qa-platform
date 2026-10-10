@@ -48,6 +48,13 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   }, [location.pathname, startPage, navigate]);
 
   const fullBleed = location.pathname.includes('/studio');
+  const workspaceRoute = location.pathname === '/workspace' || location.pathname.startsWith('/workspace/');
+  const workspaceParams = new URLSearchParams(location.search);
+  const workspaceStage = workspaceParams.get('stage');
+  const workspaceView = workspaceParams.get('view');
+  const workspaceResultsRoute = workspaceRoute && (
+    workspaceStage === 'result' || (!workspaceStage && workspaceView === 'results')
+  );
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
 
@@ -71,7 +78,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
             onSignOut={onSignOut}
           />
 
-          <div className={`content-viewport ${fullBleed ? 'full-bleed' : ''}`}>
+          <div className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`}>
             <ReadinessNotice />
             <ErrorBoundary resetKey={location.pathname}>
               <Suspense fallback={<LoadingState />}>

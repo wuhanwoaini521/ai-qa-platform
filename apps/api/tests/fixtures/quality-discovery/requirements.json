@@ -1,0 +1,11 @@
+{
+  "requirements": [
+    {"feature": "Search", "expected_behavior": "“Search results for qa sample” are displayed after submitting the query.", "acceptance_criteria": ["“Search results for qa sample” are displayed after submitting the query."], "checks": [{"target": "Search results for qa sample", "attribute": "visible", "expected": true, "when": "after_action", "criterion": "“Search results for qa sample” are displayed after submitting the query."}], "ambiguous": false},
+    {"feature": "Filter", "expected_behavior": "Filter the product listing.", "acceptance_criteria": ["Products update when a filter is applied."], "ambiguous": false},
+    {"feature": "Sort", "expected_behavior": "Sort products by price.", "acceptance_criteria": ["The product order changes when sort is selected."], "ambiguous": false},
+    {"feature": "Product detail", "expected_behavior": "Open a product detail page.", "acceptance_criteria": [], "ambiguous": false},
+    {"feature": "Cart", "expected_behavior": "Review selected products in the cart.", "acceptance_criteria": ["The cart displays selected products."], "ambiguous": false},
+    {"feature": "Checkout", "expected_behavior": "Complete the checkout flow.", "acceptance_criteria": ["Shipping, payment, and confirmation steps are available."], "ambiguous": false},
+    {"feature": "Size Guide", "expected_behavior": "View a size guide from the product page.", "acceptance_criteria": [], "ambiguous": false}
+  ]
+}

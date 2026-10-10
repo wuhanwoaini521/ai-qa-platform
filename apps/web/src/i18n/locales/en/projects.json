@@ -1,5 +1,6 @@
 {
   "subtitle": "Manage test projects, workspace repositories, and automation frameworks.",
+  "assetIndex": "Asset library",
   "createProject": "Create Project",
   "creating": "Creating...",
   "emptyTitle": "No projects found",

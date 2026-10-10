@@ -1,4 +1,11 @@
 {
+  "sectionNav": {
+    "title": "Settings index",
+    "effective": "Runtime configuration",
+    "aiHealth": "AI & Jev health",
+    "preferences": "Preferences",
+    "jevPlayground": "Jev decision test"
+  },
   "title": "Settings",
   "subtitle": "View the effective server configuration. Edit config/config.yaml and reload it here.",
   "saved": "Settings saved",

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SidebarTab } from '../types';
 
@@ -19,6 +19,7 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   onSelectTab,
 }) => {
   const { t } = useTranslation('studioShell');
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const views: { id: SidebarTab; label: string; count?: number }[] = [
     { id: 'files', label: t('sidebarView.files') },
@@ -28,13 +29,17 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   ];
 
   return (
-    <div className="studio-view-switcher" role="tablist">
-      {views.map((view) => (
+    <div className="studio-view-switcher" role="tablist" aria-label={t('sidebarView.switcherLabel')}>
+      {views.map((view, index) => (
         <button
           key={view.id}
+          ref={(element) => { tabRefs.current[index] = element; }}
+          id={`studio-sidebar-tab-${view.id}`}
           type="button"
           role="tab"
+          aria-controls="studio-sidebar-panel"
           aria-selected={sidebarTab === view.id}
+          tabIndex={sidebarTab === view.id ? 0 : -1}
           className={sidebarTab === view.id ? 'is-active' : ''}
           title={
             view.id === 'git'
@@ -46,6 +51,20 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
                   : view.label
           }
           onClick={() => onSelectTab(view.id)}
+          onKeyDown={(event) => {
+            const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+            const targetIndex = event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? views.length - 1
+                : offset
+                  ? (index + offset + views.length) % views.length
+                  : -1;
+            if (targetIndex < 0) return;
+            event.preventDefault();
+            onSelectTab(views[targetIndex].id);
+            tabRefs.current[targetIndex]?.focus();
+          }}
         >
           {view.label}
           {typeof view.count === 'number' && view.count > 0 && <span className="view-count">{view.count}</span>}

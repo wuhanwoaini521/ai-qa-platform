@@ -1,0 +1,15 @@
+{
+  "test_cases": [
+    {"feature": "Search", "title": "Search returns products", "nodeid": "tests/test_shop.py::test_search", "last_run_status": "PASSED"},
+    {"feature": "Filter", "title": "Filter limits products", "nodeid": "tests/test_shop.py::test_filter", "last_run_status": "FAILED"},
+    {"feature": "Checkout", "title": "Checkout shipping details", "nodeid": "tests/test_shop.py::test_checkout_shipping", "last_run_status": null}
+  ],
+  "expected": {
+    "Search": {"requirement": "PASS", "coverage": "VERIFIED"},
+    "Filter": {"requirement": "IMPLEMENTED_BROKEN", "coverage": "AUTOMATION_FAILING"},
+    "Sort": {"requirement": "IMPLEMENTED_PARTIAL", "coverage": "NOT_COVERED", "gaps": ["TEST_MISSING", "AUTOMATION_MISSING"]},
+    "Wishlist": {"requirement": "UNDOCUMENTED_FEATURE"},
+    "Checkout": {"requirement": "IMPLEMENTED_PARTIAL", "coverage": "COVERED"},
+    "Size Guide": {"requirement": "REQUIRED_NOT_FOUND"}
+  }
+}

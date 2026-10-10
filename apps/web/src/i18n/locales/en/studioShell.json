@@ -10,6 +10,7 @@
     "checking": "Checking...",
     "problems": "Problems ({{problemCount}})",
     "runTestTooltip": "Execute tests in current file",
+    "debugActive": "Stop the current debug session before running tests",
     "running": "Running...",
     "runTest": "Run Test",
     "debugTest": "Debug",
@@ -27,7 +28,7 @@
     "noCaseTitle": "No test case is linked to this requirement",
     "noCaseHint": "Create or select a test case first, then add or record its automation script.",
     "openCases": "Go to cases",
-    "problemsShort": "Problems"
+    "problemsShort": "Validate"
   },
   "debug": {
     "starting": "Starting…",
@@ -85,6 +86,7 @@
     "quickOpen": "Quick Open File (Cmd+P)"
   },
   "sidebarView": {
+    "switcherLabel": "Workspace view switcher",
     "files": "Files",
     "tests": "Tests ({{testCount}})",
     "git": "Git ({{changeCount}})",

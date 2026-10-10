@@ -43,7 +43,7 @@ class TaskFailureRepairService:
             from app.services.failure_evidence_service import FailureEvidenceService
 
             browser = await repositories.failures.latest_browser_session(failure.execution_id)
-            page = browser.page_evidence_json if browser else None
+            page = browser.get("page_evidence_json") if browser else None
             if isinstance(page, str):
                 try:
                     page = json.loads(page)

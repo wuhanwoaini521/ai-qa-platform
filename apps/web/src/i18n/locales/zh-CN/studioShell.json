@@ -10,6 +10,7 @@
     "checking": "检查中...",
     "problems": "问题（{{problemCount}}）",
     "runTestTooltip": "执行当前文件中的测试",
+    "debugActive": "请先停止当前调试会话，再运行测试",
     "running": "执行中...",
     "runTest": "运行测试",
     "debugTest": "调试",
@@ -27,7 +28,7 @@
     "noCaseTitle": "当前需求还没有关联用例",
     "noCaseHint": "先创建或选择测试用例，再添加或录制对应的自动化脚本。",
     "openCases": "前往用例",
-    "problemsShort": "问题"
+    "problemsShort": "校验"
   },
   "debug": {
     "starting": "正在启动…",
@@ -85,6 +86,7 @@
     "quickOpen": "快速打开文件（Cmd+P）"
   },
   "sidebarView": {
+    "switcherLabel": "工作区视图切换",
     "files": "文件",
     "tests": "测试（{{testCount}}）",
     "git": "Git（{{changeCount}}）",

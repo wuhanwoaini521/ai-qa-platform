@@ -29,6 +29,7 @@ from app.api import (
     projects_router,
     qa_assistant_router,
     quality_router,
+    quality_discovery_router,
     recorder_router,
     releases_router,
     requirements_router,
@@ -207,6 +208,7 @@ app.include_router(jira_router, prefix="/api")
 app.include_router(testrail_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(quality_router, prefix="/api")
+app.include_router(quality_discovery_router, prefix="/api")
 app.include_router(releases_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")

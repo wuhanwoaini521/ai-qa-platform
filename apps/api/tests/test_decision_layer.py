@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 import httpx
 import pytest
-from app.persistence.models import AIInvocationORM, DecisionProviderConfigORM
+from app.persistence.models import AIInvocationORM
 from app.services.decision_service import DecisionService
 from app.services.jev_provider import DecisionProviderError, JevDecisionProvider
-from app.services.secret_store import SecretStore
 from project_model.models import DecisionOption, DecisionRequest
 from sqlalchemy import select
 
@@ -224,6 +222,7 @@ async def test_decision_service_falls_back_when_disabled_or_below_confidence():
     assert result.attempted_provider == "jev"
     assert result.attempted_model == "m"
     assert result.attempted_choice == "yes"
+    assert result.probabilities == {"yes": 0.59}
     assert result.minimum_confidence == 0.6
 
 
@@ -306,8 +305,25 @@ async def test_decision_service_times_out_to_unknown_option():
 
 
 @pytest.mark.integration
-async def test_jev_settings_api_persists_encrypted_secret_and_connection_result(client, test_db_session, monkeypatch):
+async def test_jev_settings_are_config_managed_and_connection_result_is_sanitized(client, test_db_session, monkeypatch):
+    from app.services import decision_settings_service
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+
     secret = "jev-test-secret-do-not-return"
+    runtime = DecisionRuntimeConfig(
+        provider="jev",
+        enabled=True,
+        api_key="config-managed-test-key",
+        model="jev-1.13.0",
+        base_url="https://mock.typesafe.test/v1/systemone",
+        timeout=20,
+        minimum_confidence=0.6,
+    )
+
+    async def configured_runtime(_self):
+        return runtime
+
+    monkeypatch.setattr(decision_settings_service.DecisionSettingsService, "get_runtime_config", configured_runtime)
     payload = {
         "enabled": True,
         "api_key": secret,
@@ -317,14 +333,8 @@ async def test_jev_settings_api_persists_encrypted_secret_and_connection_result(
         "minimum_confidence": 0.6,
     }
     saved = await client.put("/api/decision/settings", json=payload)
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["api_key_configured"] is True
-    assert secret not in json.dumps(saved.json())
-
-    async with test_db_session() as session:
-        row = (await session.execute(select(DecisionProviderConfigORM))).scalar_one()
-        assert row.encrypted_api_key and secret not in row.encrypted_api_key
-        assert SecretStore(master_key="change-me-in-production").decrypt_secret(row.encrypted_api_key) == secret
+    assert saved.status_code == 409, saved.text
+    assert secret not in saved.text
 
     loaded = await client.get("/api/decision/settings")
     assert loaded.status_code == 200
@@ -392,22 +402,27 @@ async def test_jev_settings_are_admin_only(client, role_client):
 
 @pytest.mark.integration
 async def test_runtime_check_reports_disabled_without_probing_connectivity(client, monkeypatch):
+    from app.services import decision_settings_service
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+
     async def unexpected_probe(*_args, **_kwargs):
         raise AssertionError("A disabled runtime must not call Jev")
 
     monkeypatch.setattr(JevDecisionProvider, "choose", unexpected_probe)
-    saved = await client.put(
-        "/api/decision/settings",
-        json={
-            "enabled": False,
-            "api_key": "configured-but-disabled",
-            "model": "jev-test",
-            "base_url": "https://mock.typesafe.test/v1/systemone",
-            "timeout": 2,
-            "minimum_confidence": 0.87,
-        },
+    runtime = DecisionRuntimeConfig(
+        provider="jev",
+        enabled=False,
+        api_key="configured-but-disabled",
+        model="jev-test",
+        base_url="https://mock.typesafe.test/v1/systemone",
+        timeout=2,
+        minimum_confidence=0.87,
     )
-    assert saved.status_code == 200
+
+    async def configured_runtime(_self):
+        return runtime
+
+    monkeypatch.setattr(decision_settings_service.DecisionSettingsService, "get_runtime_config", configured_runtime)
 
     response = await client.post("/api/decision/runtime-check")
 
@@ -429,6 +444,9 @@ async def test_runtime_check_reports_disabled_without_probing_connectivity(clien
 
 @pytest.mark.integration
 async def test_runtime_check_probes_enabled_jev_through_decision_service(client, monkeypatch):
+    from app.services import decision_settings_service
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+
     async def connected_probe(self, request):
         from project_model.models import DecisionResult
 
@@ -440,18 +458,20 @@ async def test_runtime_check_probes_enabled_jev_through_decision_service(client,
         )
 
     monkeypatch.setattr(JevDecisionProvider, "choose", connected_probe)
-    saved = await client.put(
-        "/api/decision/settings",
-        json={
-            "enabled": True,
-            "api_key": "configured-for-runtime-check",
-            "model": "jev-test",
-            "base_url": "https://mock.typesafe.test/v1/systemone",
-            "timeout": 2,
-            "minimum_confidence": 0.87,
-        },
+    runtime = DecisionRuntimeConfig(
+        provider="jev",
+        enabled=True,
+        api_key="configured-for-runtime-check",
+        model="jev-test",
+        base_url="https://mock.typesafe.test/v1/systemone",
+        timeout=2,
+        minimum_confidence=0.87,
     )
-    assert saved.status_code == 200
+
+    async def configured_runtime(_self):
+        return runtime
+
+    monkeypatch.setattr(decision_settings_service.DecisionSettingsService, "get_runtime_config", configured_runtime)
 
     response = await client.post("/api/decision/runtime-check")
 
@@ -465,6 +485,9 @@ async def test_runtime_check_probes_enabled_jev_through_decision_service(client,
 
 @pytest.mark.integration
 async def test_runtime_check_blocks_when_jev_response_misses_runtime_confidence(client, monkeypatch):
+    from app.services import decision_settings_service
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+
     async def low_confidence(self, request):
         from project_model.models import DecisionResult
 
@@ -476,18 +499,20 @@ async def test_runtime_check_blocks_when_jev_response_misses_runtime_confidence(
         )
 
     monkeypatch.setattr(JevDecisionProvider, "choose", low_confidence)
-    saved = await client.put(
-        "/api/decision/settings",
-        json={
-            "enabled": True,
-            "api_key": "configured-for-runtime-check",
-            "model": "jev-test",
-            "base_url": "https://mock.typesafe.test/v1/systemone",
-            "timeout": 2,
-            "minimum_confidence": 0.87,
-        },
+    runtime = DecisionRuntimeConfig(
+        provider="jev",
+        enabled=True,
+        api_key="configured-for-runtime-check",
+        model="jev-test",
+        base_url="https://mock.typesafe.test/v1/systemone",
+        timeout=2,
+        minimum_confidence=0.87,
     )
-    assert saved.status_code == 200
+
+    async def configured_runtime(_self):
+        return runtime
+
+    monkeypatch.setattr(decision_settings_service.DecisionSettingsService, "get_runtime_config", configured_runtime)
 
     response = await client.post("/api/decision/runtime-check")
 

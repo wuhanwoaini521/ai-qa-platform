@@ -15,6 +15,7 @@ from app.api.onboarding import router as onboarding_router
 from app.api.projects import router as projects_router
 from app.api.qa_assistant import router as qa_assistant_router
 from app.api.quality import router as quality_router
+from app.api.quality_discovery import router as quality_discovery_router
 from app.api.recorder import router as recorder_router
 from app.api.releases import router as releases_router
 from app.api.settings import router as settings_router
@@ -49,6 +50,7 @@ __all__ = [
     "onboarding_router",
     "qa_assistant_router",
     "quality_router",
+    "quality_discovery_router",
     "releases_router",
     "settings_router",
     "requirements_router",

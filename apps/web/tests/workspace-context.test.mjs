@@ -49,6 +49,16 @@ test('context updates preserve unrelated view state and replace stale entity IDs
   assert.equal(params.get('line'), null);
 });
 
+test('round trips the Workspace Discover stage and view', () => {
+  const context = readWorkspaceContext('?stage=discover&view=discover&requirementId=req-1', 'project-1');
+  assert.equal(context.stage, 'discover');
+  assert.equal(context.view, 'discover');
+  const params = writeWorkspaceContext('', context);
+  assert.equal(params.get('stage'), 'discover');
+  assert.equal(params.get('view'), 'discover');
+  assert.equal(params.get('requirementId'), 'req-1');
+});
+
 test('keeps Studio deep links inside Workspace with the same context', () => {
   const context = {
     projectId: 'project-a',

@@ -61,6 +61,7 @@ export function WorkspaceRunDock({
   const [configOpen, setConfigOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dockRef = useRef<HTMLElement>(null);
   const runStatus = run?.status ?? null;
   const taskActive = Boolean(taskStatus && !['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED'].includes(taskStatus));
   const active = Boolean(runStatus && ACTIVE.has(runStatus)) || (!runStatus && taskActive);
@@ -80,16 +81,41 @@ export function WorkspaceRunDock({
   const activeExecution = run?.executions.find((item) => item.status === 'RUNNING');
   const completed = run?.executions.filter((item) => item.finished_at).length ?? 0;
   const total = run?.executions.length || run?.total || 0;
+  const hasSavedRunResults = Boolean(run?.executions.length);
 
   useEffect(() => {
     if (!dockOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setDockOpen(false);
+    const focusable = () => [...(dockRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? [])].filter((element) => element.getClientRects().length > 0);
+    const first = focusable()[0];
+    (first ?? dockRef.current)?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDockOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        dockRef.current?.focus();
+        return;
+      }
+      const current = document.activeElement;
+      if (event.shiftKey && (current === items[0] || !dockRef.current?.contains(current))) {
+        event.preventDefault();
+        items[items.length - 1].focus();
+      } else if (!event.shiftKey && (current === items[items.length - 1] || !dockRef.current?.contains(current))) {
+        event.preventDefault();
+        items[0].focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       triggerRef.current?.focus();
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
   }, [dockOpen]);
 
   const update = (patch: Partial<WorkspaceRunConfig>) => onConfigChange({ ...config, ...patch });
@@ -113,7 +139,7 @@ export function WorkspaceRunDock({
       </button>
 
       {dockOpen && <div className="workspace-run-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setDockOpen(false); triggerRef.current?.focus(); } }}>
-        <section className={`workspace-run-dock is-${status}`} role="dialog" aria-label={t('dock.title')} onMouseDown={(event) => event.stopPropagation()}>
+        <section ref={dockRef} className={`workspace-run-dock is-${status}`} role="dialog" aria-modal="true" aria-label={t('dock.title')} tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
           <header className="workspace-run-dock-heading">
             <div className="workspace-run-dock-status">
               <span className="workspace-dock-indicator" aria-hidden="true">
@@ -137,8 +163,8 @@ export function WorkspaceRunDock({
           <div className="workspace-run-dock-progress" aria-live="polite">
             {run ? (
               <>
-                <strong>{run.passed}/{total || '—'} {t('dock.passed')}</strong>
-                <small>{run.failed ? t('dock.failedCount', { count: run.failed }) : active ? t('dock.progress', { completed, total: total || '—' }) : t('dock.lastRun')}</small>
+                <strong>{hasSavedRunResults ? run.passed + '/' + (total || '—') + ' ' + t('dock.passed') : active ? t('dock.status.running') : t('dock.resultUnavailable')}</strong>
+                <small>{!hasSavedRunResults ? active ? taskStep || t('dock.preparing') : t('dock.resultUnavailableHint') : run.failed ? t('dock.failedCount', { count: run.failed }) : active ? t('dock.progress', { completed, total: total || '—' }) : t('dock.lastRun')}</small>
               </>
             ) : taskActive ? (
               <>

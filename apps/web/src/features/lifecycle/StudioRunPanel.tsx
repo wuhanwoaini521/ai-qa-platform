@@ -60,6 +60,7 @@ export function StudioRunPanel({ runId, projectId, context, onStep, onClose }: {
         key={runId}
         kind="run"
         id={runId}
+        initialTab="Browser"
         projectId={projectId}
         onOpenSource={(path, line) => { onStep(path, line); onClose(); }}
       />

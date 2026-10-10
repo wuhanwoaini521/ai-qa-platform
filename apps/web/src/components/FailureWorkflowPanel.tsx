@@ -19,6 +19,8 @@ export const FailureWorkflowPanel: React.FC<{
   history: FailureAnalysisRun[];
   selectedId: string;
   onSelect: (id: string) => void;
+  workflowLoading?: boolean;
+  workflowError?: string;
   onCancel: () => void;
   failure: FailureRecord;
   failureCreatedAt?: string;
@@ -38,6 +40,8 @@ export const FailureWorkflowPanel: React.FC<{
   history,
   selectedId,
   onSelect,
+  workflowLoading = false,
+  workflowError = '',
   onCancel,
   failure,
   failureCreatedAt,
@@ -186,7 +190,7 @@ export const FailureWorkflowPanel: React.FC<{
       className="failure-workflow"
       aria-label={t('workflow.title')}
       aria-live="polite"
-      aria-busy={running}
+      aria-busy={running || workflowLoading}
     >
       <div className="failure-workflow-heading">
         <div>
@@ -205,6 +209,14 @@ export const FailureWorkflowPanel: React.FC<{
           </button>
         )}
       </div>
+      {selectedRun && (
+        <div className="failure-workflow-attempt" aria-live="polite">
+          <strong>{t('workflow.selectedAttempt', { id: selectedRun.id.slice(0, 8), status: selectedRun.status })}</strong>
+          <time dateTime={selectedRun.created_at}>{new Date(selectedRun.created_at).toLocaleString(i18n.resolvedLanguage ?? i18n.language)}</time>
+          {workflowLoading && <span role="status">{t('workflow.loadingAttempt')}</span>}
+        </div>
+      )}
+      {workflowError && <p className="failure-workflow-error" role="status">{t('workflow.attemptLoadFailed', { error: workflowError })}</p>}
       {provider && (
         <div
           className={`failure-workflow-provider${fallback || provider === 'fake' ? ' is-fallback' : ''}`}

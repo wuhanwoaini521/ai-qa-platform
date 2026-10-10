@@ -193,6 +193,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const parentRunId = query.get('parentRunId');
   const studioContext = readWorkspaceContext(query, currentProjectId);
   const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns, onRunCreated, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
+  useEffect(() => {
+    if (!embedded && run.activeRunId) setShowBrowser(true);
+  }, [embedded, run.activeRunId]);
   const hasRunRuntime = Boolean(run.activeRunId || (!studioContext.taskId && studioContext.runId));
   const runtimeId = run.activeRunId ?? studioContext.taskId ?? studioContext.runId ?? '';
   const runtimeKind = hasRunRuntime ? 'run' : 'task';
@@ -233,13 +236,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     (test) => test.path.replace(/\\/g, '/').replace(/^\/+/, '') === activeFilePath,
   ) ? activeFilePath : null;
 
+  const problemCount = problems.validationIssues.length + Object.values(languageIssues).flat().length;
+
   fetchFilesRef.current = workspace.fetchFiles;
   openFileRef.current = openStudioFile;
 
   useEffect(() => {
     workspace.fetchFiles();
-    tests.fetchCollectedTests();
-    problems.validateWorkspace();
     git.fetchGitData();
   }, [currentProjectId]);
 
@@ -331,7 +334,6 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
   const handleSelectSidebarTab = (tab: SidebarTab) => {
     setSidebarTab(tab);
-    if (tab === 'tests') tests.fetchCollectedTests();
     if (tab === 'git') git.fetchGitData();
     if (tab === 'pr' && git.activePR) git.handleRefreshPRChecks();
   };
@@ -542,7 +544,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         />
 
         {/* Content Area for 4 Tabs */}
-        <div className="studio-file-tree">
+        <div
+          id="studio-sidebar-panel"
+          className="studio-file-tree"
+          role="tabpanel"
+          aria-labelledby={`studio-sidebar-tab-${sidebarTab}`}
+          tabIndex={0}
+        >
           {sidebarTab === 'files' && (
             <FileTree
               files={workspace.files}
@@ -567,7 +575,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             <TestExplorer
               tests={tests.collectedTests}
               loading={tests.loadingTests}
+              hasCollected={tests.hasCollectedTests}
+              collectionFailed={tests.collectionFailed}
               runningTest={run.runningTest}
+              onCollect={() => { void tests.fetchCollectedTests(); }}
               onOpenFile={openStudioFile}
               onRunTest={(nodeid)=>{void saveAndRun(nodeid);}}
               onDebugTest={(nodeid) => { void startDebug(nodeid); }}
@@ -641,18 +652,18 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               disabled={problems.validating}
               title={t('editor.validateTooltip')}
             >
-              <CheckCircle2 size={14} color={problems.validationIssues.length + Object.values(languageIssues).flat().length === 0 ? 'var(--ui-mint-strong)' : 'var(--ui-rose)'} />
-              {t('editor.problemsShort')}
-              <span className={`studio-tool-count ${problems.validationIssues.length > 0 ? 'has-issues' : ''}`}>
-                {problems.validationIssues.length + Object.values(languageIssues).flat().length}
+              <CheckCircle2 size={14} color={problems.validationFailed ? 'var(--ui-rose-strong)' : !problems.hasValidated ? 'var(--ink-muted)' : problemCount === 0 ? 'var(--ui-mint-strong)' : 'var(--ui-rose)'} />
+              {problems.validating ? t('editor.checking') : t('editor.problemsShort')}
+              <span className={`studio-tool-count ${problemCount > 0 ? 'has-issues' : ''}`}>
+                {problemCount || (problems.hasValidated ? 0 : '—')}
               </span>
             </button>}
-            {!embedded && editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
+            {editor.activeTab && (editor.activeTab.path.includes('test_') || editor.activeTab.path.endsWith('.py')) && (
               <button
                 className="studio-tool is-primary"
-                disabled={run.runningTest}
+                disabled={run.runningTest || debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'}
                 onClick={() => {void saveAndRun();}}
-                title={t('editor.runTestTooltip')}
+                title={debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused' ? t('editor.debugActive') : t('editor.runTestTooltip')}
               >
                 <Play size={14} />
                 {run.runningTest ? t('editor.running') : t('editor.runTest')}
@@ -747,18 +758,24 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           <ProblemsPanel
             issues={[...problems.validationIssues, ...Object.values(languageIssues).flat()]}
             expanded={problems.showProblemsPanel}
+            validating={problems.validating}
+            hasValidated={problems.hasValidated}
+            validationFailed={problems.validationFailed}
             onToggle={() => problems.setShowProblemsPanel(!problems.showProblemsPanel)}
+            onValidate={() => { void problems.validateWorkspace(); }}
             onJumpToIssue={problems.jumpToIssue}
           />
 
           {/* Quick Execution Log notification bar */}
-          <RunOutputPanel lastRunResult={run.lastRunResult} onNavigateToRuns={onNavigateToRuns} />
+          <RunOutputPanel lastRunResult={run.lastRunResult} runId={run.activeRunId} onNavigateToRuns={onNavigateToRuns} />
         </div>
 
         <WorkbenchStatusBar
           branch={git.currentBranch}
-          problemCount={problems.validationIssues.length + Object.values(languageIssues).flat().length}
+          problemCount={problemCount}
           validating={problems.validating}
+          hasValidated={problems.hasValidated}
+          validationFailed={problems.validationFailed}
           runningTest={run.runningTest}
           saving={editor.saving}
           activeFileName={showAutomationSetup ? null : editor.activeTab?.path ?? null}

@@ -30,6 +30,7 @@ export function RuntimeDetail({
   kind,
   id,
   revision,
+  initialTab = 'Flow',
   projectId,
   onOpenSource,
   onOpenStudio,
@@ -37,6 +38,7 @@ export function RuntimeDetail({
   kind: 'task' | 'run';
   id: string;
   revision?: string;
+  initialTab?: RuntimeTab;
   projectId?: string;
   onOpenSource?: RuntimeSourceOpener;
   onOpenStudio?: () => void;
@@ -47,7 +49,7 @@ export function RuntimeDetail({
     id,
     revision,
   );
-  const [tab, setTab] = useState<RuntimeTab>('Flow');
+  const [tab, setTab] = useState<RuntimeTab>(initialTab);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [focus, setFocus] = useState(false);
@@ -66,12 +68,12 @@ export function RuntimeDetail({
     setSearchParams((params) => { params.delete('step'); return params; }, { replace: true });
   }, [setSearchParams]);
   useEffect(() => {
-    setTab('Flow');
+    setTab(initialTab);
     setFocus(false);
     setSelectedStepId(null);
     setInspectorOpen(true);
     initialStepResolved.current = false;
-  }, [kind, id]);
+  }, [kind, id, initialTab]);
   useEffect(() => {
     document.documentElement.classList.toggle('runtime-focus', focus);
     return () => document.documentElement.classList.remove('runtime-focus');

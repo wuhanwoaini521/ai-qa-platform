@@ -76,6 +76,7 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (i18n.resolvedLanguage !== preferences.language) {
       void i18n.changeLanguage(preferences.language);
     }
+    document.documentElement.lang = preferences.language;
     storeLanguage(preferences.language);
     try {
       window.localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));

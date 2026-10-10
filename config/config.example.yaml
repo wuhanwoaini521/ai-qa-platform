@@ -111,6 +111,29 @@ agent:
     max_actions: 30
     max_candidates: 10
 
+# Quality Discovery is separate from goal-based Browser Agent tasks. Runs are bounded and Jev is
+# required by default; the service stops if Jev cannot make a confident candidate choice.
+discovery:
+  enabled: true
+  require_ai: true
+  require_jev: true
+  max_actions: 30
+  max_failures: 20
+  max_depth: 8
+  max_states: 100
+  max_runtime_minutes: 45
+  max_candidates: 5
+  screenshot: true
+  capture_console: true
+  capture_network: true
+  safe_mode: true
+  allowed_domains: []
+  state_similarity_threshold: 0.9
+  feature_mapping_confidence: 0.75
+  max_events: 500
+  max_evidence_chars: 9000
+  max_screenshots: 20
+
 # Failure creation and captured context. Character limits bound stored evidence size.
 failure:
   auto_create: true

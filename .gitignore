@@ -112,6 +112,7 @@ runtime/pytest-reports/*
 /runtime/platform-v2-*/
 /runtime/platform-v2-*.log
 /runtime/ui-review/
+/runtime/.design-research/
 
 # Agent and test scratch directories/files
 **/.tmp-*/

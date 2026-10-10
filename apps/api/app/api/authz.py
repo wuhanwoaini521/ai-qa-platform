@@ -87,6 +87,7 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/failures", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
     Rule("/api/flaky", Permission.PROJECT_READ, Permission.PROJECT_READ),
     Rule("/api/quality", Permission.PROJECT_READ, Permission.PROJECT_READ),
+    Rule("/api/discovery", Permission.PROJECT_READ, Permission.RUN_EXECUTE),
     Rule("/api/releases", Permission.PROJECT_READ, Permission.RELEASE_GATE),
     Rule("/api/jira", Permission.PROJECT_READ, Permission.INTEGRATION_MANAGE),
     Rule("/api/testrail", Permission.PROJECT_READ, Permission.INTEGRATION_MANAGE),

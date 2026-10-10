@@ -1,0 +1,76 @@
+.settings-page {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.settings-nav > span {
+  padding: 3px 8px 7px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.settings-nav a {
+  padding: 7px 8px;
+  color: var(--ink-soft);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.settings-nav a:hover,
+.settings-nav a:focus-visible {
+  color: var(--ink);
+  background: var(--surface-hover);
+  outline-color: var(--accent-blue);
+}
+
+.settings-main { min-width: 0; }
+.settings-main > * { scroll-margin-top: 16px; }
+
+.settings-effective .card-body > .card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.settings-effective .card-body > .card .card-header {
+  padding: 12px 0 5px;
+  background: transparent;
+  border: 0;
+}
+
+.settings-effective .card-body > .card .card-body { padding: 5px 0 12px; }
+
+@media (max-width: 900px) {
+  .settings-page { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .settings-nav {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    grid-template-columns: none;
+    align-items: center;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .settings-nav > span { display: none; }
+}

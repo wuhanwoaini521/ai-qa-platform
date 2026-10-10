@@ -27,6 +27,7 @@ import { EmptyState } from '../components/AsyncState';
 interface DashboardPageProps {
   onNavigate: (tab: NavTab) => void;
   onOpenTask?: (taskId: string) => void;
+  onOpenRun?: (runId: string) => void;
   onOpenCreateProject?: () => void;
 }
 
@@ -40,9 +41,12 @@ const RUN_STATUS_TONE: Record<string, string> = {
   ERROR: 'is-failed',
 };
 
+const DASHBOARD_RECENT_TASK_LIMIT = 8;
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onOpenTask,
+  onOpenRun,
 }) => {
   const { t } = useTranslation('dashboard');
   const { t: taskT } = useTranslation('tasks');
@@ -50,26 +54,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTasks, setRecentTasks] = useState<AgentTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statsUnavailable, setStatsUnavailable] = useState(false);
+  const [tasksUnavailable, setTasksUnavailable] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const sourcesUnavailable = statsUnavailable || tasksUnavailable;
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [dashboard, tasks] = await Promise.allSettled([
-          api.getDashboardStats(),
-          api.getTasks(),
-        ]);
-        if (dashboard.status === 'fulfilled') setStats(dashboard.value);
-        if (tasks.status === 'fulfilled') setRecentTasks(tasks.value);
-      } catch (err) {
-        console.error('Failed to load dashboard', err);
-      } finally {
-        setLoading(false);
+    let current = true;
+    setLoading(true);
+    void Promise.allSettled([api.getDashboardStats(), api.getTasks()]).then(([dashboard, tasks]) => {
+      if (!current) return;
+      if (dashboard.status === 'fulfilled') {
+        setStats(dashboard.value);
+        setStatsUnavailable(false);
+      } else {
+        setStats(null);
+        setStatsUnavailable(true);
       }
-    };
-    fetchStats();
-  }, []);
+      if (tasks.status === 'fulfilled') {
+        setRecentTasks(tasks.value);
+        setTasksUnavailable(false);
+      } else {
+        setRecentTasks([]);
+        setTasksUnavailable(true);
+      }
+      setLoading(false);
+    });
+    return () => { current = false; };
+  }, [reloadVersion]);
 
-  if (loading && !stats) {
+  if (loading && !stats && !sourcesUnavailable) {
     return (
       <div className="page-container" aria-busy="true">
         <div className="stats-grid">
@@ -111,9 +125,51 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     { tab: 'flaky', label: t('flakyStep'), meta: t('flakyStepDescription'), Icon: Flame },
     { tab: 'failures', label: t('failureStep'), meta: t('failureStepDescription'), Icon: AlertTriangle },
   ] as const;
+  const attentionItems = [
+    ...recentRuns
+      .filter((run) => run.status === 'FAILED' || run.status === 'ERROR')
+      .slice(0, 3)
+      .map((run) => ({
+        key: `run:${run.id}`,
+        title: t('attentionRun'),
+        detail: `#${run.id.slice(0, 8)} · ${run.failed} ${t('attentionFailedTests')}`,
+        status: run.status,
+        Icon: AlertTriangle,
+        onClick: () => { if (onOpenRun) onOpenRun(run.id); else onNavigate('runs'); },
+      })),
+    ...recentTasks
+      .filter((task) => ['RUNNING', 'WAITING', 'VERIFYING', 'RETRYING', 'PAUSED', 'BLOCKED', 'FAILED'].includes(task.status))
+      .slice(0, 3)
+      .map((task) => ({
+        key: `task:${task.id}`,
+        title: task.goal,
+        detail: task.failure_reason || task.plan.find((step) => step.status === 'RUNNING')?.name || taskT('currentStep'),
+        status: task.status,
+        Icon: Workflow,
+        onClick: () => onOpenTask?.(task.id),
+      })),
+  ].slice(0, 4);
+  const countValue = (value: number | undefined) => statsUnavailable ? '—' : value ?? 0;
+  const visibleRecentTasks = recentTasks.slice(0, DASHBOARD_RECENT_TASK_LIMIT);
 
   return (
     <div className="dashboard-page">
+      <section className="dashboard-attention card" aria-label={t('needsAttention')}>
+        <div className="dashboard-attention-heading">
+          <div><div className="card-title">{t('needsAttention')}</div><div className="card-subtitle">{t('needsAttentionSubtitle')}</div></div>
+          <span className="dashboard-attention-count">{sourcesUnavailable && attentionItems.length === 0 ? '—' : attentionItems.length}</span>
+        </div>
+        {attentionItems.length > 0 ? <div className="dashboard-attention-list">
+          {attentionItems.map(({ key, title, detail, status, Icon, onClick }) => <button type="button" className="dashboard-attention-item" key={key} onClick={onClick}>
+            <span className="dashboard-attention-icon"><Icon size={15} aria-hidden="true" /></span>
+            <span className="dashboard-attention-copy"><strong>{title}</strong><small>{detail}</small></span>
+            <span className={`dashboard-attention-status is-${status.toLowerCase()}`}>{t(`attentionStatuses.${status}`, { defaultValue: status })}</span>
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>)}
+        </div> : <div className="dashboard-attention-empty"><span className="status-dot is-live" />{sourcesUnavailable ? t('attentionUnavailable') : t('noAttentionItems')}</div>}
+        {sourcesUnavailable && <div className="dashboard-attention-warning" role="status"><span>{t('attentionPartialWarning')}</span><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={() => setReloadVersion((version) => version + 1)}><RotateCcw size={12} aria-hidden="true" />{loading ? t('attentionRetrying') : t('attentionRetry')}</button></div>}
+      </section>
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-card-body">
@@ -122,13 +178,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <span className="stat-label">{t('passRateToday')}</span>
             </div>
             <span className="stat-value">
-                {stats?.pass_rate_today != null ? `${stats.pass_rate_today.toFixed(1)}%` : '—'}
+                {!statsUnavailable && stats?.pass_rate_today != null ? `${stats.pass_rate_today.toFixed(1)}%` : '—'}
               </span>
           </div>
           <div className="stat-metric">
             <span className="status-dot is-live" />
             <span>{t('testsExecutedToday')}</span>
-            <span className="stat-metric-value">{stats?.tests_executed_today ?? 0}</span>
+            <span className="stat-metric-value">{countValue(stats?.tests_executed_today)}</span>
           </div>
           <button type="button" className="card-footer" onClick={() => onNavigate('runs')}>
             <span>{t('executionRecord')}</span>
@@ -142,11 +198,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <span className="stat-icon"><ListChecks size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('runsToday')}</span>
             </div>
-            <span className="stat-value">{stats?.runs_today ?? 0}</span>
+            <span className="stat-value">{countValue(stats?.runs_today)}</span>
           </div>
           <div className="stat-metric">
             <span>{t('totalExecutions')}</span>
-            <span className="stat-metric-value">{stats?.total_runs ?? 0}</span>
+            <span className="stat-metric-value">{countValue(stats?.total_runs)}</span>
           </div>
           <button type="button" className="card-footer" onClick={() => onNavigate('runs')}>
             <span>{t('viewAll')}</span>
@@ -160,11 +216,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <span className="stat-icon"><AlertTriangle size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('totalFailures')}</span>
             </div>
-            <span className="stat-value">{stats?.total_failures ?? 0}</span>
+            <span className="stat-value">{countValue(stats?.total_failures)}</span>
           </div>
           <div className="stat-metric">
             <span>{t('likelyFlakyTests')}</span>
-            <span className="stat-metric-value">{stats?.flaky_tests_count ?? 0}</span>
+            <span className="stat-metric-value">{countValue(stats?.flaky_tests_count)}</span>
           </div>
           <button type="button" className="card-footer" onClick={() => onNavigate('failures')}>
             <span>{t('failureStepShort')}</span>
@@ -179,7 +235,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <span className="stat-label">{t('avgExecutionTime')}</span>
             </div>
             <span className="stat-value">
-                {stats?.average_test_duration_ms
+                {!statsUnavailable && stats?.average_test_duration_ms
                   ? stats.average_test_duration_ms > 1000
                     ? `${(stats.average_test_duration_ms / 1000).toFixed(1)}s`
                     : `${stats.average_test_duration_ms}ms`
@@ -189,7 +245,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="stat-metric">
             <RotateCcw size={13} strokeWidth={1.7} />
             <span>{t('rerunRecoveries')}</span>
-            <span className="stat-metric-value">{stats?.rerun_recovery_count ?? 0}</span>
+            <span className="stat-metric-value">{countValue(stats?.rerun_recovery_count)}</span>
           </div>
           <button type="button" className="card-footer" onClick={() => onNavigate('flaky')}>
             <span>{t('likelyFlakyTests')}</span>
@@ -202,10 +258,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <span className="overview-strip-title">{t('projectOverview')}</span>
         <dl className="overview-metrics">
           {[
-            { key: 'qaProjects', Icon: FolderGit2, value: stats?.total_projects ?? 0 },
-            { key: 'requirements', Icon: FileText, value: stats?.total_requirements ?? 0 },
-            { key: 'testCases', Icon: CheckSquare, value: stats?.total_test_cases ?? 0 },
-            { key: 'totalExecutions', Icon: PlayCircle, value: stats?.total_runs ?? 0 },
+            { key: 'qaProjects', Icon: FolderGit2, value: countValue(stats?.total_projects) },
+            { key: 'requirements', Icon: FileText, value: countValue(stats?.total_requirements) },
+            { key: 'testCases', Icon: CheckSquare, value: countValue(stats?.total_test_cases) },
+            { key: 'totalExecutions', Icon: PlayCircle, value: countValue(stats?.total_runs) },
           ].map(({ key, Icon, value }) => (
             <div className="overview-metric" key={key}>
               <dt>
@@ -313,7 +369,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <EmptyState
               icon={<Inbox size={18} strokeWidth={1.7} />}
               title={t('recentRuns')}
-              message={t('noRecentRuns')}
+              message={t(statsUnavailable ? 'recentRunsUnavailable' : 'noRecentRuns')}
             />
           )}
         </section>
@@ -340,7 +396,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </section>
       </div>
 
-      <section className="card">
+      <section className="card dashboard-recent-tasks">
         <div className="card-header">
           <div>
             <div className="card-title">{taskT('recentTasks')}</div>
@@ -350,9 +406,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <Workflow size={14} strokeWidth={1.7} /> {taskT('allTasks')}
           </button>
         </div>
-        {recentTasks.length > 0 ? (
+        {tasksUnavailable ? (
+          <EmptyState
+            icon={<Workflow size={18} strokeWidth={1.7} />}
+            title={t('recentTasksUnavailableTitle')}
+            message={t('recentTasksUnavailableMessage')}
+          />
+        ) : visibleRecentTasks.length > 0 ? (
           <div className="link-rows">
-            {recentTasks.map((task) => {
+            {visibleRecentTasks.map((task) => {
               const steps = task.plan ?? [];
               const completed = steps.filter(
                 (step) => step.status === 'COMPLETED' || step.status === 'SKIPPED',
@@ -369,7 +431,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <ClipboardCheck size={15} strokeWidth={1.7} />
                   </span>
                   <span className="link-row-copy">
-                    <span className="link-row-title">
+                    <span className="link-row-title" title={task.goal}>
                       {taskT(`type_${task.type}`)} · {task.goal}
                     </span>
                     {current && (

@@ -81,12 +81,13 @@ class DecisionService:
         attempted_provider: str | None = None,
         attempted_model: str | None = None,
         attempted_choice: str | None = None,
+        probabilities: dict[str, float] | None = None,
     ) -> DecisionResult:
         choice = next((option.key for option in request.options if option.key.lower() == "unknown"), None)
         return DecisionResult(
             choice=choice,
             confidence=confidence,
-            probabilities={},
+            probabilities=probabilities or {},
             provider="fallback",
             attempted_provider=attempted_provider,
             attempted_model=attempted_model,
@@ -263,6 +264,7 @@ class DecisionService:
             attempted_provider=config.provider if provider_attempted else None,
             attempted_model=(remote_result.model if remote_result else config.model) if provider_attempted else None,
             attempted_choice=remote_result.choice if remote_result else None,
+            probabilities=remote_result.probabilities if remote_result else None,
         )
         await self._record(
             decision_name=request.name,

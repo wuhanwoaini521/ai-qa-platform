@@ -708,6 +708,9 @@
 .rt-event-empty {
   padding: 16px;
 }
+.rt-browser-preview-layout {
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+}
 .rt-focus .rt-viewport {
   height: clamp(220px, calc(100vh - 570px), 540px);
 }
@@ -749,6 +752,9 @@
 }
 @media (max-width: 760px) {
   .rt-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rt-browser-preview-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }

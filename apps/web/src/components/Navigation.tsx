@@ -1,21 +1,24 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
   PanelsTopLeft,
   GitBranch,
-  BookOpen,
+  FolderGit2,
   Flame,
   ShieldCheck,
   Shield,
   Server,
   Settings,
   Search,
-  Command,
+  ClipboardList,
+  Bug,
+  Radio,
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
+import { buildWorkspaceHref } from '../app/workspaceContext';
 import { Tooltip } from './Tooltip';
 
 export type NavTab =
@@ -34,6 +37,7 @@ export type NavTab =
   | 'workers'
   | 'settings'
   | 'workspace'
+  | 'discovery'
   | 'workflow'
   | 'library';
 
@@ -49,33 +53,105 @@ interface NavItem {
   end?: boolean;
 }
 
+interface QuickDestination {
+  id: string;
+  label: string;
+  icon: NavItem['icon'];
+  to: string;
+  keywords: string[];
+}
+
 const ICON_SIZE = 18;
 const ICON_STROKE = 1.6;
 
 /** Navigation rail: brand → search → primary destinations → platform. */
 export const Navigation: React.FC = () => {
   const { t } = useTranslation('nav');
+  const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { selectedProjectId } = useProjectScope();
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const paletteInputRef = useRef<HTMLInputElement>(null);
+  const paletteRef = useRef<HTMLElement>(null);
 
-  const projectBase = selectedProjectId
-    ? `/projects/${selectedProjectId}`
-    : null;
+  useEffect(() => {
+      const focusNavigationSearch = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      setSearchOpen(true);
+    };
+    window.addEventListener('keydown', focusNavigationSearch);
+    return () => window.removeEventListener('keydown', focusNavigationSearch);
+  }, []);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    paletteInputRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSearchOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previous?.focus();
+    };
+  }, [searchOpen]);
+
+  const navigateTo = (to: string) => {
+    navigate(to);
+    setQuery('');
+    setSearchOpen(false);
+  };
+
+  const workspaceBase = selectedProjectId ? `/workspace/${selectedProjectId}` : '/workspace';
 
   const navItems: NavItem[] = [
     { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, to: '/', end: true },
-    { id: 'workspace', labelKey: 'workspace', icon: PanelsTopLeft, to: projectBase ? `/workspace/${selectedProjectId}` : '/workspace' },
+    { id: 'workspace', labelKey: 'workspace', icon: PanelsTopLeft, to: workspaceBase },
+    { id: 'projects', labelKey: 'projects', icon: FolderGit2, to: '/projects' },
     { id: 'runs', labelKey: 'runs', icon: GitBranch, to: '/runs' },
-    { id: 'library', labelKey: 'library', icon: BookOpen, to: '/library' },
+    { id: 'quality', labelKey: 'quality', icon: ShieldCheck, to: '/quality' },
     { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
   ];
   const platformItems: NavItem[] = [
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
-    { id: 'quality', labelKey: 'quality', icon: ShieldCheck, to: '/quality' },
     { id: 'security', labelKey: 'security', icon: Shield, to: '/security' },
     { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
+  ];
+
+  const quickDestinations: QuickDestination[] = [
+    {
+      id: 'requirement',
+      label: workspaceT('quick.requirement'),
+      icon: ClipboardList,
+      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'requirement', view: 'requirement' }),
+      keywords: ['requirement', 'requirements', '需求'],
+    },
+    {
+      id: 'cases',
+      label: workspaceT('quick.cases'),
+      icon: ClipboardList,
+      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'cases', view: 'cases' }),
+      keywords: ['case', 'cases', 'test', 'tests', '用例', '测试'],
+    },
+    {
+      id: 'failures',
+      label: workspaceT('quick.failures'),
+      icon: Bug,
+      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'failure', view: 'results' }),
+      keywords: ['failure', 'failures', 'failed', '失败', '故障'],
+    },
+    {
+      id: 'recorder',
+      label: workspaceT('quick.recorder'),
+      icon: Radio,
+      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'automation', view: 'browser' }),
+      keywords: ['recorder', 'recording', '录制', '录制器'],
+    },
   ];
 
   const matches = useMemo(() => {
@@ -83,8 +159,11 @@ export const Navigation: React.FC = () => {
     if (!needle) return null;
     const filter = (items: NavItem[]) =>
       items.filter((item) => t(item.labelKey).toLowerCase().includes(needle));
-    return { primary: filter(navItems), platform: filter(platformItems) };
-  }, [query, t, navItems, platformItems]);
+    const workspace = quickDestinations.filter((item) =>
+      [item.label, ...item.keywords].some((value) => value.toLowerCase().includes(needle)),
+    );
+    return { primary: filter(navItems), platform: filter(platformItems), workspace };
+  }, [query, t, navItems, platformItems, quickDestinations]);
 
   const renderItem = (item: NavItem) => {
     const Icon = item.icon;
@@ -95,10 +174,23 @@ export const Navigation: React.FC = () => {
           to={item.to}
           end={item.end}
           aria-label={label}
+          onClick={() => { setQuery(''); setSearchOpen(false); }}
           className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
         >
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
           <span>{label}</span>
+        </NavLink>
+      </Tooltip>
+    );
+  };
+
+  const renderQuickDestination = (item: QuickDestination) => {
+    const Icon = item.icon;
+    return (
+      <Tooltip key={item.id} label={item.label}>
+        <NavLink to={item.to} aria-label={item.label} onClick={() => { setQuery(''); setSearchOpen(false); }} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
+          <span>{item.label}</span>
         </NavLink>
       </Tooltip>
     );
@@ -113,9 +205,14 @@ export const Navigation: React.FC = () => {
         <span className="sidebar-brand-title">{t('common:appName')}</span>
       </div>
 
+      <button className="sidebar-mobile-search" type="button" aria-label={t('common:search')} onClick={() => setSearchOpen(true)}>
+        <Search size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
+      </button>
+
       <div className="sidebar-search">
         <Search size={15} strokeWidth={ICON_STROKE} />
         <input
+          ref={searchInputRef}
           type="search"
           value={query}
           placeholder={t('common:search')}
@@ -125,16 +222,16 @@ export const Navigation: React.FC = () => {
             if (event.key !== 'Enter') return;
             const first = matches?.primary[0] ?? matches?.platform[0];
             if (first) {
-              navigate(first.to);
-              setQuery('');
+              navigateTo(first.to);
+              return;
+            }
+            const quickDestination = matches?.workspace[0];
+            if (quickDestination) {
+              navigateTo(quickDestination.to);
             }
           }}
         />
-        {!query && (
-          <kbd>
-            <Command size={11} strokeWidth={ICON_STROKE} />F
-          </kbd>
-        )}
+        {!query && <kbd>{/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘ K' : 'Ctrl K'}</kbd>}
       </div>
 
       <div className="sidebar-divider" />
@@ -144,7 +241,8 @@ export const Navigation: React.FC = () => {
           <>
             {matches.primary.map(renderItem)}
             {matches.platform.map(renderItem)}
-            {matches.primary.length === 0 && matches.platform.length === 0 && (
+            {matches.workspace.map(renderQuickDestination)}
+            {matches.primary.length === 0 && matches.platform.length === 0 && matches.workspace.length === 0 && (
               <p className="sidebar-empty">{t('common:noResults')}</p>
             )}
           </>
@@ -180,6 +278,61 @@ export const Navigation: React.FC = () => {
           {i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中'}
         </button>
       </div>
+
+      {searchOpen && <div className="navigation-palette-backdrop" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setSearchOpen(false);
+      }}>
+        <section
+          ref={paletteRef}
+          className="navigation-palette"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('common:search')}
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab') return;
+            const items = paletteRef.current?.querySelectorAll<HTMLElement>('input, a[href], button:not(:disabled)');
+            if (!items?.length) return;
+            const first = items[0];
+            const last = items[items.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+        >
+          <div className="navigation-palette-input">
+            <Search size={17} aria-hidden="true" />
+            <input
+              ref={paletteInputRef}
+              type="search"
+              value={query}
+              aria-label={t('common:search')}
+              placeholder={workspaceT('quick.searchPlaceholder')}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                const first = matches?.primary[0] ?? matches?.platform[0];
+                const destination = first?.to ?? matches?.workspace[0]?.to ?? quickDestinations[0]?.to;
+                if (destination) navigateTo(destination);
+              }}
+            />
+            <kbd>Esc</kbd>
+          </div>
+          <nav className="navigation-palette-results" aria-label={workspaceT('quick.destinations')}>
+            {matches ? <>
+              {matches.primary.map(renderItem)}
+              {matches.platform.map(renderItem)}
+              {matches.workspace.map(renderQuickDestination)}
+              {matches.primary.length === 0 && matches.platform.length === 0 && matches.workspace.length === 0 && (
+                <p className="sidebar-empty">{t('common:noResults')}</p>
+              )}
+            </> : quickDestinations.map(renderQuickDestination)}
+          </nav>
+        </section>
+      </div>}
     </aside>
   );
 };

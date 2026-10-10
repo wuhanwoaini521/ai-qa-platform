@@ -1,0 +1,10 @@
+{
+  "pages": {
+    "/": "<!doctype html><html><head><title>QA Shop</title></head><body><h1>QA Shop</h1><nav><a href='/search'>Search</a><a href='/products'>Products</a><a href='/cart'>Cart</a></nav></body></html>",
+    "/search": "<!doctype html><html><head><title>Search products</title></head><body><h1>Search products</h1><form action='/search'><label for='q'>Search</label><input id='q' name='q' type='search' placeholder='Search'><button type='submit'>Search</button></form><p>Search results are shown when a query is provided.</p></body></html>",
+    "/products": "<!doctype html><html><head><title>Product listing</title></head><body><h1>Products</h1><label for='filter'>Filter</label><select id='filter' name='filter'><option value='all'>All products</option><option value='shoes'>Shoes</option></select><label for='sort'>Sort</label><select id='sort' name='sort' onchange=\"document.getElementById('sort-state').textContent='Sorted '+this.value\"><option value='featured'>Featured</option><option value='price-low'>Price: low to high</option></select><p id='sort-state'>Featured order</p><button type='button'>Apply Filter</button><a href='/product/sku-1'>Running shoe</a></body></html>",
+    "/product/sku-1": "<!doctype html><html><head><title>Running shoe</title></head><body><h1>Running shoe</h1><p>Price $80</p><button id='wishlist' type='button' onclick=\"this.textContent='Wishlisted'\">Wishlist</button><label for='size'>Size</label><select id='size' name='size'><option value='m'>M</option><option value='l'>L</option></select><button type='button'>Add to Cart</button><a href='/cart'>Cart</a></body></html>",
+    "/cart": "<!doctype html><html><head><title>Cart</title></head><body><h1>Cart</h1><p>Running shoe · quantity 1</p><a href='/checkout'>Checkout</a></body></html>",
+    "/checkout": "<!doctype html><html><head><title>Checkout</title></head><body><h1>Checkout</h1><p>Shipping details step is available.</p><p>Payment and order confirmation are not implemented in this fixture.</p><button type='button' disabled>Place order</button></body></html>"
+  }
+}

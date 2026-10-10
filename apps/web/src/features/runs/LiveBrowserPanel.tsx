@@ -129,7 +129,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
             ))}
           </div>
           {selected && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(180px, 1fr)', gap: 12 }}>
+            <div className="rt-browser-preview-layout" style={{ display: 'grid', gap: 12 }}>
               <div style={{ minWidth: 0, background: 'var(--surface-inverse)', borderRadius: 'var(--r-sm)', minHeight: expanded ? 540 : 260, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 {frame ? (
                   <img src={frame} alt={`${selected.case_name} ${selected.status === 'running' ? 'live browser' : 'last captured browser frame'}`} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />

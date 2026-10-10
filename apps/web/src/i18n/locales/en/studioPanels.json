@@ -1,5 +1,13 @@
 {
   "testExplorer": {
+    "openTest": "Open test file: {{name}}",
+    "title": "Tests",
+    "notCollected": "Tests have not been discovered yet. Collect tests to inspect this project’s pytest cases.",
+    "collectionFailed": "Test collection failed; the list was not updated.",
+    "noTests": "No pytest test cases were found.",
+    "discover": "Discover tests",
+    "refresh": "Collect again",
+    "retry": "Retry",
     "collecting": "Collecting pytest tests...",
     "noTestsPrefix": "No tests detected in",
     "noTestsSuffix": "directory.",
@@ -36,6 +44,13 @@
     }
   },
   "problems": {
+    "openFile": "Open {{file}} at line {{line}}",
+    "statusNotChecked": "Not checked",
+    "statusError": "Check failed",
+    "notChecked": "Workspace validation has not run. Select Validate in the toolbar to check the current state.",
+    "validating": "Validating workspace...",
+    "validationFailed": "Workspace validation failed; the current code state could not be confirmed.",
+    "retryValidation": "Retry validation",
     "title": "Workspace Problems & Validation",
     "issuesCount": "{{count}} issues",
     "noErrors": "0 errors",
@@ -163,6 +178,8 @@
     "running": "Running tests",
     "saving": "Saving",
     "validating": "Checking workspace",
+    "validationFailed": "Workspace validation failed",
+    "validationNotRun": "Workspace not checked",
     "issues": "{{problemCount}} problem(s)",
     "engine": "Production QA"
   }

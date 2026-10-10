@@ -20,6 +20,8 @@ class _PlaywrightResources:
     browser: Any
     context: Any
     page: Any
+    block_service_workers: bool = False
+    allowed_hosts: set[str] | None = None
 
 
 class PlaywrightBrowserRuntime:
@@ -67,6 +69,7 @@ class PlaywrightBrowserRuntime:
         environment: dict[str, str] | None = None,
         headless: bool | None = None,
         launch_options: dict[str, Any] | None = None,
+        block_service_workers: bool = False,
     ) -> BrowserRuntimeSession:
         browser_config = get_config().browser
         viewport = viewport or {"width": browser_config.viewport_width, "height": browser_config.viewport_height}
@@ -86,6 +89,8 @@ class PlaywrightBrowserRuntime:
                 context_options = {"viewport": viewport}
                 context_options["locale"] = browser_config.locale
                 context_options["timezone_id"] = browser_config.timezone
+                if block_service_workers:
+                    context_options["service_workers"] = "block"
                 if storage_state is not None:
                     context_options["storage_state"] = storage_state
                 context = await browser.new_context(**context_options)
@@ -107,7 +112,12 @@ class PlaywrightBrowserRuntime:
                 created_at=now,
                 last_activity=now,
             )
-            self._resources[session.id] = _PlaywrightResources(browser=browser, context=context, page=page)
+            self._resources[session.id] = _PlaywrightResources(
+                browser=browser,
+                context=context,
+                page=page,
+                block_service_workers=block_service_workers,
+            )
             context.on("page", lambda new_page: self.set_active_page(session.id, new_page))
             page.on("console", lambda message: self._record_console(session, message))
             page.on("requestfailed", lambda request: self._record_network(session, request, failed=True))
@@ -222,6 +232,36 @@ class PlaywrightBrowserRuntime:
         session.last_activity_monotonic = time.monotonic()
         return response.status if response else None
 
+    async def restrict_navigation(self, session_id: str, allowed_hosts: set[str]) -> None:
+        """Restrict HTTP and WebSocket traffic to the discovery host allowlist."""
+        await self._require_session(session_id)
+        allowed_hosts = {host.lower().rstrip(".") for host in allowed_hosts}
+        resources = self._resources[session_id]
+        resources.allowed_hosts = allowed_hosts
+        await self._route_allowlist(resources.context, allowed_hosts)
+
+    @staticmethod
+    async def _route_allowlist(context: Any, allowed_hosts: set[str]) -> None:
+        def allowed(url: str, schemes: set[str]) -> bool:
+            parts = urlsplit(url)
+            host = (parts.hostname or "").lower().rstrip(".")
+            return parts.scheme in schemes and host in allowed_hosts and not parts.username and not parts.password
+
+        async def guard(route) -> None:
+            if not allowed(route.request.url, {"http", "https"}):
+                await route.abort()
+                return
+            await route.continue_()
+
+        async def guard_websocket(route) -> None:
+            if not allowed(route.url, {"ws", "wss"}):
+                await route.close(code=1008, reason="WebSocket host is outside the discovery allowlist")
+                return
+            route.connect_to_server()
+
+        await context.route("**/*", guard)
+        await context.route_web_socket("**/*", guard_websocket)
+
     async def snapshot(
         self,
         session_id: str,
@@ -280,13 +320,23 @@ class PlaywrightBrowserRuntime:
         return await page.locator(
             "button,a[href],input:not([type=hidden]),textarea,select,[role=button],[role=link]"
         ).evaluate_all(r"""els => els.slice(0,100).map((el,index) => {
-          const name=(el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '').trim().replace(/\s+/g,' ').slice(0,120);
-          const tag=el.tagName.toLowerCase(), type=(el.getAttribute('type') || '').toLowerCase();
-          const role=el.getAttribute('role') || (tag==='a'?'link':tag==='button'?'button':tag==='input'?'textbox':tag);
+          const tag=el.tagName.toLowerCase(), type=(tag==='input' ? (el.getAttribute('type') || 'text') : (el.getAttribute('type') || '')).toLowerCase();
+          const valueLabel=tag==='input' && ['button','submit','reset'].includes(type) ? el.value : '';
+          const explicitName=el.getAttribute('aria-label') || (el.labels && el.labels[0]?.innerText) || el.getAttribute('placeholder') || el.getAttribute('name') || valueLabel || '';
+          const name=(tag==='select' ? explicitName : (el.innerText || explicitName)).trim().replace(/\s+/g,' ').slice(0,120);
+          const role=el.getAttribute('role') || (tag==='a'?'link':tag==='button'?'button':tag==='input'||tag==='textarea'?'textbox':tag==='select'?(el.multiple||el.size>1?'listbox':'combobox'):tag);
           const href=el.getAttribute('href');
           const testId=el.getAttribute('data-testid');
           const id=el.getAttribute('id');
-          return {index,tag,type,role,name,href,test_id:testId,id,visible:!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length)};
+          const visible=!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);
+          const enabled=!(el.disabled || el.getAttribute('aria-disabled')==='true');
+          const selectedText=tag==='select' ? (el.selectedOptions[0]?.textContent || '').trim() : '';
+          const hasSelectValue=tag==='select' && !!el.value && !/^(choose|select|pick|please select|--|none|尺码|请选择)/i.test(selectedText);
+          const selected=!!(el.selected || el.getAttribute('aria-checked')==='true' || el.getAttribute('aria-pressed')==='true' || hasSelectValue);
+          const checked=!!(el.checked || el.getAttribute('aria-checked')==='true');
+          const value=tag==='select' ? el.value : '';
+          const options=tag==='select' ? Array.from(el.options).slice(0,30).map(option => ({value:option.value,enabled:!option.disabled})) : [];
+          return {index,tag,type,role,name,href,test_id:testId,id,visible,enabled,selected,checked,value,options};
         })""")
 
     async def collect_evidence(self, session_id: str) -> BrowserSnapshot:
@@ -386,10 +436,14 @@ class PlaywrightBrowserRuntime:
             except Exception:
                 pass
             options = {"viewport": session.viewport}
+            if resources.block_service_workers:
+                options["service_workers"] = "block"
             if session.storage_state is not None:
                 options["storage_state"] = session.storage_state
             resources.context = await resources.browser.new_context(**options)
             resources.page = await resources.context.new_page()
+            if resources.allowed_hosts is not None:
+                await self._route_allowlist(resources.context, resources.allowed_hosts)
             session.status = "READY"
             session.current_url = "about:blank"
             session.last_activity = datetime.now(timezone.utc)

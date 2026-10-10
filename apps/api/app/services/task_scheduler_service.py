@@ -29,11 +29,13 @@ class TaskSchedulerService:
         concurrency: int = 2,
         poll_interval: float = 0.5,
         repository_scope: TaskUnitOfWorkFactory,
+        runtime_instance_id: str | None = None,
     ) -> None:
         self.execution = execution
         self.repository_scope = repository_scope
         self.concurrency = max(1, concurrency)
         self.poll_interval = poll_interval
+        self.runtime_instance_id = runtime_instance_id
         self._scheduler: asyncio.Task | None = None
         self._active: dict[str, asyncio.Task] = {}
         self._child_runs = execution._child_runs
@@ -118,7 +120,10 @@ class TaskSchedulerService:
         while not self._stopping:
             try:
                 async with self.repository_scope() as repositories:
-                    rows = await repositories.tasks.pending(limit=self.concurrency * 2)
+                    rows = await repositories.tasks.pending(
+                        limit=self.concurrency * 2,
+                        runtime_instance_id=self.runtime_instance_id,
+                    )
                     candidates = [row.id for row in rows if row.id not in self._active]
                 for task_id in candidates:
                     if len(self._active) >= self.concurrency:

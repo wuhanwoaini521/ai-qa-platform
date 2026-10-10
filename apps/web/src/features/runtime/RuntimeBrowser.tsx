@@ -6,6 +6,7 @@ import { LiveBrowserPanel } from '../runs/LiveBrowserPanel';
 import { useRunStore } from '../runs/useRunStore';
 import { browserEntries } from './browserModel';
 import { RuntimeFailureWorkspace } from './RuntimeFailureWorkspace';
+import { runtimeActive } from './runtimeModel';
 
 export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
   snapshot: RuntimeSnapshot;
@@ -25,6 +26,8 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
   const live = useRunStore(runId);
   const entries = browserEntries(live.sessions, channel);
   const browserUsed = snapshot.browser_sessions.length > 0 || snapshot.events.some((event) => event.category === 'browser');
+  const browserRunActive = runtimeActive(snapshot.status) || ['QUEUED', 'RUNNING'].includes(live.run?.status ?? '');
+  const showLiveBrowser = browserUsed || browserRunActive;
   const recorderSessionId = snapshot.task?.recorder_session_id;
   const failures = snapshot.failures.filter((failure) => !runId || failure.test_run_id === runId);
   const activeFailure = failures.find((failure) => failure.id === selectedFailureId) ?? failures[0] ?? null;
@@ -32,7 +35,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
     ? live.sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
       ?? snapshot.browser_sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
     : null;
-  if (!browserUsed && !activeFailure && !recorderSessionId) return <div className="rt-browser"><p className="rt-empty">{t('browserUnused')}</p></div>;
+  if (!showLiveBrowser && !activeFailure && !recorderSessionId) return <div className="rt-browser"><p className="rt-empty">{t('browserUnused')}</p></div>;
   return (
     <div className="rt-browser">
       {recorderSessionId && <p className="rt-notice"><Link to={`/recorder?session_id=${encodeURIComponent(recorderSessionId)}`}>{t('takeOverBrowser')}</Link></p>}
@@ -68,14 +71,14 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
           onOpenSource={onOpenSource}
         />
       )}
-      {browserUsed && <>
-      <LiveBrowserPanel
+      {showLiveBrowser && <LiveBrowserPanel
         sessions={live.sessions}
         frames={live.frames}
         runStatus={live.run?.status ?? snapshot.status}
         streamStatus={live.streamStatus}
         streamError={live.error}
-      />
+      />}
+      {browserUsed && <>
       {!runId && (
         <p className="rt-notice">{t('browserNoSession')}</p>
       )}

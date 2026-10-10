@@ -27,18 +27,7 @@ interface TimelineEntry {
   children: AITraceEvent[];
 }
 
-const DEFAULT_WORKFLOW_STAGES = [
-  'context',
-  'logs',
-  'inspection',
-  'diagnosis',
-  'decision',
-  'suggestion',
-  'verification',
-];
-
 function buildWorkflowTimeline(events: AITraceEvent[]): TimelineEntry[] {
-  const plan = events.find((event) => event.type === 'workflow.plan');
   const hasWorkflowSteps = events.some(
     (event) => event.type === 'workflow.step',
   );
@@ -48,30 +37,8 @@ function buildWorkflowTimeline(events: AITraceEvent[]): TimelineEntry[] {
       .map((event) => ({ event, children: [] }));
   }
 
-  const plannedStages = Array.isArray(plan?.metadata.steps)
-    ? plan.metadata.steps.filter(
-        (stage): stage is string => typeof stage === 'string',
-      )
-    : DEFAULT_WORKFLOW_STAGES;
-  const stages = [...new Set([...plannedStages, ...DEFAULT_WORKFLOW_STAGES])];
-  const entries: TimelineEntry[] = stages.map((stage) => ({
-    event: {
-      run_id: plan?.run_id ?? events[0]?.run_id ?? '',
-      event_id: `${plan?.event_id ?? 'workflow'}:pending:${stage}`,
-      type: 'workflow.step',
-      step_id: `${plan?.event_id ?? 'workflow'}:${stage}`,
-      timestamp: plan?.timestamp ?? null,
-      stage,
-      title: stage,
-      status: 'PENDING',
-      message: '',
-      metadata: {},
-    },
-    children: [],
-  }));
+  const entries: TimelineEntry[] = [];
   const byStage = new Map<string, TimelineEntry>();
-  entries.forEach((entry) => byStage.set(entry.event.stage, entry));
-  const terminalEntries: TimelineEntry[] = [];
   let activeEntry: TimelineEntry | null = null;
 
   for (const event of events) {
@@ -82,8 +49,9 @@ function buildWorkflowTimeline(events: AITraceEvent[]): TimelineEntry[] {
         entry = { event, children: [] };
         entries.push(entry);
         byStage.set(event.stage, entry);
+      } else {
+        entry.event = event;
       }
-      entry.event = event;
       if ((event.status ?? '').toUpperCase() === 'RUNNING') activeEntry = entry;
       else if (activeEntry === entry) activeEntry = null;
       continue;
@@ -97,19 +65,22 @@ function buildWorkflowTimeline(events: AITraceEvent[]): TimelineEntry[] {
           message: event.message,
           metadata: { ...owner.event.metadata, ...event.metadata },
         };
+      } else {
+        entries.push({ event, children: [] });
       }
       continue;
     }
     if (event.type.startsWith('run.')) {
-      terminalEntries.push({ event, children: [] });
+      entries.push({ event, children: [] });
       activeEntry = null;
       continue;
     }
     const owner = activeEntry ?? byStage.get(event.stage);
     if (owner) owner.children.push(event);
+    else entries.push({ event, children: [] });
   }
 
-  return [...entries, ...terminalEntries];
+  return entries;
 }
 
 const EVENT_LABELS: Record<string, string> = {

@@ -190,6 +190,33 @@ class TestCaseORM(Base):
     )
 
 
+class QualityDiscoveryRunORM(Base):
+    """Persisted state and relationship map for one bounded product discovery run."""
+
+    __tablename__ = "quality_discovery_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    requested_by: Mapped[str] = mapped_column(String(100), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    start_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    requirement_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("requirements.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    requirement_text: Mapped[str] = mapped_column(Text, default="")
+    allowed_domains: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    status: Mapped[str] = mapped_column(String(30), default="QUEUED", index=True)
+    progress: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    result: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    __mapper_args__ = {"version_id_col": version}
+
+
 class AutomationBindingORM(Base):
     __tablename__ = "automation_bindings"
 

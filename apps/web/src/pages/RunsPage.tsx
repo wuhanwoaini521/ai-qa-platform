@@ -356,13 +356,13 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       ) : (
         <div className="runs-layout-grid">
           {/* Left: Execution Runs List */}
-          <div className="card">
+          <div className="card runs-list-card">
             <div className="card-header">
               <span className="card-title">
                 {t('listTitle', { count: runs.length })}
               </span>
             </div>
-            <div className="card-body" style={{ padding: 0 }}>
+            <div className="card-body runs-list-scroll" style={{ padding: 0 }}>
               {loading ? (
                 <div
                   style={{
@@ -399,10 +399,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   {runs.map((r) => {
                     const isSelected = selectedRun?.id === r.id;
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={r.id}
                         onClick={() => handleSelectRun(r)}
                         className={`select-row ${isSelected ? 'is-selected' : ''}`}
+                        aria-pressed={isSelected}
                       >
                         <div
                           style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}
@@ -481,7 +483,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                           size={16}
                           color={isSelected ? 'var(--accent-blue)' : 'var(--ink-faint)'}
                         />
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

@@ -1,6 +1,7 @@
 {
   "dashboard": "Dashboard",
   "workspace": "QA Workspace",
+  "qualityDiscovery": "Quality Discovery",
   "workflow": "Tasks & runs",
   "library": "Library",
   "projects": "Projects",
@@ -13,7 +14,7 @@
   "workers": "Distributed Workers",
   "flaky": "Flaky Intelligence",
   "failures": "Failures & Healing",
-  "quality": "Quality & Release",
+  "quality": "Insights",
   "security": "Security & RBAC",
   "settings": "Settings",
   "platform": "Platform"

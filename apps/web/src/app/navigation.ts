@@ -11,6 +11,8 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
       return '/projects';
     case 'workspace':
       return projectId ? `/workspace/${projectId}` : '/workspace';
+    case 'discovery':
+      return `${projectId ? `/workspace/${projectId}` : '/workspace'}?stage=discover&view=discover`;
     case 'workflow':
       return '/workflow';
     case 'library':

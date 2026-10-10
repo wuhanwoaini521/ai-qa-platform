@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 
@@ -86,11 +86,15 @@ class TaskCommandService:
         max_task_calls: int | Callable[[], int],
         cancel_execution,
         repository_scope: TaskUnitOfWorkFactory,
+        runtime_instance_id: str | None = None,
+        recorder_session_resolver: Callable[[str, str], Awaitable[Any | None]] | None = None,
     ) -> None:
         self.goal_service = goal_service
         self.max_task_calls = max_task_calls
         self.cancel_execution = cancel_execution
         self.repository_scope = repository_scope
+        self.runtime_instance_id = runtime_instance_id
+        self.recorder_session_resolver = recorder_session_resolver
         self._create_lock = asyncio.Lock()
 
     async def preview_goal(self, data: TaskCreate) -> TaskGoalPreview:
@@ -135,6 +139,7 @@ class TaskCommandService:
             return await self._create(data, owner_id)
 
     async def _create(self, data: TaskCreate, owner_id: str) -> Task:
+        recorder_runtime_id = await self._recorder_runtime_id(data, owner_id)
         workspace_required = {
             TaskType.QA_GOAL,
             TaskType.CREATE_TEST,
@@ -259,7 +264,11 @@ class TaskCommandService:
             "project_id": data.project_id,
             "workspace_id": data.workspace_id,
             "inputs": data.inputs,
-            "context": {"ai_calls": 0, "tool_calls": 0},
+            "context": {
+                "ai_calls": 0,
+                "tool_calls": 0,
+                **({"_recorder_runtime_id": recorder_runtime_id} if recorder_runtime_id else {}),
+            },
             "verification": {},
             "retry_count": 0,
             "replan_count": 0,
@@ -276,6 +285,20 @@ class TaskCommandService:
             row = await repo.create(values, steps)
             await repositories.commit()
             return Task(**repo.task_values(row))
+
+    async def _recorder_runtime_id(self, data: TaskCreate, owner_id: str) -> str | None:
+        session_id = str(data.inputs.get("recorder_session_id") or "").strip()
+        if not session_id:
+            return None
+
+        if self.recorder_session_resolver is not None:
+            session = await self.recorder_session_resolver(session_id, owner_id)
+            if session is None:
+                raise ValueError("浏览器录制会话不在当前 API 实例中。请重新启动录制器会话后，再发起 AI 流程。")
+            if session.project_id != data.project_id:
+                raise ValueError("浏览器录制会话与当前任务不属于同一项目。")
+
+        return self.runtime_instance_id
 
     def _max_task_call_limit(self) -> int:
         value = self.max_task_calls() if callable(self.max_task_calls) else self.max_task_calls

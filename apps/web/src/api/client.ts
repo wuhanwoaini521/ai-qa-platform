@@ -82,6 +82,8 @@ import {
   ImpactAnalysisRequest,
   ImpactAnalysisResult,
   QualityCoverageSummary,
+  QualityDiscoveryMode,
+  QualityDiscoveryRun,
   QualityRiskMatrix,
   Release,
   ReleaseCreate,
@@ -378,6 +380,18 @@ async function request<T>(
   return response.json();
 }
 
+async function requestBlob(endpoint: string): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const response = await fetch(`${BASE_URL}/api${endpoint}`, { headers });
+  if (response.status === 401) {
+    setAuthToken(null);
+    unauthorizedHandler?.();
+  }
+  if (!response.ok) throw await responseError(response);
+  return response.blob();
+}
+
 async function streamAITraceRequest(
   path: string,
   data: unknown,
@@ -467,6 +481,42 @@ async function streamOperation<T>(
 }
 
 export const api = {
+  createQualityDiscoveryRun: (data: {
+    project_id: string;
+    start_url: string;
+    mode: QualityDiscoveryMode;
+    requirement_id?: string;
+    requirement_text?: string;
+    allowed_domains?: string[];
+  }) => request<QualityDiscoveryRun>('/discovery/runs', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  getQualityDiscoveryRuns: (projectId: string) =>
+    request<QualityDiscoveryRun[]>(`/discovery/runs?project_id=${encodeURIComponent(projectId)}`),
+  getQualityDiscoveryRun: (id: string) =>
+    request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}`),
+  getQualityDiscoveryQualityMap: (id: string) =>
+    request<Record<string, unknown>>(`/discovery/runs/${encodeURIComponent(id)}/quality-map`),
+  getQualityDiscoveryEvents: (id: string, limit = 100) =>
+    request<NonNullable<QualityDiscoveryRun['result']['events']>>(`/discovery/runs/${encodeURIComponent(id)}/events?limit=${limit}`),
+  getQualityDiscoveryJourneys: (id: string) =>
+    request<NonNullable<QualityDiscoveryRun['result']['journeys']>>(`/discovery/runs/${encodeURIComponent(id)}/journeys`),
+  getQualityDiscoveryFunctionalSpec: (id: string) =>
+    request<NonNullable<QualityDiscoveryRun['result']['functional_spec']>>(`/discovery/runs/${encodeURIComponent(id)}/functional-spec`),
+  actOnQualityDiscoveryGap: (runId: string, gapId: string, action: 'create_requirement_draft' | 'generate_tests' | 'generate_automation' | 'open_failure') =>
+    request<Record<string, unknown>>(
+      `/discovery/runs/${encodeURIComponent(runId)}/gaps/${encodeURIComponent(gapId)}/actions/${action}`,
+      { method: 'POST' },
+    ),
+  pauseQualityDiscoveryRun: (id: string) =>
+    request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
+  resumeQualityDiscoveryRun: (id: string) =>
+    request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
+  stopQualityDiscoveryRun: (id: string) =>
+    request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/stop`, { method: 'POST' }),
+  getArtifactBlob: (id: string) => requestBlob(`/artifacts/${encodeURIComponent(id)}/download`),
+
   streamRequirementAnalysis: (
     id: string,
     onEvent: (event: AITraceEvent) => void,

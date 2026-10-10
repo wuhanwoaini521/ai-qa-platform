@@ -1,11 +1,12 @@
 export type WorkspaceStage =
   | 'requirement'
+  | 'discover'
   | 'cases'
   | 'automation'
   | 'result'
   | 'failure';
 
-export type WorkspaceView = 'requirement' | 'cases' | 'code' | 'browser' | 'debug' | 'results';
+export type WorkspaceView = 'requirement' | 'discover' | 'cases' | 'code' | 'browser' | 'debug' | 'results';
 
 /**
  * Shared cross-surface context. Entity IDs in the URL remain the source of truth;
@@ -92,6 +93,7 @@ export function readWorkspaceContext(
   const stage = params.get('stage');
   if (
     stage === 'requirement' ||
+    stage === 'discover' ||
     stage === 'cases' ||
     stage === 'automation' ||
     stage === 'result' ||
@@ -103,6 +105,7 @@ export function readWorkspaceContext(
   const view = params.get('view');
   if (
     view === 'requirement' ||
+    view === 'discover' ||
     view === 'cases' ||
     view === 'code' ||
     view === 'browser' ||
