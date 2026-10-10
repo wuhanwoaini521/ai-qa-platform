@@ -1,7 +1,8 @@
 # AI QA Platform Phase 0–8 Overnight Final Acceptance
 
 **日期：** 2026-10-10
-**分支 / HEAD：** `main` / `7108b08` (`fix: reconcile manual repair verification history`)
+**分支：** `main`
+**代码修复提交：** `7108b08` (`fix: reconcile manual repair verification history`)
 **结论： `PARTIAL`** — 本地 API/Web 可运行，主要代码与回归门通过，真实 AI + Jev 人工批准修复闭环也通过；PostgreSQL 和对未知旧队列的完整 Worker 验收仍是明确证据缺口，不能据此宣称生产全通过。
 
 ## 阶段验收
