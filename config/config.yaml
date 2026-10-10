@@ -28,10 +28,10 @@ database:
 
 ai:
   enabled: true
-  provider: fake
+  provider: openai-compatible
   api_key: ${QA_AI_API_KEY:-}
-  base_url: ${QA_AI_BASE_URL:-https://api.openai.com/v1}
-  model: gpt-4o-mini
+  base_url: https://api.deepseek.com
+  model: deepseek-flash
   timeout_seconds: 30
   retries: 3
   budget:
@@ -44,11 +44,11 @@ ai:
     max_output_tokens_per_run: 50000
 
 jev:
-  enabled: false
+  enabled: true
   provider: jev
   api_key: ${JEV_API_KEY:-}
   model: jev-1.13.0
-  base_url: ${JEV_BASE_URL:-https://api.typesafe.ai/v1/systemone}
+  base_url: https://api.typesafe.ai/v1/systemone
   timeout_seconds: 20
   retries: 1
   minimum_confidence: 0.70
@@ -108,6 +108,17 @@ agent:
     require_jev: false
     max_actions: 30
     max_candidates: 10
+
+discovery:
+  enabled: true
+  require_jev: true
+  max_actions: 30
+  max_failures: 20
+  max_depth: 8
+  max_states: 100
+  max_runtime_minutes: 45
+  max_candidates: 5
+  screenshot: true
 
 failure:
   auto_create: true
