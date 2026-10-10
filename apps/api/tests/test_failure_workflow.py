@@ -344,6 +344,85 @@ async def test_patch_ready_workflow_keeps_apply_and_allows_fresh_analysis(
 
 
 @pytest.mark.asyncio
+async def test_terminal_manual_verification_records_completion_even_if_state_was_not_reconciled(
+    client, test_db_session
+):
+    from app.persistence.models import FailureRecordORM
+    from qa_core.ai.trace import make_trace_event
+
+    project_id, failure_id, _ = await seed(
+        client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI"
+    )
+    analysis_id = "analysis-manual-verification-reconcile"
+    proposal = {
+        "proposed_locator": 'get_by_test_id("checkout-new")',
+        "verified": True,
+        "provider": "jev",
+        "decision_summary": {
+            "fallback_used": False,
+            "verification_source": "playwright",
+            "confidence": 0.92,
+        },
+        "ai_provider": "openai-compatible",
+        "ai_fallback_used": False,
+        "candidate_id": "candidate_1",
+        "code_diff": "- old locator\\n+ new locator",
+        "source_sha256": "source-hash",
+        "applied": True,
+    }
+    async with test_db_session() as session:
+        repo = TestRunRepository(session)
+        failure = await session.get(FailureRecordORM, failure_id)
+        verification_run = await repo.create_run(
+            TestRunCreate(
+                project_id=project_id,
+                workspace_id=project_id,
+                parent_run_id=failure.run_id,
+                origin_failure_id=failure_id,
+                nodeids=[failure.test_nodeid],
+            )
+        )
+        verification_run.status = RunStatus.PASSED.value
+        verification_run.total = 1
+        verification_run.passed = 1
+        await repo.add_execution(verification_run.id, failure.test_nodeid, status=RunStatus.PASSED)
+        failure.repair_proposal = proposal
+        started_event = make_trace_event(
+            failure.run_id,
+            "verification.started",
+            stage="verification",
+            step_id=f"{analysis_id}:repair:verifying_fix",
+            title="Verification started",
+            message="Repair verification started",
+            metadata={"verification_run_id": verification_run.id},
+        )
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                events=[started_event.model_dump(mode="json")],
+                result={
+                    "repair_state": "PATCH_APPLIED",
+                    "repair_proposal": proposal,
+                    "verification_run_id": verification_run.id,
+                },
+            )
+        )
+        await session.commit()
+
+    async with test_db_session() as session:
+        workflow = FailureWorkflowService(get_failure_service(session))
+        state = await workflow.get_repair_workflow(failure_id, analysis_id)
+        history = await workflow.list_history(failure_id)
+
+    assert state.state == "VERIFIED"
+    recorded_types = {event["type"] for event in history[0]["events"]}
+    assert "verification.completed" in recorded_types
+    assert "repair.verified" in recorded_types
+
+
+@pytest.mark.asyncio
 async def test_failed_applied_patch_requires_rollback_before_reanalysis(client, test_db_session):
     from app.persistence.models import FailureRecordORM, TestRunORM
 

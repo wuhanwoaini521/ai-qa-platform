@@ -336,7 +336,7 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(
     import app.settings as settings_module
 
     current_config = settings_module.get_config()
-    repair_config = current_config.repair.model_copy(update={"mode": "AUTO", "auto_start_on_failure": False})
+    repair_config = current_config.repair.model_copy(update={"mode": "ASSISTED", "auto_start_on_failure": False})
     monkeypatch.setattr(
         settings_module.config_manager,
         "_config",
@@ -355,7 +355,8 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(
         await AISettingsService(repository_scope).load_runtime_config()
 
         html = (
-            "<main><button>Cancel order</button><button>View order</button>"
+            "<main><h1>Checkout</h1><p>Review your order and complete checkout.</p>"
+            "<button>Cancel order</button><button>View order</button>"
             '<button aria-label="Complete order" '
             "onclick=\"document.querySelector('#status').textContent='ORDER_COMPLETED'\">Continue</button>"
             '<button>Return</button><p id="status">Pending</p></main>'
@@ -540,7 +541,14 @@ def test_workflow():
                     )
                     assert workflow_response.status_code == 200, workflow_response.text
                     state = workflow_response.json()
-                    if state["state"] in {"VERIFYING_FIX", "VERIFIED", "FAILED", "ROLLED_BACK", "BLOCKED"}:
+                    if state["state"] in {
+                        "PATCH_READY",
+                        "VERIFYING_FIX",
+                        "VERIFIED",
+                        "FAILED",
+                        "ROLLED_BACK",
+                        "BLOCKED",
+                    }:
                         break
             assert analysis_id, "The browser flow did not create an analysis"
             proposal = state.get("repair_proposal") or {}
@@ -584,8 +592,8 @@ def test_workflow():
                     sort_keys=True,
                 )
             )
-            assert "APPLY" not in state.get("allowed_actions", []), state
             if state["state"] == "BLOCKED":
+                assert "APPLY" not in state.get("allowed_actions", []), state
                 if not proposal:
                     selection = candidate.get("result", {}).get("selection") or {}
                     if selection.get("fallback_reason") == "below_minimum_confidence":
@@ -641,7 +649,32 @@ def test_workflow():
 
             assert proposal.get("provider") == "jev", proposal
             assert proposal.get("ai_fallback_used") is False, proposal
-            assert state["state"] in {"VERIFYING_FIX", "VERIFIED", "FAILED", "ROLLED_BACK"}, state
+            assert state["state"] == "PATCH_READY", state
+            assert "APPLY" in state.get("allowed_actions", []), state
+            assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
+            await page.screenshot(path=str(screenshot_dir / "patch-ready.png"), full_page=True)
+            apply_button = page.get_by_role("button", name=re.compile(r"Apply repair|应用修复", re.I))
+            await apply_button.wait_for(state="visible", timeout=30_000)
+            await apply_button.click()
+            for _ in range(30):
+                await asyncio.sleep(1)
+                workflow_response = await client.get(
+                    f"/api/failures/{failure['id']}/repair-workflow?analysis_id={analysis_id}"
+                )
+                assert workflow_response.status_code == 200, workflow_response.text
+                state = workflow_response.json()
+                if "VERIFY" in state.get("allowed_actions", []) or state["state"] == "BLOCKED":
+                    break
+            assert state["state"] == "PATCH_APPLIED", state
+            assert "VERIFY" in state.get("allowed_actions", []), state
+            patched_source = await WorkspaceService().read_file(project_id, "tests/test_workflow.py")
+            assert 'page.locator("#purchase-now")' not in patched_source
+            assert proposal["proposed_locator"] in patched_source
+            verify_button = page.locator("button.failure-primary-action")
+            await verify_button.wait_for(state="visible", timeout=30_000)
+            verify_label = await verify_button.inner_text()
+            assert re.search(r"Verify repair|验证修复", verify_label, re.I), verify_label
+            await verify_button.click()
             for _ in range(180):
                 if state["state"] in {"VERIFIED", "FAILED", "ROLLED_BACK", "BLOCKED"}:
                     break
@@ -682,6 +715,7 @@ def test_workflow():
                 return
             assert state["state"] == "VERIFIED" and state["verified"] is True, state
             assert state["verification_run_status"] == "PASSED", state
+            await page.screenshot(path=str(screenshot_dir / "verification-in-progress.png"), full_page=True)
             await (
                 page.locator(".failure-workflow-result-status")
                 .get_by_text(re.compile(r"Retest: Actual verification passed|复测状态：实际复测已通过", re.I))
@@ -692,12 +726,24 @@ def test_workflow():
             assert history.status_code == 200, history.text
             analysis = next(item for item in history.json() if item["id"] == analysis_id)
             recorded_types = {event["type"] for event in analysis["events"]}
-            assert {
+            required_events = {
                 "patch.applied",
                 "verification.started",
                 "verification.completed",
                 "repair.verified",
-            } <= recorded_types
+            }
+            assert required_events <= recorded_types, {
+                "missing": sorted(required_events - recorded_types),
+                "result": {
+                    key: analysis.get("result", {}).get(key)
+                    for key in ("repair_state", "verification_run_id", "verification_run_status", "verified")
+                },
+                "events": [
+                    {key: event.get(key) for key in ("type", "step_id", "status", "metadata")}
+                    for event in analysis.get("events", [])
+                    if event.get("type", "").startswith(("patch.", "verification.", "repair."))
+                ],
+            }
             assert 'page.locator("#purchase-now")' not in await WorkspaceService().read_file(
                 project_id, "tests/test_workflow.py"
             )

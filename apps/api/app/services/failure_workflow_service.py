@@ -529,11 +529,20 @@ class FailureWorkflowService:
                     state = "VERIFIED" if verified else "FAILED"
 
         prior_state = result.get("repair_state")
+        verification_started = bool(
+            analysis
+            and run
+            and any(
+                event.get("type") == "verification.started"
+                and (event.get("metadata") or {}).get("verification_run_id") == run.id
+                for event in analysis.get("events", [])
+            )
+        )
         if (
             analysis is not None
             and run is not None
             and run.status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
-            and prior_state == "VERIFYING_FIX"
+            and (prior_state == "VERIFYING_FIX" or verification_started)
         ):
             await self._record_transition(
                 failure,
