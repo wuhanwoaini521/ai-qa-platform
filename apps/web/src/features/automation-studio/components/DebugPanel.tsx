@@ -62,7 +62,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
         )}
         {error && <span role="alert" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11, color: 'var(--ui-rose)' }}>{error}</span>}
       </header>
-      <div aria-label={t('debug.breakpoints')} style={{ padding: '5px 12px', borderBottom: '1px solid var(--ui-line)', fontSize: 11, maxHeight: 80, overflow: 'auto' }}>
+      <div role="region" aria-label={t('debug.breakpoints')} style={{ padding: '5px 12px', borderBottom: '1px solid var(--ui-line)', fontSize: 11, maxHeight: 80, overflow: 'auto' }}>
         {nodeid?.includes('::') && <div style={{ color: 'var(--text-muted)' }}>{t('debug.singleCaseScope')}</div>}
         {state === 'finished' && !hasHitBreakpoint && (
           <div role="status" style={{ color: 'var(--ui-amber)' }}>{t('debug.noBreakpointHit')}</div>

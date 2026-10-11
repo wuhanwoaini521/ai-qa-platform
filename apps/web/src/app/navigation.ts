@@ -48,21 +48,6 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
   }
 }
 
-/** Rewrites the `:projectId` segment of a project-scoped path, keeping the rest of the route. */
-export function withProjectId(
-  pathname: string,
-  projectId: string | null,
-): string {
-  if (!projectId) {
-    return pathname;
-  }
-  const match = /^\/projects\/[^/]+(?<rest>\/.*)?$/.exec(pathname);
-  if (match) {
-    return `/projects/${projectId}${match.groups?.rest ?? ''}`;
-  }
-  return pathname;
-}
-
 interface AppNavigation {
   /** `projectId` overrides the current selection, so a row action targets the row's project. */
   toTab: (tab: NavTab, projectId?: string | null) => void;

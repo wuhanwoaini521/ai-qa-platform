@@ -375,7 +375,7 @@ export function RuntimeFailureWorkspace({
               <span role="status">{t(`failureWorkspace.pickerStatus.${pickerStatus}`)}</span>
               <button type="button" className="btn btn-primary btn-sm" disabled={pickerStatus !== 'connected'} aria-pressed={waitingForPick} onClick={pickElement}><Crosshair size={14} aria-hidden="true" />{waitingForPick ? t('failureWorkspace.pickNow') : t('failureWorkspace.pickElement')}</button>
             </div>
-            <div className="rt-failure-picker-viewport" tabIndex={0} aria-label={t('failureWorkspace.browserView')} onClick={clickBrowser} onKeyDown={handleBrowserKeyDown} onWheel={handleBrowserWheel}>
+            <div className="rt-failure-picker-viewport" role="region" tabIndex={0} aria-label={t('failureWorkspace.browserView')} onClick={clickBrowser} onKeyDown={handleBrowserKeyDown} onWheel={handleBrowserWheel}>
               {pickerFrame?.image ? <img src={`data:image/jpeg;base64,${pickerFrame.image}`} alt={t('failureWorkspace.browserView')} draggable={false} /> : <span>{t('failureWorkspace.waitingForFrame')}</span>}
             </div>
             {pickedElement && (

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Sparkles, Workflow, X } from 'lucide-react';
@@ -23,6 +23,7 @@ import { QualityDiscoveryPanel } from './QualityDiscoveryPanel';
 import { failureSourceLocation } from '../failures/failureWorkspaceModel';
 import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
 import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget } from './workspaceRunModel';
+import { workspacePanelMode } from './workspaceLayoutModel';
 import type { AgentGoalPreview, AgentTask, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
 import type { RuntimeSnapshot } from '../../types/runtime';
 import { runtimeActive } from '../runtime/runtimeModel';
@@ -120,21 +121,45 @@ export function WorkspacePage() {
   const [showRunPanel, setShowRunPanel] = useState(false);
   const [runtimePanelKind, setRuntimePanelKind] = useState<'task' | 'run'>('run');
   const [showInspector, setShowInspector] = useState(false);
-  const [inspectorModal, setInspectorModal] = useState(() => window.matchMedia('(max-width: 1280px)').matches);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-  const isInspectorModal = inspectorModal;
-  const [layoutPreference, setLayoutPreference] = useState(readWorkspaceLayout);
-  const { contextOpen: showWorkspaceContext, contextWidth, inspectorWidth, inspectorTab } = layoutPreference;
-  const inspectorMaxWidth = Math.floor(inspectorModal
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
+  const [compactContextOpen, setCompactContextOpen] = useState<boolean | null>(null);
+  const [layoutPreference, setLayoutPreference] = useState(() => {
+    const preference = readWorkspaceLayout();
+    return stage === 'automation' ? { ...preference, contextOpen: false } : preference;
+  });
+  const { contextOpen: storedContextOpen, contextWidth, inspectorWidth, inspectorTab } = layoutPreference;
+  const workspaceGridRef = useRef<HTMLDivElement>(null);
+  const previousCompactWorkspace = useRef<boolean | null>(null);
+  const panelModeInput = {
+    viewportWidth,
+    workspaceWidth,
+    contextWidth,
+    inspectorWidth,
+    isStudioView: view === 'code' || view === 'debug',
+    isResultView: stage === 'result',
+  };
+  const isCompactWorkspace = workspacePanelMode({ ...panelModeInput, contextOpen: storedContextOpen }).contextCompact;
+  const showWorkspaceContext = isCompactWorkspace ? compactContextOpen ?? false : storedContextOpen;
+  const { stackContext: isContextStacked, inspectorModal: isInspectorModal } = workspacePanelMode({
+    ...panelModeInput,
+    contextOpen: showWorkspaceContext,
+  });
+  const inspectorMaxWidth = Math.floor(isInspectorModal
     ? Math.min(640, viewportWidth * 0.92, 420)
     : Math.min(640, viewportWidth * 0.32));
   const inspectorMinWidth = Math.min(300, inspectorMaxWidth);
   const visibleInspectorWidth = Math.min(inspectorWidth, inspectorMaxWidth);
-  const setShowWorkspaceContext = (update: (open: boolean) => boolean) => setLayoutPreference((current) => ({ ...current, contextOpen: update(current.contextOpen) }));
+  const setShowWorkspaceContext = (update: (open: boolean) => boolean) => {
+    if (isCompactWorkspace) {
+      setCompactContextOpen((current) => update(current ?? false));
+      return;
+    }
+    setLayoutPreference((current) => ({ ...current, contextOpen: update(current.contextOpen) }));
+  };
   const setInspectorTab = (tab: InspectorTab) => setLayoutPreference((current) => ({ ...current, inspectorTab: tab }));
-  const workspaceGridRef = useRef<HTMLDivElement>(null);
   const inspectorTriggerRef = useRef<HTMLButtonElement>(null);
-  const inspectorDrawerRef = useRef<HTMLElement>(null);
+  const inspectorDrawerRef = useRef<HTMLDivElement>(null);
   const inspectorCloseRef = useRef<HTMLButtonElement>(null);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
@@ -167,18 +192,44 @@ export function WorkspacePage() {
   }, [layoutPreference]);
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 1280px)');
+    if (stage === 'automation') {
+      setLayoutPreference((current) => current.contextOpen ? { ...current, contextOpen: false } : current);
+      setCompactContextOpen(null);
+    }
+  }, [stage]);
+
+  useLayoutEffect(() => {
+    if (previousCompactWorkspace.current !== null && previousCompactWorkspace.current !== isCompactWorkspace) {
+      setCompactContextOpen(null);
+    }
+    previousCompactWorkspace.current = isCompactWorkspace;
+  }, [isCompactWorkspace]);
+
+  useLayoutEffect(() => {
+    const grid = workspaceGridRef.current;
+    if (!grid) {
+      setWorkspaceWidth(0);
+      return;
+    }
     const update = () => {
-      setInspectorModal(media.matches);
-      setViewportWidth(window.innerWidth);
+      const nextWidth = Math.round(grid.getBoundingClientRect().width);
+      setWorkspaceWidth((current) => current === nextWidth ? current : nextWidth);
     };
     update();
-    media.addEventListener('change', update);
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [projectId]);
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    update();
     window.addEventListener('resize', update);
-    return () => {
-      media.removeEventListener('change', update);
-      window.removeEventListener('resize', update);
-    };
+    return () => window.removeEventListener('resize', update);
   }, []);
 
   const resizeContext = (nextWidth: number) => setLayoutPreference((current) => ({
@@ -795,13 +846,21 @@ export function WorkspacePage() {
       setGoalBusy(false);
     }
   };
+  const workspaceHeading = !projectId
+    ? t('title')
+    : view === 'results'
+      ? t('result.analysisTitle')
+      : t(`pageHeadings.${view}`);
+  const workspaceEyebrow = projectId
+    ? `${t('projectWorkspace')} · ${project?.name ?? projectId}`
+    : t('projectWorkspace');
 
   return (
-    <main className={`workspace-shell${stage === 'result' ? ' is-result-stage' : ''}`} aria-label={t('title')}>
+    <div className={`workspace-shell${stage === 'result' ? ' is-result-stage' : ''}`}>
       <header className="workspace-heading">
         <div>
-          <span className="workspace-eyebrow">{t('projectWorkspace')}</span>
-          <h1 title={(project?.name ?? projectId) || t('title')}>{(project?.name ?? projectId) || t('title')}</h1>
+          <span className="workspace-eyebrow">{workspaceEyebrow}</span>
+          <h1 title={workspaceHeading}>{workspaceHeading}</h1>
           <p>{t('subtitle')}</p>
         </div>
         <div className="workspace-heading-actions">
@@ -881,7 +940,7 @@ export function WorkspacePage() {
         </section>
       ) : (
         <>
-        <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${showInspector ? ' has-inspector' : ''}`}>
+        <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${isContextStacked ? ' is-context-stacked' : ''}${showInspector ? ' has-inspector' : ''}${isInspectorModal ? ' is-inspector-modal' : ''}`}>
           <aside id="workspace-context-panel" className="workspace-context-panel" aria-label={t('context.title')}>
             <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{project?.name ?? projectId}</small></div>
             {['requirement', 'discover'].includes(stage) && <section className="workspace-context-group">
@@ -945,7 +1004,7 @@ export function WorkspacePage() {
             }}
           />}
 
-          <section className="workspace-main-panel" aria-label={t('main.title')}>
+          <section className={`workspace-main-panel is-${view}-panel`} aria-label={t('main.title')}>
             <div className="workspace-main-heading">
               <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{t(`tabs.${view}`)}</h2></div>
               {stage === 'automation' && <nav className="workspace-tool-nav" role="tablist" aria-label={t('automationViews.label')}>
@@ -1095,8 +1154,8 @@ export function WorkspacePage() {
             </div>
           </section>
 
-        <div className="workspace-inspector-overlay" hidden={!showInspector} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInspector(false); }}>
-          <aside id="workspace-inspector-drawer" ref={inspectorDrawerRef} className="workspace-inspector workspace-inspector-drawer" role={isInspectorModal ? 'dialog' : undefined} aria-modal={isInspectorModal ? true : undefined} aria-label={t('inspector.title')}>
+        <div className={`workspace-inspector-overlay${isInspectorModal ? ' is-modal' : ''}`} hidden={!showInspector} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInspector(false); }}>
+          <div id="workspace-inspector-drawer" ref={inspectorDrawerRef} className="workspace-inspector workspace-inspector-drawer" role={isInspectorModal ? 'dialog' : 'region'} aria-modal={isInspectorModal ? true : undefined} aria-label={t('inspector.title')}>
             <div
               className="workspace-inspector-resizer"
               role="separator"
@@ -1109,7 +1168,7 @@ export function WorkspacePage() {
               onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
               onPointerMove={(event) => {
                 if (event.buttons !== 1) return;
-                const gridRight = inspectorModal ? viewportWidth : workspaceGridRef.current?.getBoundingClientRect().right ?? viewportWidth;
+                const gridRight = isInspectorModal ? viewportWidth : workspaceGridRef.current?.getBoundingClientRect().right ?? viewportWidth;
                 resizeInspector(gridRight - event.clientX);
               }}
               onKeyDown={(event) => {
@@ -1179,7 +1238,7 @@ export function WorkspacePage() {
                 {currentFailure && <button type="button" className="btn btn-primary btn-sm" onClick={() => updateContext({ failureId: currentFailure.id, stage: 'failure', view: 'results' })}>{t('inspector.resolveFailure')}</button>}
               </section> : <p className="workspace-muted">{t('inspector.noRun')}</p>}
             </div>}
-          </aside>
+          </div>
         </div>
         </div>
         </>
@@ -1191,7 +1250,7 @@ export function WorkspacePage() {
           <div className="workspace-run-panel-body"><RuntimeDetail kind={runtimePanelKind} id={runtimePanelId} initialTab={runtimePanelKind === 'run' && context.view === 'code' ? 'Browser' : 'Flow'} projectId={projectId} onOpenStudio={() => openStudio(binding?.file_path)} /></div>
         </section>
       </div>}
-    </main>
+    </div>
   );
 }
 

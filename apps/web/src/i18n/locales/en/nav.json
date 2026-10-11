@@ -15,7 +15,15 @@
   "flaky": "Flaky Intelligence",
   "failures": "Failures & Healing",
   "quality": "Insights",
+  "dashboardMobile": "Home",
+  "workspaceMobile": "Workspace",
+  "projectsMobile": "Projects",
+  "runsMobile": "Runs",
+  "qualityMobile": "Insights",
   "security": "Security & RBAC",
   "settings": "Settings",
-  "platform": "Platform"
+  "platform": "Platform",
+  "primaryNavigation": "Primary navigation",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar"
 }

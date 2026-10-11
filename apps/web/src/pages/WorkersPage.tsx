@@ -303,7 +303,7 @@ export const WorkersPage: React.FC = () => {
                       <td>{getWorkerStatusBadge(w.status)}</td>
                       <td>
                         <div className="worker-load">
-                          <div className="worker-load-track" aria-label={`${w.current_load} / ${w.max_concurrency} slots in use`}>
+                          <div className="worker-load-track" role="img" aria-label={`${w.current_load} / ${w.max_concurrency} slots in use`}>
                             <div
                               className="worker-load-fill"
                               style={{ width: `${w.max_concurrency > 0 ? (w.current_load / w.max_concurrency) * 100 : 0}%` }}

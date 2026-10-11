@@ -81,6 +81,7 @@ export function RuntimeEventStream({
         <div
           ref={viewport}
           className="rt-event-viewport"
+          role="region"
           tabIndex={0}
           aria-label={t('liveEventStream')}
           onScroll={(event) => {

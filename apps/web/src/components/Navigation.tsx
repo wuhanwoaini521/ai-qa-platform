@@ -15,10 +15,15 @@ import {
   ClipboardList,
   Bug,
   Radio,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MoreHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
 import { buildWorkspaceHref } from '../app/workspaceContext';
+import { withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
 
 export type NavTab =
@@ -51,6 +56,7 @@ interface NavItem {
   }>;
   to: string;
   end?: boolean;
+  mobileLabelKey?: string;
 }
 
 interface QuickDestination {
@@ -63,22 +69,38 @@ interface QuickDestination {
 
 const ICON_SIZE = 18;
 const ICON_STROKE = 1.6;
+const SIDEBAR_COLLAPSED_KEY = 'ai-qa.sidebar-collapsed';
 
-/** Navigation rail: brand → search → primary destinations → platform. */
+/** Project context and searchable destinations in an expandable navigation rail. */
 export const Navigation: React.FC = () => {
   const { t } = useTranslation('nav');
   const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { selectedProjectId } = useProjectScope();
+  const { projects, selectedProjectId, selectProject } = useProjectScope();
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-      const focusNavigationSearch = (event: KeyboardEvent) => {
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    } catch {
+      // Keep the sidebar usable when storage is unavailable.
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
+    const focusNavigationSearch = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
       event.preventDefault();
       setSearchOpen(true);
@@ -108,15 +130,23 @@ export const Navigation: React.FC = () => {
   };
 
   const workspaceBase = selectedProjectId ? `/workspace/${selectedProjectId}` : '/workspace';
+  const workspaceRoute = pathname === '/workspace' || pathname.startsWith('/workspace/');
+  const projectScopedRoute = (workspaceRoute && pathname !== '/workspace') || pathname.startsWith('/projects/');
+  const handleProjectChange = (projectId: string) => {
+    const nextProjectId = projectId || null;
+    // Navigate before updating selection so the outgoing route cannot restore stale scope.
+    navigate(withProjectId(pathname, nextProjectId));
+    selectProject(nextProjectId);
+  };
 
   const navItems: NavItem[] = [
-    { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, to: '/', end: true },
-    { id: 'workspace', labelKey: 'workspace', icon: PanelsTopLeft, to: workspaceBase },
-    { id: 'projects', labelKey: 'projects', icon: FolderGit2, to: '/projects' },
-    { id: 'runs', labelKey: 'runs', icon: GitBranch, to: '/runs' },
-    { id: 'quality', labelKey: 'quality', icon: ShieldCheck, to: '/quality' },
-    { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' },
+    { id: 'dashboard', labelKey: 'dashboard', mobileLabelKey: 'dashboardMobile', icon: LayoutDashboard, to: '/', end: true },
+    { id: 'workspace', labelKey: 'workspace', mobileLabelKey: 'workspaceMobile', icon: PanelsTopLeft, to: workspaceBase },
+    { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: '/projects' },
+    { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: '/runs' },
+    { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: '/quality' },
   ];
+  const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' };
   const platformItems: NavItem[] = [
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
     { id: 'security', labelKey: 'security', icon: Shield, to: '/security' },
@@ -162,14 +192,15 @@ export const Navigation: React.FC = () => {
     const workspace = quickDestinations.filter((item) =>
       [item.label, ...item.keywords].some((value) => value.toLowerCase().includes(needle)),
     );
-    return { primary: filter(navItems), platform: filter(platformItems), workspace };
-  }, [query, t, navItems, platformItems, quickDestinations]);
+    return { primary: filter([...navItems, settingsItem]), platform: filter(platformItems), workspace };
+  }, [query, t, navItems, settingsItem, platformItems, quickDestinations]);
 
   const renderItem = (item: NavItem) => {
     const Icon = item.icon;
     const label = t(item.labelKey);
+    const mobileLabel = t(item.mobileLabelKey ?? item.labelKey);
     return (
-      <Tooltip key={item.id} label={label}>
+      <Tooltip key={item.id} label={label} enabled={collapsed}>
         <NavLink
           to={item.to}
           end={item.end}
@@ -178,7 +209,8 @@ export const Navigation: React.FC = () => {
           className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
         >
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
-          <span>{label}</span>
+          <span className="nav-item-label">{label}</span>
+          <span className="nav-item-mobile-label" aria-hidden="true">{mobileLabel}</span>
         </NavLink>
       </Tooltip>
     );
@@ -187,7 +219,7 @@ export const Navigation: React.FC = () => {
   const renderQuickDestination = (item: QuickDestination) => {
     const Icon = item.icon;
     return (
-      <Tooltip key={item.id} label={item.label}>
+      <Tooltip key={item.id} label={item.label} enabled={collapsed}>
         <NavLink to={item.to} aria-label={item.label} onClick={() => { setQuery(''); setSearchOpen(false); }} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
           <span>{item.label}</span>
@@ -197,15 +229,41 @@ export const Navigation: React.FC = () => {
   };
 
   return (
-    <aside className="app-sidebar">
+    <aside className={`app-sidebar${collapsed ? ' is-collapsed' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo-icon" aria-hidden="true">
+        <div className="sidebar-logo-icon" title={t('common:appName')} aria-hidden="true">
           QA
         </div>
-        <span className="sidebar-brand-title">{t('common:appName')}</span>
+        {projects.length > 0 && (
+          <div className="sidebar-project-context" title={projects.find((project) => project.id === selectedProjectId)?.name ?? t('common:allProjects')}>
+            <FolderGit2 className="sidebar-project-icon" size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
+            <select
+              className="sidebar-project-select"
+              value={selectedProjectId || ''}
+              aria-label={t('common:project')}
+              onChange={(event) => handleProjectChange(event.target.value)}
+            >
+              {!projectScopedRoute && <option value="">{t('common:allProjects')}</option>}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <button
+          type="button"
+          className="sidebar-collapse-toggle"
+          aria-label={t(collapsed ? 'expandSidebar' : 'collapseSidebar')}
+          aria-expanded={!collapsed}
+          aria-controls="primary-sidebar-navigation"
+          title={t(collapsed ? 'expandSidebar' : 'collapseSidebar')}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          {collapsed ? <PanelLeftOpen size={17} strokeWidth={ICON_STROKE} aria-hidden="true" /> : <PanelLeftClose size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />}
+        </button>
       </div>
 
-      <button className="sidebar-mobile-search" type="button" aria-label={t('common:search')} onClick={() => setSearchOpen(true)}>
+      <button className="sidebar-mobile-search" type="button" aria-label={t('common:search')} title={t('common:search')} onClick={() => setSearchOpen(true)}>
         <Search size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
       </button>
 
@@ -236,7 +294,7 @@ export const Navigation: React.FC = () => {
 
       <div className="sidebar-divider" />
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" id="primary-sidebar-navigation" aria-label={t('primaryNavigation')}>
         {matches ? (
           <>
             {matches.primary.map(renderItem)}
@@ -251,32 +309,41 @@ export const Navigation: React.FC = () => {
             {navItems.map(renderItem)}
             <div className="sidebar-divider" />
             <details key={platformItems.some((item) => pathname.startsWith(item.to)) ? 'platform-active' : 'platform-idle'} className="sidebar-platform" open={platformItems.some((item) => pathname.startsWith(item.to))}>
-              <summary className="sidebar-section-label">{t('nav:platform')}</summary>
+              <summary className="sidebar-section-label" title={t('nav:platform')}>
+                <MoreHorizontal size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden="true" />
+                <span>{t('nav:platform')}</span>
+                <ChevronDown className="sidebar-section-chevron" size={14} strokeWidth={ICON_STROKE} aria-hidden="true" />
+              </summary>
               {platformItems.map(renderItem)}
             </details>
           </>
         )}
       </nav>
 
-      <div className="sidebar-footer">
-        <span className="lang-badge">
-          <span>
-            {i18n.resolvedLanguage === 'zh-CN'
-              ? SUPPORTED_LANGUAGES.find((l) => l.code === 'zh-CN')?.label ?? '中文'
-              : 'English'}
+      <div className="sidebar-pinned">
+        {!matches && renderItem(settingsItem)}
+        <div className="sidebar-footer">
+          <span className="lang-badge">
+            <span>
+              {i18n.resolvedLanguage === 'zh-CN'
+                ? SUPPORTED_LANGUAGES.find((language) => language.code === 'zh-CN')?.label ?? '中文'
+                : 'English'}
+            </span>
           </span>
-        </span>
-        <button
-          type="button"
-          className="sidebar-lang-toggle"
-          onClick={() => {
-            const next = i18n.resolvedLanguage === 'zh-CN' ? 'en' : 'zh-CN';
-            void i18n.changeLanguage(next);
-            storeLanguage(next);
-          }}
-        >
-          {i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中'}
-        </button>
+          <button
+            type="button"
+            className="sidebar-lang-toggle"
+            aria-label={t('common:language')}
+            title={t('common:language')}
+            onClick={() => {
+              const next = i18n.resolvedLanguage === 'zh-CN' ? 'en' : 'zh-CN';
+              void i18n.changeLanguage(next);
+              storeLanguage(next);
+            }}
+          >
+            {i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中'}
+          </button>
+        </div>
       </div>
 
       {searchOpen && <div className="navigation-palette-backdrop" onMouseDown={(event) => {

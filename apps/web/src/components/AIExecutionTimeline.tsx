@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AITraceEvent } from '../types';
 import { traceState } from '../features/runtime/traceState';
+import { isProviderUnavailableFailure } from './aiExecutionTimelineModel';
 
 interface AIExecutionTimelineProps {
   events: AITraceEvent[];
@@ -159,7 +160,9 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
   const failure = [...events]
     .reverse()
     .find((event) => event.type === 'run.failed');
-  const providerUnavailable = Boolean(failure) && Boolean(provider || model) && !fallback;
+  const providerUnavailable = Boolean(
+    failure && (provider || model) && !fallback && isProviderUnavailableFailure(failure),
+  );
   const runtimeLabels: Record<string, string> = { 'run.started': '运行开始', 'run.completed': '运行完成', 'run.failed': '运行失败', 'run.cancelled': '运行取消' };
   const heading = runtime ? '执行 Trace' : t('assistant.aiExecution');
   const cancelled = [...events]

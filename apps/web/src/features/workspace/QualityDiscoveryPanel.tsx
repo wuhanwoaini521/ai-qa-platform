@@ -375,7 +375,7 @@ export function QualityDiscoveryPanel({
           </div>
           <div className="qd-current-activity"><span>{t('currentActivity')}</span><strong>{run.result.events?.[run.result.events.length - 1]?.message ?? t(`statuses.${run.status}`, { defaultValue: run.status })}</strong></div>
           {pollError && <p className="qd-error" role="alert">{pollError}</p>}
-          <div className="qd-frontier-summary" aria-label={t('frontierSummary')}>
+          <div className="qd-frontier-summary" role="group" aria-label={t('frontierSummary')}>
             <span>{t('visitedStates')}: {run.result.states?.length ?? run.progress.states}</span>
             <span>{t('pendingActions')}: {pendingFrontierCount}</span>
             <span>{t('blockedActions')}: {blockedFrontierCount}</span>

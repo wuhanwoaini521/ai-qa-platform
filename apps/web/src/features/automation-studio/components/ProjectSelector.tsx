@@ -21,7 +21,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   return (
     <div className="studio-project-select">
       <FolderGit2 size={15} color="var(--ui-primary-strong)" />
-      <select value={currentProjectId} onChange={(e) => onSelectProject(e.target.value)}>
+      <select aria-label={t('projectSelector.selectProject')} value={currentProjectId} onChange={(e) => onSelectProject(e.target.value)}>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}

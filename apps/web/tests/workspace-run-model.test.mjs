@@ -1,7 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget } = await import('../src/features/workspace/workspaceRunModel.ts');
+const { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, repairNoticeForRun, terminalRunStatus, workspaceGoalTarget } = await import('../src/features/workspace/workspaceRunModel.ts');
+
+test('terminal run status includes all completed outcomes and excludes active runs', () => {
+  for (const status of ['PASSED', 'FAILED', 'ERROR', 'CANCELLED']) {
+    assert.equal(terminalRunStatus(status), status);
+  }
+  assert.equal(terminalRunStatus('QUEUED'), null);
+  assert.equal(terminalRunStatus('RUNNING'), null);
+});
+
+test('repair is not needed after a pass and only blocked for failed runs missing failure data', () => {
+  assert.equal(repairNoticeForRun('PASSED', false, false), 'NOT_NEEDED');
+  assert.equal(repairNoticeForRun('FAILED', false, false), 'BLOCKED');
+  assert.equal(repairNoticeForRun('ERROR', false, false), 'BLOCKED');
+  assert.equal(repairNoticeForRun('FAILED', true, false), null);
+  assert.equal(repairNoticeForRun('FAILED', false, true), null);
+  assert.equal(repairNoticeForRun('RUNNING', false, false), null);
+  assert.equal(repairNoticeForRun('QUEUED', false, false), null);
+  assert.equal(repairNoticeForRun('CANCELLED', false, false), null);
+});
 
 test('a binding is unavailable until its case id matches the current selection', () => {
   const prior = { caseId: 'case-a', binding: { nodeid: 'tests/test_a.py::test_a' } };

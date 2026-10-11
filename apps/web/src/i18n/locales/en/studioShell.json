@@ -83,6 +83,7 @@
     "creating": "Creating PR..."
   },
   "projectSelector": {
+    "selectProject": "Select project",
     "quickOpen": "Quick Open File (Cmd+P)"
   },
   "sidebarView": {

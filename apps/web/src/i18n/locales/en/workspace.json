@@ -3,6 +3,14 @@
   "eyebrow": "Unified Workspace",
   "projectWorkspace": "Project workspace",
   "subtitle": "Analyze requirements, shape cases, automate, run, and recover failures in one project context.",
+  "pageHeadings": {
+    "requirement": "Requirement analysis",
+    "discover": "Quality discovery",
+    "cases": "Test case analysis",
+    "code": "Automation development",
+    "browser": "Browser recorder",
+    "debug": "Debug and repair"
+  },
   "chooseProject": "No project selected",
   "openWorkflow": "View progress",
   "tabs": {
@@ -261,6 +269,7 @@
     "openWorkflow": "View execution details"
   },
   "result": {
+    "analysisTitle": "Test analysis",
     "runResult": "Run result",
     "overviewEyebrow": "Execution summary",
     "summary": "Run status",
@@ -341,7 +350,8 @@
     "aiInvocationUnlinked": "The Task has AI calls that cannot be attributed to this Run",
     "aiInvocationUnlinkedDetail": "No event links this call to the selected Run, so it is not shown as this Run's diagnosis result.",
     "jevDecisionUnlinked": "The Task has a Jev decision that cannot be attributed to this Run",
-    "repairBlockedWithoutFailure": "Repair is blocked: this Run has no Failure record. AI diagnosis, Jev decision, patch generation, writeback, and verification did not occur.",
+    "repairBlockedWithoutFailure": "Repair is blocked: this failed Run has no Failure record. AI diagnosis, Jev decision, patch generation, writeback, and verification did not occur.",
+    "repairNotNeededWithoutFailure": "This Run passed and has no Failure record; no repair workflow was needed.",
     "artifactCount": "{{count}} linked artifacts",
     "noEvidenceYet": "No evidence was saved",
     "evidenceUnlinked": "Evidence exists in the runtime context but is not linked to this Run",

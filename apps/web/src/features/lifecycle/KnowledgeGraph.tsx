@@ -117,6 +117,7 @@ export function KnowledgeGraph({
       <div
         className="knowledge-viewport"
         ref={viewport}
+        role="region"
         tabIndex={0}
         aria-label={t('panHint')}
         {...view.handlers}

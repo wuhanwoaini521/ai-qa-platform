@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 interface TooltipProps {
   label: string;
   children: React.ReactNode;
+  enabled?: boolean;
 }
 
 interface TooltipPosition {
@@ -12,7 +13,7 @@ interface TooltipPosition {
 }
 
 /** Small shared tooltip that escapes scroll containers through a body portal. */
-export const Tooltip: React.FC<TooltipProps> = ({ label, children }) => {
+export const Tooltip: React.FC<TooltipProps> = ({ label, children, enabled = false }) => {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -29,16 +30,16 @@ export const Tooltip: React.FC<TooltipProps> = ({ label, children }) => {
   }, []);
 
   const showOnHover = useCallback(() => {
-    if (!window.matchMedia('(max-width: 1150px)').matches) return;
+    if (!enabled && !window.matchMedia('(max-width: 1150px)').matches) return;
     updatePosition();
     setHovered(true);
-  }, [updatePosition]);
+  }, [enabled, updatePosition]);
 
   const showOnFocus = useCallback(() => {
-    if (!window.matchMedia('(max-width: 1150px)').matches) return;
+    if (!enabled && !window.matchMedia('(max-width: 1150px)').matches) return;
     updatePosition();
     setFocused(true);
-  }, [updatePosition]);
+  }, [enabled, updatePosition]);
 
   useEffect(() => {
     if (!visible) return undefined;

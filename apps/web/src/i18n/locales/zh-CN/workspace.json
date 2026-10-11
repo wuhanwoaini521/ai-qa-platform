@@ -3,6 +3,14 @@
   "eyebrow": "统一工作区",
   "projectWorkspace": "项目工作区",
   "subtitle": "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。",
+  "pageHeadings": {
+    "requirement": "需求分析",
+    "discover": "质量发现",
+    "cases": "用例分析",
+    "code": "自动化开发",
+    "browser": "浏览器录制",
+    "debug": "调试修复"
+  },
   "chooseProject": "未选择项目",
   "openWorkflow": "查看进度",
   "tabs": {
@@ -261,6 +269,7 @@
     "openWorkflow": "查看运行过程"
   },
   "result": {
+    "analysisTitle": "用例分析",
     "runResult": "运行结果",
     "overviewEyebrow": "执行摘要",
     "summary": "运行状态",
@@ -341,7 +350,8 @@
     "aiInvocationUnlinked": "Task 中存在 AI 调用，但无法确认属于当前 Run",
     "aiInvocationUnlinkedDetail": "该调用缺少当前 Run 的关联事件；因此不展示为本次 Run 的 AI 诊断结果。",
     "jevDecisionUnlinked": "Task 中存在 Jev 决策，但无法确认属于当前 Run",
-    "repairBlockedWithoutFailure": "修复流程受阻：本 Run 没有 Failure 记录。AI 根因分析、Jev 决策、补丁生成、写回和验证均未发生。",
+    "repairBlockedWithoutFailure": "修复流程受阻：本次失败的 Run 没有 Failure 记录。AI 根因分析、Jev 决策、补丁生成、写回和验证均未发生。",
+    "repairNotNeededWithoutFailure": "本次运行已通过，没有失败记录，无需启动故障修复流程。",
     "artifactCount": "{{count}} 个关联制品",
     "noEvidenceYet": "没有保存证据",
     "evidenceUnlinked": "运行上下文中有证据，但未关联到此 Run",

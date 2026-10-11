@@ -536,7 +536,7 @@ export const RecorderPage: React.FC<{
           {recording && <span className="status-pill status-pill-warning">正在录制</span>}
         </div>
 
-        <div className="recorder-actions" aria-label="录制器操作">
+        <div className="recorder-actions" role="group" aria-label="录制器操作">
           <button
             type="button"
             className={`btn ${recording ? 'btn-secondary' : 'btn-primary'}`}
@@ -670,6 +670,7 @@ export const RecorderPage: React.FC<{
           <div
             ref={browserRef}
             className="recorder-browser-viewport"
+            role="region"
             tabIndex={0}
             aria-label="远程浏览器交互视图"
             aria-describedby="recorder-keyboard-help"
@@ -694,7 +695,7 @@ export const RecorderPage: React.FC<{
             )}
           </div>
           {frame?.tabs && frame.tabs.length > 1 && (
-            <div className="recorder-browser-tabs" aria-label="浏览器标签页">
+            <div className="recorder-browser-tabs" role="group" aria-label="浏览器标签页">
               {frame.tabs.map((item) => (
                 <button
                   type="button"

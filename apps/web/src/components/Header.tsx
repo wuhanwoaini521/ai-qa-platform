@@ -4,36 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
-  FolderGit2,
   Sparkles,
   Cpu,
   Globe,
   LogOut,
   X,
 } from 'lucide-react';
-import { AIStatusResponse, Project, RunnerProfile } from '../types';
+import { AIStatusResponse, RunnerProfile } from '../types';
 import { api } from '../api/client';
 import { SUPPORTED_LANGUAGES } from '../i18n';
 import { usePreferences } from '../app/Preferences';
 
 interface HeaderProps {
   title: string;
-  projects: Project[];
   selectedProjectId: string | null;
-  onSelectProject: (id: string) => void;
   onSignOut: () => void;
 }
 
 /**
- * Toolbar: back / forward / page title on the left, project scope plus one status trigger on the
- * right. Everything infrequent (AI provider, runners, language, sign out) lives in the status panel
- * so the bar stays as quiet as the reference.
+ * Toolbar: optional page context and one system-status trigger. Everything infrequent (AI
+ * provider, runners, language, sign out) lives in the status panel to keep the bar quiet.
  */
 export const Header: React.FC<HeaderProps> = ({
   title,
-  projects,
   selectedProjectId,
-  onSelectProject,
   onSignOut,
 }) => {
   const { t } = useTranslation('common');
@@ -105,25 +99,6 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="topbar-utility-section">
-        {projects.length > 0 && (
-          <div className="topbar-project">
-            <FolderGit2 size={14} strokeWidth={1.6} />
-            <select
-              className="topbar-project-select"
-              value={selectedProjectId || ''}
-              aria-label={t('project')}
-              onChange={(e) => onSelectProject(e.target.value)}
-            >
-              <option value="">{t('allProjects')}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         <div className="topbar-status" ref={panelRef}>
           <button
             type="button"

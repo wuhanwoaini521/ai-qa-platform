@@ -1,6 +1,23 @@
 import type { TestRun } from '../../types';
 import type { WorkspaceRunConfig } from './WorkspaceRunDock';
 
+const TERMINAL_RUN_STATUSES = new Set<TestRun['status']>(['PASSED', 'FAILED', 'ERROR', 'CANCELLED']);
+
+export function terminalRunStatus(status: TestRun['status']): TestRun['status'] | null {
+  return TERMINAL_RUN_STATUSES.has(status) ? status : null;
+}
+
+export function repairNoticeForRun(
+  status: TestRun['status'],
+  hasFailure: boolean,
+  hasAiInvocation: boolean,
+): 'BLOCKED' | 'NOT_NEEDED' | null {
+  if (hasFailure || hasAiInvocation) return null;
+  if (status === 'PASSED') return 'NOT_NEEDED';
+  if (status === 'FAILED' || status === 'ERROR') return 'BLOCKED';
+  return null;
+}
+
 export function bindingForSelectedCase<T>(
   record: { caseId: string; binding: T } | null,
   selectedCaseId: string | undefined,

@@ -290,6 +290,7 @@ export function RuntimeFlow({
       <div
         className="rt-viewport rt-flow-viewport"
         ref={view.viewport}
+        role="region"
         tabIndex={0}
         aria-label={t('flowCanvas')}
         aria-describedby="rt-flow-help"

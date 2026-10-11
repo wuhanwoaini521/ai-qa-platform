@@ -83,6 +83,7 @@
     "creating": "正在创建拉取请求..."
   },
   "projectSelector": {
+    "selectProject": "选择项目",
     "quickOpen": "快速打开文件（Cmd+P）"
   },
   "sidebarView": {

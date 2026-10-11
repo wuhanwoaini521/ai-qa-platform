@@ -66,7 +66,7 @@ export function WorkflowPage() {
   };
   const project = projects.find((item) => item.id === workspaceContext.projectId);
   return (
-    <main className="workflow-page">
+    <div className="workflow-page">
       <header className="workflow-page-heading">
         <div>
           <span className="workspace-eyebrow">{t('eyebrow')} · {project?.name ?? workspaceContext.projectId ?? t('allProjects')}</span>
@@ -89,7 +89,7 @@ export function WorkflowPage() {
           onOpenStudio={() => navigate(buildStudioHref({ ...workspaceContext, taskId: entity.kind === 'task' ? entity.id : undefined, runId: undefined }))}
         />
       </section>
-    </main>
+    </div>
   );
 }
 

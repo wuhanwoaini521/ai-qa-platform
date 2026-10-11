@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, readWorkspaceContext, writeWorkspaceContext } =
   await import('../src/app/workspaceContext.ts');
+const { withProjectId } = await import('../src/app/projectPaths.ts');
 
 test('reads legacy case and parent run params into the shared context', () => {
   const context = readWorkspaceContext(
@@ -86,6 +87,16 @@ test('keeps Studio deep links inside Workspace with the same context', () => {
   const studioContext = new URLSearchParams(buildStudioHref(context).split('?')[1]);
   assert.equal(studioContext.get('view'), 'debug');
   assert.equal(studioContext.get('file'), 'tests/test_login.py');
+});
+
+test('switches Workspace project scope without retaining the previous workspace context', () => {
+  assert.equal(withProjectId('/workspace/project-old', 'project-new'), '/workspace/project-new');
+  assert.equal(withProjectId('/workspace', 'project-new'), '/workspace/project-new');
+  assert.equal(withProjectId('/workspace/project-old', ''), '/projects');
+  assert.equal(withProjectId('/workspace', ''), '/projects');
+  assert.equal(withProjectId('/projects/project-old/requirements', 'project-new'), '/projects/project-new/requirements');
+  assert.equal(withProjectId('/projects/project-old', ''), '/projects');
+  assert.equal(withProjectId('/runs', 'project-new'), '/runs');
 });
 
 test('opens run progress in the Workspace drawer instead of navigating to a second runtime page', () => {

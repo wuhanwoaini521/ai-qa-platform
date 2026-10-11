@@ -174,7 +174,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="stat-card">
           <div className="stat-card-body">
             <div className="stat-head">
-              <span className="stat-icon"><Activity size={18} strokeWidth={1.7} /></span>
+              <span className="stat-icon is-blue"><Activity size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('passRateToday')}</span>
             </div>
             <span className="stat-value">
@@ -195,7 +195,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="stat-card">
           <div className="stat-card-body">
             <div className="stat-head">
-              <span className="stat-icon"><ListChecks size={18} strokeWidth={1.7} /></span>
+              <span className="stat-icon is-green"><ListChecks size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('runsToday')}</span>
             </div>
             <span className="stat-value">{countValue(stats?.runs_today)}</span>
@@ -213,7 +213,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="stat-card">
           <div className="stat-card-body">
             <div className="stat-head">
-              <span className="stat-icon"><AlertTriangle size={18} strokeWidth={1.7} /></span>
+              <span className="stat-icon is-red"><AlertTriangle size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('totalFailures')}</span>
             </div>
             <span className="stat-value">{countValue(stats?.total_failures)}</span>
@@ -231,7 +231,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="stat-card">
           <div className="stat-card-body">
             <div className="stat-head">
-              <span className="stat-icon"><Clock size={18} strokeWidth={1.7} /></span>
+              <span className="stat-icon is-violet"><Clock size={18} strokeWidth={1.7} /></span>
               <span className="stat-label">{t('avgExecutionTime')}</span>
             </div>
             <span className="stat-value">

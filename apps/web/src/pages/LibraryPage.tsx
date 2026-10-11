@@ -55,7 +55,7 @@ export function LibraryPage() {
   ];
 
   return (
-    <main className="library-page">
+    <div className="library-page">
       <header className="library-heading"><span className="workspace-eyebrow">{t('eyebrow')}</span><h1>{t('title')}</h1><p>{t('subtitle')}</p></header>
       {error && <div className="library-error" role="alert"><span>{error}</span><button className="btn btn-secondary btn-sm" type="button" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
       {loading && <p className="library-loading" role="status">{t('loading')}</p>}
@@ -72,6 +72,6 @@ export function LibraryPage() {
       </section>
       <div className="library-secondary-links"><Link to="/projects">{t('projectManagement')}</Link><Link to={projectPath('/requirements')}>{t('requirementManagement')}</Link><Link to={projectPath('/test-cases')}>{t('caseManagement')}</Link></div>
       </>}
-    </main>
+    </div>
   );
 }

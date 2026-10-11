@@ -7,7 +7,6 @@ import { LoadingState } from '../components/AsyncState';
 import { useTranslation } from 'react-i18next';
 import { useProjectScope } from './ProjectScope';
 import { usePreferences } from './Preferences';
-import { withProjectId } from './navigation';
 import { ReadinessNotice } from '../components/ReadinessNotice';
 
 /** Title keys per route, resolved through i18n (`titles` namespace). */
@@ -36,7 +35,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const navigate = useNavigate();
   const { t } = useTranslation('titles');
   const { startPage } = usePreferences();
-  const { projects, selectedProjectId, selectProject } = useProjectScope();
+  const { selectedProjectId } = useProjectScope();
 
   // Land on the configured start page once, right after a fresh sign-in.
   const landedRef = useRef<boolean>(false);
@@ -58,33 +57,27 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
 
-  const handleSelectProject = (projectId: string) => {
-    selectProject(projectId);
-    // Keep a project-scoped route pointing at the project the user just picked.
-    navigate(withProjectId(location.pathname, projectId));
-  };
-
   return (
     <div className="app-container">
       <div className="app-frame">
-        <Navigation />
+        <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
+        <Header
+          title={title}
+          selectedProjectId={selectedProjectId}
+          onSignOut={onSignOut}
+        />
 
-        <div className="app-main">
-          <Header
-            title={title}
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={handleSelectProject}
-            onSignOut={onSignOut}
-          />
-
-          <div className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`}>
-            <ReadinessNotice />
-            <ErrorBoundary resetKey={location.pathname}>
-              <Suspense fallback={<LoadingState />}>
-                <Outlet />
-              </Suspense>
-            </ErrorBoundary>
+        <div className="app-body">
+          <Navigation />
+          <div className="app-main">
+            <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
+              <ReadinessNotice />
+              <ErrorBoundary resetKey={location.pathname}>
+                <Suspense fallback={<LoadingState />}>
+                  <Outlet />
+                </Suspense>
+              </ErrorBoundary>
+            </main>
           </div>
         </div>
       </div>

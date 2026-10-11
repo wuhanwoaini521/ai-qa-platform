@@ -215,7 +215,7 @@ export function WorkspaceRunDock({
           </div>
 
           {configOpen && !active && (
-            <div className="workspace-run-config" aria-label={t('dock.config')}>
+            <div className="workspace-run-config" role="group" aria-label={t('dock.config')}>
               <label>{t('dock.environment')}
                 <select value={config.environment} onChange={(event) => update({ environment: event.target.value })}>
                   <option value="development">Development</option>

@@ -79,8 +79,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [query,setQuery] = useSearchParams();
   const [showBrowser,setShowBrowser]=useState(false);
   const [showAssistant,setShowAssistant]=useState(false);
-  const [showContext,setShowContext]=useState(!initialDebugNodeId);
-  const [showFiles,setShowFiles]=useState(true);
+  const [showContext,setShowContext]=useState(!initialDebugNodeId && !embedded);
+  const [showFiles,setShowFiles]=useState(() => !embedded || !window.matchMedia('(max-width: 820px)').matches);
   const [showCommands,setShowCommands]=useState(false);
   const [showKnowledge,setShowKnowledge]=useState(false);
   const browserDrawerRef=useRef<HTMLElement>(null);
@@ -96,7 +96,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   };
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
   useEffect(()=>{let disposed=false;setProjectCases([]);if(currentProjectId)api.getTestCases(currentProjectId).then(items=>{if(!disposed)setProjectCases(items);}).catch(()=>{});return()=>{disposed=true;};},[currentProjectId]);
-  useEffect(()=>{setShowBrowser(preset==='record');setShowAssistant(preset==='review');setShowContext(!initialDebugNodeId);setShowFiles(preset!=='debug');},[preset,currentProjectId,initialDebugNodeId]);
+  useEffect(() => {
+    setShowBrowser(preset === 'record');
+    setShowAssistant(preset === 'review');
+    setShowContext(!initialDebugNodeId && !embedded);
+    const narrowViewport = window.matchMedia('(max-width: 820px)');
+    const updateFileVisibility = () => setShowFiles(preset !== 'debug' && (!embedded || !narrowViewport.matches));
+    updateFileVisibility();
+    narrowViewport.addEventListener('change', updateFileVisibility);
+    return () => narrowViewport.removeEventListener('change', updateFileVisibility);
+  }, [preset, currentProjectId, initialDebugNodeId, embedded]);
   const generateTask = useContextTask(currentProjectId, 'studio', currentProjectId);
 
   // Cross-panel UI state (read/written by more than one panel)
@@ -178,6 +187,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const openStudioFile = (path: string) => {
     if (workspaceAutomationSetup && workspaceAutomationSetupKey) setSetupCaseId(workspaceAutomationSetupKey);
     return editor.openFile(path);
+  };
+  const openSidebarFile = (path: string) => {
+    void openStudioFile(path);
+    if (embedded && window.matchMedia('(max-width: 820px)').matches) setShowFiles(false);
   };
   const openStudioFileRef = useRef(openStudioFile);
   openStudioFileRef.current = openStudioFile;
@@ -429,9 +442,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             <span>{lc('panelTools')}</span>
             <ChevronDown size={13} aria-hidden="true" />
           </summary>
-          <div className="lc-studio-tools-menu" aria-label={lc('panelTools')}>
+          <div className="lc-studio-tools-menu" role="group" aria-label={lc('panelTools')}>
             {!embedded && <button type="button" aria-pressed={showFiles} onClick={() => { setShowFiles(value => !value); closeToolsMenu(); }}>{lc('workspaceFiles')}</button>}
             <button type="button" aria-pressed={showContext} onClick={() => { setShowContext(value => !value); closeToolsMenu(); }}>{lc('context')}</button>
+            <button type="button" aria-pressed={problems.showProblemsPanel} onClick={() => { problems.setShowProblemsPanel(value => !value); closeToolsMenu(); }}>{t('editor.problems', { problemCount })}</button>
             <button type="button" aria-pressed={showBrowser} onClick={() => { showBrowser ? setShowBrowser(false) : setShowBrowser(true); closeToolsMenu(); }}>{lc('showBrowser')}</button>
             <button type="button" aria-pressed={showAssistant} onClick={() => { setShowAssistant(value => !value); closeToolsMenu(); }}>{lc('assistant')}</button>
             <button type="button" onClick={() => { setShowCommands(true); closeToolsMenu(); }}>{lc('commands')} <span>⌃K</span></button>
@@ -557,7 +571,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               expandedFolders={workspace.expandedFolders}
               activeTabPath={showAutomationSetup ? null : editor.activeTabPath}
               onToggleFolder={workspace.toggleFolder}
-              onOpenFile={openStudioFile}
+              onOpenFile={openSidebarFile}
               onCreateFileInside={(dirPath) => {
                 setFileOpModal({ type: 'create_file', targetPath: dirPath });
                 setOpInputText(`${dirPath}/new_file.py`);
@@ -579,7 +593,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               collectionFailed={tests.collectionFailed}
               runningTest={run.runningTest}
               onCollect={() => { void tests.fetchCollectedTests(); }}
-              onOpenFile={openStudioFile}
+              onOpenFile={openSidebarFile}
               onRunTest={(nodeid)=>{void saveAndRun(nodeid);}}
               onDebugTest={(nodeid) => { void startDebug(nodeid); }}
             />
@@ -603,7 +617,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 git.setShowBranchModal(true);
               }}
               onToggleDiffView={() => git.setShowDiffView(!git.showDiffView)}
-              onOpenFile={openStudioFile}
+              onOpenFile={openSidebarFile}
               onCommitMessageChange={git.setCommitMessage}
               onSuggestCommit={git.handleSuggestCommitMessage}
               onCommit={git.handleCommitChanges}
@@ -682,7 +696,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
               {debug.state === 'starting' ? t('debug.starting') : t('editor.debugTest')}
             </button>}
             {(debug.state === 'running' || debug.state === 'paused') && (
-              <div className="studio-toolbar-group no-chrome" aria-label={t('debug.controls')}>
+              <div className="studio-toolbar-group no-chrome" role="group" aria-label={t('debug.controls')}>
                 {debug.state === 'paused' ? (
                   <>
                     <button className="studio-tool is-primary" onClick={() => debug.control('continue')}>{t('debug.continue')}</button>
@@ -754,7 +768,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         )}
 
         {/* Collapsible Bottom Problems Panel */}
-        <div style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>
+        <div className="studio-bottom-panels" style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>
           <ProblemsPanel
             issues={[...problems.validationIssues, ...Object.values(languageIssues).flat()]}
             expanded={problems.showProblemsPanel}

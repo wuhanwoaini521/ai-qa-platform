@@ -52,6 +52,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
           </span>
           <select
             className="form-control"
+            aria-label={t('formAutomationStatus')}
             style={{ padding: '3px 8px', fontSize: '12px', width: '130px' }}
             value={selectedCase.automation_status}
             onChange={(e) =>

@@ -82,7 +82,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
       {!runId && (
         <p className="rt-notice">{t('browserNoSession')}</p>
       )}
-      <div className="rt-toolbar" aria-label={t('browserTelemetry')}>
+      <div className="rt-toolbar" role="group" aria-label={t('browserTelemetry')}>
         {(
           [
             ['recent_steps', t('browserSteps')],

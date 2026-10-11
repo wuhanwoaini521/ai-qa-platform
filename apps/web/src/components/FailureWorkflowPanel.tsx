@@ -297,7 +297,7 @@ export const FailureWorkflowPanel: React.FC<{
             </div>
           )}
           {showPrimaryAction && completed && primaryAction && onPrimaryAction && (
-            <div className="failure-diagnosis-next-step" aria-label={t('primaryAction')}>
+            <div className="failure-diagnosis-next-step" role="group" aria-label={t('primaryAction')}>
               <div>
                 <strong>{t('nextAction')}</strong>
                 <p>{primaryAction === 'BLOCKED' ? t('manualNextStep') : t(`nextActionDescriptions.${primaryAction}`, { defaultValue: primaryActionReason || t(`primaryActions.${primaryAction}`) })}</p>

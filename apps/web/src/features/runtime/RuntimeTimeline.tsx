@@ -61,7 +61,7 @@ export function RuntimeTimeline({ snapshot, selectedStepId, onSelect }: {
         <div className="rt-timeline-axis" style={{ gridTemplateColumns: `${leftColumn}px minmax(0, 1fr) ${rightColumn}px` }}>
           <span>{t('step')}</span><div>{[0, 0.25, 0.5, 0.75, 1].map((tick) => <code key={tick} style={{ left: `${tick * 100}%` }}>{((domain * tick) / 1000).toFixed(0)}s</code>)}</div><span>{t('durationLabel')}</span>
         </div>
-        {active && range && <div className="rt-time-marker" style={{ left: `calc(${leftColumn}px + (100% - ${leftColumn + rightColumn}px) * ${Math.min(1, Math.max(0, (now - range.start) / domain))})` }} aria-label={t('currentTime')} />}
+        {active && range && <div className="rt-time-marker" role="img" aria-label={t('currentTime')} style={{ left: `calc(${leftColumn}px + (100% - ${leftColumn + rightColumn}px) * ${Math.min(1, Math.max(0, (now - range.start) / domain))})` }} />}
         {groups.map((group) => <section className="rt-timeline-group" key={group.key}>
           <h3>{t(`group${group.key[0].toUpperCase()}${group.key.slice(1)}`)}<span>{group.spans.length}</span></h3>
           {group.spans.map((span) => <TimelineRow key={`${span.kind}:${span.id}`} span={span} origin={range?.start ?? 0} domain={domain} now={liveSpan(span) ? now : 0} selected={span.step_id === selectedStepId} onSelect={onSelect} />)}

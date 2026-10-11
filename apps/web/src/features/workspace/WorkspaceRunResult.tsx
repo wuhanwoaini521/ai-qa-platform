@@ -9,6 +9,7 @@ import type { WorkspaceContext } from '../../app/workspaceContext';
 import { buildWorkspaceHref } from '../../app/workspaceContext';
 import { failedLocatorFromFailure, failureSourceLocation, normalizeFailureClassification, observedRoleLocatorMismatch, summarizeFailureError } from '../failures/failureWorkspaceModel';
 import { RuntimeArtifactActions } from '../runtime/RuntimeArtifactActions';
+import { repairNoticeForRun, terminalRunStatus } from './workspaceRunModel';
 
 type EventFilter = 'all' | 'errors' | 'browser' | 'ai';
 
@@ -113,6 +114,11 @@ export function WorkspaceRunResult({
   const [configurationUnavailable, setConfigurationUnavailable] = useState(false);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [logExpanded, setLogExpanded] = useState(false);
+  const [evidenceExpanded, setEvidenceExpanded] = useState(['FAILED', 'ERROR'].includes(run.status));
+  useEffect(() => {
+    setEvidenceExpanded(['FAILED', 'ERROR'].includes(run.status));
+  }, [run.id, run.status]);
+
   const runRuntime = runtime?.kind === 'run' && runtime.id === run.id ? runtime : null;
   const runtimeFailureId = runRuntime?.failures.find((item) => item.test_run_id === run.id)?.id ?? null;
   const runtimeFailureIndexReady = Boolean(runRuntime);
@@ -213,6 +219,8 @@ export function WorkspaceRunResult({
   const sourceLine = failedBrowserStep?.line ?? source?.lineNumber ?? undefined;
   const isTimeout = run.status === 'ERROR' && /execution timed out|timed out|timeout/i.test(run.log_output ?? '');
   const isRunActive = ['RUNNING', 'QUEUED'].includes(run.status);
+  const terminalStatus = terminalRunStatus(run.status);
+  const repairNotice = repairNoticeForRun(run.status, Boolean(failure), Boolean(runRuntime?.ai_invocations.length));
   const resultCount = run.executions.length;
   const passedCount = run.executions.filter((item) => item.status === 'PASSED').length;
   const failedCount = run.executions.filter((item) => item.status === 'FAILED').length;
@@ -355,7 +363,7 @@ export function WorkspaceRunResult({
         <div className="workspace-result-identity">
           <span className={'workspace-result-badge is-' + run.status.toLowerCase()}>{t('result.runStatus.' + run.status, { defaultValue: run.status })}</span>
           <div>
-            <h3>{run.requested_by || t('result.runTitle')}</h3>
+            <h2>{run.requested_by || t('result.runTitle')}</h2>
             <p><code>{run.id}</code><span>{run.nodeids[0] ?? t('result.noCaseId')}</span></p>
           </div>
         </div>
@@ -370,13 +378,13 @@ export function WorkspaceRunResult({
 
       <div className="workspace-result-columns">
         <section className="workspace-result-panel workspace-result-diagnosis" aria-labelledby="workspace-result-summary-title">
-          <header className="workspace-result-panel-heading"><div><span>{t('result.overviewEyebrow')}</span><h4 id="workspace-result-summary-title">{t('result.summary')}</h4></div><Clock3 size={16} aria-hidden="true" /></header>
+          <header className="workspace-result-panel-heading"><div><span>{t('result.overviewEyebrow')}</span><h3 id="workspace-result-summary-title">{t('result.summary')}</h3></div><Clock3 size={16} aria-hidden="true" /></header>
           <dl className="workspace-result-stats">
             <div><dt>{t('result.plannedTests')}</dt><dd>{run.total || run.nodeids.length || '—'}</dd></div>
             <div><dt>{t('result.savedTestResults')}</dt><dd>{resultCount}/{run.total || run.nodeids.length || '—'}</dd></div>
             <div><dt>{t('result.confirmedPassed')}</dt><dd>{resultCount ? passedCount : '—'}</dd></div>
             <div><dt>{t('result.confirmedFailed')}</dt><dd>{resultCount ? failedCount : '—'}</dd></div>
-            <div><dt>{t('result.runTerminalStatus')}</dt><dd>{['ERROR', 'FAILED'].includes(run.status) ? run.status : '—'}</dd></div>
+            <div><dt>{t('result.runTerminalStatus')}</dt><dd>{terminalStatus ? t(`result.runStatus.${terminalStatus}`) : '—'}</dd></div>
             <div><dt>{t('result.duration')}</dt><dd>{formatDuration(run.duration_ms)}</dd></div>
           </dl>
 
@@ -391,7 +399,7 @@ export function WorkspaceRunResult({
           {!resultCount && <p className="workspace-result-not-recorded"><strong>{t('result.resultUnavailable')}</strong>{resultUnavailableDescription}</p>}
 
           <section className="workspace-result-observation">
-            <h5>{t('result.observedFailure')}</h5>
+            <h4>{t('result.observedFailure')}</h4>
             <dl className="workspace-result-failure-facts">
               <div><dt>{t('result.expectedResult')}</dt><dd>{expectedResult || t('result.expectedResultUnavailable')}</dd></div>
               <div><dt>{t('result.observedResult')}</dt><dd>{observedFailureSummary}</dd></div>
@@ -403,7 +411,7 @@ export function WorkspaceRunResult({
           </section>
 
           <section className="workspace-result-next">
-            <h5>{t('result.nextAction')}</h5>
+            <h4>{t('result.nextAction')}</h4>
             <p>{failureLoadState === 'loading'
               ? t('result.failureLoading')
               : failureLoadState === 'error'
@@ -419,14 +427,15 @@ export function WorkspaceRunResult({
         </section>
 
         <section className="workspace-result-panel workspace-result-repair" aria-labelledby="workspace-repair-title">
-          <header className="workspace-result-panel-heading"><div><span>{t('result.repairEyebrow')}</span><h4 id="workspace-repair-title">{t('result.repairTitle')}</h4></div><Bot size={17} aria-hidden="true" /></header>
+          <header className="workspace-result-panel-heading"><div><span>{t('result.repairEyebrow')}</span><h3 id="workspace-repair-title">{t('result.repairTitle')}</h3></div><Bot size={17} aria-hidden="true" /></header>
           <div className="workspace-result-provider-row">
             <div><small>{t('result.aiProvider')}</small><strong>{aiProviderLabel}</strong><span>{aiInvocation || aiEvent ? t('result.providerUsed') : unlinkedAiInvocation ? t('result.aiInvocationUnlinked') : t('result.providerConfiguredOnly')}</span></div>
             <div><small>Jev</small><strong>{jevConfig ? jevConfig.model || t('result.modelNotSet') : configurationUnavailable ? t('result.configUnavailable') : t('result.configLoading')}</strong><span>{jevCallObserved ? t('result.jevActuallyCalled') : unlinkedJevDecision ? t('result.jevDecisionUnlinked') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : t('result.jevDisabled')}</span></div>
           </div>
           {failureLoadState === 'error' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.failureLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={retryFailureLoad}>{t('result.retryLoad')}</button></p>}
           {failureLoadState === 'loaded' && failure && repairLoadState === 'error' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.repairLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRepairRefresh((value) => value + 1)}>{t('result.retryLoad')}</button></p>}
-          {failureLoadState === 'loaded' && !failure && !runRuntime?.ai_invocations.length && <p className="workspace-result-blocker"><AlertCircle size={14} aria-hidden="true" />{t('result.repairBlockedWithoutFailure')}</p>}
+          {failureLoadState === 'loaded' && repairNotice === 'BLOCKED' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.repairBlockedWithoutFailure')}</p>}
+          {failureLoadState === 'loaded' && repairNotice === 'NOT_NEEDED' && <p className="workspace-result-notice" role="status"><Check size={14} aria-hidden="true" />{t('result.repairNotNeededWithoutFailure')}</p>}
           <ol className="workspace-repair-timeline">
             {workflowStages.map((item) => {
               const tone = eventTone(item.status);
@@ -447,14 +456,14 @@ export function WorkspaceRunResult({
         </section>
 
         <aside className="workspace-result-panel workspace-result-activity" aria-label={t('result.currentRunAndLogs')}>
-          <header className="workspace-result-panel-heading"><div><span>{runtimeConnection === 'connected' ? t('result.live') : t('result.runContext')}</span><h4>{t('result.currentTask')}</h4></div><span className={'workspace-result-state is-' + eventTone(run.status)}>{run.status}</span></header>
+          <header className="workspace-result-panel-heading"><div><span>{runtimeConnection === 'connected' ? t('result.live') : t('result.runContext')}</span><h3>{t('result.currentTask')}</h3></div><span className={'workspace-result-state is-' + eventTone(run.status)}>{run.status}</span></header>
           <dl className="workspace-result-context">
             <div><dt>{t('result.case')}</dt><dd>{run.nodeids[0] ?? '—'}</dd></div>
             <div><dt>{t('result.environment')}</dt><dd>{run.environment.QA_ENVIRONMENT ?? '—'} · {run.environment.QA_REGION ?? '—'}</dd></div>
             <div><dt>{t('result.browser')}</dt><dd>{run.browser}</dd></div>
             <div><dt>{t('result.started')}</dt><dd>{formatTime(run.started_at)}</dd></div>
           </dl>
-          <div className="workspace-result-event-heading"><h5>{t('result.eventLog')}</h5><button type="button" className="btn btn-icon btn-sm" aria-label={t('result.viewRuntimeDetails')} title={t('result.viewRuntimeDetails')} onClick={onOpenDetails}><Workflow size={13} aria-hidden="true" /></button></div>
+          <div className="workspace-result-event-heading"><h4>{t('result.eventLog')}</h4><button type="button" className="btn btn-icon btn-sm" aria-label={t('result.viewRuntimeDetails')} title={t('result.viewRuntimeDetails')} onClick={onOpenDetails}><Workflow size={13} aria-hidden="true" /></button></div>
           <div className="workspace-result-event-filters" role="group" aria-label={t('result.filterEvents')}>
             {(['all', 'errors', 'browser', 'ai'] as const).map((filter) => <button type="button" key={filter} className={eventFilter === filter ? 'is-active' : ''} aria-pressed={eventFilter === filter} onClick={() => setEventFilter(filter)}>{t('result.eventFilters.' + filter)}</button>)}
           </div>
@@ -470,23 +479,27 @@ export function WorkspaceRunResult({
         </aside>
       </div>
 
-      <details className="workspace-result-evidence">
+      <details
+        className="workspace-result-evidence"
+        open={evidenceExpanded}
+        onToggle={(event) => setEvidenceExpanded(event.currentTarget.open)}
+      >
         <summary className="workspace-result-evidence-heading"><div><span>{t('result.evidenceEyebrow')} · {run.id}</span><span className="workspace-result-evidence-title" id="workspace-evidence-title">{t('result.evidence')}</span></div><small>{t('result.evidenceCounts', { screenshots: screenshots.length, traces: traces.length, reports: reports.length })}</small></summary>
         <div className="workspace-result-evidence-grid">
           <section className="workspace-result-evidence-panel">
-            <h5><ImageIcon size={14} aria-hidden="true" />{t('result.screenshots')}</h5>
+            <h4><ImageIcon size={14} aria-hidden="true" />{t('result.screenshots')}</h4>
             {screenshots.length ? screenshots.map((artifact) => <article className="workspace-result-artifact" key={artifact.id}><div><strong>{artifact.name}</strong><small>{formatTime(artifact.created_at)}</small></div><RuntimeArtifactActions artifact={artifact} /></article>) : <p>{t('result.noScreenshot')}</p>}
           </section>
           <section className="workspace-result-evidence-panel">
-            <h5><FileCode2 size={14} aria-hidden="true" />{t('result.codeLocation')}</h5>
+            <h4><FileCode2 size={14} aria-hidden="true" />{t('result.codeLocation')}</h4>
             {sourcePath ? <><code className="workspace-result-source-path">{sourcePath}{sourceLine ? ':' + sourceLine : ''}</code>{failedBrowserStep?.locator && <pre>{failedBrowserStep.locator}</pre>}<button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenCode(sourcePath, sourceLine)}>{t('result.openSource')}</button></> : <p>{t('result.noCodeLocation')}</p>}
           </section>
           <section className="workspace-result-evidence-panel">
-            <h5><Workflow size={14} aria-hidden="true" />{t('result.repairDiff')}</h5>
+            <h4><Workflow size={14} aria-hidden="true" />{t('result.repairDiff')}</h4>
             {diff ? <details className="workspace-result-diff"><summary>{t('result.openDiff')} · {proposal?.file_path ?? t('result.diffReady')}</summary><pre>{diff}</pre></details> : <p>{t('result.diffNotGenerated')}</p>}
           </section>
           <section className="workspace-result-evidence-panel">
-            <h5><Activity size={14} aria-hidden="true" />{t('result.artifactsAndTrace')}</h5>
+            <h4><Activity size={14} aria-hidden="true" />{t('result.artifactsAndTrace')}</h4>
             {[...traces, ...reports, ...artifacts.filter((item) => !screenshots.includes(item) && !traces.includes(item) && !reports.includes(item))].length
               ? [...traces, ...reports, ...artifacts.filter((item) => !screenshots.includes(item) && !traces.includes(item) && !reports.includes(item))].map((artifact) => <article className="workspace-result-artifact" key={artifact.id}><div><strong>{artifact.name}</strong><small>{artifact.type} · {formatTime(artifact.created_at)}</small></div><RuntimeArtifactActions artifact={artifact} /></article>)
               : <p>{t('result.noArtifacts')}</p>}

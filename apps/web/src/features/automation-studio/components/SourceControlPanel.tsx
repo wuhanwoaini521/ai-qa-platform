@@ -70,6 +70,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
         </div>
         <select
           className="form-control"
+          aria-label={t('sourceControl.branch')}
           style={{ fontSize: '12px', padding: '4px' }}
           value={currentBranch}
           onChange={(e) => onSwitchBranch(e.target.value)}

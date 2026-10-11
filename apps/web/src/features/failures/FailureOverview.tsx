@@ -280,7 +280,7 @@ export const FailureOverview: React.FC<{
           </div>
         </div>
 
-        <div className="failure-verification" aria-label={t('verificationChain')}>
+        <section className="failure-verification" aria-label={t('verificationChain')}>
           <h3>{t('verificationChain')}</h3>
           <ol>
             <li><span>{t('originalRun')}</span><strong>#{failure.run_id.slice(0, 8)} · {sourceRun?.status ?? 'FAILED'}</strong></li>
@@ -309,7 +309,7 @@ export const FailureOverview: React.FC<{
           {primaryAction === 'CREATE_ISSUE_DRAFT' && <p className="failure-verification-handoff">{t('issueHandoff')}</p>}
           {verificationRun?.parent_run_id === failure.run_id && <span className="failure-verification-attempt">{t('verificationAttempt', { count: 2 })}</span>}
           {rerunMessage && <p role="status" className="failure-rerun-status">{rerunMessage}</p>}
-        </div>
+        </section>
 
         {relatedTests.length > 1 && (
           <aside className="failure-shared-group" role="note">

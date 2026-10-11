@@ -659,8 +659,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">{t('projectRequired')}</label>
+                  <label className="form-label" htmlFor="run-project">{t('projectRequired')}</label>
                   <select
+                    id="run-project"
                     className="form-control"
                     value={runFormData.project_id}
                     onChange={(e) =>
@@ -686,8 +687,9 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   }}
                 >
                   <div className="form-group">
-                    <label className="form-label">{t('runnerBackend')}</label>
+                    <label className="form-label" htmlFor="run-runner-backend">{t('runnerBackend')}</label>
                     <select
+                      id="run-runner-backend"
                       className="form-control"
                       value={runFormData.runner_type}
                       onChange={(e) =>
@@ -705,10 +707,11 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
                   {runFormData.runner_type === 'JENKINS' && (
                     <div className="form-group">
-                      <label className="form-label">
+                      <label className="form-label" htmlFor="run-jenkins-profile">
                         {t('jenkinsProfile')}
                       </label>
                       <select
+                        id="run-jenkins-profile"
                         className="form-control"
                         value={runFormData.runner_profile_id || ''}
                         onChange={(e) =>

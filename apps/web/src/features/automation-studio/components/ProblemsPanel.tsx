@@ -30,12 +30,12 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
     <>
       <button
         type="button"
+        className="studio-problems-toggle"
         aria-expanded={expanded}
         aria-controls={expanded ? 'studio-problems-panel' : undefined}
         style={{
           padding: '6px 12px',
           background: 'var(--surface-inset)',
-          display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           width: '100%',

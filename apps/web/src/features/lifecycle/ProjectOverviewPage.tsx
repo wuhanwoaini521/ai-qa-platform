@@ -37,7 +37,7 @@ export function ProjectOverviewPage() {
     catch(reason){setError(String(reason));}finally{setResetting(false);}
   };
   const root = `/projects/${projectId}`;
-  return <main className="lc-page"><nav className="lc-breadcrumb"><Link to="/projects">{t('projects')}</Link><span>/</span><span>{project?.name??projectId}</span></nav>
+  return <div className="lc-page"><nav className="lc-breadcrumb"><Link to="/projects">{t('projects')}</Link><span>/</span><span>{project?.name??projectId}</span></nav>
     <div className="lc-header"><div><span className="lc-eyebrow">{t('projectWorkspace')}</span><h2>{project?.name??t('loading')}</h2><p className="lc-muted">{project?.description}</p></div><div className="lc-toolbar"><button className="btn btn-secondary" onClick={knowledge.reload}>{t('refresh')}</button>{project?.demo_kind==='golden_shop_v1'&&<button className="btn btn-secondary" onClick={()=>setConfirmReset(true)}><RotateCcw size={14}/>{t('resetDemo')}</button>}</div></div>
     {(error||knowledge.error)&&<p role="alert" className="lc-notice lc-error">{error||knowledge.error}</p>}
     {confirmReset&&<div className="lc-notice"><p>{t('resetWarning')}</p><div className="lc-toolbar"><button className="btn btn-primary" disabled={resetting} onClick={()=>void reset()}>{resetting?t('loading'):t('confirmReset')}</button><button className="btn btn-secondary" onClick={()=>setConfirmReset(false)}>{t('cancel')}</button></div></div>}
@@ -47,5 +47,5 @@ export function ProjectOverviewPage() {
     {knowledge.graph&&tab==='overview'&&<><div className="lc-metric-grid">{['requirement','design','case','automated','executed','passed'].map(kind=><div key={kind} className="lc-metric"><span>{t(`count.${kind}`)}</span><strong>{knowledge.graph!.counts[kind]??0}</strong><small>{t('actualRecords')}</small></div>)}</div><div className="lc-two-col"><section className="lc-card"><h3>{t('startFromRequirement')}</h3>{requirements.map(req=><Link key={req.id} className="lc-gap" to={`${root}/requirements/${req.id}`}><strong>{req.qa_model?.display_id||req.id.slice(-6)}</strong><span>{req.title}</span><ArrowRight size={16}/></Link>)}{!requirements.length&&<p className="lc-muted">{t('noRequirement')}</p>}</section><section className="lc-card"><h3>{t('attention')}</h3><p>{t('coverageGapCount',{count:knowledge.graph.gaps.length})}</p><p className="lc-muted">{t('executionMeaning')}</p><Link className="btn btn-secondary" to={`${root}?tab=coverage`}>{t('inspectCoverage')}</Link>{project?.demo_kind&&<a className="btn btn-secondary" style={{marginLeft:8}} href="/api/demo-shop/index.html" target="_blank" rel="noreferrer">{t('openShop')}</a>}</section></div></>}
     {knowledge.graph&&tab==='knowledge'&&<KnowledgeGraph graph={knowledge.graph} initialNode={query.get('node')??undefined}/>}
     {knowledge.graph&&tab==='coverage'&&<CoveragePanel graph={knowledge.graph} onOpenKnowledge={()=>setQuery({tab:'knowledge'})}/>}
-  </main>;
+  </div>;
 }
