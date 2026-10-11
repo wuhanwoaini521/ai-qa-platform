@@ -27,6 +27,11 @@ class TaskAIService:
             return 50
         return int((AIProviderRegistry._runtime_config or {}).get("max_task_calls", "8"))
 
+    @staticmethod
+    def _provider_thinking_mode(provider) -> str | None:
+        model = str(getattr(provider, "model", "")).casefold()
+        return "disabled" if model.startswith("deepseek-") else None
+
     async def reserve_ai_call(self, task_id: str) -> bool:
         async with self.context.repository_scope() as repositories:
             reserved = await repositories.tasks.reserve_ai_call(task_id)
@@ -59,6 +64,7 @@ class TaskAIService:
                 max_tokens=2200,
                 timeout_seconds=20,
                 max_retries=0,
+                thinking_mode=self._provider_thinking_mode(provider),
             )
         )
         return provider, response

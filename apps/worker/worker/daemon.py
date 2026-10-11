@@ -43,6 +43,12 @@ class WorkerDaemon:
         self.worker_name = worker_name or worker_config.name or f"Runner-{platform.node()}"
 
         self.capabilities = list(worker_config.capabilities if capabilities is None else capabilities)
+        configured_projects = os.getenv("WORKER_PROJECT_IDS")
+        self.project_ids = (
+            list(dict.fromkeys(item.strip() for item in configured_projects.split(",") if item.strip()))
+            if configured_projects is not None
+            else None
+        )
         self.browser_capabilities = [
             capability for capability in self.capabilities if capability in {"chromium", "firefox", "webkit"}
         ]
@@ -246,7 +252,11 @@ class WorkerDaemon:
             assert self._http_client is not None
             response = await self._http_client.post(
                 "/api/jobs/claim",
-                json={"worker_id": self.worker_id, "browsers": self.browser_capabilities},
+                json={
+                    "worker_id": self.worker_id,
+                    "browsers": self.browser_capabilities,
+                    **({"project_ids": self.project_ids} if self.project_ids is not None else {}),
+                },
             )
             if response.status_code == 200:
                 data = response.json()

@@ -181,16 +181,17 @@ class AIExecutionService:
                         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
                             setattr(response, target, value)
                 yield chunk
+            if is_output_limit_finish_reason(finish_reason) or (
+                request.max_tokens is not None
+                and response.output_tokens is not None
+                and response.output_tokens >= request.max_tokens
+            ):
+                raise output_limit_error(
+                    max_tokens=request.max_tokens,
+                    input_tokens=response.input_tokens,
+                    output_tokens=response.output_tokens,
+                )
             if not response.content.strip():
-                if is_output_limit_finish_reason(finish_reason) or (
-                    request.max_tokens is not None
-                    and response.output_tokens is not None
-                    and response.output_tokens >= request.max_tokens
-                ):
-                    raise output_limit_error(
-                        max_tokens=request.max_tokens,
-                        output_tokens=response.output_tokens,
-                    )
                 raise empty_response_error(streamed=True)
             if request.response_schema:
                 parsed = request.response_schema.model_validate_json(clean_json_text(response.content))

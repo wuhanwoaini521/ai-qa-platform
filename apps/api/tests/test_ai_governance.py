@@ -7,6 +7,7 @@ from app.persistence.models import AIInvocationORM
 from app.repositories.ai_repo import AIRepository
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.ai_execution_service import AIExecutionService
+from app.services.task_ai_service import TaskAIService
 from qa_core.ai.budget import BudgetExceededError
 from qa_core.ai.models import AICompletionRequest, AICompletionResponse, AIStreamChunk, CodeAssistantResponse
 from qa_core.ai.provider import AIProviderError
@@ -21,6 +22,11 @@ class Provider:
         return AICompletionResponse(
             content="answer", provider=self.provider_name, model=self.model, input_tokens=7, output_tokens=3
         )
+
+
+def test_deepseek_browser_planning_disables_reasoning_token_mode():
+    assert TaskAIService._provider_thinking_mode(Provider()) is None
+    assert TaskAIService._provider_thinking_mode(type("DeepSeek", (), {"model": "deepseek-flash"})()) == "disabled"
 
 
 @pytest.mark.asyncio
@@ -128,6 +134,38 @@ async def test_empty_stream_is_failed(test_db_session):
     summary = await AIRepository().get_usage_summary()
     assert summary.failed_requests == 1
     assert summary.invocations[0].error_type == "empty_stream"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish_reason", ["length", "stop"])
+async def test_nonempty_truncated_stream_is_classified_as_output_limit(test_db_session, finish_reason):
+    class Truncated(Provider):
+        async def stream_complete(self, _):
+            yield AIStreamChunk(content_delta='{"reply":', provider=self.provider_name, model=self.model)
+            yield AIStreamChunk(
+                usage={"completion_tokens": 6000},
+                finish_reason=finish_reason,
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    with pytest.raises(AIProviderError) as caught:
+        _ = [
+            chunk
+            async for chunk in AIExecutionService(
+                Truncated(), repository_scope=TaskRepositoryScopeFactory()
+            ).stream_complete(
+                AICompletionRequest(prompt="probe", max_tokens=6000, response_schema=CodeAssistantResponse)
+            )
+        ]
+
+    assert caught.value.code == "output_limit"
+    assert caught.value.input_tokens is None
+    assert caught.value.output_tokens == 6000
+    summary = await AIRepository().get_usage_summary()
+    assert summary.failed_requests == 1
+    assert summary.total_output_tokens == 6000
+    assert summary.invocations[0].error_type == "output_limit"
 
 
 @pytest.mark.asyncio

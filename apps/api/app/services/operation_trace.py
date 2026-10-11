@@ -52,7 +52,7 @@ async def stream_operation(operation, title):
             raise
         except Exception as error:
             # Provider exception bodies may contain prompts or credentials. Publish only their class.
-            message = f"执行失败 ({type(error).__name__})；请检查输入及 AI provider 状态。"
+            message = f"执行失败 ({type(error).__name__})；请检查输入和生成结果。"
             await queue.put(
                 make_trace_event(
                     run_id, "run.failed", stage="operation", title="执行失败", status="FAILED", message=message

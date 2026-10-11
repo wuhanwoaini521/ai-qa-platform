@@ -10,6 +10,7 @@ import re
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from fnmatch import fnmatchcase
+from pathlib import Path, PurePosixPath
 
 from project_model.models import (
     ApplyRepairRequest,
@@ -51,6 +52,35 @@ def _is_allowed_repair_target(path: str) -> bool:
     if any(fnmatchcase(normalized, pattern.replace("\\", "/")) for pattern in repair.denied_paths):
         return False
     return any(fnmatchcase(normalized, pattern.replace("\\", "/")) for pattern in repair.allowed_paths)
+
+
+def _repair_source_candidates(test_nodeid: str, stack_trace: str, workspace_root: str | Path) -> list[str]:
+    """Return workspace-relative, policy-allowed test/Page Object frames in traceback order."""
+    test_path = test_nodeid.split("::", 1)[0].replace("\\", "/")
+    raw_paths = [test_path]
+    raw_paths.extend(re.findall(r"(?m)^\s*(.+?\.py):\d+:\s*(?:in\b|$)", stack_trace))
+    raw_paths.extend(re.findall(r"File [\"']([^\"']+\.py)[\"'], line \d+", stack_trace))
+    root = Path(workspace_root).resolve()
+    root_text = root.as_posix().rstrip("/")
+    candidates: list[str] = []
+    for raw_path in raw_paths:
+        normalized = raw_path.strip().replace("\\", "/")
+        if normalized.startswith(root_text + "/"):
+            relative = normalized[len(root_text) + 1 :]
+        elif Path(normalized).is_absolute():
+            try:
+                relative = Path(normalized).resolve().relative_to(root).as_posix()
+            except ValueError:
+                continue
+        else:
+            relative = PurePosixPath(normalized).as_posix()
+        parts = tuple(part for part in PurePosixPath(relative).parts if part not in {"", "."})
+        if not parts or ".." in parts:
+            continue
+        candidate = "/".join(parts)
+        if _is_allowed_repair_target(candidate) and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
 
 
 def _validated_trace_events(events: list[AITraceEvent | dict[str, object]]) -> list[AITraceEvent]:
@@ -467,25 +497,42 @@ class FailureService:
         evidence_execution_id = evidence_execution_id or failure.execution_id
         browser_session, page_evidence = await self._browser_evidence(evidence_execution_id)
         original_run = await self.run_repo.get_by_id(failure.run_id)
-        source_content = ""
-        source_sha256 = None
-        repair_file = failure.test_nodeid.split("::")[0].replace("\\", "/")
-        if not _is_allowed_repair_target(repair_file):
-            raise LocatorRepairNotApplicableError("REPAIR_TARGET_BLOCKED: automatic repair is limited to test code.")
-        if original_run and original_run.workspace_id:
-            try:
-                source_content = await self.workspace_service.read_file(
-                    original_run.workspace_id, failure.test_nodeid.split("::")[0]
-                )
-                source_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
-            except (FileNotFoundError, ValueError):
-                pass
         observed_locator = self._observed_failed_locator(page_evidence)
         failing_loc = self._require_locator_failure(
             failure,
             resolved_classification=resolved_classification,
             observed_locator=observed_locator,
         )
+        test_file = failure.test_nodeid.split("::")[0].replace("\\", "/")
+        repair_file = test_file
+        source_content = ""
+        source_sha256 = None
+        if original_run and original_run.workspace_id:
+            workspace_id = original_run.workspace_id
+            workspace_root = self.workspace_service.get_workspace_dir(workspace_id)
+            repair_candidates = _repair_source_candidates(test_file, failure.stack_trace, workspace_root)
+            test_name = failure.test_nodeid.split("::")[-1].split("[")[0]
+            for candidate_path in repair_candidates:
+                try:
+                    candidate_content = await self.workspace_service.read_file(workspace_id, candidate_path)
+                except (FileNotFoundError, ValueError):
+                    continue
+                candidate_test_name = test_name if candidate_path == test_file else None
+                if self._locator_call_count(candidate_content, failing_loc, function_name=candidate_test_name) == 1:
+                    repair_file = candidate_path
+                    source_content = candidate_content
+                    break
+            if not source_content and test_file in repair_candidates:
+                try:
+                    source_content = await self.workspace_service.read_file(workspace_id, test_file)
+                except (FileNotFoundError, ValueError):
+                    pass
+        if source_content:
+            source_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
+        if not _is_allowed_repair_target(repair_file):
+            raise LocatorRepairNotApplicableError(
+                "REPAIR_TARGET_BLOCKED: no policy-allowed automation source contains the failed locator."
+            )
         if diagnosis_override is not None:
             diagnosis_root_cause = diagnosis_override.root_cause
             trace = list(diagnosis_override.execution_trace)
@@ -677,7 +724,7 @@ class FailureService:
             confidence=summary.get("confidence"),
             strategy=selected["strategy"],
             reason=f"Playwright verified this candidate against the observed failure page. Decision engine: {summary['engine']}",
-            file_path=failure.test_nodeid.split("::")[0],
+            file_path=repair_file,
             explanation=diagnosis_root_cause,
             **proposal_fields,
             execution_trace=trace,
@@ -712,7 +759,7 @@ class FailureService:
                     proposal.file_path,
                     failing_loc,
                     proposal.proposed_locator,
-                    test_name=failure.test_nodeid.split("::")[-1].split("[")[0],
+                    test_name=(failure.test_nodeid.split("::")[-1].split("[")[0] if repair_file == test_file else None),
                 )
                 if preview is not None:
                     proposal.code_diff = "".join(
@@ -1010,11 +1057,11 @@ class FailureService:
             raise ValueError("仅允许应用真实 AI 诊断且经 Playwright 或失败页捕获证据验证的候选。")
         if proposal.get("applied"):
             raise ValueError("该修复已应用；请先复核当前补丁或执行回滚。")
-        failure_file = failure.test_nodeid.split("::")[0].replace("\\", "/")
-        if not _is_allowed_repair_target(failure_file):
-            raise ValueError("Automatic repair is limited to test code; production source is blocked.")
-        if payload.old_code != failing_locator or payload.file_path.replace("\\", "/") != failure_file:
-            raise ValueError("修复目标与失败记录中的定位器或文件不一致，不写入工作区。")
+        repair_file = str(proposal.get("file_path") or "").replace("\\", "/")
+        if not _is_allowed_repair_target(repair_file):
+            raise ValueError("Automatic repair target is outside the configured test/Page Object allowlist.")
+        if payload.old_code != failing_locator or payload.file_path.replace("\\", "/") != repair_file:
+            raise ValueError("修复目标与已审核提案中的定位器或文件不一致，不写入工作区。")
         if (
             not payload.old_code.strip()
             or not payload.new_code.strip()
@@ -1036,7 +1083,11 @@ class FailureService:
             payload.file_path,
             payload.old_code,
             payload.new_code,
-            test_name=failure.test_nodeid.split("::")[-1].split("[")[0],
+            test_name=(
+                failure.test_nodeid.split("::")[-1].split("[")[0]
+                if repair_file == failure.test_nodeid.split("::")[0].replace("\\", "/")
+                else None
+            ),
         )
         if updated_content is None:
             raise ValueError(
@@ -1095,6 +1146,34 @@ class FailureService:
             },
         )
         return {"status": "rolled_back", "file_path": file_path}
+
+    @staticmethod
+    def _locator_call_count(content: str, locator: str, *, function_name: str | None = None) -> int:
+        methods = {"locator", "get_by_role", "get_by_text", "get_by_label", "get_by_placeholder", "get_by_test_id"}
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return 0
+        scopes = [tree]
+        if function_name:
+            functions = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name
+            ]
+            if len(functions) != 1:
+                return 0
+            scopes = functions
+        return sum(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in methods
+            and bool(node.args)
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == locator
+            for scope in scopes
+            for node in ast.walk(scope)
+        )
 
     def _patched_content(
         self, content: str, file_path: str, old_code: str, new_code: str, *, test_name: str | None = None

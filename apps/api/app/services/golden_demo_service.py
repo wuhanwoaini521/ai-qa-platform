@@ -40,6 +40,8 @@ def demo_document() -> RequirementDocument:
         "购物车显示商品、规格、数量，金额符合价格乘数量。",
         "无匹配商品时显示明确空状态，无商品卡片。",
         "重复加入相同规格时合并数量，重新计算金额。",
+        "分类与最高价格条件同时生效，只显示满足全部条件的商品。",
+        "购物车数量增减、归零移除时同步更新商品行和总金额。",
     ]
     criteria = [
         AcceptanceCriterion(id=f"AC-{i:03}", description=text, negative_required=i == 5)
@@ -49,13 +51,21 @@ def demo_document() -> RequirementDocument:
         BusinessRule(
             id="BR-001",
             description="商品、颜色和尺码共同标识购物车行；相同规格合并数量。",
-            criterion_ids=["AC-003", "AC-006"],
+            criterion_ids=["AC-003", "AC-006", "AC-008"],
         ),
         BusinessRule(
-            id="BR-002", description="行金额 = 单价 × 数量；总金额 = 行金额之和。", criterion_ids=["AC-004", "AC-006"]
+            id="BR-002",
+            description="行金额 = 单价 × 数量；总金额 = 行金额之和。",
+            criterion_ids=["AC-004", "AC-006", "AC-008"],
         ),
         BusinessRule(
             id="BR-003", description="按商品名称进行大小写不敏感的包含匹配。", criterion_ids=["AC-001", "AC-005"]
+        ),
+        BusinessRule(
+            id="BR-004", description="分类与最高价格筛选取交集；最高价格边界包含等于。", criterion_ids=["AC-007"]
+        ),
+        BusinessRule(
+            id="BR-005", description="减少至零或移除商品时删除购物车行并重新计算总额。", criterion_ids=["AC-008"]
         ),
     ]
     flow = [
@@ -81,7 +91,7 @@ def demo_document() -> RequirementDocument:
             title="商品规格或金额错误",
             severity="High",
             impact="购买的规格与预期不一致或收费错误。",
-            criterion_ids=["AC-003", "AC-004", "AC-006"],
+            criterion_ids=["AC-003", "AC-004", "AC-006", "AC-008"],
             rationale="必须检查独立业务 Oracle。",
         ),
         RequirementRisk(
@@ -90,6 +100,20 @@ def demo_document() -> RequirementDocument:
             severity="Medium",
             impact="用户无法区分无商品与加载失败。",
             criterion_ids=["AC-001", "AC-005"],
+        ),
+        RequirementRisk(
+            id="RISK-004",
+            title="过滤条件组合错误",
+            severity="Medium",
+            impact="用户可能看到超出所选分类或价格范围的商品。",
+            criterion_ids=["AC-007"],
+        ),
+        RequirementRisk(
+            id="RISK-005",
+            title="购物车数量修改未同步金额",
+            severity="High",
+            impact="购物车显示的商品数量与应付金额不一致。",
+            criterion_ids=["AC-008"],
         ),
     ]
     definitions = [
@@ -177,6 +201,30 @@ def demo_document() -> RequirementDocument:
             ["连续两次加入 Navy/M", "打开购物车"],
             ["Quantity: 2，Total: $58.00"],
         ),
+        (
+            "分类与价格范围过滤",
+            "确认分类和最高价格同时筛选且价格边界有效",
+            ["AC-007"],
+            ["BR-004"],
+            ["RISK-004"],
+            ["FLOW-001"],
+            "alternative",
+            "boundary",
+            ["选择 Apparel 分类", "设置最高价格为 $30", "应用过滤"],
+            ["只显示 Apparel 分类且价格不高于 $30 的商品"],
+        ),
+        (
+            "购物车数量修改与移除",
+            "确认增减数量、删除商品后金额与空状态一致",
+            ["AC-008"],
+            ["BR-002", "BR-005"],
+            ["RISK-005"],
+            ["FLOW-005"],
+            "alternative",
+            "state_transition",
+            ["加入 Everyday Tee", "增加数量", "减少数量", "移除商品"],
+            ["数量和总额同步更新；移除后显示空购物车与 $0.00"],
+        ),
     ]
     scenarios = [
         TestScenario(
@@ -200,7 +248,7 @@ def demo_document() -> RequirementDocument:
         constraints=["本地运行，无登录或互联网依赖", "每个测试使用独立浏览器上下文"],
         dependencies=["Chromium", "pytest", "Playwright"],
         analysis=RequirementAnalysis(
-            summary="从搜索到购物车的本地购买流程。包含一项已知定位器失败与一项待自动化边界场景。",
+            summary="从商品筛选到购物车维护的本地购买流程。包含已知定位器失败与一项待 AI 自动化的边界场景。",
             business_flow=flow,
             actors=["购物者"],
             entities=["Product", "Variant", "CartLine", "Cart"],
@@ -307,6 +355,9 @@ class GoldenDemoService:
                     "test_add_to_cart",
                     "test_empty_search",
                     "test_known_locator_change",
+                    "test_repeated_add_merges_quantity_and_total",
+                    "test_category_and_price_filters",
+                    "test_cart_quantity_controls_and_remove",
                 ]
                 test_rows = []
                 for index, scenario in enumerate(doc.analysis.scenarios, 1):
@@ -328,13 +379,21 @@ class GoldenDemoService:
                         coverage=scenario.coverage,
                         path_type=scenario.path_type,
                         technique=scenario.technique,
-                        data={"query": "tee", "product": "Everyday Tee", "color": "Navy", "size": "M", "price": 29},
+                        data={
+                            "query": "tee",
+                            "product": "Everyday Tee",
+                            "color": "Navy",
+                            "size": "M",
+                            "price": 29,
+                            "category": "Apparel",
+                            "maximum_price": 30,
+                        },
                         oracles=[
                             TestOracle(kind="UI", description=outcome, criterion_ids=scenario.coverage.criterion_ids)
                             for outcome in scenario.expected_outcomes
                         ],
                         evidence=["Screenshot", "DOM", "Trace", "Network"],
-                        missing=[] if index <= 6 else ["未实现两次加入操作的自动化"],
+                        missing=["等待人工确认并生成重复加入自动化"] if index == 7 else [],
                     )
                     case = {
                         "id": case_id,
@@ -346,12 +405,12 @@ class GoldenDemoService:
                         "steps": scenario.actions,
                         "expected_result": "\n".join(scenario.expected_outcomes),
                         "priority": scenario.priority,
-                        "automation_status": "AUTOMATED" if index <= 6 else "MANUAL",
+                        "automation_status": "AUTOMATED" if index <= 6 or index >= 8 else "MANUAL",
                         "test_model": model.model_dump(mode="json"),
                         "tags": ["golden-demo", scenario.technique],
                     }
                     binding = None
-                    if index <= 6:
+                    if index <= 6 or index >= 8:
                         file = "tests/test_known_locator.py" if index == 6 else "tests/test_shop.py"
                         binding = {
                             "id": f"bind_golden_{index:03}",

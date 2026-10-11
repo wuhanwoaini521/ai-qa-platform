@@ -16,6 +16,20 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def launch_shop_browser(engine):
+    try:
+        return engine.chromium.launch(headless=True)
+    except Exception as error:
+        if "executable doesn't exist" not in str(error).lower():
+            raise
+        for channel in ("chrome", "msedge"):
+            try:
+                return engine.chromium.launch(headless=True, channel=channel)
+            except Exception:
+                continue
+        raise error
+
+
 @pytest.fixture(scope="session")
 def shop_url():
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(Path(__file__).parent / "site")))
@@ -35,7 +49,7 @@ def shop_data():
 @pytest.fixture
 def page(request):
     with sync_playwright() as engine:
-        browser = engine.chromium.launch(headless=True)
+        browser = launch_shop_browser(engine)
         context = browser.new_context(viewport={"width": 1280, "height": 800})
         context.tracing.start(screenshots=True, snapshots=True, sources=True)
         page = context.new_page()

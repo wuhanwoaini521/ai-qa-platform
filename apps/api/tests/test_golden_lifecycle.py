@@ -16,12 +16,12 @@ async def test_demo_is_idempotent_and_coverage_uses_real_denominators(client):
     doc = (await client.get(f"/api/requirements/{DEMO_REQUIREMENT}")).json()["qa_model"]
     assert doc["history"][0]["status"] == "REFERENCE"
     graph = (await client.get(f"/api/projects/{DEMO_ID}/knowledge")).json()
-    assert graph["counts"]["case"] == 7
-    assert graph["counts"]["automated"] == 6
+    assert graph["counts"]["case"] == 9
+    assert graph["counts"]["automated"] == 8
     assert graph["counts"]["executed"] == 0
     metrics = {item["key"]: item for item in graph["coverage"]}
-    assert (metrics["criteria"]["covered"], metrics["criteria"]["total"]) == (6, 6)
-    assert metrics["automation"]["percentage"] == 85.7
+    assert (metrics["criteria"]["covered"], metrics["criteria"]["total"]) == (8, 8)
+    assert metrics["automation"]["percentage"] == 88.9
     assert metrics["execution"]["percentage"] == 0
     assert metrics["passed"]["percentage"] is None
     assert not any(node["kind"] == "run" for node in graph["nodes"])
@@ -65,7 +65,7 @@ async def test_demo_reset_preserves_other_projects_and_refuses_active_runs(clien
     assert result.status_code == 200, result.text
     assert (await client.get(f"/api/projects/{other['id']}")).status_code == 200
     graph = (await client.get(f"/api/projects/{DEMO_ID}/knowledge")).json()
-    assert graph["counts"]["case"] == 7
+    assert graph["counts"]["case"] == 9
 
 
 @pytest.mark.asyncio
@@ -73,7 +73,7 @@ async def test_adoption_reuses_existing_entities_and_models(client):
     await client.post("/api/projects/golden-demo/seed")
     designs = await client.post(f"/api/requirements/{DEMO_REQUIREMENT}/lifecycle/designs")
     assert designs.status_code == 200, designs.text
-    assert len(designs.json()) == 7
+    assert len(designs.json()) == 9
     adopted = await client.post("/api/test-designs/des_golden_004/lifecycle/case")
     assert adopted.status_code == 200, adopted.text
     assert adopted.json()["id"] == "case_golden_004"

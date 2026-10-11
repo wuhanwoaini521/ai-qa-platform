@@ -96,12 +96,15 @@ class JobRepository:
         worker_id: str,
         browser: str = "chromium",
         browsers: list[str] | None = None,
+        project_ids: list[str] | None = None,
         session: AsyncSession | None = None,
     ) -> ExecutionJob | None:
         async def _exec(s: AsyncSession) -> ExecutionJob | None:
             stmt = select(ExecutionJobORM).where(ExecutionJobORM.status == JobStatus.QUEUED.value)
             supported_browsers = list(dict.fromkeys(browsers or [browser]))
             stmt = stmt.where(ExecutionJobORM.browser.in_(supported_browsers))
+            if project_ids is not None:
+                stmt = stmt.where(ExecutionJobORM.project_id.in_(list(dict.fromkeys(project_ids))))
             stmt = (
                 stmt.order_by(ExecutionJobORM.priority.desc(), ExecutionJobORM.created_at.asc())
                 .limit(1)

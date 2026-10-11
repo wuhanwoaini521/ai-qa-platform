@@ -135,6 +135,43 @@ async def test_job_queue_and_dispatch(test_db_session):
 
 
 @pytest.mark.asyncio
+async def test_project_scoped_claim_cannot_take_higher_priority_jobs_from_another_project(test_db_session):
+    job_service = JobQueueService(
+        repository_scope=TaskRepositoryScopeFactory(), job_repo=JobRepository(test_db_session)
+    )
+    async with test_db_session() as session:
+        projects = ProjectRepository(session)
+        unrelated = await projects.create(ProjectCreate(name="Unrelated queued work"))
+        demo = await projects.create(ProjectCreate(name="Scoped demo work"))
+        runs = TestRunRepository(session)
+        unrelated_run = await runs.create_run(pm.TestRunCreate(project_id=unrelated.id, workspace_id=str(uuid.uuid4())))
+        demo_run = await runs.create_run(pm.TestRunCreate(project_id=demo.id, workspace_id=str(uuid.uuid4())))
+        await session.commit()
+
+    unrelated_job = await job_service.enqueue_job(
+        run_id=unrelated_run.id,
+        project_id=unrelated.id,
+        workspace_id=unrelated_run.workspace_id,
+        nodeids=["tests/test_unrelated.py::test_unrelated"],
+        priority=100,
+    )
+    demo_job = await job_service.enqueue_job(
+        run_id=demo_run.id,
+        project_id=demo.id,
+        workspace_id=demo_run.workspace_id,
+        nodeids=["tests/test_demo.py::test_demo"],
+        priority=1,
+    )
+
+    claimed = await job_service.dispatch_next_job(worker_id="demo-worker", project_ids=[demo.id])
+
+    assert claimed is not None and claimed.id == demo_job.id
+    assert claimed.project_id == demo.id
+    assert (await job_service.get_job(unrelated_job.id)).status == JobStatus.QUEUED
+    assert await job_service.dispatch_next_job(worker_id="empty-worker", project_ids=[]) is None
+
+
+@pytest.mark.asyncio
 async def test_runner_selection_resolves_backend_by_profile_type(test_db_session):
     """RunnerService selects an execution backend from the runner profile type/config."""
     service = RunnerService(runner_repo=RunnerProfileRepository(test_db_session))
@@ -201,9 +238,10 @@ async def test_distributed_endpoints(client: AsyncClient, test_db_session, tmp_p
         "worker_service",
         WorkerService(worker_repo=WorkerRepository(test_db_session), job_repo=JobRepository(test_db_session)),
     )
-    fastapi_app.dependency_overrides[get_job_queue_service] = lambda: JobQueueService(
+    job_service = JobQueueService(
         repository_scope=TaskRepositoryScopeFactory(), job_repo=JobRepository(test_db_session)
     )
+    fastapi_app.dependency_overrides[get_job_queue_service] = lambda: job_service
     monkeypatch.setattr(
         artifacts_api,
         "artifact_service",
@@ -235,6 +273,36 @@ async def test_distributed_endpoints(client: AsyncClient, test_db_session, tmp_p
     )
     assert hb_resp.status_code == 200
     assert hb_resp.json()["current_load"] == 4
+
+    async with test_db_session() as session:
+        projects = ProjectRepository(session)
+        outside = await projects.create(ProjectCreate(name="Outside allowlist"))
+        inside = await projects.create(ProjectCreate(name="Inside allowlist"))
+        runs = TestRunRepository(session)
+        outside_run = await runs.create_run(pm.TestRunCreate(project_id=outside.id, workspace_id=str(uuid.uuid4())))
+        inside_run = await runs.create_run(pm.TestRunCreate(project_id=inside.id, workspace_id=str(uuid.uuid4())))
+        await session.commit()
+    outside_job = await job_service.enqueue_job(
+        run_id=outside_run.id,
+        project_id=outside.id,
+        workspace_id=outside_run.workspace_id,
+        nodeids=["tests/test_outside.py::test_outside"],
+        priority=100,
+    )
+    inside_job = await job_service.enqueue_job(
+        run_id=inside_run.id,
+        project_id=inside.id,
+        workspace_id=inside_run.workspace_id,
+        nodeids=["tests/test_inside.py::test_inside"],
+        priority=1,
+    )
+    scoped_claim = await client.post(
+        "/api/jobs/claim",
+        json={"worker_id": wid, "browsers": ["chromium"], "project_ids": [inside.id]},
+    )
+    assert scoped_claim.status_code == 200
+    assert scoped_claim.json()["id"] == inside_job.id
+    assert (await job_service.get_job(outside_job.id)).status == JobStatus.QUEUED
 
     # 3. Cluster status endpoint
     cluster_resp = await client.get("/api/workers/cluster-status")

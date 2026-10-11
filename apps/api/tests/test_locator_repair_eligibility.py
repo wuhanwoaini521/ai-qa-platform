@@ -7,7 +7,7 @@ from app.api.failures import get_failure_service
 from app.main import app
 from app.persistence.models import FailureAnalysisORM, FailureRecordORM
 from app.repositories.test_run_repo import TestRunRepository
-from app.services.failure_service import FailureService
+from app.services.failure_service import FailureService, _repair_source_candidates
 from project_model.models import RunStatus, TestRunCreate
 from qa_core.ai.provider import FakeAIProvider
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
@@ -140,6 +140,86 @@ async def test_real_locator_failure_without_candidate_does_not_create_noop_propo
             app.dependency_overrides.pop(get_failure_service, None)
 
 
+def test_repair_sources_include_only_allowed_traceback_frames(tmp_path):
+    paths = _repair_source_candidates(
+        "tests/test_known_locator.py::test_known_locator_change",
+        "tests/test_known_locator.py:12: in test_known_locator_change\n"
+        "pages/shop.py:35: in add_with_legacy_locator\n"
+        "apps/store.py:10: in add",
+        tmp_path,
+    )
+    assert paths == ["tests/test_known_locator.py", "pages/shop.py"]
+
+
+def test_page_object_locator_calls_are_patchable_without_test_function_scope():
+    source = "class ShopPage:\n    def add(self):\n        self.page.locator('#legacy-add').click()\n"
+    assert FailureService._locator_call_count(source, "#legacy-add") == 1
+    assert FailureService._locator_call_count(source, "#legacy-add", function_name="test_known_locator_change") == 0
+
+
+@pytest.mark.asyncio
+async def test_verified_repair_can_patch_allowlisted_page_object_source(client, test_db_session):
+    project_id, failure_id, _ = await seed_failure(
+        client,
+        test_db_session,
+        category="LOCATOR_CHANGED",
+        error='Timeout waiting for locator("#legacy-add")',
+        locator="#legacy-add",
+    )
+    page_path = "pages/shop.py"
+    page_source = "class ShopPage:\n    def add(self):\n        self.page.locator('#legacy-add').click()\n"
+    response = await client.put(f"/api/workspaces/{project_id}/file", json={"path": page_path, "content": page_source})
+    assert response.status_code == 200, response.text
+    analysis_id = "repair-analysis-page-object"
+    proposal = {
+        "file_path": page_path,
+        "old_locator": "#legacy-add",
+        "proposed_locator": 'get_by_role("button", name="Add to cart")',
+        "provider": "jev",
+        "model": "jev-1.13.0",
+        "ai_provider": "openai-compatible",
+        "ai_fallback_used": False,
+        "resolved_classification": "LOCATOR_CHANGED",
+        "candidate_id": "candidate-1",
+        "verified": True,
+        "confidence": 0.99,
+        "code_diff": "- self.page.locator('#legacy-add')\n+ self.page.get_by_role('button', name='Add to cart')",
+        "source_sha256": hashlib.sha256(page_source.encode()).hexdigest(),
+        "decision_summary": {
+            "provider": "jev",
+            "fallback_used": False,
+            "verification_source": "playwright",
+            "confidence": 0.99,
+        },
+    }
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = proposal
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={"repair_state": "PATCH_READY", "repair_proposal": proposal},
+            )
+        )
+        await session.commit()
+
+    applied = await client.post(
+        f"/api/failures/{failure_id}/analyses/{analysis_id}/apply",
+        json={
+            "file_path": page_path,
+            "old_code": "#legacy-add",
+            "new_code": proposal["proposed_locator"],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["status"] == "applied"
+    assert applied.json()["repair"]["state"] == "PATCH_APPLIED"
+    updated = await client.get(f"/api/workspaces/{project_id}/file", params={"path": page_path})
+    assert 'self.page.get_by_role("button", name="Add to cart")' in updated.json()["content"]
+
+
 @pytest.mark.asyncio
 async def test_noop_patch_is_rejected_even_for_locator_failure(client, test_db_session):
     project_id, failure_id, content = await seed_failure(
@@ -152,6 +232,7 @@ async def test_noop_patch_is_rejected_even_for_locator_failure(client, test_db_s
     async with test_db_session() as session:
         failure = await session.get(FailureRecordORM, failure_id)
         failure.repair_proposal = {
+            "file_path": "tests/test_x.py",
             "old_locator": "element",
             "proposed_locator": "element",
             "provider": "jev",

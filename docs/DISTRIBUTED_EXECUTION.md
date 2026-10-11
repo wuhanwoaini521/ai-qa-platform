@@ -35,6 +35,7 @@ Worker nodes register with the central orchestrator and transmit periodic heartb
 
 - Tasks are prioritized (`priority: 10` default, high priority P0 regressions scored `priority: 50+`).
 - Workers claim tasks matching their hardware/browser profiles using `POST /api/jobs/claim`.
+- An isolated Worker can set `WORKER_PROJECT_IDS` to a comma-separated project allowlist. The daemon sends that scope with each claim, and the API filters before selecting/locking a job. Unset preserves legacy global claiming; set to an empty string claims no jobs. Use this for demo/test Workers when the shared queue contains unrelated work.
 - Comprehensive task lifecycle: `QUEUED` $\to$ `ASSIGNED` $\to$ `RUNNING` $\to$ `COMPLETED` / `FAILED` / `CANCELLED`.
 
 ---

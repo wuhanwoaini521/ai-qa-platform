@@ -33,6 +33,7 @@ class TestOrchestrator:
         return await self.complete(request)
 
     async def complete(self, request):
+        assert request.max_tokens == 10000
         analysis = demo_document().analysis
         analysis.summary = "A structured fixture response, not a production model invocation"
         return AICompletionResponse(

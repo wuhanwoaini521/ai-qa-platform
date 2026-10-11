@@ -147,9 +147,9 @@ class RequirementLifecycleService:
                 {
                     "id": case.id,
                     "title": case.title[:200],
-                    "steps": (case.steps or [])[:8],
-                    "expected_result": (case.expected_result or "")[:600],
-                    "intent": str((case.test_model or {}).get("intent") or "")[:400],
+                    "steps": [str(step)[:200] for step in (case.steps or [])[:3]],
+                    "expected_result": (case.expected_result or "")[:350],
+                    "intent": str((case.test_model or {}).get("intent") or "")[:250],
                     "coverage": (case.test_model or {}).get("coverage", {}),
                 }
                 for case in cases
@@ -294,8 +294,9 @@ class RequirementLifecycleService:
                 prompt_id=REQUIREMENT_LIFECYCLE_PROMPT.prompt_id,
                 prompt_version=REQUIREMENT_LIFECYCLE_PROMPT.version,
                 response_schema=RequirementAnalysis,
-                max_tokens=6000,
+                max_tokens=10000,
                 max_retries=1,
+                thinking_mode="disabled" if record.model.casefold().startswith("deepseek-") else None,
                 task_id=task_id,
                 run_id=record.id,
             )

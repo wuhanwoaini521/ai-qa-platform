@@ -44,9 +44,15 @@ class JobQueueService:
         return await self.job_repo.create_job(create_req)
 
     async def dispatch_next_job(
-        self, worker_id: str, browser: str = "chromium", browsers: list[str] | None = None
+        self,
+        worker_id: str,
+        browser: str = "chromium",
+        browsers: list[str] | None = None,
+        project_ids: list[str] | None = None,
     ) -> ExecutionJob | None:
-        return await self.job_repo.claim_next_job(worker_id=worker_id, browser=browser, browsers=browsers)
+        return await self.job_repo.claim_next_job(
+            worker_id=worker_id, browser=browser, browsers=browsers, project_ids=project_ids
+        )
 
     async def get_job(self, job_id: str) -> ExecutionJob:
         job = await self.job_repo.get_by_id(job_id)

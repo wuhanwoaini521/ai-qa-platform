@@ -62,6 +62,7 @@ async def claim_next_job(
         worker_id=request.worker_id,
         browser=request.browser,
         browsers=request.browsers or None,
+        project_ids=request.project_ids,
     )
 
 

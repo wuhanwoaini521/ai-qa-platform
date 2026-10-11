@@ -582,11 +582,100 @@ async def test_jev_fallback_after_real_choice_preserves_provider_and_blocks_next
         task = discovery._tasks.get(fallback_run_id)
         if task is not None:
             await task
+        assert fallback_run["status"] == DiscoveryStatus.BLOCKED.value
         assert fallback_run["result"]["jev"]["provider"] == "fallback"
         assert fallback_run["result"]["jev"]["model"] is None
         fallback_decision = fallback_run["result"]["decisions"][0]
         assert fallback_decision["attempted_provider"] == "jev"
         assert fallback_decision["attempted_model"] == "jev-1.13.0"
+    finally:
+        fastapi_app.dependency_overrides.pop(get_quality_discovery_service, None)
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_jev_candidate_is_skipped_and_discovery_continues(client, test_db_session, monkeypatch):
+    base = discovery_module.get_config()
+    config = base.model_copy(update={"discovery": base.discovery.model_copy(update={"require_jev": True})})
+    monkeypatch.setattr(discovery_module, "get_config", lambda: config)
+    ai = DiscoveryFixtureAI()
+    runtime = DiscoveryFixtureBrowserRuntime()
+    attempted_candidates = []
+
+    async def low_confidence_then_select(_service, request, **_kwargs):
+        candidate = request.options[0].key
+        attempted_candidates.append(candidate)
+        if len(attempted_candidates) == 1:
+            return DecisionResult(
+                choice=None,
+                provider="fallback",
+                attempted_provider="jev",
+                attempted_model="jev-1.13.0",
+                attempted_choice=candidate,
+                confidence=0.46,
+                minimum_confidence=0.7,
+                probabilities={candidate: 0.57},
+                fallback_used=True,
+                reason="below_minimum_confidence",
+            )
+        return DecisionResult(
+            choice=candidate,
+            provider="jev",
+            model="jev-1.13.0",
+            confidence=0.9,
+            minimum_confidence=0.7,
+            probabilities={candidate: 0.9},
+            reason="Choose a confident safe candidate.",
+        )
+
+    monkeypatch.setattr(DecisionService, "choose", low_confidence_then_select)
+    discovery = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=runtime,
+        decisions=DecisionService(),
+        provider_factory=lambda: ai,
+    )
+    fastapi_app.dependency_overrides[get_quality_discovery_service] = lambda: discovery
+    try:
+        project_response = await client.post(
+            "/api/projects", json={"name": "Discovery Low Confidence", "bootstrap_workspace": False}
+        )
+        assert project_response.status_code == 201, project_response.text
+        created = await client.post(
+            "/api/discovery/runs",
+            json={
+                "project_id": project_response.json()["id"],
+                "start_url": "http://shop.example.test/",
+                "mode": "EXPLORE",
+            },
+        )
+        assert created.status_code == 202, created.text
+        run_id = created.json()["id"]
+
+        for _ in range(400):
+            response = await client.get(f"/api/discovery/runs/{run_id}")
+            assert response.status_code == 200, response.text
+            run = response.json()
+            if run["status"] in QualityDiscoveryService.TERMINAL:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("Discovery did not continue after skipping a low-confidence candidate")
+        task = discovery._tasks.get(run_id)
+        if task is not None:
+            await task
+
+        skipped_candidate = attempted_candidates[0]
+        assert run["status"] == DiscoveryStatus.COMPLETED.value, run.get("error")
+        assert len(attempted_candidates) >= 2
+        assert attempted_candidates[1] != skipped_candidate
+        assert run["result"]["decisions"][0]["reason"] == "below_minimum_confidence"
+        assert run["result"]["decisions"][0]["selected_candidate_id"] is None
+        assert all(action["candidate_id"] != skipped_candidate for action in run["result"]["actions"])
+        skipped = next(item for item in run["result"]["frontier"] if item["candidate_id"] == skipped_candidate)
+        assert skipped["status"] == "SKIPPED"
+        assert "置信度" in skipped["reason"]
+        assert any(action["candidate_id"] != skipped_candidate for action in run["result"]["actions"])
+        assert runtime.closed is True
     finally:
         fastapi_app.dependency_overrides.pop(get_quality_discovery_service, None)
 

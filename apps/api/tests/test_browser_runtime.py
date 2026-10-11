@@ -102,6 +102,19 @@ def browser_test_url():
 
 
 @pytest.mark.asyncio
+async def test_headless_browser_uses_standard_chrome_user_agent():
+    runtime = PlaywrightBrowserRuntime()
+    session = await runtime.create_session(headless=True)
+    try:
+        page = await runtime.get_page(session.id)
+        user_agent = await page.evaluate("navigator.userAgent")
+        assert "HeadlessChrome/" not in user_agent
+        assert f"Chrome/{session.browser_version}" in user_agent
+    finally:
+        await runtime.close_session(session.id)
+
+
+@pytest.mark.asyncio
 async def test_browser_runtime_create_restore_snapshot_verify_action_and_close(browser_test_url):
     runtime = PlaywrightBrowserRuntime()
     created = await runtime.create_session(viewport={"width": 1024, "height": 768})

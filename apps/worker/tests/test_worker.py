@@ -110,6 +110,36 @@ async def test_claim_requests_only_declared_browser_engines():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_worker_claim_is_restricted_to_configured_projects(monkeypatch):
+    monkeypatch.setenv("WORKER_PROJECT_IDS", "proj_demo, proj_other,proj_demo")
+
+    class Response:
+        status_code = 204
+
+    class Client:
+        request = None
+
+        async def post(self, path, *, json):
+            self.request = (path, json)
+            return Response()
+
+    daemon = WorkerDaemon()
+    client = Client()
+    daemon._http_client = client  # type: ignore[assignment]
+
+    assert await daemon._claim_job() is None
+    assert client.request == (
+        "/api/jobs/claim",
+        {
+            "worker_id": daemon.worker_id,
+            "browsers": ["chromium", "firefox", "webkit"],
+            "project_ids": ["proj_demo", "proj_other"],
+        },
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_start_fails_closed_when_worker_registration_is_rejected(monkeypatch):
     class Response:
         status_code = 401

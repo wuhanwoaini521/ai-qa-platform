@@ -1126,16 +1126,33 @@ class QualityDiscoveryService:
                     candidate_ids=list(choices),
                     priority_candidate_ids=suggested,
                 )
+                if decision.fallback_used:
+                    attempted_candidate = choices.get(decision.attempted_choice)
+                    if attempted_candidate and decision.reason in {"below_minimum_confidence", "confidence_missing"}:
+                        skip_reason = "Jev 决策未达到置信度要求；该候选未执行，已跳过。"
+                        await self._skip_candidates(run_id, fingerprint, [attempted_candidate], skip_reason)
+                        await self._event(
+                            run_id,
+                            "decision.low_confidence_skipped",
+                            "Jev 对该候选的置信度不足，未执行；继续评估其他安全候选。",
+                            {
+                                "candidate_id": attempted_candidate["candidate_id"],
+                                "confidence": decision.confidence,
+                                "minimum_confidence": decision.minimum_confidence,
+                                "reason": decision.reason,
+                            },
+                        )
+                        continue
+                    if config.require_jev:
+                        await self._record_frontier(
+                            run_id, state_id, pending, "BLOCKED", "Jev fallback 被配置禁止；动作未执行。"
+                        )
+                        raise DiscoveryBlocked("Jev 不可用或置信度不足；按配置停止，未执行候选动作。")
                 if not decision.choice or decision.choice not in choices:
                     await self._record_frontier(
-                        run_id, state_id, pending, "BLOCKED", "Jev 未返回有效候选；动作未执行。"
+                        run_id, state_id, pending, "BLOCKED", "决策服务未返回有效候选；动作未执行。"
                     )
-                    raise DiscoveryBlocked("Jev 未返回可执行的候选动作。")
-                if config.require_jev and decision.fallback_used:
-                    await self._record_frontier(
-                        run_id, state_id, pending, "BLOCKED", "Jev fallback 被配置禁止；动作未执行。"
-                    )
-                    raise DiscoveryBlocked("Jev 不可用或置信度不足；按配置停止，未执行候选动作。")
+                    raise DiscoveryBlocked("决策服务未返回可执行的候选动作。")
                 selected = choices[decision.choice]
                 await self._record_frontier(run_id, state_id, [selected], "SELECTED", "Jev 选择了此候选动作。")
                 await self._event(

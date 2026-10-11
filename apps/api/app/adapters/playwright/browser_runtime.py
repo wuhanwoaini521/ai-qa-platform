@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import platform
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,21 @@ from app.adapters.playwright.locator import verify_locator
 from app.adapters.playwright.proxy import browser_proxy_options, launch_chromium
 from app.ports.browser_runtime import BrowserPage, BrowserRuntimeSession, BrowserSnapshot
 from app.settings import get_config
+
+
+def _headless_chrome_user_agent(browser_version: str) -> str:
+    system_name = platform.system()
+    if system_name == "Darwin":
+        platform_token = "Macintosh; Intel Mac OS X 10_15_7"
+    elif system_name == "Windows":
+        platform_token = "Windows NT 10.0; Win64; x64"
+    else:
+        architecture = platform.machine().lower()
+        architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture or "x86_64")
+        platform_token = f"X11; Linux {architecture}"
+    return (
+        f"Mozilla/5.0 ({platform_token}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36"
+    )
 
 
 @dataclass
@@ -89,6 +105,9 @@ class PlaywrightBrowserRuntime:
                 context_options = {"viewport": viewport}
                 context_options["locale"] = browser_config.locale
                 context_options["timezone_id"] = browser_config.timezone
+                if headless:
+                    # Some sites reset HTTP/2 navigation when Chromium exposes HeadlessChrome.
+                    context_options["user_agent"] = _headless_chrome_user_agent(browser.version)
                 if block_service_workers:
                     context_options["service_workers"] = "block"
                 if storage_state is not None:

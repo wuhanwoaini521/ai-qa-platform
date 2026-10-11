@@ -1481,6 +1481,9 @@ class ClaimJobRequest(EntityBase):
     worker_id: str
     browser: str = "chromium"
     browsers: list[str] = Field(default_factory=list, max_length=10)
+    # Optional narrowing scope for isolated workers. None preserves legacy global claiming;
+    # an empty list deliberately claims no project jobs.
+    project_ids: list[str] | None = Field(default=None, max_length=100)
 
 
 class CompleteJobRequest(EntityBase):

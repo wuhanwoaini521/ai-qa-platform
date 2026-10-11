@@ -41,7 +41,9 @@ async def test_stream_failure_does_not_leak_provider_exception_bodies(error):
         raise error("raw prompt and hidden reasoning and api_key=secret")
 
     frames = [frame async for frame in stream_operation(operation, "Start")]
-    assert any("run.failed" in frame for frame in frames)
+    failure = next(frame for frame in frames if "run.failed" in frame)
+    assert f"执行失败 ({error.__name__})；请检查输入和生成结果。" in failure
+    assert "provider" not in failure.lower()
     assert "hidden reasoning" not in "".join(frames) and "api_key=" not in "".join(frames)
 
 
