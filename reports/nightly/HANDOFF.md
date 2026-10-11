@@ -3,13 +3,13 @@
 **Repository:** `/Users/hans/Code/github/ai-qa-platform`
 **Branch:** `agent/nightly-platform-improvement`
 **Base:** `cdf954a`
-**Push status:** pending at handoff generation; publish with a normal (non-force) push after reviewing the commit list.
+**Push status:** pushed successfully to `origin/agent/nightly-platform-improvement`; upstream tracking is configured.
 
 ## Delivered commits
 
 - `ea38326 fix: harden AI, browser, and worker workflows` — API, Worker, shared models/prompts, and Demo Shop changes/tests.
 - `f79c45b feat(web): refine workspace and improve accessibility` — Workspace/UI, localization, accessibility, and frontend tests.
-- Nightly audit/report/evidence files are in `reports/nightly/` and will be included as a separate documentation commit.
+- `a57d9a4 docs: record nightly platform audit and evidence` — audit reports, handoff, and before/after screenshots.
 
 ## Final validation
 
