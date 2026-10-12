@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from qa_core.failure.redactor import SensitiveRedactor
 
@@ -35,8 +35,13 @@ class AITraceEvent(BaseModel):
 
     @field_validator("content")
     @classmethod
-    def redact_content(cls, value: str | None) -> str | None:
-        return SensitiveRedactor.redact_text(value) if value is not None else None
+    def redact_content(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        if info.data.get("type") == "operation.result":
+            # Results are structured, user-facing payloads; treating JSON as free text can corrupt it.
+            return value
+        return SensitiveRedactor.redact_text(value)
 
 
 def make_trace_event(

@@ -5,7 +5,7 @@ import {
   ContextTaskProgress,
   useContextTask,
 } from '../../components/ContextTaskProgress';
-import { Project, TestCase } from '../../types';
+import { AutomationBinding, Project, TestCase } from '../../types';
 import { useTestCases } from './hooks/useTestCases';
 import { useAutomationBinding } from './hooks/useAutomationBinding';
 import { TestCaseList } from './components/TestCaseList';
@@ -31,6 +31,7 @@ interface TestCasesPageProps {
   focusAutomation?: boolean;
   hideRunAction?: boolean;
   onCaseCreated?: (testCase: TestCase) => void;
+  onAutomationBindingChanged?: (testCaseId: string, binding: AutomationBinding | null) => void;
 }
 
 export const TestCasesPage: React.FC<TestCasesPageProps> = ({
@@ -46,6 +47,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   focusAutomation = false,
   hideRunAction = false,
   onCaseCreated,
+  onAutomationBindingChanged,
 }) => {
   const { t } = useTranslation('testCases');
   const form = useTestCaseFormModal(
@@ -65,6 +67,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   const binding = useAutomationBinding({
     selectedCase: cases.selectedCase,
     selectedProjectId,
+    onBindingChanged: onAutomationBindingChanged,
     onNavigateToRuns,
     updateCaseStatus: cases.updateStatus,
   });

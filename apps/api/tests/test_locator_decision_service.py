@@ -44,6 +44,14 @@ def test_candidate_generation_preserves_only_observed_locator_strategies():
     assert all(item["evidence"]["dom_depth"] == 4 for item in candidates)
 
 
+def test_role_candidate_preserves_observed_exact_name_constraint():
+    candidates = LocatorDecisionService.generate_candidates(
+        {"candidates": [{"kind": "role", "value": "button", "name": "Continue", "exact": True}]}
+    )
+
+    assert candidates[0]["locator"] == 'get_by_role("button", name="Continue", exact=True)'
+
+
 def test_candidate_generation_does_not_invent_unobserved_strategies():
     candidates = LocatorDecisionService.generate_candidates({"candidates": [{"kind": "test_id", "value": "save"}]})
 

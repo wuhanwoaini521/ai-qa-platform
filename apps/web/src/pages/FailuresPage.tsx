@@ -573,11 +573,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const handleSemanticReview = async () => {
     if (!selectedFailure || !repairProposal) return;
     const chosenLocator = selectedCandidate || repairProposal.proposed_locator;
+    const sourceLocator = repairProposal.source_locator || repairProposal.old_locator;
     try {
       setReviewingSemantic(true);
       const review = await api.getSemanticLocatorReview(
         selectedFailure.id,
-        repairProposal.old_locator,
+        sourceLocator,
         chosenLocator,
       );
       setSemanticReview(review);
@@ -597,9 +598,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     )
       return;
     const chosenLocator = selectedCandidate || repairProposal.proposed_locator;
+    const sourceLocator = repairProposal.source_locator || repairProposal.old_locator;
     if (
       !chosenLocator.trim() ||
-      chosenLocator.trim() === repairProposal.old_locator.trim()
+      chosenLocator.trim() === sourceLocator.trim()
     ) {
       setRepairError(t('noAlternativeLocator'));
       return;
@@ -613,7 +615,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         selectedAnalysisId,
         {
           file_path: filePath,
-          old_code: repairProposal.old_locator,
+          old_code: sourceLocator,
           new_code: chosenLocator,
         },
       );
@@ -1001,7 +1003,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       ) : repairWorkflow?.allowed_actions.includes('APPLY') ? (
                         <button
                           className="btn btn-secondary btn-sm"
-                          disabled={applyingRepair || rerunning}
+                          disabled={applyingRepair || rerunning || !repairProposal.source_locator || !repairProposal.code_diff}
                           onClick={handleApplyRepair}
                         >
                           <Check size={13} />{' '}
@@ -1131,7 +1133,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                             wordBreak: 'break-all',
                           }}
                         >
-                          {repairProposal.old_locator || t('unknownValue')}
+                          {repairProposal.source_locator || repairProposal.old_locator || t('unknownValue')}
                         </code>
                       </div>
                       <div
@@ -1271,6 +1273,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   history={analysisHistory}
                   selectedId={selectedAnalysisId}
                   failureCreatedAt={selectedFailure.created_at}
+                  changesAppliedOverride={repairApplied}
                   failure={selectedFailure}
                   classification={selectedFailure.failure_kind ?? selectedFailure.classification}
                   error={diagnosisError}

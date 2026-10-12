@@ -14,6 +14,7 @@ class LocatorCandidate(BaseModel):
 
 class LocatorRepairProposal(BaseModel):
     old_locator: str
+    source_locator: str | None = None
     proposed_locator: str
     confidence: float | None = None
     strategy: str

@@ -15,7 +15,7 @@ from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.locator_history_service import LocatorHistoryService
 from app.services.test_run_service import TestRunService as RunApplicationService
-from project_model.models import DecisionResult, RunStatus, TestRunCreate
+from project_model.models import ApplyRepairRequest, DecisionResult, RunStatus, TestRunCreate
 from qa_core.ai.models import FailureAnalysisResponse
 from qa_core.ai.provider import FakeAIProvider
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
@@ -820,7 +820,7 @@ async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_
     assert result["classification_source"] == "AI_DIAGNOSIS"
     assert len(decision.calls) == 1
     assert result["selection"]["provider"] == "jev"
-    assert result["repair_proposal"]["proposed_locator"] == 'get_by_role("button", name="Complete order")'
+    assert result["repair_proposal"]["proposed_locator"] == 'get_by_role("button", name="Complete order", exact=True)'
     assert result["repair_proposal"]["verified"] is True, json.dumps(result["repair_proposal"], ensure_ascii=False)
     assert result["repair_proposal"]["code_diff"]
     assert result["repair_state"] == "VERIFYING_FIX"
@@ -874,6 +874,74 @@ async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_
     assert restored_response.status_code == 200, restored_response.text
     assert restored_response.json()["content"] == source
     await asyncio.gather(*verification_monitors, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_manual_repair_persists_applied_and_rolled_back_state(client, test_db_session, local_html_url):
+    url = local_html_url('<button type="submit">Continue</button>')
+    source = 'def test_workflow(page):\n    page.locator("#old-submit").click()\n'
+    project_id, failure_id, _ = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#old-submit")',
+        kind="UI",
+        candidates=[{"kind": "role", "value": "button", "name": "Continue", "exact": True}],
+        url=url,
+        source=source,
+    )
+    analysis_id = "manual-repair-state-transition"
+
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        proposal = await service.generate_repair_proposal(
+            failure_id,
+            diagnosis_override=FailureAnalysisResponse(
+                classification="LOCATOR_CHANGED",
+                root_cause="The checkout submit button has a new selector.",
+                provider="openai-compatible",
+                fallback_used=False,
+                confidence=0.95,
+            ),
+            resolved_classification="LOCATOR_CHANGED",
+            decision_service=LocatorDecisionService(decision_service=RecordingDecision()),
+        )
+        assert proposal.source_locator == 'page.locator("#old-submit")'
+        assert proposal.code_diff
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": proposal.model_dump(mode="json"),
+                },
+            )
+        )
+        await session.commit()
+        workflow = FailureWorkflowService(service)
+        applied = await workflow.apply_repair(
+            failure_id,
+            analysis_id,
+            ApplyRepairRequest(
+                file_path=proposal.file_path,
+                old_code=proposal.source_locator,
+                new_code=proposal.proposed_locator,
+            ),
+        )
+        assert applied["repair"]["state"] == "PATCH_APPLIED"
+        applied_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert applied_analysis["result"]["changes_applied"] is True
+        assert applied_analysis["result"]["repair_proposal"]["applied"] is True
+        patched = await service.workspace_service.read_file(project_id, "tests/test_workflow.py")
+        assert proposal.proposed_locator in patched
+
+        rolled_back = await workflow.rollback_repair(failure_id, analysis_id)
+        assert rolled_back["repair"]["state"] == "ROLLED_BACK"
+        rolled_back_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert rolled_back_analysis["result"]["changes_applied"] is False
+        assert rolled_back_analysis["result"]["repair_proposal"]["applied"] is False
+        assert await service.workspace_service.read_file(project_id, "tests/test_workflow.py") == source
 
 
 @pytest.mark.asyncio
@@ -987,7 +1055,12 @@ async def test_ui_candidates_stream_the_actual_decision_engine_without_claiming_
 ):
     url = local_html_url('<button aria-label="Checkout">Checkout</button>')
     _, failure_id, _ = await seed(
-        client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI", url=url
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#checkout")',
+        kind="UI",
+        url=url,
+        source='def test_workflow(page):\n    page.locator("#checkout").click()\n',
     )
     decision = RecordingDecision(fallback=fallback)
     async with test_db_session() as session:
@@ -1046,6 +1119,7 @@ async def test_semantically_unrelated_local_fallback_candidate_is_blocked_before
         kind="UI",
         candidates=[{"kind": "role", "value": "button", "name": "Logout", "exact": True}],
         url=url,
+        source='def test_workflow(page):\n    page.locator("#checkout").click()\n',
     )
     decision = RecordingDecision(fallback=True)
     async with test_db_session() as session:
@@ -1068,7 +1142,7 @@ async def test_semantically_unrelated_local_fallback_candidate_is_blocked_before
             ).stream(failure_id)
         ]
         assert len(decision.calls) == 1
-        assert decision.calls[0].options[0].description == 'get_by_role("button", name="Logout")'
+        assert decision.calls[0].options[0].description == 'get_by_role("button", name="Logout", exact=True)'
         assert events[-1].metadata["selection"]["provider"] == "blocked"
         assert events[-1].metadata["repair_proposal"] is None
         decision_event = next(event for event in events if event.type == "decision_completed")

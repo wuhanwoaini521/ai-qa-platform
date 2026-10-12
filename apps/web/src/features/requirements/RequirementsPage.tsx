@@ -109,6 +109,8 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
     if (!reqForm.formData.title.trim()) return;
     const created = await reqs.createRequirement(reqForm.formData);
     if (!created) return;
+    onRequirementChanged?.(created);
+    onSelectRequirement?.(created.id);
     reqForm.close();
     reqForm.reset();
   };

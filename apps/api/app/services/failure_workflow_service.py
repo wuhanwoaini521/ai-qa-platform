@@ -642,6 +642,12 @@ class FailureWorkflowService:
             raise ValueError("Repair workspace does not match the original failure run")
         result = await self.failures.apply_repair(original.workspace_id, payload, failure_id=failure_id)
         await self.failures.transaction.commit()
+        updated_failure = await self.failures.get_failure_state(failure_id)
+        applied_proposal = (
+            updated_failure.repair_proposal
+            if updated_failure and updated_failure.repair_proposal
+            else {**proposal, "applied": True}
+        )
         await self._record_transition(
             failure,
             analysis,
@@ -649,6 +655,8 @@ class FailureWorkflowService:
             "patch.applied",
             "Repair patch applied to the workspace",
             file_path=result["file_path"],
+            changes_applied=True,
+            repair_proposal=applied_proposal,
         )
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
@@ -677,6 +685,18 @@ class FailureWorkflowService:
             raise ValueError("Rollback workspace does not match the original failure run")
         result = await self.failures.rollback_repair(failure_id, original.workspace_id)
         await self.failures.transaction.commit()
+        updated_failure = await self.failures.get_failure_state(failure_id)
+        rolled_back_proposal = (
+            updated_failure.repair_proposal
+            if updated_failure and updated_failure.repair_proposal
+            else {**(analysis.get("result") or {}).get("repair_proposal", {}), "applied": False}
+        )
+        transition_metadata = {
+            "changes_applied": False,
+            "repair_proposal": rolled_back_proposal,
+        }
+        if automatic:
+            transition_metadata.update(automatic=True, auto_rolled_back=True)
         await self._record_transition(
             failure,
             analysis,
@@ -684,7 +704,7 @@ class FailureWorkflowService:
             "repair.rolled_back",
             "Repair patch rolled back",
             file_path=result["file_path"],
-            **({"automatic": True, "auto_rolled_back": True, "changes_applied": False} if automatic else {}),
+            **transition_metadata,
         )
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
@@ -1417,7 +1437,7 @@ class FailureWorkflowService:
                             analysis_id,
                             ApplyRepairRequest(
                                 file_path=repair_proposal.file_path,
-                                old_code=repair_proposal.old_locator,
+                                old_code=repair_proposal.source_locator or repair_proposal.old_locator,
                                 new_code=repair_proposal.proposed_locator,
                             ),
                         )

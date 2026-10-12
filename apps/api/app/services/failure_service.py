@@ -506,6 +506,7 @@ class FailureService:
         test_file = failure.test_nodeid.split("::")[0].replace("\\", "/")
         repair_file = test_file
         source_content = ""
+        source_locator = None
         source_sha256 = None
         if original_run and original_run.workspace_id:
             workspace_id = original_run.workspace_id
@@ -518,21 +519,22 @@ class FailureService:
                 except (FileNotFoundError, ValueError):
                     continue
                 candidate_test_name = test_name if candidate_path == test_file else None
-                if self._locator_call_count(candidate_content, failing_loc, function_name=candidate_test_name) == 1:
+                candidate_locator = self._source_locator_for_failure(
+                    candidate_content,
+                    failing_loc,
+                    function_name=candidate_test_name,
+                )
+                if candidate_locator:
                     repair_file = candidate_path
                     source_content = candidate_content
+                    source_locator = candidate_locator
                     break
-            if not source_content and test_file in repair_candidates:
-                try:
-                    source_content = await self.workspace_service.read_file(workspace_id, test_file)
-                except (FileNotFoundError, ValueError):
-                    pass
-        if source_content:
-            source_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         if not _is_allowed_repair_target(repair_file):
             raise LocatorRepairNotApplicableError(
                 "REPAIR_TARGET_BLOCKED: no policy-allowed automation source contains the failed locator."
             )
+        if source_content:
+            source_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         if diagnosis_override is not None:
             diagnosis_root_cause = diagnosis_override.root_cause
             trace = list(diagnosis_override.execution_trace)
@@ -703,6 +705,10 @@ class FailureService:
             not verification.get("verified") or verification_source not in {"playwright", "playwright_snapshot"}
         ):
             raise LocatorRepairNotApplicableError("PLAYWRIGHT_VERIFICATION_REQUIRED: candidate is not verified.")
+        if not source_content or not source_locator:
+            raise LocatorRepairNotApplicableError(
+                "REPAIR_TARGET_LOCATOR_UNRESOLVED: the failed locator does not map to one unique source call."
+            )
         proposal_fields = {
             "candidate_id": summary.get("candidate_id"),
             "provider": summary.get("provider", "local-strategy"),
@@ -711,6 +717,7 @@ class FailureService:
             "ai_provider": diagnosis_provider,
             "ai_fallback_used": diagnosis_fallback_used,
             "resolved_classification": resolved_classification or FailureCategory.LOCATOR_CHANGED.value,
+            "source_locator": source_locator,
             "source_sha256": source_sha256,
             "decision_summary": {**summary, "verification_source": verification_source},
             "verified": bool(verification.get("verified")),
@@ -757,7 +764,7 @@ class FailureService:
                 preview = self._patched_content(
                     source_content,
                     proposal.file_path,
-                    failing_loc,
+                    source_locator,
                     proposal.proposed_locator,
                     test_name=(failure.test_nodeid.split("::")[-1].split("[")[0] if repair_file == test_file else None),
                 )
@@ -1040,6 +1047,14 @@ class FailureService:
         failing_locator = self._require_locator_failure(
             failure, resolved_classification=proposal.get("resolved_classification")
         )
+        source_locator = proposal.get("source_locator")
+        source_mapped_proposal = isinstance(source_locator, str) and bool(source_locator.strip())
+        if source_mapped_proposal and not proposal.get("code_diff"):
+            raise ValueError("没有可审阅且精确映射到失败用例的源码差异；未应用修复。")
+        if not source_mapped_proposal:
+            # Older verified proposals stored only the runtime selector. Preserve their apply
+            # contract while keeping new proposals bound to an exact source-level call.
+            source_locator = failing_locator
         trusted_selection = (
             proposal.get("provider") == "jev"
             and decision_summary.get("fallback_used") is False
@@ -1060,8 +1075,8 @@ class FailureService:
         repair_file = str(proposal.get("file_path") or "").replace("\\", "/")
         if not _is_allowed_repair_target(repair_file):
             raise ValueError("Automatic repair target is outside the configured test/Page Object allowlist.")
-        if payload.old_code != failing_locator or payload.file_path.replace("\\", "/") != repair_file:
-            raise ValueError("修复目标与已审核提案中的定位器或文件不一致，不写入工作区。")
+        if payload.old_code != source_locator or payload.file_path.replace("\\", "/") != repair_file:
+            raise ValueError("修复目标与已审核提案中的源码定位器或文件不一致，不写入工作区。")
         if (
             not payload.old_code.strip()
             or not payload.new_code.strip()
@@ -1075,6 +1090,16 @@ class FailureService:
         current_hash = hashlib.sha256(current_content.encode("utf-8")).hexdigest()
         if proposal.get("source_sha256") != current_hash:
             raise ValueError("Source changed after repair candidates were generated; nothing was written.")
+        test_path = failure.test_nodeid.split("::")[0].replace("\\", "/")
+        test_name = failure.test_nodeid.split("::")[-1].split("[")[0]
+        if source_mapped_proposal:
+            mapped_locator = self._source_locator_for_failure(
+                current_content,
+                failing_locator,
+                function_name=test_name if repair_file == test_path else None,
+            )
+            if mapped_locator != source_locator:
+                raise ValueError("当前源码中的失败定位器与已审核提案不一致；未写入代码。")
         if payload.old_code not in current_content:
             raise ValueError(f"Original target code block not found in {payload.file_path}")
 
@@ -1146,6 +1171,90 @@ class FailureService:
             },
         )
         return {"status": "rolled_back", "file_path": file_path}
+
+    @staticmethod
+    def _source_locator_for_failure(content: str, locator: str, *, function_name: str | None = None) -> str | None:
+        """Resolve a Playwright failure selector to one exact public-API call in source."""
+        methods = {"locator", "get_by_role", "get_by_text", "get_by_label", "get_by_placeholder", "get_by_test_id"}
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return None
+        scopes = [tree]
+        if function_name:
+            functions = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name
+            ]
+            if len(functions) != 1:
+                return None
+            scopes = functions
+
+        expected_method = None
+        expected_values: tuple[str, ...] = ()
+        expected_exact: bool | None = None
+        role_match = re.fullmatch(r'internal:role=([\w-]+)\[name=("(?:\\.|[^"\\])*")([si])\]', locator)
+        value_match = re.fullmatch(r'internal:(label|placeholder|text)=("(?:\\.|[^"\\])*")[si]', locator)
+        test_id_match = re.fullmatch(r'internal:testid=\[data-testid=("(?:\\.|[^"\\])*")[si]\]', locator)
+        try:
+            if role_match:
+                expected_method = "get_by_role"
+                expected_values = (role_match.group(1), json.loads(role_match.group(2)))
+                expected_exact = role_match.group(3) == "s"
+            elif value_match:
+                expected_method = {
+                    "label": "get_by_label",
+                    "placeholder": "get_by_placeholder",
+                    "text": "get_by_text",
+                }[value_match.group(1)]
+                expected_values = (json.loads(value_match.group(2)),)
+            elif test_id_match:
+                expected_method = "get_by_test_id"
+                expected_values = (json.loads(test_id_match.group(1)),)
+            else:
+                expected_method = "locator"
+                expected_values = (locator.removeprefix("css="),)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+        def constant(node: ast.AST | None) -> str | None:
+            return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+        matches: list[str] = []
+        for scope in scopes:
+            for node in ast.walk(scope):
+                if (
+                    not isinstance(node, ast.Call)
+                    or not isinstance(node.func, ast.Attribute)
+                    or node.func.attr != expected_method
+                    or expected_method not in methods
+                ):
+                    continue
+                if expected_method == "get_by_role":
+                    role = (
+                        constant(node.args[0])
+                        if node.args
+                        else constant(next((item.value for item in node.keywords if item.arg == "role"), None))
+                    )
+                    name = constant(next((item.value for item in node.keywords if item.arg == "name"), None))
+                    exact_node = next((item.value for item in node.keywords if item.arg == "exact"), None)
+                    exact = (
+                        exact_node.value
+                        if isinstance(exact_node, ast.Constant) and isinstance(exact_node.value, bool)
+                        else False
+                        if exact_node is None
+                        else None
+                    )
+                    matches_selector = (role, name) == expected_values and exact is expected_exact
+                else:
+                    value = constant(node.args[0]) if node.args else None
+                    matches_selector = (value,) == expected_values
+                if matches_selector:
+                    segment = ast.get_source_segment(content, node)
+                    if segment:
+                        matches.append(segment)
+        return matches[0] if len(matches) == 1 else None
 
     @staticmethod
     def _locator_call_count(content: str, locator: str, *, function_name: str | None = None) -> int:
@@ -1225,21 +1334,56 @@ class FailureService:
                     if test_name
                     else [tree]
                 )
-                matches = [
-                    node
-                    for scope in scopes
-                    for node in ast.walk(scope)
-                    if isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr in methods
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and node.args[0].value == old_code
-                ]
+                old_expression = None
+                try:
+                    old_expression = ast.parse(old_code, mode="eval").body
+                except SyntaxError:
+                    pass
+                if isinstance(old_expression, ast.Call):
+                    old_method = (
+                        old_expression.func.attr
+                        if isinstance(old_expression.func, ast.Attribute)
+                        else old_expression.func.id
+                        if isinstance(old_expression.func, ast.Name)
+                        else None
+                    )
+                    matches = [
+                        node
+                        for scope in scopes
+                        for node in ast.walk(scope)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == old_method
+                        and old_method in methods
+                        and len(node.args) == len(old_expression.args)
+                        and all(
+                            ast.dump(current, include_attributes=False) == ast.dump(original, include_attributes=False)
+                            for current, original in zip(node.args, old_expression.args, strict=True)
+                        )
+                        and len(node.keywords) == len(old_expression.keywords)
+                        and all(
+                            ast.dump(current, include_attributes=False) == ast.dump(original, include_attributes=False)
+                            for current, original in zip(node.keywords, old_expression.keywords, strict=True)
+                        )
+                    ]
+                else:
+                    matches = [
+                        node
+                        for scope in scopes
+                        for node in ast.walk(scope)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in methods
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and node.args[0].value == old_code
+                    ]
                 if len(matches) != 1:
                     return None
                 target = matches[0]
                 receiver = ast.get_source_segment(content, target.func.value)
+                if not receiver:
+                    return None
                 encoded = content.encode("utf-8")
                 lines = encoded.splitlines(keepends=True)
                 start = sum(map(len, lines[: target.lineno - 1])) + target.col_offset

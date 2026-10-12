@@ -25,7 +25,7 @@ import { failureSourceLocation } from '../failures/failureWorkspaceModel';
 import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
 import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget, workspaceRunCaseLabel } from './workspaceRunModel';
 import { workspacePanelMode } from './workspaceLayoutModel';
-import type { AgentGoalPreview, AgentTask, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
+import type { AgentGoalPreview, AgentTask, AutomationBinding, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
 import type { RuntimeSnapshot } from '../../types/runtime';
 import { runtimeActive } from '../runtime/runtimeModel';
 import './workspace.css';
@@ -800,6 +800,21 @@ export function WorkspacePage() {
       : [...items, requirement]);
   }, []);
 
+  const handleBindingChanged = (testCaseId: string, nextBinding: AutomationBinding | null) => {
+    const automationStatus = nextBinding?.status === 'ACTIVE' ? 'AUTOMATED' : nextBinding ? 'DRAFT' : 'MANUAL';
+    setCases((items) => items.map((item) => item.id === testCaseId
+      ? { ...item, binding: nextBinding, automation_status: automationStatus }
+      : item));
+    setBindingRecord({ caseId: testCaseId, binding: nextBinding });
+    if (context.testCaseId === testCaseId) {
+      updateContext({
+        automationBindingId: nextBinding?.id,
+        nodeId: nextBinding?.nodeid,
+        file: nextBinding?.file_path,
+      });
+    }
+  };
+
   const editGoal = (value: string) => {
     setGoalText(value);
     setGoalPreview(null);
@@ -1078,6 +1093,7 @@ export function WorkspacePage() {
                   setCases((items) => [...items.filter((item) => item.id !== createdCase.id), createdCase]);
                   updateContext({ requirementId: createdCase.requirement_id ?? context.requirementId, testCaseId: createdCase.id, view: 'cases', stage: 'cases' });
                 }}
+                onAutomationBindingChanged={handleBindingChanged}
                 onNavigateToStudio={(filePath) => openStudio(filePath)}
                 onNavigateToRuns={onRunStarted}
                 onTaskStarted={onTaskStarted}

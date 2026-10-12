@@ -114,7 +114,7 @@
     "title": "失败分析流程",
     "analyzing": "AI 正在分析",
     "ready": "等待启动分析",
-    "finished": "分析完成 · 尚未验证修复",
+    "finished": "分析完成",
     "failed": "分析失败 · 保留已取得的证据",
     "cancelled": "分析已取消",
     "interrupted": "分析已中断",

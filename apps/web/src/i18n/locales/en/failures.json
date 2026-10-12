@@ -114,7 +114,7 @@
     "title": "Failure analysis workflow",
     "analyzing": "AI is analyzing",
     "ready": "Ready to analyze",
-    "finished": "Analysis complete · Repair not verified",
+    "finished": "Analysis complete",
     "failed": "Analysis failed · Evidence retained",
     "cancelled": "Analysis cancelled",
     "interrupted": "Analysis interrupted",

@@ -20,6 +20,7 @@ export interface BindingFormData {
 interface UseAutomationBindingOptions {
   selectedCase: TestCase | null;
   selectedProjectId: string | null;
+  onBindingChanged?: (testCaseId: string, binding: AutomationBinding | null) => void;
   onNavigateToRuns?: (runId?: string) => void;
   updateCaseStatus: (
     caseId: string,
@@ -35,6 +36,7 @@ function errorText(err: unknown): string {
 export function useAutomationBinding({
   selectedCase,
   selectedProjectId,
+  onBindingChanged,
   onNavigateToRuns,
   updateCaseStatus,
 }: UseAutomationBindingOptions) {
@@ -112,6 +114,7 @@ export function useAutomationBinding({
       setGeneratedDraft(draft);
       const binding = await api.getAutomationBinding(selectedCase.id);
       setSelectedBinding(binding);
+      onBindingChanged?.(selectedCase.id, binding);
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError'))
         console.error('Automation generation failed', err);
@@ -145,6 +148,7 @@ export function useAutomationBinding({
       });
 
       setSelectedBinding(savedBinding);
+      onBindingChanged?.(selectedCase.id, savedBinding);
       await updateCaseStatus(selectedCase.id, 'AUTOMATED');
       alert(t('errorSaveDraftSuccess', { file: generatedDraft.target_file }));
     } catch (err) {
@@ -166,6 +170,7 @@ export function useAutomationBinding({
         status: bindingFormData.status,
       });
       setSelectedBinding(saved);
+      onBindingChanged?.(selectedCase.id, saved);
       await updateCaseStatus(
         selectedCase.id,
         bindingFormData.status === 'DRAFT' ? 'DRAFT' : 'AUTOMATED',

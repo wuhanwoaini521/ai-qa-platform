@@ -580,8 +580,10 @@ export interface CandidateLocator {
 }
 
 export interface LocatorRepairProposal {
-  /** The locator currently in the code (the API's field name). */
+  /** Runtime selector reported for the failed action. */
   old_locator: string;
+  /** Unique source call mapped to the failed runtime selector; used for reviewed patches. */
+  source_locator?: string | null;
   proposed_locator: string;
   confidence: number | null;
   strategy: string;

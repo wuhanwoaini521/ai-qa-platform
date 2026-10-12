@@ -35,6 +35,23 @@ async def test_stream_cancel_cleans_up_operation_even_when_progress_queue_is_ful
     assert stopped.is_set()
 
 
+async def test_operation_result_keeps_json_valid_when_generated_code_contains_password_assignment():
+    generated_code = """def test_sign_in():
+    password = "demo_password"
+    assert password
+"""
+
+    async def operation():
+        return {"suggested_code": generated_code}
+
+    frames = [frame async for frame in stream_operation(operation, "Generate automation")]
+    result_event = next(
+        json.loads(frame.split("data: ", 1)[1]) for frame in frames if "event: operation.result" in frame
+    )
+
+    assert json.loads(result_event["content"]) == {"suggested_code": generated_code}
+
+
 @pytest.mark.parametrize("error", [RuntimeError, ValueError])
 async def test_stream_failure_does_not_leak_provider_exception_bodies(error):
     async def operation():

@@ -150,7 +150,8 @@ class LocatorDecisionService:
         value = json.dumps(str(candidate.get("value", "")), ensure_ascii=False)
         if kind == "role":
             name = json.dumps(str(candidate.get("name", "")), ensure_ascii=False)
-            return f"get_by_role({value}, name={name})"
+            exact = ", exact=True" if candidate.get("exact") is True else ""
+            return f"get_by_role({value}, name={name}{exact})"
         method = _METHODS.get(kind)
         if method:
             return f"{method}({value})"

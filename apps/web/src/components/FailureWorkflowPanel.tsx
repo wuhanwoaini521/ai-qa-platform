@@ -24,6 +24,7 @@ export const FailureWorkflowPanel: React.FC<{
   onCancel: () => void;
   failure: FailureRecord;
   failureCreatedAt?: string;
+  changesAppliedOverride?: boolean;
   classification?: string;
   error?: string;
   primaryAction?: PrimaryAction;
@@ -45,6 +46,7 @@ export const FailureWorkflowPanel: React.FC<{
   onCancel,
   failure,
   failureCreatedAt,
+  changesAppliedOverride,
   classification,
   error,
   primaryAction,
@@ -146,9 +148,11 @@ export const FailureWorkflowPanel: React.FC<{
       : decisionFallbackReason;
   const localDecisionFallback = /local[- ]strategy|local strategy/i.test(decisionEngine);
   const trustedDecisionBlocked = decisionEngine.toLowerCase() === 'blocked' && decisionFallbackReason !== 'unknown';
-  const changesApplied = typeof selectedResult?.changes_applied === 'boolean'
-    ? selectedResult.changes_applied
-    : suggestionEvent?.metadata.changes_applied === true;
+  const changesApplied = changesAppliedOverride ?? (
+    typeof selectedResult?.changes_applied === 'boolean'
+      ? selectedResult.changes_applied
+      : suggestionEvent?.metadata.changes_applied === true
+  );
   const rolledBack = selectedResult?.repair_state === 'ROLLED_BACK';
   const autoRolledBack = selectedResult?.auto_rolled_back === true;
   const testRerun = verification?.metadata.test_rerun === true || Boolean(selectedResult?.verification_run_id);
@@ -279,7 +283,7 @@ export const FailureWorkflowPanel: React.FC<{
               {t('workflow.decisionBlocked', { reason: decisionFallbackReasonLabel })}
             </p>
           )}
-          {(recommendations.length > 0 || (locatorTimeout && Boolean(observedCartLocator))) && (
+          {!verified && (recommendations.length > 0 || (locatorTimeout && Boolean(observedCartLocator))) && (
             <div className="failure-workflow-result-block">
               <span>{t('workflow.nextSteps')}</span>
               {locatorTimeout && isChinese ? (
