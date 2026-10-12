@@ -1,5 +1,7 @@
 {
   "subtitle": "管理测试项目、工作区仓库与自动化测试框架。",
+  "tableScrollHint": "使用左右方向键或 Home、End 键横向滚动项目表格。",
+  "tableSwipeHint": "左右滑动或滚动以查看项目的全部列。",
   "assetIndex": "资产库",
   "createProject": "新建项目",
   "creating": "创建中...",

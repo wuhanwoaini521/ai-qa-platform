@@ -878,7 +878,9 @@
 }
 
 .workspace-run-launcher > small { color: var(--ink-muted); font-size: 10px; font-weight: 500; }
-.workspace-run-launcher.is-failed .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
+.workspace-run-launcher.is-failed .workspace-dock-indicator,
+.workspace-run-launcher.is-task-failed .workspace-dock-indicator,
+.workspace-run-launcher.is-task-blocked .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
 .workspace-run-launcher.is-passed .workspace-dock-indicator { color: var(--accent-green); background: var(--accent-green-soft); }
 .workspace-run-launcher.is-running .workspace-dock-indicator,
 .workspace-run-launcher.is-preparing .workspace-dock-indicator { animation: workspace-live-pulse 1.6s ease-out infinite; }
@@ -916,10 +918,13 @@
 .workspace-run-dock-context,
 .workspace-run-dock-progress { display: grid; min-width: 0; gap: 3px; }
 .workspace-run-dock-status { grid-template-columns: 24px minmax(0, 1fr); align-items: center; }
+.workspace-run-dock-status > div { display: grid; min-width: 0; gap: 3px; }
 .workspace-dock-indicator { display: grid; place-items: center; width: 24px; height: 24px; color: var(--accent-blue); background: var(--accent-blue-soft); border-radius: 50%; }
 .workspace-run-dock.is-running .workspace-dock-indicator,
 .workspace-run-dock.is-preparing .workspace-dock-indicator { animation: workspace-live-pulse 1.6s ease-out infinite; }
-.workspace-run-dock.is-failed .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
+.workspace-run-dock.is-failed .workspace-dock-indicator,
+.workspace-run-dock.is-task-failed .workspace-dock-indicator,
+.workspace-run-dock.is-task-blocked .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
 .workspace-run-dock.is-passed .workspace-dock-indicator { color: var(--accent-green); background: var(--accent-green-soft); }
 .workspace-run-dock strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-run-dock small { overflow: hidden; color: var(--ink-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }

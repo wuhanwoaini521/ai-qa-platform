@@ -1,5 +1,7 @@
 {
   "subtitle": "Manage test projects, workspace repositories, and automation frameworks.",
+  "tableScrollHint": "Use the left and right arrow keys, or Home and End, to scroll the project table.",
+  "tableSwipeHint": "Swipe or scroll horizontally to view all project columns.",
   "assetIndex": "Asset library",
   "createProject": "Create Project",
   "creating": "Creating...",

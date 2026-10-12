@@ -4,6 +4,7 @@ import { Activity, Check, Globe, LayoutDashboard, Play, RefreshCw, RotateCcw, Wi
 import { SUPPORTED_LANGUAGES } from '../i18n';
 import { START_PAGE_OPTIONS, usePreferences } from '../app/Preferences';
 import { useProjectScope } from '../app/ProjectScope';
+import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import './SettingsPage.css';
 import { api } from '../api/client';
 import type {
@@ -37,6 +38,7 @@ export const SettingsPage: React.FC = () => {
   const { theme, setTheme, language, setLanguage, startPage, setStartPage, defaultProjectId, setDefaultProjectId, reset } =
     usePreferences();
   const { projects } = useProjectScope();
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   const [effective, setEffective] = useState<EffectiveConfigResponse | null>(null);
   const [sources, setSources] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -274,7 +276,7 @@ export const SettingsPage: React.FC = () => {
             <label className="form-label" htmlFor="settings-default-project">{t('defaultProject')}</label>
             <select id="settings-default-project" className="form-control" style={{ maxWidth: 280 }} value={defaultProjectId ?? ''} onChange={(event) => setDefaultProjectId(event.target.value || null)}>
               <option value="">{t('defaultProjectNone')}</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              {projects.map((project) => <option key={project.id} value={project.id}>{projectDisplayNames.get(project.id) ?? project.name}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>

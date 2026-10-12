@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AutomationStatus, Project, TestCaseCreate, TestCasePriority } from '../../../types';
+import { buildProjectDisplayNames } from '../../../app/projectSelectionModel';
 
 interface TestCaseFormModalProps {
   isOpen: boolean;
@@ -98,6 +99,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation('testCases');
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   return (
     <>
       {isOpen && (
@@ -127,7 +129,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {projectDisplayNames.get(p.id) ?? p.name}
                       </option>
                     ))}
                   </select>

@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderGit2, Search } from 'lucide-react';
 import { Project } from '../../../types';
+import { buildProjectDisplayNames } from '../../../app/projectSelectionModel';
 
 interface ProjectSelectorProps {
   projects: Project[];
@@ -18,13 +19,14 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onQuickOpen,
 }) => {
   const { t } = useTranslation('studioShell');
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   return (
     <div className="studio-project-select">
       <FolderGit2 size={15} color="var(--ui-primary-strong)" />
       <select aria-label={t('projectSelector.selectProject')} value={currentProjectId} onChange={(e) => onSelectProject(e.target.value)}>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.name}
+            {projectDisplayNames.get(p.id) ?? p.name}
           </option>
         ))}
       </select>

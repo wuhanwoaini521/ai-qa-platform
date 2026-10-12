@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Project, RequirementCreate, RequirementStatus } from '../../../types';
+import { buildProjectDisplayNames } from '../../../app/projectSelectionModel';
 
 interface RequirementFormModalProps {
   isOpen: boolean;
@@ -49,6 +50,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation('requirements');
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   return (
     <>
       {isOpen && (
@@ -77,7 +79,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {projectDisplayNames.get(p.id) ?? p.name}
                       </option>
                     ))}
                   </select>

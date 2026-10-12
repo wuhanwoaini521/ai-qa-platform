@@ -156,8 +156,13 @@
       "running": "Running",
       "failed": "Needs attention",
       "passed": "Passed",
-      "cancelled": "Cancelled"
-    }
+      "cancelled": "Cancelled",
+      "task-completed": "Task complete",
+      "task-failed": "Task failed",
+      "task-blocked": "Task needs attention",
+      "task-cancelled": "Task cancelled"
+    },
+    "taskFinished": "The workflow task is complete; no TestRun was created."
   },
   "aiRun": {
     "title": "AI Run",

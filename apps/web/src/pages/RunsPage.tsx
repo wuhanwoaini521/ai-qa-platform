@@ -10,6 +10,7 @@ import {
   TestRunCreate,
 } from '../types';
 import { api } from '../api/client';
+import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import {
   ContextTaskProgress,
   useContextTask,
@@ -43,6 +44,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 }) => {
   const { t } = useTranslation('runs');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
+  const projectDisplayNames = buildProjectDisplayNames(projects);
 
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -673,7 +675,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {projectDisplayNames.get(p.id) ?? p.name}
                       </option>
                     ))}
                   </select>
