@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, Bug, ChevronDown, CircleAlert, Play, RotateCcw, Sparkles, Square, Workflow, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TestRun } from '../../types';
+import { workspaceRunDockState } from './workspaceRunModel';
 
 export interface WorkspaceRunConfig {
   environment: string;
@@ -33,8 +34,6 @@ interface WorkspaceRunDockProps {
   onOpenCode: () => void;
 }
 
-const ACTIVE = new Set(['QUEUED', 'RUNNING']);
-
 export function WorkspaceRunDock({
   caseLabel,
   caseTitle,
@@ -63,21 +62,7 @@ export function WorkspaceRunDock({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dockRef = useRef<HTMLElement>(null);
   const runStatus = run?.status ?? null;
-  const taskActive = Boolean(taskStatus && !['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED'].includes(taskStatus));
-  const active = Boolean(runStatus && ACTIVE.has(runStatus)) || (!runStatus && taskActive);
-  const failed = ['FAILED', 'ERROR', 'BLOCKED'].includes(runStatus ?? taskStatus ?? '');
-  const passed = runStatus === 'PASSED' || taskStatus === 'COMPLETED';
-  const status = active
-    ? runStatus === 'QUEUED' || (!runStatus && ['PENDING', 'PLANNING', 'QUEUED'].includes(taskStatus ?? ''))
-      ? 'preparing'
-      : 'running'
-    : failed
-      ? 'failed'
-      : passed
-        ? 'passed'
-        : runStatus === 'CANCELLED' || taskStatus === 'CANCELLED'
-          ? 'cancelled'
-          : 'idle';
+  const { status, active, failed, passed, taskTerminal } = workspaceRunDockState(runStatus, taskStatus);
   const activeExecution = run?.executions.find((item) => item.status === 'RUNNING');
   const completed = run?.executions.filter((item) => item.finished_at).length ?? 0;
   const total = run?.executions.length || run?.total || 0;
@@ -134,7 +119,7 @@ export function WorkspaceRunDock({
           {failed ? <CircleAlert size={14} /> : active ? <Activity size={14} /> : <Play size={13} />}
         </span>
         <span>{t('dock.openControls')}</span>
-        {(active || failed) && <small>{t(`dock.status.${status}`)}{caseLabel ? ` · ${caseLabel}` : ''}</small>}
+        {status !== 'idle' && <small>{t(`dock.status.${status}`)}{caseLabel ? ` · ${caseLabel}` : ''}</small>}
         <ChevronDown size={14} aria-hidden="true" />
       </button>
 
@@ -166,10 +151,15 @@ export function WorkspaceRunDock({
                 <strong>{hasSavedRunResults ? run.passed + '/' + (total || '—') + ' ' + t('dock.passed') : active ? t('dock.status.running') : t('dock.resultUnavailable')}</strong>
                 <small>{!hasSavedRunResults ? active ? taskStep || t('dock.preparing') : t('dock.resultUnavailableHint') : run.failed ? t('dock.failedCount', { count: run.failed }) : active ? t('dock.progress', { completed, total: total || '—' }) : t('dock.lastRun')}</small>
               </>
-            ) : taskActive ? (
+            ) : active ? (
               <>
                 <strong>{t('dock.aiPlanRunning')}</strong>
                 <small>{taskStep || t('dock.preparing')}</small>
+              </>
+            ) : taskTerminal ? (
+              <>
+                <strong>{t(`dock.status.${status}`)}</strong>
+                <small>{taskStep || t('dock.taskFinished')}</small>
               </>
             ) : (
               <>
@@ -206,9 +196,8 @@ export function WorkspaceRunDock({
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onRerun(); }}><RotateCcw size={13} aria-hidden="true" /> {t('dock.rerun')}</button>
               </>
             )}
-            {failed && !run && <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.viewTask')}</button>}
+            {taskTerminal && !run && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.viewTask')}</button>}
             {passed && run && <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onViewResult(); }}>{t('dock.viewResult')}</button>}
-            {passed && !run && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.viewTask')}</button>}
             {!hasAutomation && !active && !failed && (
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpenCode(); }}><Workflow size={13} aria-hidden="true" /> {t('dock.addAutomation')}</button>
             )}

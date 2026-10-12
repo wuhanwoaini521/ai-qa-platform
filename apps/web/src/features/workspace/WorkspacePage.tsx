@@ -22,7 +22,7 @@ import { WorkspaceRunResult } from './WorkspaceRunResult';
 import { QualityDiscoveryPanel } from './QualityDiscoveryPanel';
 import { failureSourceLocation } from '../failures/failureWorkspaceModel';
 import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
-import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget } from './workspaceRunModel';
+import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget, workspaceRunCaseLabel } from './workspaceRunModel';
 import { workspacePanelMode } from './workspaceLayoutModel';
 import type { AgentGoalPreview, AgentTask, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
 import type { RuntimeSnapshot } from '../../types/runtime';
@@ -871,7 +871,7 @@ export function WorkspacePage() {
           </button>}
           {projectId && <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>}
           {projectId && view !== 'discover' && (!currentRun || stage !== 'result') && <WorkspaceRunDock
-            caseLabel={dockCase?.test_model?.display_id ?? (dockCase?.id ? dockCase.id.slice(-6).toUpperCase() : stage === 'failure' ? failureDockName : '')}
+            caseLabel={workspaceRunCaseLabel(dockCase?.test_model?.display_id, dockCase?.id, stage === 'failure' ? failureDockName : undefined)}
             caseTitle={dockCase?.title ?? (stage === 'failure' ? failureDockName : '')}
             hasAutomation={dockBinding?.status === 'ACTIVE' && Boolean(dockBinding.nodeid)}
             aiRunLabel={goalTarget === 'requirement' ? t('dock.aiRunRequirement') : dockCase && !dockBinding ? t('dock.aiGenerateAutomation') : undefined}

@@ -2,6 +2,60 @@ import type { TestRun } from '../../types';
 import type { WorkspaceRunConfig } from './WorkspaceRunDock';
 
 const TERMINAL_RUN_STATUSES = new Set<TestRun['status']>(['PASSED', 'FAILED', 'ERROR', 'CANCELLED']);
+const TERMINAL_TASK_STATUSES = new Set(['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'ERROR']);
+
+export type WorkspaceRunDockStatus =
+  | 'idle'
+  | 'preparing'
+  | 'running'
+  | 'failed'
+  | 'passed'
+  | 'cancelled'
+  | 'task-completed'
+  | 'task-failed'
+  | 'task-blocked'
+  | 'task-cancelled';
+
+export interface WorkspaceRunDockState {
+  status: WorkspaceRunDockStatus;
+  active: boolean;
+  failed: boolean;
+  passed: boolean;
+  taskTerminal: boolean;
+}
+
+export function workspaceRunCaseLabel(
+  displayId?: string | null,
+  caseId?: string | null,
+  failureLabel?: string | null,
+): string {
+  return displayId?.trim() || caseId?.slice(-6).toUpperCase() || failureLabel?.trim() || '';
+}
+
+export function workspaceRunDockState(
+  runStatus: TestRun['status'] | null,
+  taskStatus?: string | null,
+): WorkspaceRunDockState {
+  let status: WorkspaceRunDockStatus = 'idle';
+  if (runStatus === 'QUEUED') status = 'preparing';
+  else if (runStatus === 'RUNNING') status = 'running';
+  else if (runStatus === 'FAILED' || runStatus === 'ERROR') status = 'failed';
+  else if (runStatus === 'PASSED') status = 'passed';
+  else if (runStatus === 'CANCELLED') status = 'cancelled';
+  else if (taskStatus === 'COMPLETED') status = 'task-completed';
+  else if (taskStatus === 'FAILED' || taskStatus === 'ERROR') status = 'task-failed';
+  else if (taskStatus === 'BLOCKED') status = 'task-blocked';
+  else if (taskStatus === 'CANCELLED') status = 'task-cancelled';
+  else if (taskStatus) status = ['PENDING', 'PLANNING', 'QUEUED'].includes(taskStatus) ? 'preparing' : 'running';
+
+  return {
+    status,
+    active: status === 'preparing' || status === 'running',
+    failed: status === 'failed' || status === 'task-failed' || status === 'task-blocked',
+    passed: status === 'passed',
+    taskTerminal: !runStatus && TERMINAL_TASK_STATUSES.has(taskStatus ?? ''),
+  };
+}
 
 export function terminalRunStatus(status: TestRun['status']): TestRun['status'] | null {
   return TERMINAL_RUN_STATUSES.has(status) ? status : null;
