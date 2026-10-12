@@ -4,6 +4,8 @@
   "newTestCase": "New Test Case",
   "createProjectFirst": "Please create a project first before adding test cases.",
   "selectCase": "Select a test case to view step details and automation bindings.",
+  "currentTestCase": "Current test case",
+  "casePickerPlaceholder": "Choose a test case",
   "listTitle": "Test Cases ({{total}})",
   "listLoading": "Loading test cases...",
   "listEmpty": "No test cases found.",

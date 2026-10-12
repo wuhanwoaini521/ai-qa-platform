@@ -9,6 +9,8 @@ import type { WorkspaceContext } from '../../app/workspaceContext';
 import { buildWorkspaceHref } from '../../app/workspaceContext';
 import { failedLocatorFromFailure, failureSourceLocation, normalizeFailureClassification, observedRoleLocatorMismatch, summarizeFailureError } from '../failures/failureWorkspaceModel';
 import { RuntimeArtifactActions } from '../runtime/RuntimeArtifactActions';
+import { TestExecutionResults } from '../runs/TestExecutionResults';
+import { resolveExecutionCase } from '../runs/testExecutionResultsModel';
 import { repairNoticeForRun, terminalRunStatus } from './workspaceRunModel';
 
 type EventFilter = 'all' | 'errors' | 'browser' | 'ai';
@@ -313,7 +315,14 @@ export function WorkspaceRunResult({
       : failureLoadState === 'error' ? t('result.failureLoadError') : t('result.noFailureEvidence'));
   const failedNodeId = failure?.test_nodeid
     ?? run.executions.find((item) => ['FAILED', 'ERROR'].includes(item.status))?.nodeid;
-  const expectedResult = testCases.find((item) => item.binding?.nodeid === failedNodeId)?.expected_result.trim();
+  const failedIdentity = failedNodeId ? resolveExecutionCase(failedNodeId, testCases) : null;
+  const failureCaseLabel = failedIdentity?.mapping === 'matched'
+    ? `${failedIdentity.displayId} · ${failedIdentity.title}`
+    : failedNodeId;
+  const expectedCase = failedIdentity?.mapping === 'matched'
+    ? testCases.find((item) => item.id === failedIdentity.caseId)
+    : undefined;
+  const expectedResult = expectedCase?.expected_result.trim();
   const locatorMismatch = failure ? observedRoleLocatorMismatch(failure) : null;
   const failureKind = failure
     ? locatorMismatch || summarizeFailureError(failure.error_message, failure.classification) === 'locatorTimeout'
@@ -376,6 +385,15 @@ export function WorkspaceRunResult({
         </div>
       </header>
 
+      <div className="workspace-result-execution-panel">
+        <TestExecutionResults
+          executions={run.executions}
+          testCases={testCases}
+          failures={runRuntime?.failures.filter((item) => item.test_run_id === run.id) ?? []}
+          onOpenFailure={onOpenFailure}
+        />
+      </div>
+
       <div className="workspace-result-columns">
         <section className="workspace-result-panel workspace-result-diagnosis" aria-labelledby="workspace-result-summary-title">
           <header className="workspace-result-panel-heading"><div><span>{t('result.overviewEyebrow')}</span><h3 id="workspace-result-summary-title">{t('result.summary')}</h3></div><Clock3 size={16} aria-hidden="true" /></header>
@@ -400,6 +418,7 @@ export function WorkspaceRunResult({
 
           <section className="workspace-result-observation">
             <h4>{t('result.observedFailure')}</h4>
+            {failureCaseLabel && <small className="workspace-result-failure-case">{t('result.failureCaseContext', { case: failureCaseLabel })}</small>}
             <dl className="workspace-result-failure-facts">
               <div><dt>{t('result.expectedResult')}</dt><dd>{expectedResult || t('result.expectedResultUnavailable')}</dd></div>
               <div><dt>{t('result.observedResult')}</dt><dd>{observedFailureSummary}</dd></div>

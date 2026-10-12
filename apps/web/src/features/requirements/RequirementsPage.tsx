@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Project, Requirement } from '../../types';
 import { useRequirements } from './hooks/useRequirements';
+import { buildRequirementSelectionModel } from './requirementSelectionModel';
 import { useTestDesigns } from './hooks/useTestDesigns';
 import { useRequirementAI } from './hooks/useRequirementAI';
 import { useJiraImport } from './hooks/useJiraImport';
@@ -76,6 +77,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   });
 
   const { selectedReq } = reqs;
+  const requirementSelection = buildRequirementSelectionModel(reqs.requirements, selectedReq);
 
   const handleWorkspaceAnalysis = async () => {
     if (!selectedReq || !onStartAnalysis || analysisRunning) return;
@@ -130,6 +132,31 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   return (
     <div className={workspaceMode ? 'workspace-requirement-embedded' : undefined}>
       <div className={workspaceMode ? 'workspace-requirement-toolbar' : undefined}>
+        {workspaceMode && requirementSelection && (
+          <div className="workspace-requirement-selection">
+            <span className="workspace-requirement-selection-label">{t('currentRequirement')}</span>
+            {requirementSelection.kind === 'multiple' ? (
+              <select
+                className="form-select workspace-requirement-selection-control"
+                aria-label={t('currentRequirement')}
+                value={requirementSelection.selectedId}
+                onChange={(event) => {
+                  const requirement = reqs.requirements.find((item) => item.id === event.target.value);
+                  if (requirement) handleSelectRequirement(requirement);
+                }}
+              >
+                {requirementSelection.options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="workspace-requirement-selection-current">
+                <strong>{requirementSelection.displayId}</strong>
+                <span>{requirementSelection.title}</span>
+              </div>
+            )}
+          </div>
+        )}
         <RequirementToolbar
           projects={projects}
           onOpenJira={jira.handleOpenJiraModal}

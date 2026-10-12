@@ -1,0 +1,3 @@
+# Fixes
+
+- **First browser-pass readability finding (fixed):** after switching to three desktop columns, current-task metadata still used four subcolumns inside a ~346px activity panel. A long test node ID broke into very short fragments. Made the context grid two columns by default and allowed four columns only when the activity panel is at least 700px wide. Rechecked desktop, intermediate, tablet and mobile; the ID is readable and no P0/P1 remains.

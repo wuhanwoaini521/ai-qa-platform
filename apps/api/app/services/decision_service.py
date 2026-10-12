@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -12,6 +13,7 @@ from project_model.models import (
     DecisionOption,
     DecisionRequest,
     DecisionResult,
+    DecisionSignalRequest,
     JevRuntimeCheckResponse,
     JevSettingsUpdate,
 )
@@ -110,6 +112,7 @@ class DecisionService:
         usage: dict[str, int | float | None] | None = None,
         task_id: str | None = None,
         run_id: str | None = None,
+        decision_value: float | None = None,
     ) -> None:
         try:
             await self.ai_repo.record_invocation(
@@ -125,6 +128,17 @@ class DecisionService:
                 error_type=error_type,
                 decision_choice=result.choice if result else None,
                 decision_confidence=result.confidence if result else None,
+                decision_value=(
+                    decision_value
+                    if decision_value is not None
+                    else (
+                        result.probability
+                        if result and result.probability is not None
+                        else result.score
+                        if result
+                        else None
+                    )
+                ),
                 task_id=task_id,
                 run_id=run_id,
             )
@@ -288,6 +302,214 @@ class DecisionService:
             logger,
             run_id=run_id,
             feature=request.name,
+            provider=config.provider,
+            model=config.model,
+            duration_ms=duration,
+            status="FALLBACK",
+            fallback_used=True,
+        )
+        return result
+
+    async def ask_probability(
+        self,
+        request: DecisionSignalRequest,
+        *,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        reserve_task_call=None,
+        daily_request_reserve: int = 0,
+    ) -> DecisionResult:
+        return await self._ask_signal(
+            request,
+            signal_type="noul",
+            run_id=run_id,
+            task_id=task_id,
+            reserve_task_call=reserve_task_call,
+            daily_request_reserve=daily_request_reserve,
+        )
+
+    async def ask_score(
+        self,
+        request: DecisionSignalRequest,
+        *,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        reserve_task_call=None,
+        daily_request_reserve: int = 0,
+    ) -> DecisionResult:
+        return await self._ask_signal(
+            request,
+            signal_type="score",
+            run_id=run_id,
+            task_id=task_id,
+            reserve_task_call=reserve_task_call,
+            daily_request_reserve=daily_request_reserve,
+        )
+
+    async def _ask_signal(
+        self,
+        request: DecisionSignalRequest,
+        *,
+        signal_type: str,
+        run_id: str | None,
+        task_id: str | None,
+        reserve_task_call,
+        daily_request_reserve: int,
+    ) -> DecisionResult:
+        run_id = run_id or uuid4().hex
+        config = await self.settings_service.get_runtime_config()
+        started = time.perf_counter()
+        decision_name = request.name
+        if not config.enabled:
+            result = DecisionResult(
+                provider="fallback",
+                minimum_confidence=config.minimum_confidence,
+                fallback_used=True,
+                reason="provider_disabled",
+            )
+            await self._record(
+                decision_name=decision_name,
+                provider="fallback",
+                model=None,
+                duration_ms=0,
+                result=result,
+                status="FALLBACK",
+                error_type="provider_disabled",
+                task_id=task_id,
+                run_id=run_id,
+            )
+            log_ai_execution(
+                logger,
+                run_id=run_id,
+                feature=decision_name,
+                provider="fallback",
+                model="",
+                duration_ms=0,
+                status="FALLBACK",
+                fallback_used=True,
+            )
+            return result
+
+        error_code: str | None = None
+        remote_result: DecisionResult | None = None
+        provider_attempted = False
+        try:
+            from app.services.ai_execution_service import AIExecutionService
+            from app.services.ai_settings_service import AISettingsService
+
+            policy = await AISettingsService(self.repository_scope)._effective_config()
+            request = request.model_copy(update={"state": SensitiveRedactor.redact_value(request.state)})
+            if policy.budget_enabled and (
+                len(json.dumps(request.model_dump(), ensure_ascii=False).encode("utf-8")) // 3 + 100
+                > policy.max_request_tokens
+            ):
+                raise BudgetExceededError("Decision signal exceeds configured token budget.")
+            if reserve_task_call is not None and not await reserve_task_call():
+                error_code = "task_ai_budget_exhausted"
+            else:
+                if policy.budget_enabled and self.repository_scope is not None:
+                    daily_limit = max(0, policy.max_daily_requests - max(0, daily_request_reserve))
+                    await AIExecutionService.reserve_daily_limit(daily_limit, self.repository_scope)
+                provider = self.provider_registry.create(config.provider, config)
+                method = getattr(provider, f"ask_{'probability' if signal_type == 'noul' else 'score'}", None)
+                if method is None:
+                    raise DecisionProviderError("invalid_request")
+                provider_attempted = True
+                remote_result = await asyncio.wait_for(method(request), timeout=config.timeout + 1)
+            if error_code is None and remote_result is not None:
+                value = remote_result.probability if signal_type == "noul" else remote_result.score
+                if remote_result.provider != config.provider or remote_result.fallback_used:
+                    error_code = "unexpected_provider"
+                elif value is None:
+                    error_code = "signal_missing"
+                elif (
+                    not isinstance(remote_result.confidence, (int, float))
+                    or isinstance(remote_result.confidence, bool)
+                    or not math.isfinite(remote_result.confidence)
+                    or not 0 <= remote_result.confidence <= 1
+                ):
+                    error_code = "confidence_missing"
+                elif remote_result.confidence < config.minimum_confidence:
+                    error_code = "below_minimum_confidence"
+                else:
+                    accepted = remote_result.model_copy(update={"minimum_confidence": config.minimum_confidence})
+                    duration = (time.perf_counter() - started) * 1000
+                    await self._record(
+                        decision_name=decision_name,
+                        provider=accepted.provider,
+                        model=accepted.model,
+                        duration_ms=duration,
+                        result=accepted,
+                        status="SUCCESS",
+                        usage=accepted.usage,
+                        task_id=task_id,
+                        run_id=run_id,
+                    )
+                    log_ai_execution(
+                        logger,
+                        run_id=run_id,
+                        feature=decision_name,
+                        provider=accepted.provider,
+                        model=accepted.model or "",
+                        duration_ms=duration,
+                        status="SUCCESS",
+                        fallback_used=False,
+                    )
+                    return accepted
+        except asyncio.TimeoutError:
+            error_code = "timeout"
+        except DecisionProviderError as error:
+            error_code = error.code
+        except BudgetExceededError:
+            error_code = "budget_exceeded"
+        except Exception as error:
+            error_code = "unknown_error"
+            logger.warning(
+                "Decision signal failed name=%s signal_type=%s error_type=%s",
+                decision_name,
+                signal_type,
+                type(error).__name__,
+            )
+
+        duration = (time.perf_counter() - started) * 1000
+        attempted_confidence = remote_result.confidence if remote_result else None
+        if (
+            not isinstance(attempted_confidence, (int, float))
+            or isinstance(attempted_confidence, bool)
+            or not math.isfinite(attempted_confidence)
+            or not 0 <= attempted_confidence <= 1
+        ):
+            attempted_confidence = None
+        result = DecisionResult(
+            provider="fallback",
+            attempted_provider=config.provider if provider_attempted else None,
+            attempted_model=(remote_result.model if remote_result else config.model) if provider_attempted else None,
+            confidence=attempted_confidence,
+            minimum_confidence=config.minimum_confidence,
+            usage=remote_result.usage if remote_result else None,
+            fallback_used=True,
+            reason=error_code or "unknown_error",
+        )
+        attempted_value = (
+            (remote_result.probability if signal_type == "noul" else remote_result.score) if remote_result else None
+        )
+        await self._record(
+            decision_name=decision_name,
+            provider=config.provider,
+            model=config.model,
+            duration_ms=duration,
+            result=result,
+            status="FALLBACK",
+            error_type=error_code,
+            usage=remote_result.usage if remote_result else None,
+            task_id=task_id,
+            run_id=run_id,
+            decision_value=attempted_value,
+        )
+        log_ai_execution(
+            logger,
+            run_id=run_id,
+            feature=decision_name,
             provider=config.provider,
             model=config.model,
             duration_ms=duration,

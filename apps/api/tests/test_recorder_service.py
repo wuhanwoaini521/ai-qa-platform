@@ -43,6 +43,29 @@ def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
     assert 'expect(page.locator("#status")).to_contain_text("Order saved")' in source
 
 
+def test_generator_supports_selecting_observed_discovery_values_without_changing_legacy_labels():
+    source = generate_python_case(
+        RecorderGenerateRequest(
+            steps=[
+                RecorderStep(
+                    action="select",
+                    locator=RecorderLocator(kind="label", value="Color"),
+                    value="navy",
+                    select_by_value=True,
+                ),
+                RecorderStep(
+                    action="select",
+                    locator=RecorderLocator(kind="label", value="Size"),
+                    value="Large",
+                ),
+            ]
+        )
+    )
+
+    assert '.select_option(value="navy")' in source
+    assert '.select_option(label="Large")' in source
+
+
 def test_generator_preserves_agent_search_submission_keypress() -> None:
     source = generate_python_case(
         RecorderGenerateRequest(

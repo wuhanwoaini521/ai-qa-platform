@@ -1,0 +1,135 @@
+{
+  "audit_date": "2026-10-11",
+  "repository": {
+    "branch": "main",
+    "head": "cdf954a",
+    "product_source_changes_during_audit": true
+  },
+  "runtime": {
+    "api_live_http": 200,
+    "api_ready_http": 200,
+    "api_ready_status": "ready",
+    "database_health": "ok",
+    "artifact_storage_health": "ok",
+    "migration_revision": "0007_quality_discovery_version",
+    "web_root_http": 200,
+    "services_stopped_after_audit": true,
+    "ports_8000_and_5173_listening_after_shutdown": false
+  },
+  "providers": {
+    "ai": {
+      "status": "REAL_CONNECTED",
+      "operational_state": "READY",
+      "provider": "openai-compatible",
+      "model": "deepseek-flash",
+      "fallback_active": false,
+      "settings_connection_test_http": 200,
+      "settings_connection_test_connected": true
+    },
+    "jev": {
+      "runtime_check_http": 200,
+      "connectivity": "CONNECTED",
+      "runtime": "READY",
+      "enabled": true,
+      "model": "jev-1.13.0",
+      "budget_available": true,
+      "connection_test_http": 200,
+      "connection_test_connected": true,
+      "playground_decision": {
+        "choice": "preserve_read_only",
+        "confidence": 1.0,
+        "provider": "jev",
+        "model": "jev-1.13.0",
+        "fallback_used": false
+      }
+    }
+  },
+  "browser": {
+    "engine": "system Chrome",
+    "target_viewports": ["1920x1080", "1440x900", "1366x768", "390x844"],
+    "stable_after_screenshots": 24,
+    "dashboard_before_after_screenshots": 4,
+    "mobile_navigation_after": {
+      "viewport": "390x844",
+      "item_width_px": 52,
+      "label_font_size": "9px",
+      "visible_nav_width_px": 148,
+      "scroll_width_px": 264,
+      "max_scroll_left_px": 116,
+      "primary_destinations_checked": 5,
+      "all_primary_destinations_reachable": true,
+      "all_primary_routes_opened": true,
+      "compact_labels_unclipped_in_both_languages": true,
+      "full_accessible_names_preserved": true,
+      "document_overflow": false
+    },
+    "dashboard_and_core_workspace_document_overflow": false,
+    "workspace_failure_after": {
+      "viewports": ["1440x900", "390x844"],
+      "http": 200,
+      "document_overflow": false
+    },
+    "targeted_runtime_page_errors": 0,
+    "targeted_runtime_http_api_failures": 0,
+    "expected_sse_abort_count_during_navigation": 2,
+    "expected_sse_abort_count_during_final_workspace_screenshot_sweep": 8,
+    "recorder": {
+      "local_demo_shop_frame_received": true,
+      "steps_recorded": 0,
+      "case_saved": false,
+      "session_closed": true
+    },
+    "debugger": {
+      "target": "tests/test_shop.py::test_product_detail",
+      "terminal_state": "finished",
+      "pytest_result": "1 passed in 2.51s",
+      "breakpoints_added_or_removed": false
+    }
+  },
+  "database_preservation": {
+    "prestart_checkpoint_matches_live_job_counts": true,
+    "execution_jobs_total": 5004,
+    "queued_jobs_total": 5000,
+    "completed_jobs_total": 4,
+    "golden_demo_jobs": {
+      "completed": 4,
+      "queued": 0,
+      "running": 0
+    },
+    "registered_workers": {
+      "total": 1,
+      "online": 0,
+      "offline": 1
+    },
+    "worker_started": false,
+    "preexisting_golden_demo_run": {
+      "id": "run_51c9455dff71",
+      "checkpoint_status": "RUNNING",
+      "final_status": "CANCELLED",
+      "started_at": "2026-10-11 02:20:51.117140",
+      "finished_at": "2026-10-11 04:22:44.647233",
+      "reason": "automatic API startup stale-run recovery after the 7200-second threshold; confirmed in startup log",
+      "manually_cancelled_or_restored": false
+    }
+  },
+  "observed_side_effects": [
+    "API startup automatically transitioned pre-existing run_51c9455dff71 from RUNNING to CANCELLED after the configured 7200-second stale threshold; confirmed in the startup log. No manual cancellation or restoration occurred."
+  ],
+  "regression": {
+    "pnpm_test": "667 passed, 7 skipped, 44 warnings",
+    "pnpm_lint": "passed",
+    "web_typecheck": "passed",
+    "web_build": "passed; existing Monaco large-chunk advisory",
+    "i18n_parity": "passed; 25 namespaces, 2 languages, 2865 keys",
+    "git_diff_check": "passed"
+  },
+  "known_limits": [
+    "PostgreSQL and Docker validation unavailable",
+    "No Windows/Linux CI executed",
+    "No fresh Worker run against the existing queue",
+    "No fresh Quality Discovery run",
+    "Human rejection and retry-failure coverage incomplete",
+    "Golden Demo tablet direct-refresh unverified"
+  ],
+  "secrets_recorded": false
+}

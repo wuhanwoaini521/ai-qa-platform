@@ -46,6 +46,7 @@ from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.golden_demo_service import GoldenDemoService
 from app.services.health_service import HealthService
 from app.services.jira_service import JiraService
+from app.services.locator_repair_funnel_service import LocatorRepairFunnelService
 from app.services.metrics_service import MetricsService
 from app.services.onboarding_service import OnboardingService
 from app.services.platform_health_service import PlatformHealthService
@@ -262,6 +263,10 @@ def get_jira_service(session: AsyncSession = Depends(get_db)) -> JiraService:
 
 def get_quality_service(session: AsyncSession = Depends(get_db)) -> QualityIntelligenceService:
     return build_quality_service(session)
+
+
+def get_locator_repair_funnel_service() -> LocatorRepairFunnelService:
+    return LocatorRepairFunnelService(get_repository_scope_factory())
 
 
 def build_quality_service(session: AsyncSession) -> QualityIntelligenceService:

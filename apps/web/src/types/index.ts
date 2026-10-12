@@ -53,6 +53,7 @@ export interface RecorderStep {
   frame_path?: string[];
   url?: string | null;
   value?: string | null;
+  select_by_value?: boolean;
   key?: string | null;
   description: string;
   locator_decision?: {
@@ -550,6 +551,34 @@ export type FailureRepairState =
 
 export type FailureRepairAction = 'START_ANALYSIS' | 'APPLY' | 'VERIFY' | 'ROLLBACK' | 'RETRY' | 'CREATE_ISSUE_DRAFT';
 
+export interface ElementBaselineFingerprint {
+  status: 'CAPTURED' | 'MISSING';
+  fingerprint: Record<string, string> | null;
+  reason: string | null;
+}
+
+export interface FailureReplaySummary {
+  status: 'NOT_STARTED' | 'RESTORED' | 'PARTIAL' | 'RESTORE_FAILED' | 'INSUFFICIENT_EVIDENCE';
+  safe_point: string | null;
+  replayed_steps: string[];
+  not_replayed_steps: string[];
+  message: string;
+}
+
+export interface FailureSnapshotBundle {
+  status: 'CAPTURED' | 'PARTIAL' | 'INSUFFICIENT_EVIDENCE';
+  captured_at: string | null;
+  url: string | null;
+  accessibility_tree: string;
+  redacted_dom: string;
+  failed_locator: string | null;
+  original_element_baseline: ElementBaselineFingerprint;
+  storage_state_status: 'AVAILABLE' | 'NOT_CAPTURED' | 'UNAVAILABLE' | 'EXPIRED' | 'RESTORE_FAILED';
+  storage_state_expires_at: string | null;
+  replay: FailureReplaySummary;
+  evidence_gaps: string[];
+}
+
 export interface FailureRepairWorkflow {
   repair_id: string | null;
   failure_id: string;
@@ -562,6 +591,7 @@ export interface FailureRepairWorkflow {
   retry_run_status: string | null;
   verified: boolean;
   repair_proposal: Partial<LocatorRepairProposal> | null;
+  failure_snapshot: FailureSnapshotBundle;
 }
 
 /** Body accepted by `POST /api/failures/{id}/analyses/{analysisId}/apply`. */
@@ -596,6 +626,7 @@ export interface LocatorRepairProposal {
   ai_fallback_used?: boolean;
   verified?: boolean;
   verification_reason?: string | null;
+  verification_replay?: FailureReplaySummary;
   resolved_classification?: string | null;
   decision_summary?: Record<string, unknown>;
   code_diff?: string;
@@ -944,6 +975,7 @@ export interface AIInvocationDTO {
   decision_name?: string | null;
   decision_choice?: string | null;
   decision_confidence?: number | null;
+  decision_value?: number | null;
 }
 
 export interface JevSettings {
@@ -978,11 +1010,41 @@ export interface DecisionResult {
   choice: string | null;
   confidence: number | null;
   probabilities: Record<string, number>;
+  probability?: number | null;
+  score?: number | null;
+  decision_value?: number | null;
   provider: string;
   model?: string | null;
   usage?: Record<string, number | null> | null;
   fallback_used: boolean;
   reason?: string | null;
+}
+
+export interface DecisionSamplesEvaluationRequest {
+  samples: Record<string, unknown>[];
+  threshold?: number;
+  input_cost_per_million_usd?: number | null;
+  output_cost_per_million_usd?: number | null;
+}
+
+export interface DecisionSamplesEvaluationResponse {
+  sample_count: number;
+  threshold: number;
+  consistency_rate: number | null;
+  labeled_sample_count: number;
+  consistency_observation_count: number;
+  ranking_pair_count: number;
+  abstention_rate: number;
+  fallback_rate: number;
+  mean_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  cost_usd: number | null;
+  cost_source: string;
+  cost_coverage: number;
+  input_tokens: number;
+  output_tokens: number;
+  threshold_replay: Record<string, unknown>;
+  decision_points: Record<string, Record<string, unknown>>;
 }
 
 export interface DecisionConnectionResult {

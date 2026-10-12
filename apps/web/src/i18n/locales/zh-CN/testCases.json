@@ -4,6 +4,8 @@
   "newTestCase": "新建测试用例",
   "createProjectFirst": "请先创建项目，然后再添加测试用例。",
   "selectCase": "选择一个测试用例，查看步骤详情与自动化绑定。",
+  "currentTestCase": "当前用例",
+  "casePickerPlaceholder": "请选择测试用例",
   "listTitle": "测试用例（{{total}}）",
   "listLoading": "正在加载测试用例...",
   "listEmpty": "未找到测试用例。",

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from project_model.models import FailureRecord
+from project_model.models import FailureRecord, FailureSnapshotBundle
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.models import BrowserSessionORM, FailureAnalysisORM, FailureRecordORM, TestRunORM
+from app.persistence.models import BrowserSessionORM, FailureAnalysisORM, FailureRecordORM, TestRunORM, utc_now
 
 
 class FailureRepository:
@@ -99,6 +100,98 @@ class FailureRepository:
         )
         row = result.scalar_one_or_none()
         return {"current_url": row.current_url, "page_evidence_json": row.page_evidence_json} if row else None
+
+    async def latest_failure_snapshot(self, execution_id: str) -> tuple[FailureSnapshotBundle, str | None]:
+        result = await self.session.execute(
+            select(BrowserSessionORM)
+            .where(
+                BrowserSessionORM.case_execution_id == execution_id,
+                BrowserSessionORM.failure_snapshot_json.is_not(None),
+            )
+            .order_by(BrowserSessionORM.started_at.desc())
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return (
+                FailureSnapshotBundle(
+                    status="INSUFFICIENT_EVIDENCE",
+                    evidence_gaps=["failure_snapshot_not_captured"],
+                    replay={"status": "INSUFFICIENT_EVIDENCE", "message": "No live failure snapshot was captured."},
+                ),
+                None,
+            )
+        try:
+            bundle = FailureSnapshotBundle.model_validate_json(row.failure_snapshot_json or "{}")
+        except ValueError:
+            bundle = FailureSnapshotBundle(
+                status="PARTIAL",
+                url=row.current_url,
+                evidence_gaps=["failure_snapshot_record_invalid"],
+            )
+        expired = bool(row.storage_state_expires_at and row.storage_state_expires_at <= utc_now())
+        encrypted_state = row.encrypted_storage_state
+        if expired:
+            encrypted_state = None
+            if bundle.storage_state_status == "AVAILABLE":
+                bundle = bundle.model_copy(
+                    update={
+                        "storage_state_status": "EXPIRED",
+                        "evidence_gaps": list(dict.fromkeys([*bundle.evidence_gaps, "storage_state_expired"])),
+                        "replay": bundle.replay.model_copy(
+                            update={
+                                "status": "PARTIAL",
+                                "message": "Encrypted storage state expired; no authenticated browser replay was attempted.",
+                            }
+                        ),
+                    }
+                )
+        elif not encrypted_state and bundle.storage_state_status == "AVAILABLE":
+            bundle = bundle.model_copy(update={"storage_state_status": "UNAVAILABLE"})
+        return bundle, encrypted_state
+
+    async def purge_expired_failure_snapshots(self) -> int:
+        result = await self.session.execute(
+            select(BrowserSessionORM).where(
+                BrowserSessionORM.storage_state_expires_at <= utc_now(),
+                BrowserSessionORM.encrypted_storage_state.is_not(None),
+            )
+        )
+        rows = result.scalars().all()
+        for row in rows:
+            row.encrypted_storage_state = None
+            try:
+                bundle = FailureSnapshotBundle.model_validate_json(row.failure_snapshot_json or "{}")
+            except ValueError:
+                bundle = None
+            if bundle is not None and bundle.storage_state_status == "AVAILABLE":
+                bundle.storage_state_status = "EXPIRED"
+                bundle.evidence_gaps = list(dict.fromkeys([*bundle.evidence_gaps, "storage_state_expired"]))
+                bundle.replay = bundle.replay.model_copy(
+                    update={
+                        "status": "PARTIAL",
+                        "message": "Encrypted storage state expired; no authenticated browser replay was attempted.",
+                    }
+                )
+                row.failure_snapshot_json = json.dumps(bundle.model_dump(mode="json"), ensure_ascii=False)
+        await self.session.flush()
+        return len(rows)
+
+    async def update_failure_snapshot(self, execution_id: str, bundle: FailureSnapshotBundle) -> None:
+        result = await self.session.execute(
+            select(BrowserSessionORM)
+            .where(
+                BrowserSessionORM.case_execution_id == execution_id,
+                BrowserSessionORM.failure_snapshot_json.is_not(None),
+            )
+            .order_by(BrowserSessionORM.started_at.desc())
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            row.failure_snapshot_json = json.dumps(bundle.model_dump(mode="json"), ensure_ascii=False)
+            await self.session.flush()
+        await self.purge_expired_failure_snapshots()
 
     async def update_repair_proposal(
         self, failure_id: str, proposal: dict[str, Any], *, failing_locator: str | None = None

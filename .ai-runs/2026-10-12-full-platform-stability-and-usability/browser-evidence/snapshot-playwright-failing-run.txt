@@ -1,0 +1,291 @@
+- generic
+  - generic [ref=e3351] clickable [onclick]
+    - link "跳转到主要内容" [ref=e3352]
+    - banner
+      - button "返回" [ref=e3353]
+      - button "下一步" [ref=e3354]
+      - heading "QA 工作台" [level=1, ref=e3355]
+      - button "系统" [expanded=false, ref=e3362]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e3363]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e3386]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e3387]
+          - option "Northstar · Golden Demo Shop" [ref=e3388]
+          - option "Broken Conftest Probe" [ref=e3389]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e3390]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e3391]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e3392]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e3393]
+          - option "Benchmark Project 0" [ref=e3394]
+          - option "Benchmark Project 1" [ref=e3395]
+          - option "Benchmark Project 2" [ref=e3396]
+          - option "Benchmark Project 3" [ref=e3397]
+          - option "Benchmark Project 4" [ref=e3398]
+          - option "Benchmark Project 5" [ref=e3399]
+          - option "Benchmark Project 6" [ref=e3400]
+          - option "Benchmark Project 7" [ref=e3401]
+          - option "Benchmark Project 8" [ref=e3402]
+          - option "Benchmark Project 9" [ref=e3403]
+          - option "Benchmark Project 10" [ref=e3404]
+          - option "Benchmark Project 11" [ref=e3405]
+          - option "Benchmark Project 12" [ref=e3406]
+          - option "Benchmark Project 13" [ref=e3407]
+          - option "Benchmark Project 14" [ref=e3408]
+          - option "Benchmark Project 15" [ref=e3409]
+          - option "Benchmark Project 16" [ref=e3410]
+          - option "Benchmark Project 17" [ref=e3411]
+          - option "Benchmark Project 18" [ref=e3412]
+          - option "Benchmark Project 19" [ref=e3413]
+      - button "收起侧边栏" [expanded=true, ref=e3356]
+      - generic
+        - searchbox "搜索" [ref=e3364]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e3357]
+        - link "总览" [ref=e3365]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e3366]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e3367]
+          - StaticText "项目管理"
+        - link "运行" [ref=e3368]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e3369]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e3358]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e3359]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "自动化开发" [level=1, ref=e3370]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "展开上下文" [expanded=false, ref=e3371]
+          - StaticText "展开上下文"
+        - button "检查器" [expanded=false, ref=e3372]
+        - button "运行控制 · 失败待处理 · D080C3" [expanded=false, ref=e3373]
+          - StaticText "运行控制"
+          - generic
+            - StaticText "失败待处理 · D080C3"
+        - button "查看进度" [ref=e3374]
+      - navigation "工作阶段" [ref=e3360]
+        - button "需求 · 2 项需求" [ref=e3375]
+          - strong
+            - StaticText "需求"
+          - StaticText "2 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e3376]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 2 条用例" [ref=e3377]
+          - strong
+            - StaticText "用例"
+          - StaticText "2 条用例"
+        - button "自动化 · 2/2 已绑定" [ref=e3378]
+          - strong
+            - StaticText "自动化"
+          - StaticText "2/2 已绑定"
+        - button "结果 · 本次运行 FAILED · 已保存 1/1 条逐例结果" [ref=e3379]
+          - strong
+            - StaticText "结果"
+          - StaticText "本次运行 FAILED · 已保存 1/1 条逐例结果"
+      - region "工作内容" [ref=e3361]
+        - StaticText "当前阶段"
+        - heading "代码" [level=2, ref=e3380]
+        - tablist "自动化工具"
+          - tab "代码" [selected, ref=e3510]
+          - tab "浏览器" [ref=e3511]
+          - tab "调试" [ref=e3512]
+        - button "工作区文件" [ref=e3509]
+          - StaticText "工作区文件"
+        - group
+          - DisclosureTriangle "更多工具" [expanded=false]
+            - StaticText "更多工具"
+        - generic
+          - generic
+            - combobox "选择项目" [expanded=false, ref=e3519]: Platform Stability Acceptance 2026-10-12 0955
+              - MenuListPopup
+                - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e3548]
+                - option "V2 Overhaul Sandbox 2026-10-12" [ref=e3549]
+                - option "Northstar · Golden Demo Shop" [ref=e3550]
+                - option "Broken Conftest Probe" [ref=e3551]
+                - option "Reference QA (playwright-test) · #f2e603" [ref=e3552]
+                - option "Reference QA (playwright-test) · #06d7cd" [ref=e3553]
+                - option "Reference QA (playwright-test) · #b3b098" [ref=e3554]
+                - option "Reference QA (playwright-test) · #73b98d" [ref=e3555]
+                - option "Benchmark Project 0" [ref=e3556]
+                - option "Benchmark Project 1" [ref=e3557]
+                - option "Benchmark Project 2" [ref=e3558]
+                - option "Benchmark Project 3" [ref=e3559]
+                - option "Benchmark Project 4" [ref=e3560]
+                - option "Benchmark Project 5" [ref=e3561]
+                - option "Benchmark Project 6" [ref=e3562]
+                - option "Benchmark Project 7" [ref=e3563]
+                - option "Benchmark Project 8" [ref=e3564]
+                - option "Benchmark Project 9" [ref=e3565]
+                - option "Benchmark Project 10" [ref=e3566]
+                - option "Benchmark Project 11" [ref=e3567]
+                - option "Benchmark Project 12" [ref=e3568]
+                - option "Benchmark Project 13" [ref=e3569]
+                - option "Benchmark Project 14" [ref=e3570]
+                - option "Benchmark Project 15" [ref=e3571]
+                - option "Benchmark Project 16" [ref=e3572]
+                - option "Benchmark Project 17" [ref=e3573]
+                - option "Benchmark Project 18" [ref=e3574]
+                - option "Benchmark Project 19" [ref=e3575]
+            - button "快速打开文件（Cmd+P）" [ref=e3520]
+            - tablist "工作区视图切换"
+              - tab "文件" [selected, ref=e3526]
+              - tab "测试" [ref=e3527]
+              - tab "变更 4" [ref=e3528]
+                - StaticText "变更"
+                - StaticText "4"
+              - tab "PR" [ref=e3529]
+            - StaticText "工作区文件"
+            - button "新建文件" [ref=e3521]
+            - button "新建文件夹" [ref=e3522]
+            - button "刷新" [ref=e3523]
+            - tabpanel "文件" [ref=e3524] focusable [tabindex]
+              - generic [ref=e3530] clickable [cursor:pointer, onclick]
+                - StaticText "components"
+              - generic [ref=e3531] clickable [cursor:pointer, onclick]
+                - StaticText "flows"
+              - generic [ref=e3532] clickable [cursor:pointer, onclick]
+                - StaticText "__init__.py"
+              - generic [ref=e3533] clickable [cursor:pointer, onclick]
+                - StaticText "login_flow.py"
+              - generic [ref=e3534] clickable [cursor:pointer, onclick]
+                - StaticText "knowledge"
+              - generic [ref=e3535] clickable [cursor:pointer, onclick]
+                - StaticText "example_rules.md"
+              - generic [ref=e3536] clickable [cursor:pointer, onclick]
+                - StaticText "pages"
+              - generic [ref=e3537] clickable [cursor:pointer, onclick]
+                - StaticText "README.md"
+              - generic [ref=e3538] clickable [cursor:pointer, onclick]
+                - StaticText "tests"
+              - generic [ref=e3539] clickable [cursor:pointer, onclick]
+                - StaticText "test_cart.py"
+                - StaticText "PY"
+              - generic [ref=e3540] clickable [cursor:pointer, onclick]
+                - StaticText "test_case_tc_f5e450bd2_4f0752.py"
+                - StaticText "PY"
+              - generic [ref=e3541] clickable [cursor:pointer, onclick]
+                - StaticText "test_case_tc_f5e450bd2_60dbee.py"
+                - StaticText "PY"
+              - generic [ref=e3542] clickable [cursor:pointer, onclick]
+                - StaticText "test_case_tc_f5e450bd2_90e8fc.py"
+                - StaticText "PY"
+              - generic [ref=e3543] clickable [cursor:pointer, onclick]
+                - StaticText "test_login.py"
+                - StaticText "PY"
+              - generic [ref=e3544] clickable [cursor:pointer, onclick]
+                - StaticText "test_sign_in_locator_repair.py"
+                - StaticText "PY"
+              - generic [ref=e3545] clickable [cursor:pointer, onclick]
+                - StaticText ".gitignore"
+              - generic [ref=e3546] clickable [cursor:pointer, onclick]
+                - StaticText "pytest.ini"
+              - generic [ref=e3547] clickable [cursor:pointer, onclick]
+                - StaticText "README.md"
+          - generic [ref=e3513] clickable [cursor:pointer, onclick]
+            - StaticText "test_sign_in_locator_repair.py"
+            - button [ref=e3525]
+          - button "保存" [disabled, ref=e3514]
+          - button "校验 —" [ref=e3515]
+            - StaticText "校验"
+            - StaticText "—"
+          - button "运行测试" [ref=e3516]
+          - button "调试" [disabled, ref=e3517]
+          - generic
+            - code
+              - generic
+                - textbox "Editor content" [ref=e3576]
+            - status
+              - StaticText "Python 语言服务不可用"
+          - button "工作区问题与校验 尚未校验 展开" [expanded=false, ref=e3518]
+            - StaticText "工作区问题与校验"
+            - StaticText "尚未校验"
+            - StaticText "展开"
+          - StaticText "Run #run_22db · FAILED · 0/1 passed"
+          - button "在执行平台中查看" [ref=e3578]
+          - StaticText "尚未校验工作区"
+          - StaticText "main"
+          - StaticText "tests/test_sign_in_locator_repair.py"
+          - StaticText "py"
+          - StaticText "Production QA 引擎"
+      - dialog "运行详情"
+        - sectionheader
+          - StaticText "运行详情"
+          - strong
+            - StaticText "Automation Studio"
+          - button "关闭运行详情" [ref=e3579]
+        - region "执行观察台" [ref=e3577]
+          - sectionheader
+            - StaticText "执行观察台"
+            - heading "Test Run run_22db17ea7f1b" [level=2, ref=e3581]
+            - link "测试运行 #run_22db17ea7f1b" [ref=e3582]
+              - StaticText "测试运行 #run_22db17ea7f1b"
+            - code
+              - StaticText "run_22db17ea7f1b"
+            - status
+              - StaticText "失败"
+            - StaticText "已记录"
+          - navigation "运行时视图" [ref=e3580]
+            - button "概览" [ref=e3583]
+            - button "逐条结果" [ref=e3584]
+            - button "流程图" [ref=e3585]
+            - button "时间线" [ref=e3586]
+            - button "执行追踪" [ref=e3587]
+            - button "浏览器" [ref=e3588]
+            - button "制品" [ref=e3589]
+            - button "强制刷新执行记录" [ref=e3590]
+          - paragraph
+            - StaticText "此独立 TestRun 没有关联 TaskStep DAG。"
+          - group
+            - DisclosureTriangle "实时事件流 4" [expanded=true]
+              - StaticText "实时事件流"
+              - code
+                - StaticText "4"
+            - region "实时事件流" [ref=e3591] focusable [tabindex]
+              - list
+                - listitem [level=1]
+                  - time
+                    - StaticText "10:32:49"
+                  - StaticText "任务"
+                  - button "测试运行已开始" [disabled, ref=e3592]
+                  - code
+                    - StaticText "运行中"
+                - listitem [level=1]
+                  - time
+                    - StaticText "10:32:53"
+                  - StaticText "浏览器"
+                  - button "浏览器操作 · 点击 · internal:role=button[name=\"Continue\"s] · 失败" [disabled, ref=e3593]
+                    - StaticText "浏览器操作 · 点击 · internal:role=button[name=\"Continue\"s] · 失败"
+                  - code
+                    - StaticText "失败 · 2.5s"
+                - listitem [level=1]
+                  - time
+                    - StaticText "10:32:54"
+                  - StaticText "测试"
+                  - button "测试失败" [disabled, ref=e3594]
+                  - code
+                    - StaticText "失败 · 4.7s"
+                - listitem [level=1]
+                  - time
+                    - StaticText "10:32:54"
+                  - StaticText "任务"
+                  - button "测试运行已完成" [disabled, ref=e3595]
+                  - code
+                    - StaticText "失败"
+  - generic
+    - alert
+    - alert

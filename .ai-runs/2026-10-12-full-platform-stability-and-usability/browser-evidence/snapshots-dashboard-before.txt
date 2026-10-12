@@ -1,0 +1,267 @@
+- generic [ref=e1] clickable [onclick]
+  - link "跳转到主要内容" [ref=e5]
+  - banner
+    - button "返回" [ref=e6]
+    - button "下一步" [ref=e7]
+    - heading "平台总览" [level=1, ref=e8]
+    - button "系统" [expanded=false, ref=e13]
+      - StaticText "系统"
+  - complementary
+    - combobox "项目" [expanded=false, ref=e14]: V2 Overhaul Sandbox 2026-10-12
+      - MenuListPopup
+        - option "全部项目" [ref=e21]
+        - option "V2 Overhaul Sandbox 2026-10-12" [selected, ref=e22]
+        - option "Northstar · Golden Demo Shop" [ref=e23]
+        - option "Broken Conftest Probe" [ref=e24]
+        - option "Reference QA (playwright-test) · #f2e603" [ref=e25]
+        - option "Reference QA (playwright-test) · #06d7cd" [ref=e26]
+        - option "Reference QA (playwright-test) · #b3b098" [ref=e27]
+        - option "Reference QA (playwright-test) · #73b98d" [ref=e28]
+        - option "Benchmark Project 0" [ref=e29]
+        - option "Benchmark Project 1" [ref=e30]
+        - option "Benchmark Project 2" [ref=e31]
+        - option "Benchmark Project 3" [ref=e32]
+        - option "Benchmark Project 4" [ref=e33]
+        - option "Benchmark Project 5" [ref=e34]
+        - option "Benchmark Project 6" [ref=e35]
+        - option "Benchmark Project 7" [ref=e36]
+        - option "Benchmark Project 8" [ref=e37]
+        - option "Benchmark Project 9" [ref=e38]
+        - option "Benchmark Project 10" [ref=e39]
+        - option "Benchmark Project 11" [ref=e40]
+        - option "Benchmark Project 12" [ref=e41]
+        - option "Benchmark Project 13" [ref=e42]
+        - option "Benchmark Project 14" [ref=e43]
+        - option "Benchmark Project 15" [ref=e44]
+        - option "Benchmark Project 16" [ref=e45]
+        - option "Benchmark Project 17" [ref=e46]
+        - option "Benchmark Project 18" [ref=e47]
+        - option "Benchmark Project 19" [ref=e48]
+    - button "收起侧边栏" [expanded=true, ref=e9]
+    - generic
+      - searchbox "搜索" [ref=e15]
+      - StaticText "⌘ K"
+    - navigation "主导航" [ref=e10]
+      - link "总览" [ref=e16]
+        - StaticText "总览"
+      - link "QA 工作台" [ref=e17]
+        - StaticText "QA 工作台"
+      - link "项目管理" [ref=e18]
+        - StaticText "项目管理"
+      - link "运行" [ref=e19]
+        - StaticText "运行"
+      - link "质量洞察" [ref=e20]
+        - StaticText "质量洞察"
+      - group
+        - DisclosureTriangle "平台" [expanded=false]
+          - StaticText "平台"
+    - link "系统设置" [ref=e11]
+      - StaticText "系统设置"
+    - StaticText "中文"
+    - button "界面语言" [ref=e12]
+      - StaticText "EN"
+  - main
+    - region "待处理事项" [ref=e49]
+      - StaticText "待处理事项"
+      - StaticText "从近期失败和正在处理的任务继续工作。"
+      - StaticText "3"
+      - button "检查失败运行 #run_1a8b · 1 个失败用例 失败" [ref=e55]
+        - strong
+          - StaticText "检查失败运行"
+        - StaticText "#run_1a8b · 1 个失败用例"
+        - StaticText "失败"
+      - button "On the local Northstar demo shop, search for Everyday Tee and open its product detail. Verify that the detail heading identifies Everyday Tee and the Add to cart button is visible and enabled. Do not add the item, enter checkout, pay, or change account data. 没有找到可靠的下一步浏览操作。 已阻塞" [ref=e56]
+        - strong
+          - StaticText "On the local Northstar demo shop, search for Everyday Tee and open its product detail. Verify that the detail heading identifies Everyday Tee and the Add to cart button is visible and enabled. Do not add the item, enter checkout, pay, or change account data."
+        - StaticText "没有找到可靠的下一步浏览操作。"
+        - StaticText "已阻塞"
+      - button "请根据失败证据为用例 tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。 Locator repair needs a DOM snapshot, a failure-time browser observation with a page URL and observed controls, or a user-supplied proposed_locator; no source was changed. 已阻塞" [ref=e57]
+        - strong
+          - StaticText "请根据失败证据为用例 tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。"
+        - StaticText "Locator repair needs a DOM snapshot, a failure-time browser observation with a page URL and observed controls, or a user-supplied proposed_locator; no source was changed."
+        - StaticText "已阻塞"
+    - StaticText "今日通过率"
+    - StaticText "100.0%"
+    - StaticText "今日执行用例数"
+    - StaticText "1"
+    - button "执行记录" [ref=e50]
+      - StaticText "执行记录"
+    - StaticText "今日执行"
+    - StaticText "1"
+    - StaticText "执行总次数"
+    - StaticText "20"
+    - button "查看全部" [ref=e51]
+      - StaticText "查看全部"
+    - StaticText "累计失败"
+    - StaticText "20"
+    - StaticText "疑似不稳定用例"
+    - StaticText "1"
+    - button "失败智能分析" [ref=e52]
+      - StaticText "失败智能分析"
+    - StaticText "平均执行耗时"
+    - StaticText "10.2s"
+    - StaticText "重跑恢复次数"
+    - StaticText "2400"
+    - button "疑似不稳定用例" [ref=e53]
+      - StaticText "疑似不稳定用例"
+    - region "项目概览" [ref=e54]
+      - StaticText "项目概览"
+      - DescriptionList
+        - term "QA 项目"
+        - definition
+          - StaticText "27"
+        - term "需求"
+        - definition
+          - StaticText "1002"
+        - term "测试用例"
+        - definition
+          - StaticText "10012"
+        - term "执行总次数"
+        - definition
+          - StaticText "20"
+    - generic
+      - StaticText "执行趋势"
+      - StaticText "最近若干次执行的通过率"
+      - image "执行趋势"
+        - StaticText "84%"
+        - StaticText "88%"
+        - StaticText "92%"
+        - StaticText "96%"
+        - StaticText "100%"
+        - StaticText "06:58"
+        - StaticText "07:00"
+        - StaticText "07:00"
+        - StaticText "09:04"
+    - generic
+      - StaticText "AI 正在协助质量工作"
+      - StaticText "从原有业务页面发起 AI 操作，在这里查看跨页面进度。"
+      - button "录制并生成测试" [ref=e58]
+        - StaticText "录制并生成测试"
+      - button "分析与修复失败" [ref=e59]
+        - StaticText "分析与修复失败"
+      - button "优化与审查用例" [ref=e60]
+        - StaticText "优化与审查用例"
+      - button "执行与 AI 回归" [ref=e61]
+        - StaticText "执行与 AI 回归"
+    - generic
+      - StaticText "最近执行记录"
+      - button "查看全部" [ref=e62]
+      - table
+        - rowgroup
+          - row
+            - columnheader "状态" [ref=e105]
+            - columnheader "执行 ID" [ref=e106]
+            - columnheader "运行器" [ref=e107]
+            - columnheader "合计" [ref=e108]
+            - columnheader "耗时" [ref=e109]
+        - row [ref=e75] clickable [cursor:pointer, onclick]
+          - cell "PASSED" [ref=e80]
+            - StaticText "PASSED"
+          - cell "#run_f991" [ref=e81]
+            - StaticText "#run_f991"
+          - cell "LOCAL" [ref=e82]
+          - cell "1 / 0" [ref=e83]
+            - StaticText "1 / 0"
+          - cell "0.63s" [ref=e84]
+            - StaticText "0.63s"
+        - row [ref=e76] clickable [cursor:pointer, onclick]
+          - cell "FAILED" [ref=e85]
+            - StaticText "FAILED"
+          - cell "#run_1a8b" [ref=e86]
+            - StaticText "#run_1a8b"
+          - cell "LOCAL" [ref=e87]
+          - cell "7 / 1" [ref=e88]
+            - StaticText "7 / 1"
+          - cell "30.94s" [ref=e89]
+            - StaticText "30.94s"
+        - row [ref=e77] clickable [cursor:pointer, onclick]
+          - cell "PASSED" [ref=e90]
+            - StaticText "PASSED"
+          - cell "#run_e396" [ref=e91]
+            - StaticText "#run_e396"
+          - cell "LOCAL" [ref=e92]
+          - cell "8 / 0" [ref=e93]
+            - StaticText "8 / 0"
+          - cell "26.93s" [ref=e94]
+            - StaticText "26.93s"
+        - row [ref=e78] clickable [cursor:pointer, onclick]
+          - cell "PASSED" [ref=e95]
+            - StaticText "PASSED"
+          - cell "#run_1c21" [ref=e96]
+            - StaticText "#run_1c21"
+          - cell "LOCAL" [ref=e97]
+          - cell "8 / 0" [ref=e98]
+            - StaticText "8 / 0"
+          - cell "26.14s" [ref=e99]
+            - StaticText "26.14s"
+        - row [ref=e79] clickable [cursor:pointer, onclick]
+          - cell "CANCELLED" [ref=e100]
+            - StaticText "CANCELLED"
+          - cell "#run_51c9" [ref=e101]
+            - StaticText "#run_51c9"
+          - cell "LOCAL" [ref=e102]
+          - cell "0 / 0" [ref=e103]
+            - StaticText "0 / 0"
+          - cell "0.00s" [ref=e104]
+            - StaticText "0.00s"
+    - generic
+      - StaticText "质量闭环"
+      - StaticText "从需求到证据，依次流转。"
+      - button "1. AI 需求与测试设计 风险分析与测试维度设计" [ref=e63]
+        - StaticText "1. AI 需求与测试设计"
+        - StaticText "风险分析与测试维度设计"
+      - button "2. 自动化工作室 V2 AST 校验、实时运行器与 Sidecar" [ref=e64]
+        - StaticText "2. 自动化工作室 V2"
+        - StaticText "AST 校验、实时运行器与 Sidecar"
+      - button "3. 不稳定用例智能分析 确定性评分与状态迁移分析" [ref=e65]
+        - StaticText "3. 不稳定用例智能分析"
+        - StaticText "确定性评分与状态迁移分析"
+      - button "4. 失败智能分析与自愈 根因诊断与语义评审" [ref=e66]
+        - StaticText "4. 失败智能分析与自愈"
+        - StaticText "根因诊断与语义评审"
+    - generic
+      - StaticText "最近任务"
+      - StaticText "从原有业务页面发起 AI 操作，在这里查看跨页面进度。"
+      - button "查看全部任务" [ref=e67]
+      - button "分析需求 · Analyze requirement: Quickstart account and cart lifecycle 1/1" [ref=e68]
+        - generic
+          - StaticText "分析需求 · Analyze requirement: Quickstart account and cart lifecycle"
+        - StaticText "1"
+        - StaticText "/"
+        - StaticText "1"
+      - button "type_QA_GOAL · 分析当前 Run 的执行错误，结合实际浏览器事件和日志给出根因与修复建议；如需修改代码，请先等待人工确认。 1/1" [ref=e69]
+        - generic
+          - StaticText "type_QA_GOAL · 分析当前 Run 的执行错误，结合实际浏览器事件和日志给出根因与修复建议；如需修改代码，请先等待人工确认。"
+        - StaticText "1"
+        - StaticText "/"
+        - StaticText "1"
+      - button "探索网页 · On the local Northstar demo shop, submit the exact search 'qa-empty-state-20261011' and verify the no-results status says 'No products found. Try another search.'. Do not open product details, add products, enter checkout, pay, or change account data. 1/1" [ref=e70]
+        - generic
+          - StaticText "探索网页 · On the local Northstar demo shop, submit the exact search 'qa-empty-state-20261011' and verify the no-results status says 'No products found. Try another search.'. Do not open product details, add products, enter checkout, pay, or change account data."
+        - StaticText "1"
+        - StaticText "/"
+        - StaticText "1"
+      - button "探索网页 · On the local Northstar demo shop, search for Everyday Tee and verify the matching product title is visible in the result list. Do not open product details, add products, enter checkout, pay, or change account data. 1/1" [ref=e71]
+        - generic
+          - StaticText "探索网页 · On the local Northstar demo shop, search for Everyday Tee and verify the matching product title is visible in the result list. Do not open product details, add products, enter checkout, pay, or change account data."
+        - StaticText "1"
+        - StaticText "/"
+        - StaticText "1"
+      - button "探索网页 · On the local Northstar demo shop, search for Everyday Tee and open its product detail. Verify that the detail heading identifies Everyday Tee and the Add to cart button is visible and enabled. Do not add the item, enter checkout, pay, or change account data. 0/1" [ref=e72]
+        - generic
+          - StaticText "探索网页 · On the local Northstar demo shop, search for Everyday Tee and open its product detail. Verify that the detail heading identifies Everyday Tee and the Add to cart button is visible and enabled. Do not add the item, enter checkout, pay, or change account data."
+        - StaticText "0"
+        - StaticText "/"
+        - StaticText "1"
+      - button "修复失败用例 · 请根据失败证据为用例 tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。 4/11" [ref=e73]
+        - generic
+          - StaticText "修复失败用例 · 请根据失败证据为用例 tests/unit/test_zh_repair_probe.py::test_checkout_submit_locator 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。"
+        - StaticText "4"
+        - StaticText "/"
+        - StaticText "11"
+      - button "type_QA_GOAL · 分析当前 Run 的执行错误，结合实际浏览器事件和日志给出根因与修复建议；如需修改代码，请先等待人工确认。 2/2" [ref=e74]
+        - generic
+          - StaticText "type_QA_GOAL · 分析当前 Run 的执行错误，结合实际浏览器事件和日志给出根因与修复建议；如需修改代码，请先等待人工确认。"
+        - StaticText "2"
+        - StaticText "/"
+        - StaticText "2"

@@ -7,7 +7,7 @@ import pytest
 from app.persistence.models import AIInvocationORM
 from app.services.decision_service import DecisionService
 from app.services.jev_provider import DecisionProviderError, JevDecisionProvider
-from project_model.models import DecisionOption, DecisionRequest
+from project_model.models import DecisionOption, DecisionRequest, DecisionSignalRequest
 from sqlalchemy import select
 
 
@@ -88,6 +88,51 @@ async def test_jev_provider_sends_dynamic_choice_request_and_normalizes_response
     assert result.choice == "allow" and result.confidence == 0.91
     assert result.probabilities == {"allow": 0.91, "deny": 0.09}
     assert result.usage == {"input_tokens": 12, "output_tokens": 3}
+
+
+@pytest.mark.parametrize(
+    ("signal_type", "answer", "value_field"),
+    [
+        ("noul", {"type": "noul", "probability": 0.87, "confidence": 0.93}, "probability"),
+        ("score", {"type": "score", "score": 0.74, "confidence": 0.91}, "score"),
+    ],
+)
+async def test_jev_provider_asks_scalar_signal_question(monkeypatch, signal_type, answer, value_field):
+    stub = StubClient(
+        StubResponse(
+            200,
+            {"model": "jev-1.13.0", "answers": {"signal": answer}, "usage": {"input_tokens": 9, "output_tokens": 2}},
+        )
+    )
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: stub)
+    request = DecisionSignalRequest(name="signal", state={"candidate": "observed"}, instructions="Score it")
+    provider = JevDecisionProvider(
+        api_key="jev-secret", model="jev-1.13.0", base_url="https://example.test/v1/systemone", timeout=3
+    )
+
+    result = await (provider.ask_probability(request) if signal_type == "noul" else provider.ask_score(request))
+
+    _url, args = stub.request_args
+    assert args["json"] == {
+        "model": "jev-1.13.0",
+        "state": {"candidate": "observed"},
+        "questions": {"signal": {"type": signal_type, "instructions": "Score it"}},
+    }
+    assert getattr(result, value_field) == answer[value_field]
+    assert result.confidence == answer["confidence"]
+    assert result.usage == {"input_tokens": 9, "output_tokens": 2}
+
+
+async def test_jev_scalar_signal_without_key_never_opens_an_http_client(monkeypatch):
+    def unexpected_client(**_kwargs):
+        raise AssertionError("No HTTP client should be created without a configured key")
+
+    monkeypatch.setattr(httpx, "AsyncClient", unexpected_client)
+    provider = JevDecisionProvider(api_key="", model="m", base_url="https://example.test", timeout=2)
+    request = DecisionSignalRequest(name="noul", state={}, instructions="Estimate")
+
+    with pytest.raises(DecisionProviderError, match="missing_api_key"):
+        await provider.ask_probability(request)
 
 
 @pytest.mark.parametrize(
@@ -262,6 +307,160 @@ async def test_task_jev_decision_reserves_per_task_budget_before_provider_call(m
 
 
 @pytest.mark.unit
+async def test_decision_signal_value_is_recorded_in_ai_invocation_telemetry():
+    class ScoreProvider:
+        async def ask_score(self, _request):
+            from project_model.models import DecisionResult
+
+            return DecisionResult(provider="jev", score=0.81, confidence=0.93, model="m")
+
+    class RecordingAIRepository:
+        def __init__(self):
+            self.invocations = []
+
+        async def record_invocation(self, **kwargs):
+            self.invocations.append(kwargs)
+
+    ai_repo = RecordingAIRepository()
+    service = DecisionService(
+        settings_service=StubSettingsService(enabled=True),
+        provider_registry=StubRegistry(ScoreProvider()),
+        ai_repo=ai_repo,
+    )
+
+    result = await service.ask_score(
+        DecisionSignalRequest(name="discovery_candidate_score", state={}, instructions="Rank")
+    )
+
+    assert result.score == 0.81
+    assert ai_repo.invocations[0]["decision_value"] == 0.81
+    assert ai_repo.invocations[0]["decision_name"] == "discovery_candidate_score"
+
+
+@pytest.mark.unit
+async def test_decision_signal_reserves_task_budget_and_marks_exhaustion_as_fallback():
+    class SignalProvider:
+        calls = 0
+
+        async def ask_probability(self, _request):
+            self.calls += 1
+            raise AssertionError("Provider must not be called after task budget exhaustion")
+
+    provider = SignalProvider()
+    service = DecisionService(
+        settings_service=StubSettingsService(enabled=True),
+        provider_registry=StubRegistry(provider),
+        ai_repo=NoopAIRepository(),
+    )
+    reserved = []
+
+    async def reserve_task_call():
+        reserved.append(True)
+        return False
+
+    result = await service.ask_probability(
+        DecisionSignalRequest(name="identity", state={}, instructions="Estimate probability"),
+        task_id="task-budget",
+        reserve_task_call=reserve_task_call,
+    )
+
+    assert reserved == [True]
+    assert provider.calls == 0
+    assert result.provider == "fallback"
+    assert result.fallback_used is True
+    assert result.reason == "task_ai_budget_exhausted"
+    assert result.probability is None
+
+
+@pytest.mark.unit
+async def test_optional_score_reserves_one_daily_request_for_the_required_choice(monkeypatch):
+    from app.services.ai_execution_service import AIExecutionService
+    from app.services.ai_settings_service import AISettingsService
+
+    class BudgetPolicy:
+        budget_enabled = True
+        max_request_tokens = 10_000
+        max_daily_requests = 8
+
+    reserved_limits = []
+
+    async def load_policy(_self):
+        return BudgetPolicy()
+
+    async def reserve_daily_limit(limit, _scope):
+        reserved_limits.append(limit)
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", load_policy)
+    monkeypatch.setattr(AIExecutionService, "reserve_daily_limit", staticmethod(reserve_daily_limit))
+
+    class ScoreProvider:
+        async def ask_score(self, _request):
+            from project_model.models import DecisionResult
+
+            return DecisionResult(provider="jev", score=0.8, confidence=0.9)
+
+    service = DecisionService(
+        settings_service=StubSettingsService(enabled=True),
+        provider_registry=StubRegistry(ScoreProvider()),
+        ai_repo=NoopAIRepository(),
+        repository_scope=object(),
+    )
+    result = await service.ask_score(
+        DecisionSignalRequest(name="discovery_score", state={}, instructions="Rank this"),
+        daily_request_reserve=1,
+    )
+
+    assert result.provider == "jev"
+    assert reserved_limits == [7]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("confidence", [float("nan"), float("inf"), 1.1, -0.1])
+async def test_decision_signal_rejects_non_finite_or_out_of_range_confidence(confidence):
+    class InvalidConfidenceProvider:
+        async def ask_probability(self, _request):
+            from project_model.models import DecisionResult
+
+            return DecisionResult(provider="jev", probability=0.8, confidence=confidence)
+
+    service = DecisionService(
+        settings_service=StubSettingsService(enabled=True),
+        provider_registry=StubRegistry(InvalidConfidenceProvider()),
+        ai_repo=NoopAIRepository(),
+    )
+
+    result = await service.ask_probability(DecisionSignalRequest(name="identity", state={}, instructions="Estimate"))
+
+    assert result.provider == "fallback"
+    assert result.reason == "confidence_missing"
+    assert result.confidence is None
+    assert result.probability is None
+
+
+@pytest.mark.unit
+async def test_decision_signal_below_minimum_confidence_falls_back_without_exposing_untrusted_value():
+    class LowConfidenceSignalProvider:
+        async def ask_probability(self, _request):
+            from project_model.models import DecisionResult
+
+            return DecisionResult(provider="jev", probability=0.99, confidence=0.4, model="m")
+
+    service = DecisionService(
+        settings_service=StubSettingsService(enabled=True, confidence=0.6),
+        provider_registry=StubRegistry(LowConfidenceSignalProvider()),
+        ai_repo=NoopAIRepository(),
+    )
+
+    result = await service.ask_probability(DecisionSignalRequest(name="identity", state={}, instructions="Estimate"))
+
+    assert result.provider == "fallback"
+    assert result.fallback_used is True
+    assert result.reason == "below_minimum_confidence"
+    assert result.probability is None
+    assert result.attempted_provider == "jev"
+
+
+@pytest.mark.unit
 async def test_decision_service_accepts_missing_confidence_only_when_requested():
     request = DecisionRequest(
         name="locator_candidate_selection",
@@ -380,6 +579,49 @@ async def test_jev_settings_are_config_managed_and_connection_result_is_sanitize
             await session.execute(select(AIInvocationORM).where(AIInvocationORM.decision_name == "release_decision"))
         ).scalar_one()
         assert invocation.decision_choice == "ship" and invocation.decision_confidence == 0.99
+
+
+@pytest.mark.integration
+async def test_decision_sample_evaluation_api_is_offline_and_ui_consumable(client, monkeypatch):
+    async def unexpected_provider_call(*_args, **_kwargs):
+        raise AssertionError("Sample evaluation must never call Jev")
+
+    monkeypatch.setattr(JevDecisionProvider, "ask_probability", unexpected_provider_call)
+    monkeypatch.setattr(JevDecisionProvider, "ask_score", unexpected_provider_call)
+    response = await client.post(
+        "/api/decision/evaluate-samples",
+        json={
+            "threshold": 0.75,
+            "samples": [
+                {
+                    "decision_point": "locator_same_function_probability",
+                    "expected": True,
+                    "probability": 0.8,
+                    "latency_ms": 12,
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                },
+                {
+                    "decision_point": "locator_same_function_probability",
+                    "expected": False,
+                    "probability": 0.4,
+                    "abstained": True,
+                    "fallback_used": True,
+                    "latency_ms": 20,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["sample_count"] == 2
+    assert body["threshold"] == 0.75
+    assert body["consistency_rate"] == 1
+    assert body["abstention_rate"] == 0.5
+    assert body["fallback_rate"] == 0.5
+    assert body["decision_points"]["locator_same_function_probability"]["sample_count"] == 2
+    assert body["threshold_replay"]["above_threshold_count"] == 1
 
 
 @pytest.mark.integration

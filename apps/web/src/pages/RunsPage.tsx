@@ -502,6 +502,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 key={selectedRun.id}
                 kind="run"
                 id={selectedRun.id}
+                initialTab="Results"
               />
               {/* Summary Header */}
               <div className="card">

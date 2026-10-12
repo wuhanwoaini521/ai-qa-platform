@@ -241,6 +241,8 @@ class TaskCodeGenerationService:
             if names != expected:
                 raise TaskBlocked("Generated automation must contain exactly one named test for each uncovered case.")
             self._validate_goal_generated_test(code, file_path)
+        elif self.context.input(task, "assertion_bypass_check") is True:
+            self._validate_goal_generated_test(code, file_path)
         artifact = await self.context.artifact(
             task, "generate", Path(file_path).name, "GENERATED_TEST", code.encode("utf-8"), "text/x-python"
         )
@@ -445,7 +447,7 @@ class TaskCodeGenerationService:
         source = outputs.get("generate") or outputs.get("refactor") or outputs.get("repair", {})
         code, file_path = source.get("suggested_code", ""), source.get("target_file", source.get("file_path", ""))
         self._validate_python_test(code, file_path)
-        if task.type == TaskType.QA_GOAL.value:
+        if task.type == TaskType.QA_GOAL.value or self.context.input(task, "assertion_bypass_check") is True:
             self._validate_goal_generated_test(code, file_path)
         return {
             "valid": True,

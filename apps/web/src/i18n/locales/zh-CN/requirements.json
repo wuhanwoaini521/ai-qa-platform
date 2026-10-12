@@ -1,6 +1,7 @@
 {
   "pageNoProject": "请先创建项目，再创建需求。",
   "pageSelectRequirement": "请选择一条需求以查看详情。",
+  "currentRequirement": "当前需求",
   "toolbarTitle": "需求与 AI 测试设计",
   "toolbarSubtitle": "AI 辅助的需求可测试性分析、风险提取与多维测试设计生成。",
   "toolbarImportFromJira": "从 Jira 导入",

@@ -24,6 +24,7 @@ class RepositoryScope(Protocol):
     ai_budgets: Any
     jobs: Any
     locator_history: Any
+    locator_repairs: Any
     browser_sessions: Any
     runner_profiles: Any
     workers: Any

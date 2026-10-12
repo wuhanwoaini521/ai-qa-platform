@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.persistence.database import Base
+from project_model.models import FailureRepairState
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -18,6 +19,9 @@ from sqlalchemy import (
     TypeDecorator,
     UniqueConstraint,
     text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -341,6 +345,9 @@ class BrowserSessionORM(Base):
     case_name: Mapped[str] = mapped_column(String(250), default="")
     current_url: Mapped[str] = mapped_column(String(2048), default="")
     page_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failure_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_storage_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_state_expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(30), default="running", index=True)
     started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
@@ -432,6 +439,39 @@ class FailureAnalysisORM(Base):
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
+class LocatorRepairORM(Base):
+    __tablename__ = "locator_repairs"
+    __table_args__ = (UniqueConstraint("analysis_id", name="uq_locator_repairs_analysis_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    failure_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("failure_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    analysis_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("failure_analyses.id", ondelete="CASCADE"), nullable=True
+    )
+    state: Mapped[FailureRepairState] = mapped_column(
+        SAEnum(
+            FailureRepairState,
+            name="ck_locator_repairs_state",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda states: [state.value for state in states],
+        ),
+        nullable=False,
+        default=FailureRepairState.CREATED,
+        index=True,
+    )
+    block_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    candidate_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    verification_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class AIInvocationORM(Base):
     __tablename__ = "ai_invocations"
 
@@ -439,6 +479,9 @@ class AIInvocationORM(Base):
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    locator_repair_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("locator_repairs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     task: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -455,6 +498,7 @@ class AIInvocationORM(Base):
     decision_name: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     decision_choice: Mapped[str | None] = mapped_column(String(128), nullable=True)
     decision_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    decision_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
 
 

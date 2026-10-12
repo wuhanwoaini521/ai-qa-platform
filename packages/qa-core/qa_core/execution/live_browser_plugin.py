@@ -13,6 +13,7 @@ LIVE_BROWSER_PLUGIN_SOURCE = '''"""Generated for one AI QA Platform TestRun."""
 from __future__ import annotations
 
 import base64
+import hashlib
 import inspect
 import json
 import os
@@ -23,6 +24,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from qa_platform_sensitive_redactor import SensitiveRedactor
 
 
 PLUGIN_NAME = "qa-platform-live-browser"
@@ -44,6 +46,136 @@ class LiveBrowserPlugin:
         self.lock = threading.Lock()
         self.active = {}
         self.locator_originals = {}
+
+    @staticmethod
+    def _redact_text(value):
+        text = SensitiveRedactor.redact_text(str(value or ""))
+        text = re.sub(r"(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", "[REDACTED_EMAIL]", text)
+        return re.sub(r"(?<!\\d)(?:\\+?\\d[\\d .()/-]{7,}\\d)(?!\\d)", "[REDACTED_PHONE]", text)
+
+    @classmethod
+    def _safe_value(cls, value):
+        if isinstance(value, dict):
+            return {str(key): "[REDACTED]" if re.search("password|passwd|secret|token|authorization|cookie|api.?key|email|phone|address|card", str(key), re.I) else cls._safe_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls._safe_value(item) for item in value]
+        if isinstance(value, str):
+            return cls._redact_text(value)
+        return value
+
+    @classmethod
+    def _element_fingerprint(cls, locator):
+        try:
+            if locator.count() != 1:
+                return None
+            attributes = locator.evaluate("""el => ({tag:el.tagName.toLowerCase(),role:el.getAttribute('role')||'',type:(el.getAttribute('type')||'').toLowerCase(),test_id:el.getAttribute('data-testid')||'',id:el.id||'',name:el.getAttribute('name')||'',aria_label:el.getAttribute('aria-label')||'',text:(el.innerText||el.textContent||'').replace(/\\\\s+/g,' ').trim()})""")
+            stable = {key: str(value) for key, value in attributes.items() if key not in {"tag", "role", "type"}}
+            return {
+                "sha256": hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest(),
+                "tag": str(attributes.get("tag") or "")[:40],
+                "role": str(attributes.get("role") or "")[:40],
+                "type": str(attributes.get("type") or "")[:40],
+            }
+        except Exception:
+            return None
+
+    def _failure_snapshot(self, record):
+        page = record["page"]
+        gaps = []
+        url = SensitiveRedactor.redact_url(str(getattr(page, "url", "")))
+        locator = self._redact_text(record.get("failed_locator") or "") or None
+        prior = record.get("successful_baselines", {}).get(record.get("failed_locator", ""))
+        baseline = (
+            {"status": "CAPTURED", "fingerprint": prior, "reason": None}
+            if prior
+            else {"status": "MISSING", "fingerprint": None, "reason": "no_prior_successful_matching_locator"}
+        )
+        snapshot_text_limit = min(20_000, self.max_dom_chars)
+        accessibility = ""
+        try:
+            accessibility = page.locator("body").aria_snapshot()
+        except Exception:
+            gaps.append("accessibility_tree_unavailable")
+        try:
+            private_values = page.locator("input,textarea,select").evaluate_all(
+                "els => els.map(el => el.value || '').filter(value => value.length >= 2)"
+            )
+            for value in private_values:
+                accessibility = accessibility.replace(str(value), "[REDACTED]")
+        except Exception:
+            pass
+        accessibility = self._redact_text(accessibility)[:snapshot_text_limit]
+
+        dom = ""
+        if self.capture_dom:
+            try:
+                dom = page.locator("html").evaluate("""root => {
+                    const clone=root.cloneNode(true);
+                    for(const el of clone.querySelectorAll('input,textarea,select')) {
+                      if(el.hasAttribute('value')) el.setAttribute('value','[REDACTED]');
+                      if(el.tagName==='TEXTAREA') el.textContent='[REDACTED]';
+                      if(el.tagName==='SELECT') el.selectedIndex=-1;
+                    }
+                    for(const el of clone.querySelectorAll('*')) for(const attr of Array.from(el.attributes)) {
+                      if(/password|passwd|secret|token|authorization|cookie|api.?key/i.test(attr.name)) el.setAttribute(attr.name,'[REDACTED]');
+                    }
+                    return clone.outerHTML;
+                }""")
+            except Exception:
+                gaps.append("redacted_dom_unavailable")
+        else:
+            gaps.append("dom_capture_disabled")
+        dom = self._redact_text(dom)[:snapshot_text_limit]
+        if not url:
+            gaps.append("url_unavailable")
+        if not locator:
+            gaps.append("failed_locator_unavailable")
+
+        storage_state_status = "UNAVAILABLE"
+        storage_state_ciphertext = None
+        try:
+            state = page.context.storage_state()
+            raw_state = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+            key = os.environ.get("QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY", "")
+            if not key:
+                gaps.append("storage_state_encryption_key_unavailable")
+            elif len(raw_state.encode("utf-8")) > 2_000_000:
+                gaps.append("storage_state_exceeds_size_limit")
+            else:
+                from cryptography.fernet import Fernet
+
+                ciphertext = Fernet(key.encode("ascii")).encrypt(raw_state.encode("utf-8")).decode("ascii")
+                storage_state_ciphertext = "ephemeral:v1:" + ciphertext
+                storage_state_status = "AVAILABLE"
+        except ImportError:
+            gaps.append("storage_state_encryption_unavailable")
+        except Exception:
+            gaps.append("storage_state_capture_failed")
+
+        side_effect_steps = [
+            f"{step.get('action', 'action')}:{step.get('locator', '')}"[:300]
+            for step in record.get("recent_steps", [])
+            if step.get("action") in {"click", "dblclick", "fill", "select_option", "check", "uncheck", "press", "hover"}
+        ]
+        return {
+            "status": "CAPTURED" if url and (accessibility or dom) else "PARTIAL",
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "url": url,
+            "accessibility_tree": accessibility,
+            "redacted_dom": dom,
+            "failed_locator": locator,
+            "original_element_baseline": baseline,
+            "storage_state_status": storage_state_status,
+            "storage_state_ciphertext": storage_state_ciphertext,
+            "replay": {
+                "status": "NOT_STARTED",
+                "safe_point": "captured_storage_state_and_url" if storage_state_status == "AVAILABLE" else "captured_url_only",
+                "replayed_steps": [],
+                "not_replayed_steps": side_effect_steps,
+                "message": "No browser actions are automatically replayed; only the captured storage state and URL may be restored.",
+            },
+            "evidence_gaps": gaps,
+        }
 
     def emit(self, event):
         event.setdefault('timestamp',datetime.now(timezone.utc).isoformat())
@@ -89,9 +221,9 @@ class LiveBrowserPlugin:
                   return {tag,type,role,name,candidates,visible:!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length),enabled:!el.disabled};
                 })""") if self.capture_dom else []
             evidence = {
-                "url": str(getattr(page, "url", ""))[:2048],
-                "title": str(page.title())[:200],
-                "controls": controls,
+                "url": SensitiveRedactor.redact_url(str(getattr(page, "url", "")))[:2048],
+                "title": self._redact_text(str(page.title())[:200]),
+                "controls": self._safe_value(controls),
             }
             remaining = self.max_dom_chars
             bounded = []
@@ -113,6 +245,7 @@ class LiveBrowserPlugin:
         requests = {}
         def publish(kind, entry):
             entry.setdefault('timestamp',datetime.now(timezone.utc).isoformat())
+            entry = self._safe_value(entry)
             key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[kind]
             if (kind == "console" and not self.capture_console) or (kind == "network" and not self.capture_network):
                 return
@@ -122,7 +255,7 @@ class LiveBrowserPlugin:
             record[key].append(entry)
             del record[key][:-limit]
             self.emit({"type": kind, "session_id": record["session_id"], "page_id": record["page_id"],
-                "nodeid": record["nodeid"], "url": getattr(page, "url", ""), "entry": entry})
+                "nodeid": record["nodeid"], "url": SensitiveRedactor.redact_url(getattr(page, "url", "")), "entry": entry})
         def safe_payload(value, depth=0):
             if depth > 4:
                 return "[depth limit]"
@@ -174,6 +307,8 @@ class LiveBrowserPlugin:
                         if kwargs.get("trial"):
                             return original(locator, *args, **kwargs)
                         started = time.perf_counter()
+                        locator_text = self._redact_text(str(getattr(getattr(locator, "_impl_obj", None), "_selector", ""))[:1000])
+                        fingerprint = self._element_fingerprint(locator)
                         location = {}
                         for frame in inspect.stack(context=0)[1:12]:
                             relative = os.path.relpath(frame.filename, os.getcwd()).replace(os.sep, "/")
@@ -186,7 +321,14 @@ class LiveBrowserPlugin:
                             passed = True
                             return result
                         finally:
-                            publish("step", {"action": method, "locator": str(getattr(getattr(locator, "_impl_obj", None), "_selector", ""))[:1000],
+                            if passed and fingerprint and locator_text:
+                                record["successful_baselines"][locator_text] = fingerprint
+                                if len(record["successful_baselines"]) > 100:
+                                    record["successful_baselines"].pop(next(iter(record["successful_baselines"])))
+                            elif not passed:
+                                record["failed_locator"] = locator_text
+                                record["failed_action"] = method
+                            publish("step", {"action": method, "locator": locator_text,
                                 "status": "PASSED" if passed else "FAILED", "duration_ms": round((time.perf_counter()-started)*1000, 1), **location})
                             evidence = self._page_evidence(page)
                             if evidence:
@@ -304,7 +446,8 @@ class LiveBrowserPlugin:
         session_id = uuid.uuid4().hex
         page_id = uuid.uuid4().hex
         nodeid = self._nodeid(item)
-        record = {"session_id": session_id, "page_id": page_id, "nodeid": nodeid, "case_name": item.name, "page": page, "cdp": None}
+        record = {"session_id": session_id, "page_id": page_id, "nodeid": nodeid, "case_name": item.name, "page": page, "cdp": None,
+            "successful_baselines": {}, "failed_locator": None, "failed_action": None}
         self.active[item.nodeid] = record
         self._install_telemetry(page, record)
         self.emit({
@@ -355,6 +498,21 @@ class LiveBrowserPlugin:
         record = self.active.pop(item.nodeid, None)
         if record is None:
             return
+        if report.failed:
+            try:
+                record["failure_snapshot"] = self._failure_snapshot(record)
+            except Exception:
+                record["failure_snapshot"] = {
+                    "status": "PARTIAL",
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "url": SensitiveRedactor.redact_url(str(getattr(record["page"], "url", ""))),
+                    "failed_locator": self._redact_text(record.get("failed_locator") or "") or None,
+                    "original_element_baseline": {"status": "MISSING", "fingerprint": None, "reason": "snapshot_capture_failed"},
+                    "storage_state_status": "UNAVAILABLE",
+                    "storage_state_ciphertext": None,
+                    "replay": {"status": "NOT_STARTED", "safe_point": "captured_url_only", "replayed_steps": [], "not_replayed_steps": [], "message": "Snapshot capture failed; no actions were replayed."},
+                    "evidence_gaps": ["snapshot_capture_failed"],
+                }
         artifact_dir = os.environ.get("QA_ARTIFACT_DIR")
         if artifact_dir and record.get("last_frame"):
             try:
@@ -368,7 +526,8 @@ class LiveBrowserPlugin:
             "url": getattr(record["page"], "url", ""),
             "status": "passed" if report.passed else "failed" if report.failed else "closed",
             "page_evidence": {**(self._page_evidence(record["page"]) or record.get("last_page_evidence") or {}), "console_logs": record.get("console_logs", []),
-                "network_logs": record.get("network_logs", []), "recent_steps": record.get("recent_steps", [])},
+                "network_logs": record.get("network_logs", []), "recent_steps": record.get("recent_steps", []),
+                **({"failure_snapshot": record["failure_snapshot"]} if record.get("failure_snapshot") else {})},
         })
 
     def close(self):
@@ -397,7 +556,14 @@ def pytest_unconfigure(config):
 
 
 def write_live_browser_plugin(artifacts_dir) -> str:
-    """Write a per-run plugin module and return its pytest ``-p`` name."""
+    """Write a standalone plugin and the exact shared redactor into the imported project's run directory."""
+    from pathlib import Path
+
+    artifacts_dir = Path(artifacts_dir)
     path = artifacts_dir / f"{LIVE_BROWSER_PLUGIN_NAME}.py"
     path.write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    redactor_source = Path(__file__).resolve().parents[1] / "failure" / "redactor.py"
+    (artifacts_dir / "qa_platform_sensitive_redactor.py").write_text(
+        redactor_source.read_text(encoding="utf-8"), encoding="utf-8"
+    )
     return LIVE_BROWSER_PLUGIN_NAME

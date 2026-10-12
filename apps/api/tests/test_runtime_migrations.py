@@ -6,7 +6,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
     with engine.begin() as connection:
         upgrade_database(connection)
-        assert len(inspect(connection).get_table_names()) == 37
+        assert len(inspect(connection).get_table_names()) == 38
         connection.execute(
             text(
                 "INSERT INTO projects (id,name,description,framework_type,default_branch,created_at,updated_at) VALUES ('p','Retain','','playwright_python','main',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"
@@ -15,8 +15,14 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_quality_discovery_version"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010_locator_repair_state_machine"
+        assert {"decision_value", "locator_repair_id"} <= {
+            column["name"] for column in inspect(connection).get_columns("ai_invocations")
+        }
         assert "version" in {column["name"] for column in inspect(connection).get_columns("quality_discovery_runs")}
+        assert {"failure_snapshot_json", "encrypted_storage_state", "storage_state_expires_at"} <= {
+            column["name"] for column in inspect(connection).get_columns("browser_sessions")
+        }
     engine.dispose()
 
 
@@ -127,4 +133,142 @@ def test_time_and_step_backfill_uses_real_records_and_preserves_children_on_down
         assert connection.scalar(text("SELECT COUNT(*) FROM test_executions")) == 1
         assert connection.scalar(text("SELECT COUNT(*) FROM agent_task_events")) == 2
         upgrade_database(connection)
+    engine.dispose()
+
+
+def test_locator_repair_migration_backfills_legacy_state_and_downgrades_cleanly(tmp_path):
+    import json
+
+    from app.persistence.models import (
+        AIInvocationORM,
+        FailureAnalysisORM,
+        FailureRecordORM,
+        ProjectORM,
+        TestExecutionORM,
+        TestRunORM,
+    )
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'locator-repair.db'}")
+    legacy_result = {
+        "repair_state": "BLOCKED",
+        "block_reason": "AI_BUDGET_EXHAUSTED",
+        "selection": {"candidate_id": "candidate-1"},
+    }
+    applied_proposal = {
+        "candidate_id": "candidate-applied",
+        "proposed_locator": 'get_by_test_id("new")',
+        "applied": True,
+    }
+    with engine.begin() as connection:
+        upgrade_database(connection, "0009_decision_signal_values")
+        connection.execute(
+            AIInvocationORM.__table__.insert().values(
+                id="legacy-invocation",
+                task="locator_choice",
+                provider="jev",
+                model="jev-test",
+            )
+        )
+        connection.execute(ProjectORM.__table__.insert().values(id="p", name="Legacy"))
+        connection.execute(TestRunORM.__table__.insert().values(id="run", project_id="p", workspace_id="p"))
+        connection.execute(
+            TestExecutionORM.__table__.insert().values(
+                id="execution", run_id="run", nodeid="tests/test_locator.py::test_button"
+            )
+        )
+        connection.execute(
+            FailureRecordORM.__table__.insert().values(
+                id="failure",
+                run_id="run",
+                execution_id="execution",
+                test_nodeid="tests/test_locator.py::test_button",
+                test_name="test_button",
+                repair_proposal=applied_proposal,
+            )
+        )
+        connection.execute(
+            FailureAnalysisORM.__table__.insert().values(
+                id="analysis",
+                failure_id="failure",
+                status="COMPLETED",
+                result=legacy_result,
+                events=[],
+            )
+        )
+        connection.execute(
+            FailureAnalysisORM.__table__.insert().values(
+                id="analysis-applied",
+                failure_id="failure",
+                status="COMPLETED",
+                result={"repair_state": "PATCH_READY", "repair_proposal": applied_proposal},
+                events=[],
+            )
+        )
+        connection.execute(
+            FailureAnalysisORM.__table__.insert().values(
+                id="analysis-from-event",
+                failure_id="failure",
+                status="RUNNING",
+                result={},
+                events=[
+                    {
+                        "type": "repair.started",
+                        "stage": "repair",
+                        "metadata": {"state": "DECIDING"},
+                    }
+                ],
+            )
+        )
+        connection.execute(
+            FailureAnalysisORM.__table__.insert().values(
+                id="analysis-without-repair",
+                failure_id="failure",
+                status="COMPLETED",
+                result={},
+                events=[{"type": "workflow.plan", "stage": "workflow", "metadata": {}}],
+            )
+        )
+
+        upgrade_database(connection)
+        repair = connection.execute(
+            text(
+                "SELECT failure_id, analysis_id, state, block_reason, candidate_id "
+                "FROM locator_repairs WHERE analysis_id='analysis'"
+            )
+        ).one()
+        assert repair == (
+            "failure",
+            "analysis",
+            "BLOCKED",
+            "AI_BUDGET_EXHAUSTED",
+            "candidate-1",
+        )
+        assert "locator_repair_id" in {column["name"] for column in inspect(connection).get_columns("ai_invocations")}
+        assert (
+            connection.scalar(text("SELECT state FROM locator_repairs WHERE analysis_id='analysis-from-event'"))
+            == "DECIDING"
+        )
+        assert connection.scalar(text("SELECT COUNT(*) FROM locator_repairs")) == 3
+        assert (
+            connection.scalar(text("SELECT state FROM locator_repairs WHERE analysis_id='analysis-applied'"))
+            == "PATCH_APPLIED"
+        )
+        assert (
+            connection.scalar(text("SELECT locator_repair_id FROM ai_invocations WHERE id='legacy-invocation'")) is None
+        )
+
+        downgrade_database(connection, "0009_decision_signal_values")
+        assert "locator_repairs" not in inspect(connection).get_table_names()
+        assert "locator_repair_id" not in {
+            column["name"] for column in inspect(connection).get_columns("ai_invocations")
+        }
+        assert (
+            json.loads(connection.scalar(text("SELECT result FROM failure_analyses WHERE id='analysis'")))
+            == legacy_result
+        )
+        assert connection.scalar(text("SELECT COUNT(*) FROM ai_invocations WHERE id='legacy-invocation'")) == 1
+
+        upgrade_database(connection)
+        assert connection.scalar(text("SELECT COUNT(*) FROM locator_repairs")) == 3
+        assert connection.scalar(text("SELECT COUNT(*) FROM locator_repairs WHERE analysis_id='analysis'")) == 1
     engine.dispose()

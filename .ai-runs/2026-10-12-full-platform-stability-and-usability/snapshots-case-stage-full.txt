@@ -1,0 +1,137 @@
+- generic
+  - generic [ref=e2572] clickable [onclick]
+    - link "跳转到主要内容" [ref=e2573]
+    - banner
+      - button "返回" [ref=e2574]
+      - button "下一步" [ref=e2575]
+      - heading "QA 工作台" [level=1, ref=e2576]
+      - button "系统" [expanded=false, ref=e2583]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e2584]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e2604]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e2605]
+          - option "Northstar · Golden Demo Shop" [ref=e2606]
+          - option "Broken Conftest Probe" [ref=e2607]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e2608]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e2609]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e2610]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e2611]
+          - option "Benchmark Project 0" [ref=e2612]
+          - option "Benchmark Project 1" [ref=e2613]
+          - option "Benchmark Project 2" [ref=e2614]
+          - option "Benchmark Project 3" [ref=e2615]
+          - option "Benchmark Project 4" [ref=e2616]
+          - option "Benchmark Project 5" [ref=e2617]
+          - option "Benchmark Project 6" [ref=e2618]
+          - option "Benchmark Project 7" [ref=e2619]
+          - option "Benchmark Project 8" [ref=e2620]
+          - option "Benchmark Project 9" [ref=e2621]
+          - option "Benchmark Project 10" [ref=e2622]
+          - option "Benchmark Project 11" [ref=e2623]
+          - option "Benchmark Project 12" [ref=e2624]
+          - option "Benchmark Project 13" [ref=e2625]
+          - option "Benchmark Project 14" [ref=e2626]
+          - option "Benchmark Project 15" [ref=e2627]
+          - option "Benchmark Project 16" [ref=e2628]
+          - option "Benchmark Project 17" [ref=e2629]
+          - option "Benchmark Project 18" [ref=e2630]
+          - option "Benchmark Project 19" [ref=e2631]
+      - button "收起侧边栏" [expanded=true, ref=e2577]
+      - generic
+        - searchbox "搜索" [ref=e2585]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e2578]
+        - link "总览" [ref=e2586]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e2587]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e2588]
+          - StaticText "项目管理"
+        - link "运行" [ref=e2589]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e2590]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e2579]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e2580]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "用例分析" [level=1, ref=e2591]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "展开上下文" [expanded=false, ref=e2592]
+          - StaticText "展开上下文"
+        - button "检查器" [expanded=false, ref=e2593]
+        - button "运行控制 · 就绪 · BD2561" [expanded=false, ref=e2594]
+          - StaticText "运行控制"
+      - navigation "工作阶段" [ref=e2581]
+        - button "需求 · 1 项需求" [ref=e2595]
+          - strong
+            - StaticText "需求"
+          - StaticText "1 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e2596]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 1 条用例" [ref=e2597]
+          - strong
+            - StaticText "用例"
+          - StaticText "1 条用例"
+        - button "自动化 · 0/1 已绑定" [ref=e2598]
+          - strong
+            - StaticText "自动化"
+          - StaticText "0/1 已绑定"
+        - button "结果 · 尚无运行记录" [ref=e2599]
+          - strong
+            - StaticText "结果"
+          - StaticText "尚无运行记录"
+      - region "工作内容" [ref=e2582]
+        - StaticText "当前阶段"
+        - heading "用例" [level=2, ref=e2644]
+        - StaticText "当前用例"
+        - strong
+          - StaticText "BD2561"
+        - StaticText "Valid and invalid sign-in feedback is correct"
+        - button "新建测试用例" [ref=e2792]
+        - StaticText "Valid and invalid sign-in feedback is correct"
+        - button "AI Copilot · 生成、审阅并验证此用例" [ref=e2793]
+          - StaticText "AI Copilot"
+        - button "AI 优化" [disabled, ref=e2794]
+        - button "AI 审查" [disabled, ref=e2795]
+        - StaticText "P1"
+        - combobox "自动化状态" [expanded=false, ref=e2796]: MANUAL
+          - MenuListPopup
+            - option "MANUAL" [selected, ref=e2797]
+            - option "DRAFT" [ref=e2798]
+            - option "AUTOMATED" [ref=e2799]
+        - StaticText "前置条件"
+        - StaticText "The acceptance sandbox contains the local sign-in example; no external account is used."
+        - StaticText "测试步骤（2）"
+        - list
+          - listitem [level=1]
+            - ListMarker "1. "
+            - StaticText "Submit valid credentials."
+          - listitem [level=1]
+            - ListMarker "2. "
+            - StaticText "Submit invalid credentials."
+        - StaticText "预期结果"
+        - StaticText "Valid sign-in opens the account state. Invalid sign-in displays rejection and creates no session."
+        - StaticText "标签"
+        - StaticText "acceptance"
+        - StaticText "sign-in"
+        - group
+          - DisclosureTriangle "自动化绑定与执行 配置绑定" [expanded=false]
+            - StaticText "自动化绑定与执行"
+            - StaticText "配置绑定"
+  - generic
+    - alert
+    - alert

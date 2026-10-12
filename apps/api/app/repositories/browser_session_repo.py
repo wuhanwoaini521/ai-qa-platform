@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
+from qa_core.execution.models import FailureSnapshotCapture
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +95,54 @@ class BrowserSessionRepository:
         evidence[key] = [*(evidence.get(key) or []), entry][-100:]
         row.page_evidence_json = json.dumps(evidence, ensure_ascii=False)
         await self.session.flush()
+
+    async def save_failure_snapshot(
+        self,
+        *,
+        run_id: str,
+        execution_id: str,
+        capture: FailureSnapshotCapture,
+        storage_state_ttl_seconds: int,
+    ) -> BrowserSessionORM:
+        now = utc_now()
+        row = await self.get_by_id(capture.browser_session_id)
+        captured_at = capture.bundle.captured_at or now
+        if row is None:
+            row = BrowserSessionORM(
+                id=capture.browser_session_id,
+                run_id=run_id,
+                case_execution_id=execution_id,
+                worker_id=capture.worker_id,
+                browser_session_id=capture.browser_session_id,
+                page_id=capture.page_id,
+                nodeid=capture.nodeid,
+                case_name=capture.case_name,
+                current_url=capture.bundle.url or "",
+                status="failed",
+                started_at=captured_at,
+                finished_at=captured_at,
+            )
+            self.session.add(row)
+        else:
+            if row.run_id != run_id or row.nodeid != capture.nodeid:
+                raise ValueError("Failure snapshot does not belong to the browser session/run")
+            row.case_execution_id = execution_id
+            row.current_url = capture.bundle.url or row.current_url
+            row.status = "failed"
+            row.finished_at = captured_at
+        bundle = capture.bundle.model_copy(deep=True)
+        bundle.storage_state_expires_at = (
+            now + timedelta(seconds=storage_state_ttl_seconds) if capture.encrypted_storage_state else None
+        )
+        if not capture.encrypted_storage_state:
+            bundle.storage_state_status = (
+                "UNAVAILABLE" if bundle.storage_state_status == "AVAILABLE" else bundle.storage_state_status
+            )
+        row.failure_snapshot_json = json.dumps(bundle.model_dump(mode="json"), ensure_ascii=False)
+        row.encrypted_storage_state = capture.encrypted_storage_state
+        row.storage_state_expires_at = bundle.storage_state_expires_at
+        await self.session.flush()
+        return row
 
     async def close_running_sessions(self, run_id: str, executions_by_nodeid: dict, finished_at) -> None:
         for row in await self.list_by_run(run_id):

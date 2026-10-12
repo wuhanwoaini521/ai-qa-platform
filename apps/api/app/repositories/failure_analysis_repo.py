@@ -44,6 +44,12 @@ class FailureAnalysisRepository:
         await self.session.flush()
         return analysis_id
 
+    async def get_state_source(self, analysis_id: str) -> dict | None:
+        row = await self.session.get(FailureAnalysisORM, analysis_id)
+        if row is None:
+            return None
+        return {"failure_id": row.failure_id, "result": row.result or {}}
+
     async def append(self, analysis_id: str, event: AITraceEvent, *, result: dict | None = None) -> None:
         row = await self.session.get(FailureAnalysisORM, analysis_id)
         if row is None:

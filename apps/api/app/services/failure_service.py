@@ -6,6 +6,7 @@ import difflib
 import hashlib
 import json
 import logging
+import math
 import re
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -14,8 +15,11 @@ from pathlib import Path, PurePosixPath
 
 from project_model.models import (
     ApplyRepairRequest,
+    DecisionResult,
+    DecisionSignalRequest,
     FailureRecord,
     FailureRecurrenceItem,
+    FailureSnapshotBundle,
 )
 from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.ai.trace import AITraceEvent, make_trace_event
@@ -38,6 +42,7 @@ from app.services.ai_observability import log_ai_execution
 from app.services.ai_runtime import build_ai_orchestrator
 from app.services.failure_evidence_service import FailureEvidenceService
 from app.services.locator_decision_service import LocatorDecisionService
+from app.services.secret_store import SecretStore
 from app.services.workspace_service import WorkspaceService
 from app.settings import get_config
 
@@ -496,13 +501,20 @@ class FailureService:
             resolved_classification = str((stored_analysis.get("diagnosis") or {}).get("classification") or "") or None
         evidence_execution_id = evidence_execution_id or failure.execution_id
         browser_session, page_evidence = await self._browser_evidence(evidence_execution_id)
+        snapshot, encrypted_storage_state = await self.get_failure_snapshot(
+            evidence_execution_id, browser_session=browser_session, page_evidence=page_evidence
+        )
         original_run = await self.run_repo.get_by_id(failure.run_id)
-        observed_locator = self._observed_failed_locator(page_evidence)
+        observed_locator = snapshot.failed_locator or self._observed_failed_locator(page_evidence)
         failing_loc = self._require_locator_failure(
             failure,
             resolved_classification=resolved_classification,
             observed_locator=observed_locator,
         )
+        if snapshot.status == "INSUFFICIENT_EVIDENCE":
+            raise LocatorRepairNotApplicableError(
+                "INSUFFICIENT_EVIDENCE: no live browser page snapshot or observed controls are available for locator verification."
+            )
         test_file = failure.test_nodeid.split("::")[0].replace("\\", "/")
         repair_file = test_file
         source_content = ""
@@ -553,6 +565,7 @@ class FailureService:
             diagnosis_provider = diagnosis_response.provider
             diagnosis_fallback_used = diagnosis_response.fallback_used
         candidate_selection = None
+        pipeline: LocatorDecisionService | None = None
         verification_reason = "page_evidence_unavailable" if not page_evidence else "no_playwright_candidate"
         candidates = self._observed_locator_candidates(page_evidence)
         seen: set[tuple[str, str, str | None]] = {
@@ -567,7 +580,9 @@ class FailureService:
         candidates = LocatorDecisionService.prioritize_candidates_for_failure(failing_loc, candidates)
         target_match = re.search(r"name\s*=\s*(['\"])(.*?)\1", failing_loc)
         failed_name = target_match.group(2)[:180] if target_match else ""
-        current_url = str((browser_session or {}).get("current_url") or (page_evidence or {}).get("url") or "")
+        current_url = str(
+            snapshot.url or (browser_session or {}).get("current_url") or (page_evidence or {}).get("url") or ""
+        )
         event = {
             "tag": "element",
             "role": "",
@@ -601,17 +616,96 @@ class FailureService:
         verification_session = None
         live_page_available = False
         if ranked and current_url:
-            try:
-                verification_session = await self.browser_runtime.create_session()
-                await self.browser_runtime.navigate(verification_session.id, current_url, timeout_ms=12_000)
-                live_page_available = True
-            except Exception as error:
-                verification_reason = f"live_page_unavailable:{type(error).__name__}"
-                if verification_session is not None:
+            restored_storage_state = False
+            if encrypted_storage_state and snapshot.storage_state_status == "AVAILABLE":
+                try:
+                    decrypted_state = SecretStore().decrypt_secret(encrypted_storage_state)
+                    storage_state = json.loads(decrypted_state) if decrypted_state else None
+                    if not isinstance(storage_state, dict):
+                        raise ValueError("Stored browser state is unavailable")
+                    verification_session = await self.browser_runtime.create_session(storage_state=storage_state)
+                    restored_storage_state = True
+                except Exception as error:
+                    snapshot.storage_state_status = "RESTORE_FAILED"
+                    snapshot.replay = snapshot.replay.model_copy(
+                        update={
+                            "status": "RESTORE_FAILED",
+                            "safe_point": "captured_url_and_redacted_evidence",
+                            "replayed_steps": [],
+                            "message": f"Storage state could not be restored ({type(error).__name__}); no test actions were replayed.",
+                        }
+                    )
+                    verification_reason = f"storage_state_restore_failed:{type(error).__name__}"
+            elif snapshot.storage_state_status in {"EXPIRED", "RESTORE_FAILED"}:
+                verification_reason = (
+                    "storage_state_expired"
+                    if snapshot.storage_state_status == "EXPIRED"
+                    else "storage_state_restore_failed"
+                )
+                snapshot.replay = snapshot.replay.model_copy(
+                    update={
+                        "status": "RESTORE_FAILED" if snapshot.storage_state_status == "RESTORE_FAILED" else "PARTIAL",
+                        "safe_point": "captured_url_and_redacted_evidence",
+                        "replayed_steps": [],
+                        "message": "Encrypted storage state is unavailable; the captured URL/evidence is not a replay of the authenticated page.",
+                    }
+                )
+            else:
+                try:
+                    verification_session = await self.browser_runtime.create_session()
+                    verification_reason = f"storage_state_unavailable:{snapshot.storage_state_status.lower()}"
+                except Exception as error:
+                    verification_reason = f"live_page_unavailable:{type(error).__name__}"
+            if verification_session is not None:
+                try:
+                    await self.browser_runtime.navigate(verification_session.id, current_url, timeout_ms=12_000)
+                    live_page_available = True
+                    snapshot.replay = snapshot.replay.model_copy(
+                        update={
+                            "status": "RESTORED" if restored_storage_state else "PARTIAL",
+                            "safe_point": "captured_storage_state_and_url"
+                            if restored_storage_state
+                            else "captured_url_only",
+                            "replayed_steps": [],
+                            "message": (
+                                "Encrypted storage state and captured URL were restored; no browser actions were replayed."
+                                if restored_storage_state
+                                else "A fresh context navigated to the captured URL without storage state; no browser actions were replayed."
+                            ),
+                        }
+                    )
+                    if not restored_storage_state:
+                        verification_reason = f"storage_state_unavailable:{snapshot.storage_state_status.lower()}"
+                except Exception as error:
+                    if restored_storage_state:
+                        snapshot.storage_state_status = "RESTORE_FAILED"
+                        verification_reason = f"snapshot_navigation_failed:{type(error).__name__}"
+                    else:
+                        verification_reason = f"live_page_unavailable:{type(error).__name__}"
+                    snapshot.replay = snapshot.replay.model_copy(
+                        update={
+                            "status": "RESTORE_FAILED" if restored_storage_state else "PARTIAL",
+                            "safe_point": "captured_storage_state_and_url"
+                            if restored_storage_state
+                            else "captured_url_only",
+                            "replayed_steps": [],
+                            "message": f"Captured URL navigation failed ({type(error).__name__}); no browser actions were replayed.",
+                        }
+                    )
                     await self.browser_runtime.close_session(verification_session.id)
                     verification_session = None
         elif ranked:
             verification_reason = "failed_page_url_unavailable"
+            snapshot.replay = snapshot.replay.model_copy(
+                update={
+                    "status": "PARTIAL",
+                    "safe_point": "captured_redacted_evidence",
+                    "replayed_steps": [],
+                    "message": "Captured URL is unavailable; no browser session or action replay was attempted.",
+                }
+            )
+        if ranked:
+            await self.failure_repo.update_failure_snapshot(evidence_execution_id, snapshot)
 
         if ranked:
             try:
@@ -669,6 +763,123 @@ class FailureService:
                 execution_trace=trace,
                 decision_summary=summary,
             )
+
+        same_function_threshold = get_config().repair.locator_same_function_threshold
+        same_function_result = DecisionResult(provider="fallback", fallback_used=True, reason="signal_unavailable")
+        signal_started = time.perf_counter()
+        signal_method = getattr(getattr(pipeline, "decision_service", None), "ask_probability", None)
+        if callable(signal_method):
+            signal_request = DecisionSignalRequest(
+                name="locator_same_function_probability",
+                state={
+                    "failed_locator": failing_loc[:500],
+                    "failed_element_name": failed_name[:180],
+                    "failure_classification": resolved_classification or FailureCategory.LOCATOR_CHANGED.value,
+                    "failure_excerpt": SensitiveRedactor.redact_text(failure.error_message or "")[:300],
+                    "page_url": current_url,
+                    "observed_controls": [
+                        {
+                            key: candidate.get(key)
+                            for key in ("candidate_id", "strategy", "locator", "name", "role", "value", "evidence")
+                            if candidate.get(key) is not None
+                        }
+                        for candidate in ranked[:8]
+                    ],
+                    "candidate": {
+                        key: selected.get(key)
+                        for key in ("candidate_id", "strategy", "locator", "name", "role", "value", "evidence")
+                        if selected.get(key) is not None
+                    },
+                    "original_element_baseline": snapshot.original_element_baseline.model_dump(mode="json"),
+                },
+                instructions=(
+                    "Estimate the probability from 0 to 1 that the selected candidate is the same intended "
+                    "functional element as the failed locator, using the supplied failure-page evidence. "
+                    "Do not decide test PASS/FAIL or authorize browser actions; this is only an Apply recommendation."
+                ),
+            )
+            try:
+                same_function_result = await signal_method(signal_request, run_id=failure.run_id)
+            except Exception as error:
+                same_function_result = DecisionResult(
+                    provider="fallback", fallback_used=True, reason=f"signal_error:{type(error).__name__}"
+                )
+
+        signal_latency_ms = round((time.perf_counter() - signal_started) * 1000, 1)
+        same_function_probability = same_function_result.probability
+        signal_confidence = same_function_result.confidence
+        signal_usage = same_function_result.usage or {}
+        signal_minimum_confidence = (
+            same_function_result.minimum_confidence
+            if isinstance(same_function_result.minimum_confidence, (int, float))
+            and not isinstance(same_function_result.minimum_confidence, bool)
+            else get_config().jev.minimum_confidence
+        )
+        trusted_same_function_signal = (
+            same_function_result.provider == "jev"
+            and not same_function_result.fallback_used
+            and isinstance(same_function_probability, (int, float))
+            and not isinstance(same_function_probability, bool)
+            and math.isfinite(same_function_probability)
+            and 0 <= same_function_probability <= 1
+            and isinstance(signal_confidence, (int, float))
+            and not isinstance(signal_confidence, bool)
+            and math.isfinite(signal_confidence)
+            and 0 <= signal_confidence <= 1
+            and math.isfinite(signal_minimum_confidence)
+            and 0 <= signal_minimum_confidence <= 1
+            and signal_confidence >= signal_minimum_confidence
+        )
+        same_function_summary = {
+            "decision_point": "locator_same_function_probability",
+            "provider": same_function_result.provider,
+            "model": same_function_result.model,
+            "probability": same_function_probability if trusted_same_function_signal else None,
+            "confidence": signal_confidence if trusted_same_function_signal else None,
+            "minimum_confidence": signal_minimum_confidence,
+            "threshold": same_function_threshold,
+            "latency_ms": signal_latency_ms,
+            "input_tokens": signal_usage.get("input_tokens")
+            if isinstance(signal_usage.get("input_tokens"), int)
+            and not isinstance(signal_usage.get("input_tokens"), bool)
+            and signal_usage.get("input_tokens") >= 0
+            else None,
+            "output_tokens": signal_usage.get("output_tokens")
+            if isinstance(signal_usage.get("output_tokens"), int)
+            and not isinstance(signal_usage.get("output_tokens"), bool)
+            and signal_usage.get("output_tokens") >= 0
+            else None,
+            "fallback_used": same_function_result.fallback_used,
+            "reason": same_function_result.reason,
+            "status": "AVAILABLE" if trusted_same_function_signal else "UNAVAILABLE",
+            "advisory_only": True,
+        }
+        summary = {**summary, "same_function_signal": same_function_summary}
+        trace.append(
+            make_trace_event(
+                failure.run_id,
+                "locator.same_function_signal",
+                stage="decision",
+                title="Same-function identity recommendation",
+                message=(
+                    f"Jev probability {same_function_probability:.2f} is below the {same_function_threshold:.2f} "
+                    "Apply recommendation threshold."
+                    if trusted_same_function_signal and same_function_probability < same_function_threshold
+                    else "Jev supplied a same-function identity recommendation."
+                    if trusted_same_function_signal
+                    else "Same-function identity recommendation is unavailable; no probability was assumed."
+                ),
+                metadata={"decision_type": "noul", **same_function_summary},
+            )
+        )
+        if trusted_same_function_signal and same_function_probability < same_function_threshold:
+            raise LocatorRepairNotApplicableError(
+                "LOCATOR_IDENTITY_BELOW_THRESHOLD: Jev estimates this candidate may not be the same functional "
+                f"element ({same_function_probability:.2f} < {same_function_threshold:.2f}); Apply is blocked.",
+                execution_trace=trace,
+                decision_summary=summary,
+            )
+
         if (
             not verification.get("verified")
             and not live_page_available
@@ -721,9 +932,12 @@ class FailureService:
             "source_sha256": source_sha256,
             "decision_summary": {**summary, "verification_source": verification_source},
             "verified": bool(verification.get("verified")),
-            "verification_reason": None
-            if verification.get("verified")
-            else verification_reason or summary.get("fallback_reason"),
+            "verification_reason": (
+                verification_reason or summary.get("fallback_reason")
+                if not verification.get("verified") or snapshot.replay.status != "RESTORED"
+                else None
+            ),
+            "verification_replay": snapshot.replay,
         }
         proposal = LocatorRepairProposal(
             old_locator=failing_loc,
@@ -961,6 +1175,54 @@ class FailureService:
                     return False
         return matches == 1
 
+    async def get_failure_snapshot(
+        self,
+        execution_id: str,
+        *,
+        browser_session: dict | None = None,
+        page_evidence: dict | None = None,
+    ) -> tuple[FailureSnapshotBundle, str | None]:
+        if browser_session is None and page_evidence is None:
+            browser_session, page_evidence = await self._browser_evidence(execution_id)
+        bundle, encrypted_storage_state = await self.failure_repo.latest_failure_snapshot(execution_id)
+        if bundle.status != "INSUFFICIENT_EVIDENCE":
+            return bundle, encrypted_storage_state
+        if not isinstance(page_evidence, dict) or not any(
+            page_evidence.get(key) for key in ("url", "controls", "recent_steps")
+        ):
+            return bundle, None
+
+        url = SensitiveRedactor.redact_url(
+            str((browser_session or {}).get("current_url") or page_evidence.get("url") or "")
+        )
+        failed_locator = self._observed_failed_locator(page_evidence)
+        side_effect_steps = [
+            f"{step.get('action', 'action')}:{step.get('locator', '')}"[:300]
+            for step in page_evidence.get("recent_steps", [])
+            if isinstance(step, dict)
+            and step.get("action")
+            in {"click", "dblclick", "fill", "select_option", "check", "uncheck", "press", "hover"}
+        ]
+        legacy_bundle = FailureSnapshotBundle(
+            status="PARTIAL",
+            url=url or None,
+            failed_locator=SensitiveRedactor.redact_text(failed_locator or "") or None,
+            original_element_baseline={
+                "status": "MISSING",
+                "reason": "baseline_not_captured_by_legacy_runner",
+            },
+            storage_state_status="NOT_CAPTURED",
+            replay={
+                "status": "PARTIAL",
+                "safe_point": "captured_url_only",
+                "replayed_steps": [],
+                "not_replayed_steps": side_effect_steps,
+                "message": "Legacy page evidence has no storage state; no browser actions are replayed.",
+            },
+            evidence_gaps=["legacy_page_evidence_only", "storage_state_not_captured", "baseline_not_captured"],
+        )
+        return legacy_bundle, None
+
     async def _browser_evidence(self, execution_id: str):
         browser_session = await self.failure_repo.latest_browser_session(execution_id)
         if not browser_session or not browser_session.get("page_evidence_json"):
@@ -1061,6 +1323,15 @@ class FailureService:
             and isinstance(decision_summary.get("confidence"), (int, float))
             and decision_summary["confidence"] >= get_config().jev.minimum_confidence
         )
+        identity_signal = decision_summary.get("same_function_signal")
+        if isinstance(identity_signal, dict) and identity_signal.get("status") == "AVAILABLE":
+            probability = identity_signal.get("probability")
+            threshold = get_config().repair.locator_same_function_threshold
+            if not isinstance(probability, (int, float)) or probability < threshold:
+                raise ValueError(
+                    "LOCATOR_IDENTITY_BELOW_THRESHOLD: Jev same-function probability is below the current "
+                    f"Apply threshold ({threshold:.2f}); the repair was not applied."
+                )
         if (
             not proposal.get("verified")
             or not trusted_selection

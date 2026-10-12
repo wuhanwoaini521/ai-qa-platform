@@ -41,7 +41,12 @@ from app.services.quality_discovery_service import (
     QualityDiscoveryService,
 )
 from app.settings import settings
-from project_model.models import AutomationBindingCreate, AutomationBindingStatus, DecisionResult, FrameworkType
+from project_model.models import (
+    AutomationBindingCreate,
+    AutomationBindingStatus,
+    DecisionResult,
+    FrameworkType,
+)
 from qa_core.ai.models import AICompletionResponse, CodeAssistantResponse
 from qa_core.ai.models import TestCaseGenerationItem as _TestCaseGenerationItem
 
@@ -3376,3 +3381,411 @@ def test_page_title_redacts_embedded_url_query_and_fragment():
         QualityDiscoveryService._safe_title("Search //shop.example.test/catalog?q=private#results")
         == "Search //shop.example.test/catalog"
     )
+
+
+@pytest.mark.asyncio
+async def test_jev_score_reorders_discovery_candidates_only_as_a_ranking_recommendation(test_db_session):
+    class ScoreDecisions:
+        async def ask_score(self, request, *, run_id, daily_request_reserve):
+            assert daily_request_reserve == 1
+            candidate_id = request.state["candidate"]["candidate_id"]
+            return DecisionResult(
+                provider="jev",
+                model="test-score",
+                score={"candidate_1": 0.35, "candidate_2": 0.92}[candidate_id],
+                confidence=0.95,
+            )
+
+        async def choose(self, _request, **_kwargs):
+            raise AssertionError("Scoring must not replace the deterministic candidate choice step")
+
+    service = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=DiscoveryFixtureBrowserRuntime(),
+        decisions=ScoreDecisions(),
+    )
+    score_events = []
+
+    async def record_event(_run_id, event_type, _message, metadata):
+        score_events.append((event_type, metadata))
+
+    service._event = record_event
+    choices = {
+        "candidate_1": {"candidate_id": "candidate_1", "action_type": "click", "target": "Search"},
+        "candidate_2": {"candidate_id": "candidate_2", "action_type": "click", "target": "Continue"},
+    }
+
+    ranked = await service._score_candidate_priority(
+        "discovery-score-test",
+        state={"state_id": "home", "goal": "EXPLORE"},
+        choices=choices,
+        priority_ids=["candidate_1", "candidate_2"],
+    )
+
+    assert ranked == ["candidate_2", "candidate_1"]
+    assert len(score_events) == 2
+    assert all(event_type == "decision.score_recommendation" for event_type, _metadata in score_events)
+    assert all(metadata["advisory_only"] is True for _event_type, metadata in score_events)
+
+
+@pytest.mark.asyncio
+async def test_discovery_ignores_low_confidence_score_recommendations(test_db_session):
+    class LowConfidenceScores:
+        async def ask_score(self, _request, **_kwargs):
+            return DecisionResult(provider="jev", score=0.99, confidence=0.2)
+
+    service = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=DiscoveryFixtureBrowserRuntime(),
+        decisions=LowConfidenceScores(),
+    )
+    ranked = await service._score_candidate_priority(
+        "discovery-low-score-confidence",
+        state={},
+        choices={
+            "candidate_1": {"candidate_id": "candidate_1", "action_type": "click", "target": "Search"},
+            "candidate_2": {"candidate_id": "candidate_2", "action_type": "click", "target": "Continue"},
+        },
+        priority_ids=["candidate_1", "candidate_2"],
+    )
+
+    assert ranked == ["candidate_1", "candidate_2"]
+
+
+def _replayable_discovery_result(*, final_state_overrides=None):
+    start_state = {
+        "state_id": "state-home",
+        "fingerprint": "fingerprint-home",
+        "url": "https://shop.example.test/",
+        "url_navigable": True,
+        "title": "Shop",
+        "main_content": "Search products",
+        "landmarks": 'heading "Shop" [level=1]',
+        "controls": [
+            {
+                "index": 3,
+                "tag": "input",
+                "type": "search",
+                "role": "searchbox",
+                "name": "Search products",
+                "id": "product-search",
+                "test_id": "product-search",
+                "visible": True,
+                "enabled": True,
+            }
+        ],
+        "evidence_id": "evidence-home",
+    }
+    final_state = {
+        "state_id": "state-results",
+        "fingerprint": "fingerprint-results",
+        "url": "https://shop.example.test/search",
+        "url_navigable": True,
+        "title": "Search results",
+        "main_content": "Search results for camera",
+        "landmarks": 'heading "Search results for camera" [level=1]',
+        "controls": [],
+        "evidence_id": "evidence-results",
+        **(final_state_overrides or {}),
+    }
+    return {
+        "requirements": [],
+        "features": [],
+        "gaps": [],
+        "edges": [
+            {
+                "from_state_id": "state-home",
+                "to_state_id": "state-results",
+                "action": "search",
+                "label": "Search products",
+                "candidate_id": "candidate-search",
+            }
+        ],
+        "actions": [
+            {
+                "candidate_id": "candidate-search",
+                "from_state_id": "state-home",
+                "target_id": "el_3",
+                "action_type": "search",
+                "target": "Search products",
+                "status": "EXECUTED",
+                "state_changed": True,
+                "to_fingerprint": "fingerprint-results",
+                "search_value": "camera",
+                "expected_effect": "Observe matching search results.",
+            }
+        ],
+        "states": [start_state, final_state],
+        "journeys": [
+            {
+                "journey_id": "journey-1",
+                "steps": [
+                    {"state_id": "state-home", "title": "Shop", "evidence_ids": ["evidence-home"]},
+                    {
+                        "state_id": "state-results",
+                        "title": "Search results",
+                        "action": "Search products",
+                        "evidence_ids": ["evidence-results"],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_discovery_journey_creates_replayable_create_test_draft_without_browser_input(test_db_session):
+    from project_model.task_models import TaskType
+
+    project_id = f"project-{uuid4().hex[:12]}"
+    run_id = str(uuid4())
+    now = utc_now()
+    async with test_db_session() as session:
+        session.add(
+            ProjectORM(
+                id=project_id,
+                name="Discovery Draft",
+                description="",
+                default_branch="main",
+                framework_type="playwright_python",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="https://shop.example.test/",
+                requirement_id=None,
+                requirement_text="",
+                allowed_domains=["shop.example.test"],
+                status="COMPLETED",
+                progress={"states": 2, "actions": 1, "features": 0},
+                result=_replayable_discovery_result(),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    class CaptureTasks:
+        data = None
+        owner_id = None
+
+        async def create(self, data, owner_id):
+            self.data = data
+            self.owner_id = owner_id
+            return SimpleNamespace(id="task-draft", status="PENDING")
+
+    tasks = CaptureTasks()
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    task = await service.create_pytest_draft(run_id, "journey-1", "owner-1", tasks)
+
+    assert task.id == "task-draft"
+    assert tasks.owner_id == "owner-1"
+    assert tasks.data.type == TaskType.CREATE_TEST
+    assert tasks.data.project_id == project_id and tasks.data.workspace_id == project_id
+    assert "url" not in tasks.data.inputs and "recorder_session_id" not in tasks.data.inputs
+    assert tasks.data.inputs["assertion_bypass_check"] is True
+    steps = tasks.data.inputs["recorded_steps"]
+    assert [step["action"] for step in steps] == ["navigate", "fill", "press", "assert_text"]
+    assert steps[1]["locator"]["kind"] == "role"
+    assert steps[1]["value"] == "camera"
+    assert steps[2]["key"] == "Enter"
+    assert steps[-1]["locator"]["name"] == "Search results for camera"
+
+
+@pytest.mark.asyncio
+async def test_discovery_journey_draft_rejects_non_replayable_or_unassertable_journeys(test_db_session):
+    project_id = f"project-{uuid4().hex[:12]}"
+    run_id = str(uuid4())
+    now = utc_now()
+    result = _replayable_discovery_result(final_state_overrides={"title": "", "landmarks": "", "main_content": ""})
+    async with test_db_session() as session:
+        session.add(
+            ProjectORM(
+                id=project_id,
+                name="Discovery Draft Evidence",
+                description="",
+                default_branch="main",
+                framework_type="playwright_python",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="https://shop.example.test/",
+                requirement_id=None,
+                requirement_text="",
+                allowed_domains=["shop.example.test"],
+                status="COMPLETED",
+                progress={},
+                result=result,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    class CaptureTasks:
+        async def create(self, *_args, **_kwargs):
+            pytest.fail("A draft must not be created without grounded assertion evidence")
+
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    with pytest.raises(ValueError, match="assertion|observable"):
+        await service.create_pytest_draft(run_id, "journey-1", "owner-1", CaptureTasks())
+
+    run = await service.get(run_id)
+    non_replayable = _replayable_discovery_result()
+    with pytest.raises(ValueError, match="transition"):
+        service._journey_recording_steps(
+            run,
+            non_replayable,
+            {"journey_id": "journey-1", "steps": non_replayable["journeys"][0]["steps"][:1]},
+        )
+    unverified = _replayable_discovery_result()
+    unverified["actions"][0]["status"] = "FAILED"
+    with pytest.raises(ValueError, match="successfully executed and verified"):
+        service._journey_recording_steps(run, unverified, unverified["journeys"][0])
+
+    non_text_search = {
+        "action_type": "search",
+        "target_id": "el_3",
+        "target": "Search",
+    }
+    button_state = {
+        "controls": [{"index": 3, "tag": "button", "role": "button", "name": "Search", "visible": True}],
+    }
+    with pytest.raises(ValueError, match="replayable text input"):
+        service._append_replay_action([], non_text_search, button_state)
+    with pytest.raises(ValueError, match="observed-control evidence"):
+        service._append_replay_action([], non_text_search, {"controls": None})
+
+
+@pytest.mark.asyncio
+async def test_discovery_draft_api_waits_for_approval_before_workspace_write(client, test_db_session):
+    from app.api.tasks import task_scheduler_service
+    from app.services.workspace_service import WorkspaceService
+
+    async def serve_page(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2)
+            path = request.split(b" ", 2)[1]
+            if path.startswith(b"/search"):
+                title, body = "Search results", "<h1>Search results for camera</h1>"
+            else:
+                title, body = (
+                    "Shop",
+                    (
+                        "<h1>Shop</h1><form action='/search' method='get'>"
+                        "<input type='search' name='q' aria-label='Search products'></form>"
+                    ),
+                )
+            content = f"<html><head><title>{title}</title></head><body>{body}</body></html>".encode()
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: "
+                + str(len(content)).encode()
+                + b"\r\n\r\n"
+                + content
+            )
+            await writer.drain()
+        except (asyncio.IncompleteReadError, asyncio.TimeoutError, ConnectionError):
+            pass
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    project = await client.post("/api/projects", json={"name": "Discovery Draft API", "bootstrap_workspace": True})
+    assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+    server = await asyncio.start_server(serve_page, "127.0.0.1", 0)
+    start_url = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/"
+    run_id = str(uuid4())
+    now = utc_now()
+    async with test_db_session() as session:
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url=start_url,
+                requirement_id=None,
+                requirement_text="",
+                allowed_domains=["127.0.0.1"],
+                status="COMPLETED",
+                progress={"states": 2, "actions": 1, "features": 0},
+                result=_replayable_discovery_result(),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    await task_scheduler_service.start()
+    try:
+        response = await client.post(f"/api/discovery/runs/{run_id}/journeys/journey-1/pytest-draft")
+        assert response.status_code == 202, response.text
+        task_id = response.json()["id"]
+        for _ in range(150):
+            await asyncio.sleep(0.2)
+            detail = await client.get(f"/api/tasks/{task_id}")
+            if detail.json()["status"] in {"WAITING", "FAILED", "BLOCKED"}:
+                break
+        waiting = detail.json()
+        assert waiting["status"] == "WAITING", waiting.get("failure_reason")
+        assert "url" not in waiting["inputs"]
+        assert waiting["inputs"]["assertion_bypass_check"] is True
+        assert all(
+            next(step for step in waiting["steps"] if step["key"] == key)["status"] == "SKIPPED"
+            for key in ("inspect", "decide", "act")
+        )
+        generated = next(step for step in waiting["steps"] if step["key"] == "generate")["outputs"]["suggested_code"]
+        assert "to_contain_text" in generated
+        file_path = waiting["inputs"]["file_path"]
+        workspace_file = WorkspaceService().get_workspace_dir(project_id) / file_path
+        assert not workspace_file.exists()
+
+        rejected = await client.post(
+            f"/api/tasks/{task_id}/approval",
+            json={"approved": False, "comment": "Keep this as a draft"},
+        )
+        assert rejected.status_code == 200, rejected.text
+        assert rejected.json()["status"] == "BLOCKED"
+        assert not workspace_file.exists()
+
+        adopted = await client.post(f"/api/discovery/runs/{run_id}/journeys/journey-1/pytest-draft")
+        assert adopted.status_code == 202, adopted.text
+        adopted_id = adopted.json()["id"]
+        for _ in range(150):
+            await asyncio.sleep(0.2)
+            adopted_detail = await client.get(f"/api/tasks/{adopted_id}")
+            if adopted_detail.json()["status"] in {"WAITING", "FAILED", "BLOCKED"}:
+                break
+        assert adopted_detail.json()["status"] == "WAITING", adopted_detail.json().get("failure_reason")
+        approved = await client.post(
+            f"/api/tasks/{adopted_id}/approval",
+            json={"approved": True, "comment": "Adopt the reviewed Discovery journey"},
+        )
+        assert approved.status_code == 200, approved.text
+        for _ in range(600):
+            await asyncio.sleep(0.2)
+            adopted_detail = await client.get(f"/api/tasks/{adopted_id}")
+            if adopted_detail.json()["status"] in {"COMPLETED", "FAILED", "BLOCKED"}:
+                break
+        assert adopted_detail.json()["status"] == "COMPLETED", adopted_detail.json().get("failure_reason")
+        assert workspace_file.exists()
+        run_step = next(step for step in adopted_detail.json()["steps"] if step["key"] == "run")
+        assert run_step["outputs"]["status"] == "PASSED"
+    finally:
+        await task_scheduler_service.stop()
+        server.close()
+        await server.wait_closed()

@@ -16,6 +16,7 @@ from app.repositories.failure_repo import FailureRepository
 from app.repositories.golden_demo_repo import GoldenDemoRepository
 from app.repositories.job_repo import JobRepository
 from app.repositories.locator_history_repo import LocatorHistoryRepository
+from app.repositories.locator_repair_repo import LocatorRepairRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.runner_profile_repo import RunnerProfileRepository
@@ -49,6 +50,7 @@ class TaskRepositoryUnitOfWork:
         self.ai_budgets = AIDailyBudgetRepository(session)
         self.jobs = JobRepository(session)
         self.locator_history = LocatorHistoryRepository(session)
+        self.locator_repairs = LocatorRepairRepository(session)
         self.browser_sessions = BrowserSessionRepository(session)
         self.runner_profiles = RunnerProfileRepository(lambda: session)
         self.workers = WorkerRepository(session)

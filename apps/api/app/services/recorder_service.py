@@ -158,6 +158,7 @@ class RecorderStep(BaseModel):
     frame_path: list[str] = Field(default_factory=list)
     url: str | None = None
     value: str | None = None
+    select_by_value: bool = False
     key: str | None = None
     description: str = ""
     locator_decision: dict[str, Any] | None = None
@@ -762,7 +763,8 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
             elif step.action == "fill":
                 lines.append(f"            {locator}.fill({_py_literal(step.value)})")
             elif step.action == "select":
-                lines.append(f"            {locator}.select_option(label={_py_literal(step.value)})")
+                option_key = "value" if step.select_by_value else "label"
+                lines.append(f"            {locator}.select_option({option_key}={_py_literal(step.value)})")
             elif step.action == "check":
                 lines.append(f"            {locator}.check()")
             elif step.action == "uncheck":

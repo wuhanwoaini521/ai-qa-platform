@@ -1,0 +1,5 @@
+# Review and Test Fixes
+
+1. **Responsive activity overflow found in independent review:** removed the leftover tablet-width `.workspace-result-events { max-height: 260px; }` rule in `apps/web/src/features/workspace/workspace.css`. The activity list now remains in document flow at all tested widths.
+2. **Verification after fix:** reran the Playwright browser matrix, including a 24-row activity stress case at 820px; no constrained event list, horizontal overflow, nested scrolling, or console errors. Reran frontend tests, typecheck, lint, production build, translation parity, and diff checks; all passed.
+3. **Temporary test-harness correction:** an earlier assertion assumed the failed fixture must display PASSED. The UI correctly displayed FAILED; changed the temporary `/tmp` script to compare against the selected fixture status. This did not require a product-code correction.

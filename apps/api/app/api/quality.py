@@ -4,14 +4,24 @@ from fastapi import APIRouter, Depends, Query
 from project_model.models import (
     ImpactAnalysisRequest,
     ImpactAnalysisResult,
+    LocatorRepairFunnelResponse,
     QualityCoverageSummary,
     QualityRiskMatrix,
 )
 
-from app.container import get_quality_service
+from app.container import get_locator_repair_funnel_service, get_quality_service
+from app.services.locator_repair_funnel_service import LocatorRepairFunnelService
 from app.services.quality_intelligence_service import QualityIntelligenceService
 
 router = APIRouter(prefix="/quality", tags=["Quality Intelligence & Coverage"])
+
+
+@router.get("/repair-funnel", response_model=LocatorRepairFunnelResponse)
+async def get_locator_repair_funnel(
+    project_id: str = Query(...),
+    service: LocatorRepairFunnelService = Depends(get_locator_repair_funnel_service),
+):
+    return await service.summarize(project_id)
 
 
 @router.get("/coverage", response_model=QualityCoverageSummary)

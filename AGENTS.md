@@ -1,5 +1,10 @@
 # Agent Guidelines for AI QA Platform
 
+必须遵守 docs/ROADMAP.md 第 0 节不变量：AI 不决定 PASS/FAIL；不经人工批准不改代码；
+确定性优先；外部写入先预览；无无人值守循环。不得新增第二套 Runtime/Agent/Provider；
+复用现有 DecisionService、Task Runtime、BrowserRuntime。改动前先阅读相关文件，
+遇到与文档不符的地方以代码为准并在回复中指出。
+
 ## Operational Principles
 
 - **Platform Environment**: This repository runs on macOS, Linux and Windows. Developer tasks are cross-platform Python in `scripts/task.py`; the `scripts/dev|test|lint` files are bash shims over it.

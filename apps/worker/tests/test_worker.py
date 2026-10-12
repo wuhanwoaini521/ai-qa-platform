@@ -277,3 +277,124 @@ async def test_cancelled_job_reports_interruption_and_cancels_pytest(tmp_path, m
         {"worker_id": daemon.worker_id, "error_message": "Worker shut down before the job completed."},
     ) in client.posts
     assert not any(path.endswith("/result") for path, _ in client.posts)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_worker_collects_encrypted_failure_snapshot_from_existing_pytest_runner(tmp_path, monkeypatch):
+    import json
+
+    from qa_core.execution.models import SingleTestResult, SuiteExecutionResult, TestExecutionStatus
+    from qa_core.failure.snapshot_crypto import FailureSnapshotCipher
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, data=None):
+            self.data = data or {}
+
+        def json(self):
+            return self.data
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self):
+            self.posts = []
+
+        async def get(self, path):
+            if path == "/api/runs/run-snapshot":
+                return Response({"markers": [], "environment": {}})
+            return Response({"status": "RUNNING"})
+
+        async def post(self, path, *, json):
+            self.posts.append((path, json))
+            return Response()
+
+    daemon = WorkerDaemon()
+    worker_config = daemon.config.worker.model_copy(
+        update={
+            "workspace_storage_dir": tmp_path / "workspaces",
+            "artifact_storage_dir": tmp_path / "artifacts",
+        }
+    )
+    features = daemon.config.features.model_copy(update={"live_browser": True})
+    daemon.config = daemon.config.model_copy(update={"worker": worker_config, "features": features})
+    (tmp_path / "workspaces" / "project-snapshot").mkdir(parents=True)
+    client = Client()
+    daemon._http_client = client  # type: ignore[assignment]
+    observed = {}
+
+    async def no_cancellation(_job_id):
+        return False
+
+    async def run_suite(**kwargs):
+        observed.update(kwargs)
+        ephemeral_key = kwargs["environment"]["QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY"]
+        event = {
+            "type": "session.finished",
+            "session_id": "snapshot-session",
+            "page_id": "snapshot-page",
+            "nodeid": "tests/test_checkout.py::test_checkout",
+            "case_name": "test_checkout",
+            "worker_id": "main",
+            "page_evidence": {
+                "failure_snapshot": {
+                    "status": "CAPTURED",
+                    "url": "https://shop.example/checkout",
+                    "failed_locator": "#old",
+                    "original_element_baseline": {
+                        "status": "MISSING",
+                        "fingerprint": None,
+                        "reason": "no_prior_successful_matching_locator",
+                    },
+                    "storage_state_status": "AVAILABLE",
+                    "storage_state_ciphertext": FailureSnapshotCipher.encrypt_ephemeral(
+                        json.dumps({"cookies": [{"name": "auth", "value": "worker-fixture-token"}]}),
+                        ephemeral_key,
+                    ),
+                    "replay": {
+                        "status": "NOT_STARTED",
+                        "safe_point": "captured_storage_state_and_url",
+                        "replayed_steps": [],
+                        "not_replayed_steps": ["click:#submit"],
+                        "message": "No action replay.",
+                    },
+                    "evidence_gaps": [],
+                }
+            },
+        }
+        await kwargs["on_browser_event"](event)
+        return SuiteExecutionResult(
+            exit_code=1,
+            total=1,
+            failed=1,
+            results=[
+                SingleTestResult(
+                    nodeid="tests/test_checkout.py::test_checkout",
+                    status=TestExecutionStatus.FAILED,
+                    error_message="expected failure",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(daemon._runner, "run_suite", run_suite)
+    monkeypatch.setattr(daemon, "_watch_job_cancellation", no_cancellation)
+    await daemon._process_job(
+        {
+            "id": "job-snapshot",
+            "run_id": "run-snapshot",
+            "workspace_id": "project-snapshot",
+            "nodeids": ["tests/test_checkout.py::test_checkout"],
+            "browser": "chromium",
+        }
+    )
+
+    posted = next(body["result"] for path, body in client.posts if path == "/api/jobs/job-snapshot/result")
+    snapshot = posted["failure_snapshots"][0]
+    assert snapshot["encrypted_storage_state"].startswith("enc_")
+    assert "worker-fixture-token" not in json.dumps(posted)
+    assert "QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY" in observed["environment"]
+    assert "qa_platform_live_browser_plugin" in observed["extra_pytest_args"]
+    assert observed["browser_event_path"] is not None

@@ -1,9 +1,14 @@
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 
 import pytest
-from qa_core.execution.live_browser_plugin import LIVE_BROWSER_PLUGIN_NAME, LIVE_BROWSER_PLUGIN_SOURCE
+from qa_core.execution.live_browser_plugin import (
+    LIVE_BROWSER_PLUGIN_NAME,
+    LIVE_BROWSER_PLUGIN_SOURCE,
+    write_live_browser_plugin,
+)
 from qa_core.execution.pytest_runner import PytestRunner
 
 
@@ -47,7 +52,7 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}/"
     _write_test_browser_support(tmp_path)
-    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    write_live_browser_plugin(tmp_path)
     (tmp_path / "test_short.py").write_text(
         "import os\nfrom playwright.sync_api import sync_playwright\nfrom browser_support import launch_test_browser\n"
         "def test_navigate_and_close():\n"
@@ -105,7 +110,7 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
 @pytest.mark.asyncio
 async def test_real_browser_created_inside_test_and_fixture_both_emit_frames_and_evidence(tmp_path):
     _write_test_browser_support(tmp_path)
-    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    write_live_browser_plugin(tmp_path)
     (tmp_path / "conftest.py").write_text(
         "import pytest\nfrom playwright.sync_api import sync_playwright\nfrom browser_support import launch_test_browser\n"
         "@pytest.fixture\ndef page():\n    with sync_playwright() as p:\n        browser = launch_test_browser(p)\n        yield browser.new_page()\n        browser.close()\n",
@@ -187,7 +192,7 @@ async def test_network_body_is_bounded_redacted_and_has_real_duration(tmp_path):
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     _write_test_browser_support(tmp_path)
-    (tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py").write_text(LIVE_BROWSER_PLUGIN_SOURCE, encoding="utf-8")
+    write_live_browser_plugin(tmp_path)
     (tmp_path / "test_network.py").write_text(
         "from playwright.sync_api import sync_playwright\n"
         "from browser_support import launch_test_browser\n"
@@ -293,3 +298,110 @@ async def test_runner_parses_pytest_xdist_worker_results(tmp_path: Path):
         "tests/test_parallel.py::test_case[b]",
         "tests/test_parallel.py::test_case[c]",
     }
+
+
+@pytest.mark.asyncio
+async def test_failed_page_emits_redacted_snapshot_encrypted_state_and_explicit_baseline(tmp_path):
+    from cryptography.fernet import Fernet
+
+    class Website(BaseHTTPRequestHandler):
+        def do_GET(self):
+            authenticated = "qa-auth=fixture-auth-token" in self.headers.get("Cookie", "")
+            body = (
+                b'<main><h1>Protected checkout</h1><button id="legacy">Continue</button>'
+                b'<button aria-label="Complete purchase">Pay</button>'
+                b'<input id="secret" type="password" value="fixture-password"></main>'
+                if authenticated
+                else b"<h1>Login required</h1>"
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}/protected"
+    _write_test_browser_support(tmp_path)
+    write_live_browser_plugin(tmp_path)
+    (tmp_path / "conftest.py").write_text(
+        "import pytest\nfrom playwright.sync_api import sync_playwright\n"
+        "from browser_support import launch_test_browser\n"
+        f"BASE_URL = {base_url!r}\n"
+        "@pytest.fixture\ndef page():\n"
+        "    with sync_playwright() as p:\n"
+        "        browser = launch_test_browser(p)\n"
+        "        context = browser.new_context()\n"
+        "        context.add_cookies([{'name':'qa-auth','value':'fixture-auth-token','url':BASE_URL}])\n"
+        "        page = context.new_page()\n"
+        "        yield page\n"
+        "        browser.close()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_snapshot.py").write_text(
+        "import pytest\nfrom playwright.sync_api import TimeoutError as PlaywrightTimeoutError\n"
+        "from conftest import BASE_URL\n"
+        "def test_failure_with_prior_successful_target(page):\n"
+        "    page.goto(BASE_URL)\n"
+        "    page.locator('#secret').fill('fixture-password')\n"
+        "    page.locator('#legacy').click()\n"
+        "    page.locator('#legacy').evaluate('(el) => el.remove()')\n"
+        "    with pytest.raises(PlaywrightTimeoutError):\n"
+        "        page.locator('#legacy').click(timeout=100)\n"
+        "    assert False, 'force pytest call failure after the failed locator action'\n"
+        "def test_failure_without_prior_target_baseline(page):\n"
+        "    page.goto(BASE_URL)\n"
+        "    with pytest.raises(PlaywrightTimeoutError):\n"
+        "        page.locator('#never-existed').click(timeout=100)\n"
+        "    assert False, 'force pytest call failure without a successful locator baseline'\n",
+        encoding="utf-8",
+    )
+    events = []
+    key = Fernet.generate_key().decode("ascii")
+    try:
+        result = await PytestRunner().run_suite(
+            tmp_path,
+            nodeids=["test_snapshot.py"],
+            environment={
+                "PYTHONPATH": str(tmp_path),
+                "QA_PLATFORM_LIVE_BROWSER_LOG": str(tmp_path / "live"),
+                "QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY": key,
+                "WEBSITE_URL": base_url,
+            },
+            browser_event_path=tmp_path / "live",
+            on_browser_event=lambda event: _append_event(events, event),
+            extra_pytest_args=["-p", LIVE_BROWSER_PLUGIN_NAME],
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result.exit_code == 1
+    finished = [event for event in events if event.get("type") == "session.finished"]
+    assert len(finished) == 2
+    snapshots = [event["page_evidence"]["failure_snapshot"] for event in finished]
+    with_baseline = next(item for item in snapshots if item["failed_locator"] == "#legacy")
+    without_baseline = next(item for item in snapshots if item["failed_locator"] == "#never-existed")
+    assert with_baseline["original_element_baseline"]["status"] == "CAPTURED"
+    assert with_baseline["original_element_baseline"]["fingerprint"]["sha256"]
+    assert without_baseline["original_element_baseline"] == {
+        "status": "MISSING",
+        "fingerprint": None,
+        "reason": "no_prior_successful_matching_locator",
+    }
+    assert "fixture-auth-token" not in json.dumps(events)
+    assert "fixture-password" not in json.dumps(events)
+    encrypted_state = with_baseline["storage_state_ciphertext"]
+    assert encrypted_state.startswith("ephemeral:v1:")
+    decrypted = Fernet(key.encode("ascii")).decrypt(encrypted_state.removeprefix("ephemeral:v1:").encode("ascii"))
+    assert b"fixture-auth-token" in decrypted
+
+
+async def _append_event(events, event):
+    events.append(event)

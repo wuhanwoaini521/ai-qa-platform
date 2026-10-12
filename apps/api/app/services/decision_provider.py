@@ -3,13 +3,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from project_model.models import DecisionRequest, DecisionResult
+from project_model.models import DecisionRequest, DecisionResult, DecisionSignalRequest
 
 
 class DecisionProvider(Protocol):
     name: str
 
     async def choose(self, request: DecisionRequest) -> DecisionResult: ...
+
+    async def ask_probability(self, request: DecisionSignalRequest) -> DecisionResult: ...
+
+    async def ask_score(self, request: DecisionSignalRequest) -> DecisionResult: ...
 
 
 class DecisionProviderRegistry:

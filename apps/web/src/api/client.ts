@@ -502,6 +502,8 @@ export const api = {
     request<NonNullable<QualityDiscoveryRun['result']['events']>>(`/discovery/runs/${encodeURIComponent(id)}/events?limit=${limit}`),
   getQualityDiscoveryJourneys: (id: string) =>
     request<NonNullable<QualityDiscoveryRun['result']['journeys']>>(`/discovery/runs/${encodeURIComponent(id)}/journeys`),
+  createQualityDiscoveryPytestDraft: (runId: string, journeyId: string) =>
+    request<AgentTask>(`/discovery/runs/${encodeURIComponent(runId)}/journeys/${encodeURIComponent(journeyId)}/pytest-draft`, { method: 'POST' }),
   getQualityDiscoveryFunctionalSpec: (id: string) =>
     request<NonNullable<QualityDiscoveryRun['result']['functional_spec']>>(`/discovery/runs/${encodeURIComponent(id)}/functional-spec`),
   actOnQualityDiscoveryGap: (runId: string, gapId: string, action: 'create_requirement_draft' | 'generate_tests' | 'generate_automation' | 'open_failure') =>

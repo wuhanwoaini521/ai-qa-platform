@@ -90,6 +90,7 @@ Thumbs.db
 # Runtime data (ignore contents but keep .gitkeep)
 runtime/acceptance-*/
 runtime/dev-logs/
+runtime/runtime/
 runtime/projects/*
 !runtime/projects/.gitkeep
 runtime/workspaces/*
@@ -115,6 +116,7 @@ runtime/pytest-reports/*
 /runtime/.design-research/
 
 # Agent and test scratch directories/files
+/.ai-runs/*/test-work/
 **/.tmp-*/
 *.tmp
 *.temp

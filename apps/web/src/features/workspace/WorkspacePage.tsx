@@ -18,7 +18,7 @@ import { TestCasesPage } from '../test-cases/TestCasesPage';
 import { FailuresPage } from '../../pages/FailuresPage';
 import { useRunStore } from '../runs/useRunStore';
 import { useRuntimeSnapshot } from '../runtime/useRuntimeSnapshot';
-import { RuntimeDetail } from '../runtime/RuntimeDetail';
+import { RuntimeDetail, type RuntimeTab } from '../runtime/RuntimeDetail';
 import { WorkspaceRunResult } from './WorkspaceRunResult';
 import { QualityDiscoveryPanel } from './QualityDiscoveryPanel';
 import { failureSourceLocation } from '../failures/failureWorkspaceModel';
@@ -121,6 +121,7 @@ export function WorkspacePage() {
   const [aiRunOpen, setAiRunOpen] = useState(false);
   const [showRunPanel, setShowRunPanel] = useState(false);
   const [runtimePanelKind, setRuntimePanelKind] = useState<'task' | 'run'>('run');
+  const [runtimePanelInitialTab, setRuntimePanelInitialTab] = useState<RuntimeTab>('Flow');
   const [showInspector, setShowInspector] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
@@ -596,7 +597,7 @@ export function WorkspacePage() {
         : t('journeyFacts.bindingCount', { bound: activeBoundCases, total: relatedCases.length }),
     result: taskContext
       ? taskContextStatus
-        ? t(`result.taskStatus.${taskContextStatus}`, { defaultValue: taskContextStatus })
+        ? t(`result.workflowStatus.${taskContextStatus}`, { defaultValue: taskContextStatus })
         : t('journeyFacts.noRun')
       : journeyRun
         ? t('journeyFacts.runStatus', { status: journeyRun.status, saved: journeyRun.executions.length, total: journeyRun.total || journeyRun.nodeids.length })
@@ -760,7 +761,7 @@ export function WorkspacePage() {
     updateContext({ failureId, stage: 'failure', view: 'results' });
   };
 
-  const openRunDetails = (extra: Partial<WorkspaceContext> = {}) => {
+  const openRunDetails = (extra: Partial<WorkspaceContext> = {}, initialTab?: RuntimeTab) => {
     const taskId = extra.taskId ?? (!extra.runId ? progressTaskId : undefined);
     const runId = extra.runId ?? activeRunId;
     if (taskId) {
@@ -774,7 +775,10 @@ export function WorkspacePage() {
         updateContext({ runId: extra.runId, taskId: undefined });
       }
     }
-    if (taskId || runId) setShowRunPanel(true);
+    if (taskId || runId) {
+      setRuntimePanelInitialTab(initialTab ?? (!taskId && context.view === 'code' ? 'Browser' : 'Flow'));
+      setShowRunPanel(true);
+    }
   };
 
   const startRequirementAnalysis = async (requirement: Requirement) => {
@@ -1082,13 +1086,14 @@ export function WorkspacePage() {
                 onOpenCase={(testCaseId, requirementId) => updateContext({ testCaseId, requirementId: requirementId?.split(':REQ-')[0], stage: 'cases', view: 'cases' })}
                 onOpenAutomation={(testCaseId, filePath) => updateContext({ testCaseId, file: filePath, nodeId: undefined, stage: 'automation', view: 'code', returnTo: 'workspace' })}
                 onOpenRun={(runId, testCaseId) => updateContext({ runId, testCaseId, taskId: undefined, failureId: undefined, stage: 'result', view: 'results' })}
+                onOpenTask={(taskId) => openRunDetails({ taskId })}
               />}
               {view === 'cases' && <TestCasesPage
                 projects={projects}
                 selectedProjectId={projectId}
                 initialRequirementId={context.requirementId}
                 initialTestCaseId={context.testCaseId}
-                onSelectTestCase={(id) => updateContext({ testCaseId: id, view: 'cases', stage: 'cases' })}
+                onSelectTestCase={selectCase}
                 onCaseCreated={(createdCase) => {
                   setCases((items) => [...items.filter((item) => item.id !== createdCase.id), createdCase]);
                   updateContext({ requirementId: createdCase.requirement_id ?? context.requirementId, testCaseId: createdCase.id, view: 'cases', stage: 'cases' });
@@ -1136,10 +1141,10 @@ export function WorkspacePage() {
                 projectId={projectId}
                 onOpenFailure={(failureId) => updateContext({ failureId, stage: 'failure', view: 'results' })}
                 onOpenCode={(filePath, lineNumber) => openStudio(filePath, lineNumber)}
-                onOpenDetails={() => openRunDetails()}
+                onOpenDetails={() => openRunDetails({}, 'Results')}
                 onOpenStep={(stepId) => {
                   setSearchParams((current) => { const next = new URLSearchParams(current); next.set('step', stepId); return next; }, { replace: true });
-                  openRunDetails();
+                  openRunDetails({}, 'Flow');
                 }}
                 onStop={() => void stopActiveRun()}
                 onRerun={() => void runSelectedCase(true)}
@@ -1265,7 +1270,7 @@ export function WorkspacePage() {
       {showRunPanel && runtimePanelId && <div className="workspace-run-panel-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRunPanel(false); }}>
         <section className="workspace-run-panel" role="dialog" aria-modal="true" aria-label={runtimePanelTitle}>
           <header><div><span className="workspace-eyebrow">{runtimePanelTitle}</span><strong>{runtimePanelHeading}</strong></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('main.closeRunDetails')} onClick={() => setShowRunPanel(false)}><X size={15} /></button></header>
-          <div className="workspace-run-panel-body"><RuntimeDetail kind={runtimePanelKind} id={runtimePanelId} initialTab={runtimePanelKind === 'run' && context.view === 'code' ? 'Browser' : 'Flow'} projectId={projectId} onOpenStudio={() => openStudio(binding?.file_path)} /></div>
+          <div className="workspace-run-panel-body"><RuntimeDetail kind={runtimePanelKind} id={runtimePanelId} initialTab={runtimePanelInitialTab} projectId={projectId} onOpenStudio={() => openStudio(binding?.file_path)} /></div>
         </section>
       </div>}
     </div>
@@ -1339,7 +1344,7 @@ function RunResultSurface({
       ? value
       : String(value.description ?? value.root_cause ?? value.message ?? value.reason ?? JSON.stringify(value));
     if (goalSummary) return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.taskStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.taskStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.workflowStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.workflowStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <div className="workspace-goal-result">
         {goalSummary.tests && goalSummary.runs?.length ? <dl className="workspace-result-metrics"><div><dt>{t('result.total')}</dt><dd>{goalSummary.tests.total ?? 0}</dd></div><div><dt>{t('result.passed')}</dt><dd>{goalSummary.tests.passed ?? 0}</dd></div><div><dt>{t('result.failed')}</dt><dd>{goalSummary.tests.failed ?? 0}</dd></div><div><dt>{t('result.skipped')}</dt><dd>{goalSummary.tests.skipped ?? 0}</dd></div></dl> : <p className="workspace-muted">{t('result.testsNotRun')}</p>}
         {goalSummary.work_completed?.length ? <section><h4>{t('result.workCompleted')}</h4><ul>{goalSummary.work_completed.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section> : null}
@@ -1363,12 +1368,12 @@ function RunResultSurface({
       </div>
     </section>;
     if (task.type === 'QA_GOAL') return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       {task.failure_reason && <p role="status">{task.failure_reason}</p>}
       <details className="workspace-goal-activity" open><summary>{t('result.stepActivity')} · {steps.length}</summary><ol className="workspace-step-list">{steps.map((item) => <li key={item.id}><span>{item.status}</span><strong>{item.name}</strong>{item.error && <small>{item.error}</small>}</li>)}</ol></details>
     </section>;
     return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.taskStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <p>{t('result.taskSummary', { completed: steps.filter((item) => item.status === 'COMPLETED').length, total: steps.length })}</p>
       <ol className="workspace-step-list">{steps.map((item) => <li key={item.id} className={`is-${item.status.toLowerCase()}`}><span>{item.status}</span><strong>{item.name}</strong><small>{item.error ?? (Object.keys(item.outputs).length ? JSON.stringify(item.outputs) : '')}</small></li>)}</ol>
     </section>;

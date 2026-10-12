@@ -7,6 +7,7 @@ import {
 } from '../../components/ContextTaskProgress';
 import { AutomationBinding, Project, TestCase } from '../../types';
 import { useTestCases } from './hooks/useTestCases';
+import { buildTestCaseSelectionModel } from './testCaseSelectionModel';
 import { useAutomationBinding } from './hooks/useAutomationBinding';
 import { TestCaseList } from './components/TestCaseList';
 import { TestCaseDetail } from './components/TestCaseDetail';
@@ -25,7 +26,7 @@ interface TestCasesPageProps {
   onNavigateToRuns?: (runId?: string) => void;
   initialTestCaseId?: string | null;
   initialRequirementId?: string | null;
-  onSelectTestCase?: (testCaseId: string) => void;
+  onSelectTestCase?: (testCase: TestCase) => void;
   onTaskStarted?: (taskId: string) => void;
   workspaceMode?: boolean;
   focusAutomation?: boolean;
@@ -73,6 +74,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   });
 
   const { selectedCase } = cases;
+  const caseSelection = buildTestCaseSelectionModel(cases.testCases, selectedCase);
   const caseTask = useContextTask(
     selectedCase?.project_id ?? null,
     'test_case',
@@ -114,7 +116,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     cases.setSelectedCase(tc);
     binding.clearDraft();
     binding.fetchBinding(tc.id);
-    onSelectTestCase?.(tc.id);
+    onSelectTestCase?.(tc);
   };
 
   const handleCreateTestCase = async (e: React.FormEvent) => {
@@ -140,7 +142,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     form.reset();
     binding.fetchBinding(created.id);
     if (onCaseCreated) onCaseCreated(created);
-    else onSelectTestCase?.(created.id);
+    else onSelectTestCase?.(created);
   };
 
   const automationBindingPanel = <AutomationBindingPanel
@@ -163,7 +165,34 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   return (
     <div className={`page-container test-cases-page${workspaceMode ? ' workspace-cases-embedded' : ''}${focusAutomation ? ' is-automation-focus' : ''}`}>
       {workspaceMode ? <div className="workspace-case-toolbar">
-        <span>{t('pageTitle')}</span>
+        {caseSelection && (
+          <div className="workspace-case-selection">
+            <span className="workspace-case-selection-label">{t('currentTestCase')}</span>
+            {caseSelection.kind === 'select' ? (
+              <select
+                className="form-select workspace-case-selection-control"
+                aria-label={t('currentTestCase')}
+                value={caseSelection.selectedId}
+                onChange={(event) => {
+                  const testCase = cases.testCases.find((item) => item.id === event.target.value);
+                  if (testCase) handleSelectCase(testCase);
+                }}
+              >
+                {!caseSelection.selectedId && (
+                  <option value="" disabled>{t('casePickerPlaceholder')}</option>
+                )}
+                {caseSelection.options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="workspace-case-selection-current">
+                <strong>{caseSelection.displayId}</strong>
+                <span>{caseSelection.title}</span>
+              </div>
+            )}
+          </div>
+        )}
         <button
           className="btn btn-primary btn-sm"
           disabled={projects.length === 0}

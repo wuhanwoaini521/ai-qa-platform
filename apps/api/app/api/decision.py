@@ -5,6 +5,8 @@ from project_model.models import (
     DecisionConnectionResult,
     DecisionPlaygroundResult,
     DecisionRequest,
+    DecisionSamplesEvaluationRequest,
+    DecisionSamplesEvaluationResponse,
     JevRuntimeCheckResponse,
     JevSettingsResponse,
     JevSettingsUpdate,
@@ -14,6 +16,7 @@ from project_model.models import (
 
 from app.api.authz import get_current_user, require_permission
 from app.container import get_decision_service, get_decision_settings_service
+from app.services.decision_sample_evaluation import evaluate_decision_samples
 from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 
@@ -59,6 +62,23 @@ async def check_jev_runtime(
     service: DecisionService = Depends(get_decision_service),
 ) -> JevRuntimeCheckResponse:
     return await service.runtime_check()
+
+
+@router.post("/evaluate-samples", response_model=DecisionSamplesEvaluationResponse)
+async def evaluate_samples(
+    request: DecisionSamplesEvaluationRequest,
+    _: User = Depends(get_current_user),
+) -> DecisionSamplesEvaluationResponse:
+    try:
+        result = evaluate_decision_samples(
+            request.samples,
+            threshold=request.threshold,
+            input_cost_per_million_usd=request.input_cost_per_million_usd,
+            output_cost_per_million_usd=request.output_cost_per_million_usd,
+        )
+        return DecisionSamplesEvaluationResponse.model_validate(result)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post("/choose", response_model=DecisionPlaygroundResult)

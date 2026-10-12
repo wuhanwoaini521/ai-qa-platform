@@ -1,0 +1,282 @@
+- generic
+  - generic [ref=e2572] clickable [onclick]
+    - link "跳转到主要内容" [ref=e2573]
+    - banner
+      - button "返回" [ref=e2574]
+      - button "下一步" [ref=e2575]
+      - heading "QA 工作台" [level=1, ref=e2576]
+      - button "系统" [expanded=false, ref=e2583]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e2584]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e2604]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e2605]
+          - option "Northstar · Golden Demo Shop" [ref=e2606]
+          - option "Broken Conftest Probe" [ref=e2607]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e2608]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e2609]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e2610]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e2611]
+          - option "Benchmark Project 0" [ref=e2612]
+          - option "Benchmark Project 1" [ref=e2613]
+          - option "Benchmark Project 2" [ref=e2614]
+          - option "Benchmark Project 3" [ref=e2615]
+          - option "Benchmark Project 4" [ref=e2616]
+          - option "Benchmark Project 5" [ref=e2617]
+          - option "Benchmark Project 6" [ref=e2618]
+          - option "Benchmark Project 7" [ref=e2619]
+          - option "Benchmark Project 8" [ref=e2620]
+          - option "Benchmark Project 9" [ref=e2621]
+          - option "Benchmark Project 10" [ref=e2622]
+          - option "Benchmark Project 11" [ref=e2623]
+          - option "Benchmark Project 12" [ref=e2624]
+          - option "Benchmark Project 13" [ref=e2625]
+          - option "Benchmark Project 14" [ref=e2626]
+          - option "Benchmark Project 15" [ref=e2627]
+          - option "Benchmark Project 16" [ref=e2628]
+          - option "Benchmark Project 17" [ref=e2629]
+          - option "Benchmark Project 18" [ref=e2630]
+          - option "Benchmark Project 19" [ref=e2631]
+      - button "收起侧边栏" [expanded=true, ref=e2577]
+      - generic
+        - searchbox "搜索" [ref=e2585]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e2578]
+        - link "总览" [ref=e2586]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e2587]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e2588]
+          - StaticText "项目管理"
+        - link "运行" [ref=e2589]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e2590]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e2579]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e2580]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "用例分析" [level=1, ref=e2591]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "检查器" [expanded=false, ref=e2593]
+        - button "查看进度" [ref=e2971]
+      - navigation "工作阶段" [ref=e2581]
+        - button "需求 · 2 项需求" [ref=e2595]
+          - strong
+            - StaticText "需求"
+          - StaticText "2 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e2596]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 1 条用例" [ref=e2597]
+          - strong
+            - StaticText "用例"
+          - StaticText "1 条用例"
+        - button "自动化 · 0/1 已绑定" [ref=e2598]
+          - strong
+            - StaticText "自动化"
+          - StaticText "0/1 已绑定"
+        - button "结果 · 本次运行 PASSED · 已保存 1/1 条逐例结果" [ref=e2599]
+          - strong
+            - StaticText "结果"
+          - StaticText "本次运行 PASSED · 已保存 1/1 条逐例结果"
+      - region "工作内容" [ref=e2582]
+        - region "运行结果" [ref=e3058]
+          - sectionheader
+            - StaticText "运行通过"
+            - heading "Automation Studio" [level=2, ref=e3062]
+            - code
+              - StaticText "run_63cec6f0e680"
+            - StaticText "tests/test_case_tc_f5e450bd2_4f0752.py::test_submitting_valid_credentials_opens_account_state"
+            - button "手动 AI 分析" [ref=e3063]
+            - button "运行详情" [ref=e3064]
+            - button "重跑用例" [ref=e3065]
+          - region "逐条用例结果" [ref=e3059]
+            - sectionheader
+              - heading "逐条用例结果" [level=3, ref=e3068]
+              - StaticText "1 条结果 · 1 通过 · 0 失败"
+            - list
+              - listitem [level=1]
+                - code
+                  - StaticText "BD2561"
+                - strong
+                  - StaticText "Valid and invalid sign-in feedback is correct"
+                - code
+                  - StaticText "tests/test_case_tc_f5e450bd2_4f0752.py::test_submitting_valid_credentials_opens_account_state"
+                - StaticText "耗时"
+                - StaticText "51 ms"
+                - StaticText "PASSED"
+          - region "运行状态" [ref=e3060]
+            - sectionheader
+              - StaticText "执行摘要"
+              - heading "运行状态" [level=3, ref=e3069]
+            - DescriptionList
+              - term "计划用例"
+              - definition
+                - StaticText "1"
+              - term "已保存逐条结果"
+              - definition
+                - StaticText "1/1"
+              - term "已确认通过"
+              - definition
+                - StaticText "1"
+              - term "已确认失败"
+              - definition
+                - StaticText "0"
+              - term "运行级终态"
+              - definition
+                - StaticText "运行通过"
+              - term "耗时"
+              - definition
+                - StaticText "489 ms"
+            - status
+              - strong
+                - StaticText "Run 报告通过"
+              - paragraph
+                - StaticText "PASSED"
+            - generic
+              - heading "失败证据摘要" [level=4, ref=e3070]
+              - DescriptionList
+                - term "预期结果记录"
+                - definition
+                  - StaticText "没有匹配到已保存的预期结果记录，无法与实际证据对照。"
+                - term "观测到的错误证据"
+                - definition
+                  - StaticText "没有保存 Failure 记录或失败步骤证据。"
+                - term "失败分类"
+                - definition
+                  - StaticText "未提供失败分类。"
+            - generic
+              - heading "建议下一步" [level=4, ref=e3071]
+              - paragraph
+                - StaticText "当前 Run 没有 Failure 记录。可通过 AI Run 提交此 Run 与日志，请求一份需人工审查的诊断计划。"
+              - button "在编辑器中定位" [ref=e3072]
+          - region "AI + Jev 修复流程" [ref=e3061]
+            - sectionheader
+              - StaticText "仅展示真实事件与状态"
+              - heading "AI + Jev 修复流程" [level=3, ref=e3073]
+            - StaticText "AI Provider / Model"
+            - strong
+              - StaticText "openai-compatible · deepseek-flash"
+            - StaticText "当前配置；本 Run 未调用"
+            - StaticText "Jev"
+            - strong
+              - StaticText "jev-1.13.0"
+            - StaticText "配置已启用，但本 Run 未调用 Jev"
+            - status
+              - StaticText "本次运行已通过，没有失败记录，无需启动故障修复流程。"
+            - list
+              - listitem [level=1]
+                - strong
+                  - StaticText "失败证据收集"
+                - StaticText "不可用"
+                - paragraph
+                  - StaticText "没有保存证据"
+              - listitem [level=1]
+                - strong
+                  - StaticText "AI 根因分析"
+                - StaticText "未启动"
+                - paragraph
+                  - StaticText "本 Run 尚未启动 AI 诊断"
+              - listitem [level=1]
+                - strong
+                  - StaticText "Jev 策略决策"
+                - StaticText "未调用"
+                - paragraph
+                  - StaticText "配置已启用，但本 Run 未调用 Jev"
+              - listitem [level=1]
+                - strong
+                  - StaticText "代码补丁生成"
+                - StaticText "未启动"
+                - paragraph
+                  - StaticText "尚未生成代码补丁 Diff"
+              - listitem [level=1]
+                - strong
+                  - StaticText "应用补丁"
+                - StaticText "未启动"
+                - paragraph
+                  - StaticText "没有应用补丁记录"
+              - listitem [level=1]
+                - strong
+                  - StaticText "回归验证"
+                - StaticText "未启动"
+                - paragraph
+                  - StaticText "没有验证 Run"
+          - complementary "当前运行与日志"
+            - sectionheader
+              - StaticText "RUN 上下文"
+              - heading "当前任务" [level=3, ref=e3074]
+              - StaticText "PASSED"
+            - DescriptionList
+              - term "测试用例"
+              - definition
+                - StaticText "tests/test_case_tc_f5e450bd2_4f0752.py::test_submitting_valid_credentials_opens_account_state"
+              - term "环境"
+              - definition
+                - StaticText "— · —"
+              - term "浏览器"
+              - definition
+                - StaticText "chromium"
+              - term "开始时间"
+              - definition
+                - StaticText "10:18:46"
+            - heading "运行事件" [level=4, ref=e3066]
+            - button "查看完整运行事件" [ref=e3067]
+            - group "筛选运行事件"
+              - button "全部" [ref=e3075]
+              - button "错误" [ref=e3076]
+              - button "浏览器" [ref=e3077]
+              - button "AI / Jev" [ref=e3078]
+            - list
+              - listitem [level=1]
+                - group
+                  - DisclosureTriangle "10:18:46 RUN_STARTED lifecycle RUNNING" [expanded=false]
+                    - time
+                      - StaticText "10:18:46"
+                    - strong
+                      - StaticText "RUN_STARTED"
+                    - StaticText "lifecycle"
+                    - StaticText "RUNNING"
+              - listitem [level=1]
+                - group
+                  - DisclosureTriangle "10:18:47 tests/test_case_tc_f5e450bd2_4f0752.py::test_submitting_valid_credentials_opens_account_state test PASSED" [expanded=false]
+                    - time
+                      - StaticText "10:18:47"
+                    - strong
+                      - StaticText "tests/test_case_tc_f5e450bd2_4f0752.py::test_submitting_valid_credentials_opens_account_state"
+                    - StaticText "test"
+                    - StaticText "PASSED"
+              - listitem [level=1]
+                - group
+                  - DisclosureTriangle "10:18:47 RUN_FINISHED lifecycle PASSED" [expanded=false]
+                    - time
+                      - StaticText "10:18:47"
+                    - strong
+                      - StaticText "RUN_FINISHED"
+                    - StaticText "lifecycle"
+                    - StaticText "PASSED"
+            - group
+              - DisclosureTriangle "原始执行器日志 · 12 行" [expanded=false]
+                - StaticText "原始执行器日志 · 12 行"
+          - group
+            - DisclosureTriangle "RUN 关联证据 · RUN_63CEC6F0E680 可追溯对象 截图 0 · Trace 0 · 报告 0 ▸" [expanded=false]
+              - StaticText "RUN 关联证据"
+              - StaticText " · "
+              - StaticText "RUN_63CEC6F0E680"
+              - StaticText "可追溯对象"
+              - StaticText "截图 0 · Trace 0 · 报告 0"
+              - StaticText "▸"
+  - generic
+    - alert
+    - alert

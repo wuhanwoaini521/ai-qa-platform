@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -494,6 +495,40 @@ class TestRunCreate(BaseModel):
 
 
 # --- Failure Diagnosis & Repair Models ---
+class ElementBaselineFingerprint(BaseModel):
+    status: Literal["CAPTURED", "MISSING"] = "MISSING"
+    fingerprint: dict[str, str] | None = None
+    reason: str | None = "baseline_not_captured"
+
+
+class FailureReplaySummary(BaseModel):
+    status: Literal["NOT_STARTED", "RESTORED", "PARTIAL", "RESTORE_FAILED", "INSUFFICIENT_EVIDENCE"] = "NOT_STARTED"
+    safe_point: str | None = Field(default=None, max_length=128)
+    replayed_steps: list[str] = Field(default_factory=list, max_length=100)
+    not_replayed_steps: list[str] = Field(default_factory=list, max_length=100)
+    message: str = Field(default="", max_length=1000)
+
+
+class FailureSnapshotBundle(BaseModel):
+    """Redacted browser evidence and replay boundaries; encrypted state is never part of this DTO."""
+
+    status: Literal["CAPTURED", "PARTIAL", "INSUFFICIENT_EVIDENCE"] = "INSUFFICIENT_EVIDENCE"
+    captured_at: datetime | None = None
+    url: str | None = Field(default=None, max_length=2048)
+    accessibility_tree: str = Field(default="", max_length=20_000)
+    redacted_dom: str = Field(default="", max_length=20_000)
+    failed_locator: str | None = Field(default=None, max_length=1000)
+    original_element_baseline: ElementBaselineFingerprint = Field(
+        default_factory=lambda: ElementBaselineFingerprint(reason="failure_snapshot_not_available")
+    )
+    storage_state_status: Literal["AVAILABLE", "NOT_CAPTURED", "UNAVAILABLE", "EXPIRED", "RESTORE_FAILED"] = (
+        "NOT_CAPTURED"
+    )
+    storage_state_expires_at: datetime | None = None
+    replay: FailureReplaySummary = Field(default_factory=FailureReplaySummary)
+    evidence_gaps: list[str] = Field(default_factory=list, max_length=100)
+
+
 class FailureRecord(EntityBase):
     failure_kind: str = "UNKNOWN"
     evidence_bundle: dict[str, Any] = Field(default_factory=dict)
@@ -547,6 +582,24 @@ class FailureRepairAction(str, Enum):
     CREATE_ISSUE_DRAFT = "CREATE_ISSUE_DRAFT"
 
 
+class LocatorRepairAIInvocationSummary(BaseModel):
+    total: int = 0
+    fallback: int = 0
+    linked_repairs: int = 0
+    by_task: dict[str, int] = Field(default_factory=dict)
+    by_provider: dict[str, int] = Field(default_factory=dict)
+    by_status: dict[str, int] = Field(default_factory=dict)
+    by_repair_state: dict[str, int] = Field(default_factory=dict)
+
+
+class LocatorRepairFunnelResponse(BaseModel):
+    project_id: str
+    total_repairs: int = 0
+    stage_counts: dict[str, int] = Field(default_factory=dict)
+    blocking_reasons: dict[str, int] = Field(default_factory=dict)
+    ai_invocations: LocatorRepairAIInvocationSummary = Field(default_factory=LocatorRepairAIInvocationSummary)
+
+
 class FailureRepairWorkflow(BaseModel):
     """Server-owned repair state and the commands currently legal for the client."""
 
@@ -560,6 +613,12 @@ class FailureRepairWorkflow(BaseModel):
     retry_run_id: str | None = None
     retry_run_status: str | None = None
     verified: bool = False
+    failure_snapshot: FailureSnapshotBundle = Field(
+        default_factory=lambda: FailureSnapshotBundle(
+            evidence_gaps=["failure_snapshot_not_available"],
+            replay={"status": "INSUFFICIENT_EVIDENCE", "message": "No live failure snapshot is available."},
+        )
+    )
     repair_proposal: dict[str, Any] | None = None
 
 
@@ -666,6 +725,7 @@ class AIInvocationDTO(EntityBase):
     decision_name: str | None = None
     decision_choice: str | None = None
     decision_confidence: float | None = None
+    decision_value: float | None = None
 
 
 class AIUsageSummary(BaseModel):
@@ -692,10 +752,18 @@ class DecisionRequest(BaseModel):
     instructions: str | None = Field(default=None, max_length=2000)
 
 
+class DecisionSignalRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    state: Any
+    instructions: str = Field(min_length=1, max_length=2000)
+
+
 class DecisionResult(BaseModel):
     choice: str | None = None
     confidence: float | None = None
     probabilities: dict[str, float] = Field(default_factory=dict)
+    probability: float | None = Field(default=None, ge=0, le=1, strict=True)
+    score: float | None = Field(default=None, ge=0, le=1, strict=True)
     provider: str
     model: str | None = None
     attempted_provider: str | None = None
@@ -752,6 +820,45 @@ class JevRuntimeCheckResponse(BaseModel):
 
 class DecisionPlaygroundResult(DecisionResult):
     decision_name: str
+
+
+class DecisionSamplesEvaluationRequest(BaseModel):
+    samples: list[dict[str, Any]] = Field(min_length=1, max_length=10_000)
+    threshold: float = Field(default=0.7, ge=0, le=1, strict=True)
+    input_cost_per_million_usd: float | None = Field(default=None, ge=0, le=10_000, strict=True)
+    output_cost_per_million_usd: float | None = Field(default=None, ge=0, le=10_000, strict=True)
+
+    @model_validator(mode="after")
+    def validate_payload_size(self):
+        try:
+            encoded = json.dumps(self.samples, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode(
+                "utf-8"
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("Decision samples must contain finite JSON values only.") from error
+        if len(encoded) > 5_000_000:
+            raise ValueError("Decision samples must be no larger than 5 MB.")
+        return self
+
+
+class DecisionSamplesEvaluationResponse(BaseModel):
+    sample_count: int
+    threshold: float
+    consistency_rate: float | None = None
+    labeled_sample_count: int = 0
+    consistency_observation_count: int = 0
+    ranking_pair_count: int = 0
+    abstention_rate: float
+    fallback_rate: float
+    mean_latency_ms: float | None = None
+    p95_latency_ms: float | None = None
+    cost_usd: float | None = None
+    cost_source: str
+    cost_coverage: float
+    input_tokens: int
+    output_tokens: int
+    threshold_replay: dict[str, Any]
+    decision_points: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class RequirementAnalysisDTO(BaseModel):

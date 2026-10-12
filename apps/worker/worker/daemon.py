@@ -6,12 +6,17 @@ import os
 import platform
 import socket
 import sys
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
 from platform_config import AppConfig, ConfigManager
+from qa_core.execution.failure_snapshot import capture_failure_snapshot_event
+from qa_core.execution.live_browser_plugin import write_live_browser_plugin
 from qa_core.execution.pytest_runner import PytestRunner
+from qa_core.failure.snapshot_crypto import FailureSnapshotCipher
 from qa_core.onboarding.contract import venv_interpreter
 
 logger = logging.getLogger("worker.daemon")
@@ -312,23 +317,68 @@ class WorkerDaemon:
                 )
                 response.raise_for_status()
 
-            runner_task = asyncio.create_task(
-                self._runner.run_suite(
-                    workspace_dir=workspace_dir,
-                    nodeids=job_data["nodeids"],
-                    markers=run["markers"],
-                    environment={
-                        **run["environment"],
-                        "QA_ARTIFACT_DIR": str(artifact_dir),
-                        "QA_BROWSER": str(job_data.get("browser", "chromium")),
-                    },
-                    interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
-                    on_log=send_log,
-                    extra_pytest_args=self.config.pytest.default_args,
-                    parallel_workers=self.config.pytest.workers,
-                    timeout_sec=self.config.pytest.timeout_seconds,
+            snapshot_key = FailureSnapshotCipher.generate_ephemeral_key()
+            failure_snapshots = []
+
+            async def on_browser_event(event: dict[str, Any]) -> None:
+                capture = capture_failure_snapshot_event(
+                    event,
+                    ephemeral_key=snapshot_key,
+                    master_key=self.config.app.secret_key.get_secret_value(),
                 )
-            )
+                if capture is not None:
+                    failure_snapshots.append(capture)
+
+            live_dir_runtime = tempfile.TemporaryDirectory(prefix=".qa-live-", dir=artifact_dir)
+            live_dir = Path(live_dir_runtime.name)
+            live_browser_log = live_dir / "browser-live"
+            live_plugin = write_live_browser_plugin(live_dir) if self.config.features.live_browser else None
+            env = {
+                **run["environment"],
+                "QA_ARTIFACT_DIR": str(artifact_dir),
+                "QA_BROWSER": str(job_data.get("browser", "chromium")),
+                "QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY": snapshot_key,
+                "QA_FAILURE_SNAPSHOT_TTL_SECONDS": str(self.config.failure.storage_state_ttl_seconds),
+                "QA_CAPTURE_SCREENSHOT": str(int(self.config.failure.capture_screenshot)),
+                "QA_CAPTURE_DOM": str(int(self.config.failure.capture_dom)),
+                "QA_CAPTURE_CONSOLE": str(int(self.config.failure.capture_console)),
+                "QA_CAPTURE_NETWORK": str(int(self.config.failure.capture_network)),
+                "QA_EVIDENCE_MAX_CONSOLE_ENTRIES": str(self.config.evidence.max_console_entries),
+                "QA_EVIDENCE_MAX_NETWORK_ENTRIES": str(self.config.evidence.max_network_entries),
+                "QA_EVIDENCE_MAX_DOM_CHARS": str(self.config.evidence.max_dom_chars),
+                "PYTHONPATH": os.pathsep.join(
+                    value
+                    for value in (
+                        str(live_dir) if live_plugin else "",
+                        run["environment"].get("PYTHONPATH", ""),
+                        os.environ.get("PYTHONPATH", ""),
+                    )
+                    if value
+                ),
+                **({"QA_PLATFORM_LIVE_BROWSER_LOG": str(live_browser_log)} if live_plugin else {}),
+            }
+            try:
+                runner_task = asyncio.create_task(
+                    self._runner.run_suite(
+                        workspace_dir=workspace_dir,
+                        nodeids=job_data["nodeids"],
+                        markers=run["markers"],
+                        environment=env,
+                        interpreter=str(project_interpreter) if project_interpreter.exists() else sys.executable,
+                        on_log=send_log,
+                        browser_event_path=live_browser_log if live_plugin else None,
+                        on_browser_event=on_browser_event if live_plugin else None,
+                        extra_pytest_args=[
+                            *self.config.pytest.default_args,
+                            *(["-p", live_plugin] if live_plugin else []),
+                        ],
+                        parallel_workers=self.config.pytest.workers,
+                        timeout_sec=self.config.pytest.timeout_seconds,
+                    )
+                )
+            except BaseException:
+                live_dir_runtime.cleanup()
+                raise
             cancellation_task = asyncio.create_task(self._watch_job_cancellation(job_id))
             try:
                 done, _ = await asyncio.wait(
@@ -347,7 +397,9 @@ class WorkerDaemon:
                 if not runner_task.done():
                     runner_task.cancel()
                 await asyncio.gather(cancellation_task, runner_task, return_exceptions=True)
+                live_dir_runtime.cleanup()
 
+            result.failure_snapshots = failure_snapshots
             result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
             response = await self._http_client.post(
                 f"/api/jobs/{job_id}/result",

@@ -2341,3 +2341,28 @@ async def test_approval_diff_exposes_tail_and_keeps_complete_artifact(client, te
     assert "-    assert 1 == 1" in response.text and "+    assert 2 == 2" in response.text
     await task_execution_service._write_generated(task, outputs)
     assert await WorkspaceService().read_file(wid, path) == updated
+
+
+@pytest.mark.asyncio
+async def test_create_test_assertion_bypass_flag_is_checked_during_source_validation():
+    task = SimpleNamespace(
+        type=TaskType.CREATE_TEST.value,
+        inputs={"assertion_bypass_check": True},
+        workspace_id="project",
+    )
+
+    async def evidence(*_args, **_kwargs):
+        return "evidence-id"
+
+    service = TaskCodeGenerationService(
+        SimpleNamespace(input=lambda item, key, default=None: item.inputs.get(key, default), evidence=evidence)
+    )
+    outputs = {
+        "generate": {
+            "target_file": "tests/test_generated.py",
+            "suggested_code": "def test_generated():\n    assert True\n",
+        }
+    }
+
+    with pytest.raises(TaskBlocked, match="constant-true assertion"):
+        await service._validate_generated(task, outputs)

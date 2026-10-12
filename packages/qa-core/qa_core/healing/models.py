@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from project_model.models import FailureReplaySummary
 from pydantic import BaseModel, Field
 
 from qa_core.ai.trace import AITraceEvent
@@ -27,6 +28,7 @@ class LocatorRepairProposal(BaseModel):
     ai_fallback_used: bool = False
     verified: bool = False
     verification_reason: str | None = None
+    verification_replay: FailureReplaySummary = Field(default_factory=FailureReplaySummary)
     resolved_classification: str | None = None
     decision_summary: dict[str, object] = Field(default_factory=dict)
     code_diff: str = ""

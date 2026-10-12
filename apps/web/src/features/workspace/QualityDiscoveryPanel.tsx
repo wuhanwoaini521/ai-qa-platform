@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowDownRight, ExternalLink, Eye, GitBranch, Pause, Play, RotateCcw, ShieldAlert, Square, Waypoints } from 'lucide-react';
+import { Activity, ArrowDownRight, Code2, ExternalLink, Eye, GitBranch, Pause, Play, RotateCcw, ShieldAlert, Square, Waypoints } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type { QualityDiscoveryGap, QualityDiscoveryMode, QualityDiscoveryRun, Requirement } from '../../types';
@@ -15,6 +15,7 @@ export function QualityDiscoveryPanel({
   onOpenCase,
   onOpenAutomation,
   onOpenRun,
+  onOpenTask,
 }: {
   projectId: string;
   initialRequirementId?: string;
@@ -22,6 +23,7 @@ export function QualityDiscoveryPanel({
   onOpenCase?: (testCaseId: string, requirementId?: string) => void;
   onOpenAutomation?: (testCaseId: string, filePath: string) => void;
   onOpenRun?: (runId: string, testCaseId?: string) => void;
+  onOpenTask?: (taskId: string) => void;
 }) {
   const { t } = useTranslation('qualityDiscovery');
   const [requirements, setRequirements] = useState<Requirement[]>([]);
@@ -51,6 +53,8 @@ export function QualityDiscoveryPanel({
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [draftBusyJourney, setDraftBusyJourney] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState('');
 
   useEffect(() => {
     requirementEdited.current = false;
@@ -287,6 +291,20 @@ export function QualityDiscoveryPanel({
     }
   };
 
+  const createJourneyDraft = async (journeyId: string) => {
+    if (!run || !onOpenTask) return;
+    setDraftBusyJourney(journeyId);
+    setDraftError('');
+    try {
+      const task = await api.createQualityDiscoveryPytestDraft(run.id, journeyId);
+      onOpenTask(task.id);
+    } catch (reason) {
+      setDraftError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDraftBusyJourney(null);
+    }
+  };
+
   const runGapAction = async (gap: QualityDiscoveryGap, action: 'create_requirement_draft' | 'generate_tests' | 'generate_automation' | 'open_failure') => {
     if (!run) return;
     setActionBusy(`${gap.id}:${action}`);
@@ -452,7 +470,9 @@ export function QualityDiscoveryPanel({
             <div className="qd-journey-list">{journeys.map((journey) => <article key={journey.journey_id}>
               {journey.steps.map((step, index) => <span key={`${step.state_id}-${index}`}>{index > 0 && <ArrowDownRight size={12} aria-hidden="true" />}{step.title}</span>)}
               {journey.steps.flatMap((step) => step.evidence_ids ?? []).map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading}>{t('openEvidence')} · {id.slice(0, 8)}</button>)}
+              {run.status === 'COMPLETED' && <div className="qd-journey-draft"><button type="button" className="btn btn-secondary btn-sm" disabled={!onOpenTask || draftBusyJourney !== null} onClick={() => void createJourneyDraft(journey.journey_id)}><Code2 size={13} aria-hidden="true" />{draftBusyJourney === journey.journey_id ? t('draftingPytest') : t('createPytestDraft')}</button><small>{t('pytestDraftNote')}</small></div>}
             </article>)}</div>
+            {draftError && <p className="qd-error" role="alert">{draftError}</p>}
           </details>
         </section>}
 

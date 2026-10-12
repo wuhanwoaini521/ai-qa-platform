@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from project_model.models import Permission, User
+from project_model.task_models import Task
 
 from app.api.authz import get_current_user, require_permission
+from app.api.tasks import get_task_command_service
 from app.container import get_quality_discovery_service
 from app.services.quality_discovery_service import (
     DiscoveryRunCreate,
     QualityDiscoveryService,
     discovery_run_dict,
 )
+from app.services.task_command_service import TaskCommandService
 
 router = APIRouter(prefix="/discovery", tags=["Quality Discovery"])
 
@@ -179,6 +182,24 @@ async def execute_discovery_gap_action(
             status_code=502,
             detail=f"Quality Gap action failed ({type(error).__name__}). See AI Usage for invocation status.",
         ) from error
+
+
+@router.post(
+    "/runs/{run_id}/journeys/{journey_id}/pytest-draft",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=Task,
+)
+async def create_discovery_pytest_draft(
+    run_id: str,
+    journey_id: str,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+    service: QualityDiscoveryService = Depends(get_quality_discovery_service),
+    task_commands: TaskCommandService = Depends(get_task_command_service),
+) -> Task:
+    try:
+        return await service.create_pytest_draft(run_id, journey_id, str(user.id), task_commands)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post("/runs/{run_id}/pause")

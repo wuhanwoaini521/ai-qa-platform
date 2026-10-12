@@ -87,6 +87,7 @@ class RepairSettings(ConfigSection):
     require_jev: bool = True
     # Automatic repair cannot disable browser evidence verification.
     require_candidate_verification: Literal[True] = True
+    locator_same_function_threshold: float = Field(default=0.7, ge=0, le=1)
     rerun_exact_nodeid: bool = True
     allowed_paths: list[str] = Field(default_factory=lambda: ["tests/**", "pages/**", "helpers/**"])
     denied_paths: list[str] = Field(
@@ -163,6 +164,7 @@ class FailureSettings(ConfigSection):
     capture_network: bool = True
     traceback_chars: int = Field(default=8000, ge=0, le=1_000_000)
     source_context_chars: int = Field(default=8000, ge=0, le=1_000_000)
+    storage_state_ttl_seconds: int = Field(default=604800, ge=60, le=2_592_000)
 
 
 class EvidenceSettings(ConfigSection):

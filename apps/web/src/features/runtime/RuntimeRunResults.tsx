@@ -1,20 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { api } from '../../api/client';
+import type { TestCase } from '../../types';
 import type { RuntimeSnapshot } from '../../types/runtime';
+import { TestExecutionResults } from '../runs/TestExecutionResults';
 import { useRunStore } from '../runs/useRunStore';
-import { durationLabel } from './runtimeModel';
 
 /** Results and bounded console output use the same live store as Browser and Studio. */
-export function RuntimeRunResults({ snapshot }: { snapshot: RuntimeSnapshot }) {
+export function RuntimeRunResults({ snapshot, fallbackRunId }: { snapshot: RuntimeSnapshot; fallbackRunId?: string }) {
   const { t } = useTranslation('runtime');
   const [selected, setSelected] = useState('');
   const [page, setPage] = useState(0);
   const [following, setFollowing] = useState(true);
+  const [caseData, setCaseData] = useState<{ projectId: string; cases: TestCase[]; error: boolean } | null>(null);
   const output = useRef<HTMLPreElement>(null);
-  const runId = snapshot.runs.find((run) => run.id === selected)?.id ?? snapshot.runs.at(-1)?.id ?? null;
+  const runId = snapshot.runs.find((run) => run.id === selected)?.id ?? snapshot.runs.at(-1)?.id ?? fallbackRunId ?? null;
   const live = useRunStore(runId);
+  const projectId = live.run?.project_id ?? null;
   useEffect(() => { setPage(0); setFollowing(true); }, [runId]);
+  useEffect(() => {
+    if (!projectId) {
+      setCaseData(null);
+      return;
+    }
+    let active = true;
+    void api.getTestCases(projectId).then((cases) => {
+      if (active) setCaseData({ projectId, cases, error: false });
+    }).catch(() => {
+      if (active) setCaseData({ projectId, cases: [], error: true });
+    });
+    return () => { active = false; };
+  }, [projectId]);
   useEffect(() => {
     if (following && output.current) output.current.scrollTop = output.current.scrollHeight;
   }, [following, live.run?.log_output]);
@@ -22,6 +39,8 @@ export function RuntimeRunResults({ snapshot }: { snapshot: RuntimeSnapshot }) {
   const executions = live.run?.executions ?? [];
   const lastPage = Math.max(0, Math.ceil(executions.length / 50) - 1);
   const currentPage = Math.min(page, lastPage);
+  const testCases = caseData?.projectId === projectId ? caseData.cases : [];
+  const caseMappingUnavailable = Boolean(caseData?.projectId === projectId && caseData.error);
   return (
     <section className="rt-block rt-run-results">
       <div className="rt-toolbar">
@@ -34,21 +53,14 @@ export function RuntimeRunResults({ snapshot }: { snapshot: RuntimeSnapshot }) {
         <Link to={`/runs/${runId}`}>{t('openFullRun')}</Link>
       </div>
       {live.error && <p className="rt-notice" role="alert">{live.error}</p>}
-      {!executions.length ? <p className="rt-muted">{live.run ? t('noTestResults') : t('loadingTestResults')}</p> : (
-        <div className="table-responsive">
-          <table className="data-table">
-            <thead><tr><th>{t('statusLabel')}</th><th>{t('test')}</th><th>{t('durationLabel')}</th><th>{t('failureEvidence')}</th></tr></thead>
-            <tbody>{executions.slice(currentPage * 50, (currentPage + 1) * 50).map((item) => {
-              const failure = snapshot.failures.find((value) => value.execution_id === item.id && value.test_run_id === runId);
-              return <tr key={item.id}>
-                <td><span className={`rt-status status-${item.status.toLowerCase()}`}>{t(item.status.toLowerCase(), { defaultValue: item.status })}</span></td>
-                <td><code>{item.nodeid}</code></td><td>{durationLabel(item.duration_ms)}</td>
-                <td>{failure ? <Link to={`/failures/${encodeURIComponent(failure.id)}`}>{item.error_message || failure.title}</Link> : item.error_message || '—'}</td>
-              </tr>;
-            })}</tbody>
-          </table>
-        </div>
-      )}
+      <TestExecutionResults
+        executions={executions.slice(currentPage * 50, (currentPage + 1) * 50)}
+        testCases={testCases}
+        failures={snapshot.failures.filter((item) => item.test_run_id === runId)}
+        loading={!live.run && !live.error}
+        loadError={!live.run && Boolean(live.error)}
+        caseMappingUnavailable={caseMappingUnavailable}
+      />
       {lastPage > 0 && <div className="rt-toolbar">
         <button className="btn btn-secondary btn-sm" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>{t('previousPage')}</button>
         <span>{currentPage + 1} / {lastPage + 1} · {t('testsCount', { count: executions.length })}</span>

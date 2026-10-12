@@ -910,7 +910,7 @@ async def test_locator_repair_requires_observed_candidates(client: AsyncClient, 
 
         from app.services.failure_service import LocatorRepairNotApplicableError
 
-        with pytest.raises(LocatorRepairNotApplicableError, match="trusted candidate decision"):
+        with pytest.raises(LocatorRepairNotApplicableError, match="INSUFFICIENT_EVIDENCE"):
             await service.generate_repair_proposal(failure_id)
         assert session.is_active
         await session.commit()
@@ -922,7 +922,7 @@ async def test_locator_repair_requires_observed_candidates(client: AsyncClient, 
 
 
 @pytest.mark.integration
-async def test_repair_proposal_blocks_without_trusted_jev_even_with_saved_diagnosis(
+async def test_repair_proposal_requires_live_evidence_before_jev_even_with_saved_diagnosis(
     client: AsyncClient, test_db_session, monkeypatch
 ):
     import app.settings as settings_module
@@ -974,7 +974,7 @@ async def test_repair_proposal_blocks_without_trusted_jev_even_with_saved_diagno
 
     response = await client.post(f"/api/failures/{failure_id}/repair-proposal")
     assert response.status_code == 422, response.text
-    assert "Jev did not make a trusted candidate decision" in response.json()["detail"]
+    assert "INSUFFICIENT_EVIDENCE" in response.json()["detail"]
 
     async with test_db_session() as session:
         service = get_failure_service(session)
@@ -989,7 +989,7 @@ async def test_repair_proposal_blocks_without_trusted_jev_even_with_saved_diagno
         service.orchestrator = StubOrchestrator()
         from app.services.failure_service import LocatorRepairNotApplicableError
 
-        with pytest.raises(LocatorRepairNotApplicableError, match="trusted candidate decision"):
+        with pytest.raises(LocatorRepairNotApplicableError, match="INSUFFICIENT_EVIDENCE"):
             await service.generate_repair_proposal(failure_id)
 
         assert session.is_active

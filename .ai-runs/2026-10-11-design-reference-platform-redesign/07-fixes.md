@@ -1,0 +1,8 @@
+# Review / Test Fixes
+
+1. **Node test import failure (test harness coupling).** The first new helper test imported `navigation.ts`, which transitively imports a React component with extensionless ESM resolution and cannot run under Node's test loader. Moved the pure project-path function to `apps/web/src/app/projectPaths.ts`, imported it directly from `AppLayout`, and updated the test. Re-run: all 105 Web tests pass.
+2. **Evidence below the first viewport.** Initial 1440×1000 browser inspection placed the evidence section below the viewport (top ≈984px). Added equal-height, scrollable desktop result panels and automatic expansion for real FAILED/ERROR runs. Re-review showed the evidence row starting around 774px and the lower panels visible; scrolling the repair panel exposed the last workflow stage.
+3. **Workspace title hierarchy.** The project name was repeated in both selector and Workspace H1. Changed Workspace H1 to the active stage's localized title (including “用例分析” for results) and retained the project name as eyebrow context.
+4. **Project selector scope.** Browser testing showed that choosing “All projects” while on an explicit Workspace route could race route-scope synchronization and leave the page without a project context. Restricted that option to global routes; on project-scoped Workspace/project detail routes users can switch directly to another project, which starts a clean route. Verified the project switch in browser; global routes retain the all-project choice.
+
+All fixes were rechecked with the final frontend tests, lint/typecheck/build, and browser smoke tests. No product data was changed during investigation.

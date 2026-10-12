@@ -30,6 +30,7 @@
   "evidence": "证据",
   "childRuns": "子运行",
   "testRun": "测试运行",
+  "Results": "逐条结果",
   "notReached": "未到达",
   "notStarted": "未启动",
   "currentState": "当前状态",

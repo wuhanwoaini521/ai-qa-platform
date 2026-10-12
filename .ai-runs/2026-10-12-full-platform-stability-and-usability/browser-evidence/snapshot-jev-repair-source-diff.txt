@@ -1,0 +1,396 @@
+- generic
+  - generic [ref=e3351] clickable [onclick]
+    - link "跳转到主要内容" [ref=e3352]
+    - banner
+      - button "返回" [ref=e3353]
+      - button "下一步" [ref=e3354]
+      - heading "QA 工作台" [level=1, ref=e3355]
+      - button "系统" [expanded=false, ref=e3362]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e3363]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e3386]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e3387]
+          - option "Northstar · Golden Demo Shop" [ref=e3388]
+          - option "Broken Conftest Probe" [ref=e3389]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e3390]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e3391]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e3392]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e3393]
+          - option "Benchmark Project 0" [ref=e3394]
+          - option "Benchmark Project 1" [ref=e3395]
+          - option "Benchmark Project 2" [ref=e3396]
+          - option "Benchmark Project 3" [ref=e3397]
+          - option "Benchmark Project 4" [ref=e3398]
+          - option "Benchmark Project 5" [ref=e3399]
+          - option "Benchmark Project 6" [ref=e3400]
+          - option "Benchmark Project 7" [ref=e3401]
+          - option "Benchmark Project 8" [ref=e3402]
+          - option "Benchmark Project 9" [ref=e3403]
+          - option "Benchmark Project 10" [ref=e3404]
+          - option "Benchmark Project 11" [ref=e3405]
+          - option "Benchmark Project 12" [ref=e3406]
+          - option "Benchmark Project 13" [ref=e3407]
+          - option "Benchmark Project 14" [ref=e3408]
+          - option "Benchmark Project 15" [ref=e3409]
+          - option "Benchmark Project 16" [ref=e3410]
+          - option "Benchmark Project 17" [ref=e3411]
+          - option "Benchmark Project 18" [ref=e3412]
+          - option "Benchmark Project 19" [ref=e3413]
+      - button "收起侧边栏" [expanded=true, ref=e3356]
+      - generic
+        - searchbox "搜索" [ref=e3364]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e3357]
+        - link "总览" [ref=e3365]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e3366]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e3367]
+          - StaticText "项目管理"
+        - link "运行" [ref=e3368]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e3369]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e3358]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e3359]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "用例分析" [level=1, ref=e3370]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "展开上下文" [expanded=false, ref=e3779]
+          - StaticText "展开上下文"
+        - button "检查器" [expanded=false, ref=e3372]
+        - button "运行控制 · 失败待处理 · D080C3" [expanded=false, ref=e3780]
+          - StaticText "运行控制"
+          - generic
+            - StaticText "失败待处理 · D080C3"
+        - button "查看进度" [ref=e3374]
+      - navigation "工作阶段" [ref=e3360]
+        - button "需求 · 2 项需求" [ref=e3375]
+          - strong
+            - StaticText "需求"
+          - StaticText "2 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e3376]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 2 条用例" [ref=e3377]
+          - strong
+            - StaticText "用例"
+          - StaticText "2 条用例"
+        - button "自动化 · 2/2 已绑定" [ref=e3378]
+          - strong
+            - StaticText "自动化"
+          - StaticText "2/2 已绑定"
+        - button "结果 · 任务已取消" [ref=e3379]
+          - strong
+            - StaticText "结果"
+          - StaticText "任务已取消"
+      - region "工作内容" [ref=e3361]
+        - StaticText "当前阶段"
+        - heading "结果" [level=2, ref=e3380]
+        - region "test_sign_in_submit_is_activatable" [ref=e3781]
+          - StaticText "失败概览"
+          - heading "test_sign_in_submit_is_activatable" [level=2, ref=e3784]
+          - code
+            - StaticText "tests/test_sign_in_locator_repair.py::test_sign_in_submit_is_activatable"
+          - StaticText "失败"
+          - StaticText "LOCATOR_CHANGED"
+          - DescriptionList
+            - term "运行"
+            - definition
+              - StaticText "#run_c248"
+            - term "环境"
+            - definition
+              - StaticText "未知"
+            - term "浏览器"
+            - definition
+              - StaticText "chromium"
+            - term "时间"
+            - definition
+              - StaticText "20分钟前"
+          - StaticText "失败摘要"
+          - paragraph
+            - StaticText "定位器 未知定位器 未能在页面中找到目标元素。"
+          - paragraph
+            - StaticText "根因： 测试等待定位器 未知定位器 时超过 2500 ms，页面上没有找到它，因此点击操作超时。"
+          - StaticText "诊断状态"
+          - StaticText ": "
+          - strong
+            - StaticText "补丁已就绪"
+          - StaticText "推荐下一步"
+          - button "查看修复提案" [ref=e3913]
+          - button "重新分析（AI + Jev）" [ref=e3914]
+          - region "重跑与验证" [ref=e3787]
+            - heading "重跑与验证" [level=3, ref=e3788]
+            - list
+              - listitem [level=1]
+                - StaticText "原始运行"
+                - strong
+                  - StaticText "#run_c248 · FAILED"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "失败记录"
+                - strong
+                  - StaticText "test_sign_in_submit_is_activatable"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "诊断"
+                - strong
+                  - StaticText "补丁已就绪"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "修复"
+                - strong
+                  - StaticText "提案待审阅"
+                - StaticText "当前阶段"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "重跑"
+                - strong
+                  - StaticText "尚未开始"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "验证结果"
+                - strong
+                  - StaticText "尚未开始"
+          - group
+            - DisclosureTriangle "开发者操作" [expanded=false]
+              - StaticText "开发者操作"
+        - region "根因诊断（LOCATOR_CHANGED）" [ref=e3912]
+          - StaticText "根因诊断（LOCATOR_CHANGED）"
+          - StaticText "置信度：88%"
+          - DescriptionList
+            - term "自动修复适用性"
+            - definition
+              - StaticText "适合生成定位器提案；仍需审阅与验证"
+            - term "根因："
+            - definition
+              - link "见失败概览" [ref=e3918]
+            - term "已发现的证据："
+            - definition
+              - list
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "错误为 playwright._impl._errors.TimeoutError: Locator.click: Timeout 2500ms exceeded，Call log 显示 waiting for get_by_role(\"button\", name=\"Continue\", exact=True)。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "失败定位器为 internal:role=button[name=\"Continue\"s]，recent_steps 中该 click 动作耗时 2524.6ms 且状态为 FAILED。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "当前页面证据 observed_controls 仅有 [\"Sign in\", \"Ready\"]，controls 中唯一的 button 是 type=submit、role=button、name=\"Sign in\"。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "controls 给出该按钮候选：{\"kind\": \"role\", \"value\": \"button\", \"name\": \"Sign in\", \"exact\": true}、{\"kind\": \"text\", \"value\": \"Sign in\"}、{\"kind\": \"css\", \"value\": \"button[type=\\\"submit\\\"]\"}。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "页面 URL 加载成功（GET http://127.0.0.1:8765/pages/sign-in.html 返回 200），但 console 中存在一条 404 (File not found) 资源加载错误。"
+            - term "建议的修复措施："
+            - definition
+              - list
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "在确认页面无 \"Continue\" 按钮后，将定位器修复为 page.get_by_role(\"button\", name=\"Sign in\", exact=True) 或 page.locator(\"button[type=\\\"submit\\\"]\")。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "补充采集 DOM 快照、screenshot 与 trace（本次 artifacts 为空且 missing 列出 screenshot/trace/dom），以确认是否存在 \"Continue\" 按钮或条件渲染。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "保留原有断言 page.get_by_role(\"status\").inner_text() == \"Signed in\" 不变，仅修复定位器后复跑，验证点击后状态文本变化。"
+                - listitem [level=1]
+                  - ListMarker "• "
+                  - StaticText "排查 console 中 404 资源请求，确认其是否影响 sign-in.html 的脚本行为。"
+          - paragraph
+            - StaticText "当前诊断 API 不返回影响范围和风险评估。"
+          - paragraph
+            - StaticText "AI 分析 Provider: openai-compatible"
+        - region "证据" [ref=e3782]
+          - StaticText "证据"
+          - tablist "证据"
+            - tab "摘要" [ref=e3789]
+            - tab "堆栈" [ref=e3790]
+            - tab "浏览器" [selected, ref=e3791]
+            - tab "控制台" [ref=e3792]
+            - tab "网络" [ref=e3793]
+            - tab "产物" [ref=e3794]
+          - tabpanel "浏览器"
+            - DescriptionList
+              - term "浏览器"
+              - definition
+                - StaticText "chromium"
+              - term "页面 URL"
+              - definition
+                - StaticText "http://127.0.0.1:8765/pages/sign-in.html"
+              - term "页面标题"
+              - definition
+                - StaticText "Acceptance sign-in fixture"
+              - term "最近浏览器画面证据 ID"
+              - definition
+                - code
+                  - StaticText "c399c123-dbe5-4469-b843-353cd0f6ce64"
+            - heading "页面可见控件与候选定位器" [level=4, ref=e3804]
+            - list
+              - listitem [level=1]
+                - ListMarker "• "
+                - strong
+                  - StaticText "textbox"
+                - StaticText "label: Email · id: email · css: input[type=\"email\"]"
+              - listitem [level=1]
+                - ListMarker "• "
+                - strong
+                  - StaticText "textbox"
+                - StaticText "label: Password · id: password · css: input[type=\"password\"]"
+              - listitem [level=1]
+                - ListMarker "• "
+                - strong
+                  - StaticText "button · Sign in"
+                - StaticText "role: Sign in · text: Sign in · css: button[type=\"submit\"]"
+              - listitem [level=1]
+                - ListMarker "• "
+                - strong
+                  - StaticText "status · Ready"
+                - StaticText "role: Ready · text: Ready · css: p"
+          - group
+            - DisclosureTriangle "查看原始错误" [expanded=false]
+              - StaticText "查看原始错误"
+        - generic
+          - StaticText "定位器修复提案（置信度：100%）"
+          - button "语义等价性审查" [ref=e3915]
+          - button "应用修复" [ref=e3916]
+          - button "忽略" [ref=e3917]
+          - status
+            - StaticText "候选定位器已通过 Playwright 验证。补丁尚未应用，仍需重跑原用例确认修复。"
+          - DescriptionList
+            - term "决策引擎"
+            - definition
+              - StaticText "Jev · jev-1.13.0 · candidate_1"
+            - term "Jev 置信度 / 延迟"
+            - definition
+              - StaticText "100% · 496 ms"
+            - term "AI 诊断 Provider"
+            - definition
+              - StaticText "openai-compatible"
+            - term "类型"
+            - definition
+              - StaticText "role"
+            - term "文件"
+            - definition
+              - code
+                - StaticText "tests/test_sign_in_locator_repair.py"
+            - term "摘要"
+            - definition
+              - StaticText "Playwright verified this candidate against the observed failure page. Decision engine: Jev"
+            - term "风险"
+            - definition
+              - StaticText "风险：未评估"
+          - group
+            - DisclosureTriangle "查看执行证据" [expanded=false]
+              - StaticText "查看执行证据"
+          - StaticText "已失效的定位器"
+          - code
+            - StaticText "page.get_by_role(\"button\", name=\"Continue\", exact=True)"
+          - StaticText "建议替换为（role）"
+          - code
+            - StaticText "get_by_role(\"button\", name=\"Sign in\")"
+          - group
+            - DisclosureTriangle "代码差异预览（tests/test_sign_in_locator_repair.py）" [expanded=true]
+              - StaticText "代码差异预览（tests/test_sign_in_locator_repair.py）"
+            - StaticText "--- tests/test_sign_in_locator_repair.py\n+++ tests/test_sign_in_locator_repair.py\n@@ -10,7 +10,7 @@\n             page = browser.new_page()\n             page.set_default_timeout(2500)\n             page.goto(LOGIN_URL)\n-            page.get_by_role(\"button\", name=\"Continue\", exact=True).click()\n+            page.get_by_role(\"button\", name=\"Sign in\").click()\n             assert page.get_by_role(\"status\").inner_text() == \"Signed in\"\n         finally:\n             browser.close()\n"
+        - region "失败分析流程" [ref=e3807]
+          - strong
+            - StaticText "分析完成 · 尚未验证修复"
+          - StaticText "UI 自动化"
+          - generic
+            - strong
+              - StaticText "当前分析尝试 #d9d508e5 · COMPLETED"
+            - time
+              - StaticText "2026/10/12 10:59:58"
+          - generic
+            - StaticText "真实 AI Provider · openai-compatible · deepseek-flash"
+          - region "分析结论与处理状态" [ref=e3810]
+            - strong
+              - StaticText "分析结论与处理状态"
+            - StaticText "分析完成 · 尚未验证修复"
+            - StaticText "失败原因"
+            - paragraph
+              - StaticText "测试等待定位器 未知定位器 时超过 2500 ms，页面上没有找到它，因此点击操作超时。"
+            - StaticText "代码修改：未应用"
+            - StaticText "复测状态：未运行"
+            - StaticText "下一步"
+            - list
+              - listitem [level=1]
+                - ListMarker "1. "
+                - StaticText "将失败定位器更新为当前页面定位：在确认页面无 \"Continue\" 按钮后，将定位器修复为 page.get_by_role(\"button\", name=\"Sign in\", exact=True) 或 page.locator(\"button[type=\\\"submit\\\"]\")。 补充采集 DOM 快照、screenshot 与 trace（本次 artifacts 为空且 missing 列出 screenshot/trace/dom），以确认是否存在 \"Continue\" 按钮或条件渲染。 保留原有断言 page.get_by_role(\"status\").inner_text() == \"Signed in\" 不变，仅修复定位器后复跑，验证点击后状态文本变化。 排查 console 中 404 资源请求，确认其是否影响 sign-in.html 的脚本行为。。"
+              - listitem [level=1]
+                - ListMarker "2. "
+                - StaticText "重跑该测试，并确认加入购物车及金额断言都通过。"
+            - group "推荐下一步"
+              - strong
+                - StaticText "下一步操作"
+              - paragraph
+                - StaticText "候选和补丁已生成。检查差异后点击“应用并复测原用例”。"
+              - button "查看修复提案" [ref=e3919]
+            - group
+              - DisclosureTriangle "展开 AI 原始分析与建议" [expanded=false]
+                - StaticText "展开 AI 原始分析与建议"
+          - group
+            - DisclosureTriangle "查看已发生的分析阶段" [expanded=false]
+              - StaticText "查看已发生的分析阶段"
+          - paragraph
+            - StaticText "建议不是验证结论。系统只会自动应用通过候选与页面检查的补丁；只有原失败用例实际复测通过，才算修复成功。"
+          - strong
+            - StaticText "分析时间线"
+          - list
+            - listitem [level=1]
+              - time
+                - StaticText "2026/10/12 10:40:47"
+              - StaticText "失败已记录 · 规则分类：LOCATOR_ERROR"
+            - listitem [level=1]
+              - button "2026/10/12 10:59:58 分析已完成 · 分析完成 31 个真实事件" [ref=e3920]
+                - time
+                  - StaticText "2026/10/12 10:59:58"
+                - StaticText "分析已完成"
+                - StaticText " · "
+                - StaticText "分析完成"
+                - generic
+                  - StaticText "31 个真实事件"
+            - listitem [level=1]
+              - button "2026/10/12 10:42:36 分析已完成 · 分析完成 29 个真实事件" [ref=e3814]
+                - time
+                  - StaticText "2026/10/12 10:42:36"
+                - StaticText "分析已完成"
+                - StaticText " · "
+                - StaticText "分析完成"
+                - generic
+                  - StaticText "29 个真实事件"
+        - StaticText "相似的历史失败（1）"
+        - table
+          - rowgroup
+            - row
+              - columnheader "分类" [ref=e3799]
+              - columnheader "运行 ID" [ref=e3800]
+              - columnheader "记录时间" [ref=e3801]
+              - columnheader "错误详情" [ref=e3802]
+          - row
+            - cell "LOCATOR_CHANGED" [ref=e3795]
+            - cell "#run_22db" [ref=e3796]
+              - StaticText "#run_22db"
+            - cell "2026/10/12" [ref=e3797]
+            - cell "错误详情" [ref=e3798]
+              - group
+                - DisclosureTriangle "错误详情" [expanded=false]
+                  - StaticText "错误详情"
+  - generic
+    - alert
+    - alert

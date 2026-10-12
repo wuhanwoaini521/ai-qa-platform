@@ -1,6 +1,7 @@
 {
   "pageNoProject": "Please create a project first before creating requirements.",
   "pageSelectRequirement": "Select a requirement to view details.",
+  "currentRequirement": "Current requirement",
   "toolbarTitle": "Requirement & AI Test Design",
   "toolbarSubtitle": "AI-assisted requirement testability analysis, risk extraction, and dimensional test design generation.",
   "toolbarImportFromJira": "Import from Jira",

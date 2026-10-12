@@ -30,6 +30,7 @@
   "evidence": "Evidence",
   "childRuns": "Child runs",
   "testRun": "Test run",
+  "Results": "Test results",
   "notReached": "Not reached",
   "notStarted": "Not started",
   "currentState": "Current state",

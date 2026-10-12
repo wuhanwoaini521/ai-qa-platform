@@ -7,11 +7,16 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from project_model.models import ApplyRepairRequest, FailureRepairWorkflow, TestRun, TestRunCreate
+from project_model.models import (
+    ApplyRepairRequest,
+    FailureRepairState,
+    FailureRepairWorkflow,
+    TestRun,
+    TestRunCreate,
+)
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.failure.classifier import FailureClassifier
 from qa_core.failure.models import FailureCategory
@@ -22,25 +27,11 @@ from app.services.ai_settings_service import AISettingsService
 from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.locator_history_service import LocatorHistoryService
+from app.services.locator_repair_context import bind_locator_repair, reset_locator_repair
+from app.services.locator_repair_state_machine import LocatorRepairStateMachine
 from app.services.test_run_service import TestRunService
 from app.services.workspace_service import SecurityException
 from app.settings import get_config
-
-REPAIR_ACTIONS_BY_STATE = {
-    "CREATED": ("START_ANALYSIS",),
-    "ANALYZING": (),
-    "DECIDING": (),
-    "VERIFYING_CANDIDATE": (),
-    "PATCH_READY": ("APPLY", "START_ANALYSIS"),
-    "APPLYING": (),
-    "PATCH_APPLIED": ("VERIFY", "ROLLBACK"),
-    "VERIFYING_FIX": (),
-    "VERIFIED": ("ROLLBACK",),
-    "FAILED": ("VERIFY", "ROLLBACK", "START_ANALYSIS"),
-    "BLOCKED": ("START_ANALYSIS",),
-    "NOT_APPLICABLE": ("START_ANALYSIS",),
-    "ROLLED_BACK": ("START_ANALYSIS",),
-}
 
 RETRYABLE_CLASSIFICATIONS = {"LOCATOR_CHANGED", "AUTOMATION_DEFECT", "ENVIRONMENT", "NETWORK", "TIMING", "TEST_DATA"}
 ISSUE_CLASSIFICATIONS = {"PRODUCT_DEFECT", "ENVIRONMENT"}
@@ -54,25 +45,6 @@ def _repair_verification_nodeids(test_nodeid: str) -> list[str]:
 
 
 logger = logging.getLogger(__name__)
-_verification_reconciliation_locks: dict[str, tuple[asyncio.Lock, int]] = {}
-_verification_reconciliation_locks_guard = asyncio.Lock()
-
-
-@asynccontextmanager
-async def _lock_verification_reconciliation(failure_id: str):
-    async with _verification_reconciliation_locks_guard:
-        lock, users = _verification_reconciliation_locks.get(failure_id, (asyncio.Lock(), 0))
-        _verification_reconciliation_locks[failure_id] = (lock, users + 1)
-    try:
-        async with lock:
-            yield
-    finally:
-        async with _verification_reconciliation_locks_guard:
-            lock, users = _verification_reconciliation_locks[failure_id]
-            if users == 1:
-                del _verification_reconciliation_locks[failure_id]
-            else:
-                _verification_reconciliation_locks[failure_id] = (lock, users - 1)
 
 
 class FailureWorkflowService:
@@ -95,6 +67,8 @@ class FailureWorkflowService:
         )
         self.auto_repair_mode = (auto_repair_mode or configured_mode).upper()
         self._verification_monitors: set[asyncio.Task[None]] = set()
+        self._monitored_verification_run_ids: set[str] = set()
+        self.repair_state_machine = LocatorRepairStateMachine()
         if self.repository_scope is None:
             raise ValueError("FailureWorkflowService requires a repository scope")
 
@@ -124,19 +98,113 @@ class FailureWorkflowService:
             raise ValueError("Failure record not found")
         active_id = await self._history_running(failure_id)
         if active_id:
+            await self._ensure_locator_repair(
+                failure_id,
+                active_id,
+                initial_state=FailureRepairState.ANALYZING,
+            )
             return active_id, False
         workflow = await self.get_repair_workflow(failure_id)
         if "START_ANALYSIS" not in workflow.allowed_actions:
             active_id = await self._history_running(failure_id)
             if active_id:
+                await self._ensure_locator_repair(
+                    failure_id,
+                    active_id,
+                    initial_state=FailureRepairState.ANALYZING,
+                )
                 return active_id, False
             raise ValueError(f"Repair state {workflow.state} does not allow starting analysis")
-        return await self._history_claim(failure_id)
+        analysis_id, created = await self._history_claim(failure_id)
+        await self._ensure_locator_repair(failure_id, analysis_id)
+        return analysis_id, created
+
+    @staticmethod
+    def _repair_state_from_event(event: AITraceEvent, result: dict[str, Any] | None) -> FailureRepairState | None:
+        state = (result or {}).get("repair_state") or event.metadata.get("state")
+        if isinstance(state, str) and state in FailureRepairState._value2member_map_:
+            return FailureRepairState(state)
+        if event.type == "workflow.step":
+            if event.stage == "decision" and event.status == "RUNNING":
+                return FailureRepairState.DECIDING
+            if event.stage == "decision" and event.status == "COMPLETED":
+                return FailureRepairState.VERIFYING_CANDIDATE
+            if event.stage == "repair" and event.status == "COMPLETED":
+                return FailureRepairState.PATCH_READY
+            if event.stage == "repair" and event.status == "BLOCKED":
+                return FailureRepairState.BLOCKED
+            if event.stage == "verification" and event.status == "RUNNING":
+                return FailureRepairState.VERIFYING_FIX
+        return None
+
+    async def _locator_repair_for_analysis(self, analysis_id: str):
+        async with self.repository_scope() as repositories:
+            return await repositories.locator_repairs.get_by_analysis(analysis_id)
+
+    async def _ensure_locator_repair(
+        self,
+        failure_id: str,
+        analysis_id: str,
+        *,
+        initial_state: FailureRepairState = FailureRepairState.CREATED,
+    ):
+        async with self.repository_scope() as repositories:
+            repair = await self.repair_state_machine.create(
+                repositories.locator_repairs,
+                failure_id=failure_id,
+                analysis_id=analysis_id,
+                initial_state=initial_state,
+            )
+            await repositories.commit()
+            return repair
 
     async def _history_append(
         self, analysis_id: str, event: AITraceEvent, *, result: dict[str, Any] | None = None
     ) -> None:
         async with self.repository_scope() as repositories:
+            source = await repositories.failure_analyses.get_state_source(analysis_id)
+            target_state = self._repair_state_from_event(event, result)
+            stale_failure = (source or {}).get("result", {}).get(
+                "repair_state"
+            ) == "ROLLED_BACK" and target_state != FailureRepairState.ROLLED_BACK
+            if source is not None and target_state is not None and not stale_failure:
+                repair = await repositories.locator_repairs.get_by_analysis(analysis_id)
+                block_reason = (
+                    (result or {}).get("block_reason")
+                    or event.metadata.get("block_reason")
+                    or event.metadata.get("reason")
+                )
+                repair_proposal = (result or {}).get("repair_proposal") or {}
+                selection = (result or {}).get("selection") or {}
+                candidate_id = (
+                    repair_proposal.get("candidate_id")
+                    or selection.get("candidate_id")
+                    or (result or {}).get("candidate_id")
+                )
+                verification_run_id = (result or {}).get("verification_run_id") or event.metadata.get(
+                    "verification_run_id"
+                )
+                if verification_run_id and await repositories.test_runs.get_by_id(verification_run_id) is None:
+                    verification_run_id = None
+                if repair is None:
+                    repair = await self.repair_state_machine.create(
+                        repositories.locator_repairs,
+                        failure_id=source["failure_id"],
+                        analysis_id=analysis_id,
+                        initial_state=target_state,
+                        block_reason=block_reason,
+                        candidate_id=candidate_id,
+                        verification_run_id=verification_run_id,
+                    )
+                else:
+                    await self.repair_state_machine.move(
+                        repositories.locator_repairs,
+                        repair.id,
+                        target_state,
+                        block_reason=block_reason,
+                        candidate_id=candidate_id,
+                        verification_run_id=verification_run_id,
+                    )
             await repositories.failure_analyses.append(analysis_id, event, result=result)
             await repositories.commit()
 
@@ -212,7 +280,7 @@ class FailureWorkflowService:
             "jev_minimum_confidence": jev_runtime.minimum_confidence if jev_runtime else None,
         }
 
-    async def start_verification(self, failure_id: str, analysis_id: str) -> TestRun:
+    async def start_verification(self, failure_id: str, analysis_id: str, *, monitor: bool = True) -> TestRun:
         """Create and attach the canonical exact-case repair verification run."""
         if self.run_service is None:
             raise RuntimeError("A run service is required to start repair verification")
@@ -230,6 +298,18 @@ class FailureWorkflowService:
         existing_run_id = analysis["result"].get("verification_run_id")
         existing_run = await self.failures.run_repo.get_by_id(existing_run_id) if existing_run_id else None
         if existing_run and existing_run.status in {"QUEUED", "RUNNING"}:
+            repair_record = await self._locator_repair_for_analysis(analysis_id)
+            if repair_record and repair_record.state == FailureRepairState.PATCH_APPLIED:
+                await self._record_transition(
+                    failure,
+                    analysis,
+                    "VERIFYING_FIX",
+                    "verification.started",
+                    "Repair verification resumed",
+                    verification_run_id=existing_run.id,
+                )
+            if monitor:
+                self._schedule_verification_monitor(failure_id, analysis_id, existing_run.id)
             return existing_run
         state = await self.get_repair_workflow(failure_id, analysis_id)
         if "VERIFY" not in state.allowed_actions:
@@ -266,12 +346,22 @@ class FailureWorkflowService:
             verification_run_id=run.id,
             verification_attempt=attempt,
         )
+        if monitor:
+            self._schedule_verification_monitor(failure_id, analysis_id, run.id)
         return run
 
     def _schedule_verification_monitor(self, failure_id: str, analysis_id: str, run_id: str) -> None:
+        if run_id in self._monitored_verification_run_ids:
+            return
+        self._monitored_verification_run_ids.add(run_id)
         task = asyncio.create_task(self._monitor_verification(failure_id, analysis_id, run_id))
         self._verification_monitors.add(task)
-        task.add_done_callback(self._verification_monitors.discard)
+
+        def clear_monitor(completed: asyncio.Task[None]) -> None:
+            self._verification_monitors.discard(completed)
+            self._monitored_verification_run_ids.discard(run_id)
+
+        task.add_done_callback(clear_monitor)
 
     async def _monitor_verification(self, failure_id: str, analysis_id: str, run_id: str) -> None:
         """Reconcile asynchronous verification completion without using the request session."""
@@ -293,6 +383,62 @@ class FailureWorkflowService:
                         result = (analysis or {}).get("result") or {}
                         attempt = int(result.get("repair_attempt", 1))
                         verified = status == "PASSED" and result.get("verified") is True
+                        proposal = result.get("repair_proposal") or {}
+                        failure_state = await service.get_failure_state(failure_id)
+                        if analysis is not None and proposal.get("applied") and failure_state is not None:
+                            target_state = "VERIFIED" if verified else "FAILED"
+                            await workflow._record_transition(
+                                failure_state,
+                                analysis,
+                                target_state,
+                                "verification.completed",
+                                f"Exact-case verification {status}",
+                                block_reason=None if verified else "VERIFICATION_FAILED",
+                                verification_run_id=run_id,
+                                verification_run_status=status,
+                                verified=verified,
+                            )
+                            result = {
+                                **result,
+                                "repair_state": target_state,
+                                "verification_run_status": status,
+                                "verified": verified,
+                            }
+                            if not verified and get_config().repair.auto_rollback:
+                                try:
+                                    current = await workflow.get_repair_workflow(failure_id, analysis_id)
+                                    if "ROLLBACK" in current.allowed_actions:
+                                        await workflow.rollback_repair(failure_id, analysis_id, automatic=True)
+                                        result = next(
+                                            item["result"]
+                                            for item in await workflow.list_history(failure_id)
+                                            if item["id"] == analysis_id
+                                        )
+                                except Exception:
+                                    logger.exception(
+                                        "Automatic repair rollback failed after verification",
+                                        extra={"failure_id": failure_id, "analysis_id": analysis_id, "run_id": run_id},
+                                    )
+                            if verified:
+                                failure = await service.get_failure_state(failure_id)
+                                proposal = (failure.repair_proposal or {}) if failure else {}
+                                applied_at = proposal.get("applied_at")
+                                if failure and proposal.get("proposed_locator") and applied_at:
+                                    browser, page = await service._browser_evidence(failure.execution_id)
+                                    url = (browser or {}).get("current_url") or (page or {}).get("url")
+                                    if url:
+                                        verified_run = await service.run_repo.get_by_id(run_id)
+                                        if verified_run and verified_run.created_at >= datetime.fromisoformat(
+                                            applied_at
+                                        ):
+                                            await LocatorHistoryService(workflow.repository_scope).record(
+                                                url,
+                                                proposal["proposed_locator"],
+                                                True,
+                                                verification=True,
+                                                healed=True,
+                                                healed_analysis_id=analysis_id,
+                                            )
                         if (
                             not verified
                             and result.get("automatic_triggered") is True
@@ -468,13 +614,20 @@ class FailureWorkflowService:
             result: dict[str, Any] = {}
         else:
             result = dict(analysis.get("result") or {})
-            state = str(result.get("repair_state") or ("ANALYZING" if analysis["status"] == "RUNNING" else "BLOCKED"))
+            repair_record = await self._locator_repair_for_analysis(analysis["id"])
+            state = (
+                repair_record.state.value
+                if repair_record is not None
+                else str(result.get("repair_state") or ("ANALYZING" if analysis["status"] == "RUNNING" else "BLOCKED"))
+            )
             if analysis["status"] in {"FAILED", "CANCELLED", "INTERRUPTED"} and state in {
                 "ANALYZING",
                 "DECIDING",
                 "VERIFYING_CANDIDATE",
             }:
                 state = "BLOCKED"
+        if state not in FailureRepairState._value2member_map_:
+            state = FailureRepairState.BLOCKED.value
 
         proposal = failure.repair_proposal or {}
         selected_proposal = (result.get("repair_proposal") or {}) if analysis else {}
@@ -528,62 +681,7 @@ class FailureWorkflowService:
                 if same_repair and proposal.get("applied"):
                     state = "VERIFIED" if verified else "FAILED"
 
-        prior_state = result.get("repair_state")
-        verification_started = bool(
-            analysis
-            and run
-            and any(
-                event.get("type") == "verification.started"
-                and (event.get("metadata") or {}).get("verification_run_id") == run.id
-                for event in analysis.get("events", [])
-            )
-        )
-        if (
-            analysis is not None
-            and run is not None
-            and run.status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
-            and (prior_state == "VERIFYING_FIX" or verification_started)
-        ):
-            await self._record_transition(
-                failure,
-                analysis,
-                state,
-                "verification.completed",
-                f"Exact-case verification {run.status}",
-                verification_run_id=run.id,
-                verification_run_status=run.status,
-                verified=verified,
-            )
-            await self._record_transition(
-                failure,
-                analysis,
-                state,
-                "repair.verified" if state == "VERIFIED" else "repair.failed",
-                f"Repair state changed to {state}",
-                verification_run_id=run.id,
-                verification_run_status=run.status,
-                verified=verified,
-            )
-        elif analysis is not None and prior_state != state:
-            event_type = (
-                "repair.verified"
-                if state == "VERIFIED"
-                else "repair.failed"
-                if state == "FAILED"
-                else "repair.state_changed"
-            )
-            await self._record_transition(
-                failure,
-                analysis,
-                state,
-                event_type,
-                f"Repair state changed to {state}",
-                verification_run_id=run.id if run else None,
-                verification_run_status=run.status if run else None,
-                verified=verified,
-            )
-
-        allowed_actions = REPAIR_ACTIONS_BY_STATE.get(state, ())
+        allowed_actions = self.repair_state_machine.allowed_actions(state)
         if (
             state == "ROLLED_BACK"
             and self.auto_repair_mode == "AUTO"
@@ -608,8 +706,9 @@ class FailureWorkflowService:
                 allowed_actions = (*allowed_actions, "CREATE_ISSUE_DRAFT")
         retry_run_id = result.get("retry_run_id")
         retry_run = await self.failures.run_repo.get_by_id(retry_run_id) if retry_run_id else None
+        failure_snapshot, _ = await self.failures.get_failure_snapshot(failure.execution_id)
         return FailureRepairWorkflow(
-            repair_id=analysis["id"] if analysis else None,
+            repair_id=repair_record.id if analysis and repair_record else None,
             failure_id=failure_id,
             analysis_id=analysis["id"] if analysis else None,
             state=state,
@@ -619,6 +718,7 @@ class FailureWorkflowService:
             retry_run_id=retry_run.id if retry_run else None,
             retry_run_status=retry_run.status if retry_run else None,
             verified=verified,
+            failure_snapshot=failure_snapshot,
             repair_proposal={**selected_proposal, **proposal} if selected_proposal else None,
         )
 
@@ -640,7 +740,27 @@ class FailureWorkflowService:
             raise ValueError("Failure workspace is unavailable")
         if expected_workspace_id is not None and expected_workspace_id != original.workspace_id:
             raise ValueError("Repair workspace does not match the original failure run")
-        result = await self.failures.apply_repair(original.workspace_id, payload, failure_id=failure_id)
+        await self._record_transition(
+            failure,
+            analysis,
+            "APPLYING",
+            "patch.applying",
+            "Repair patch application started",
+            candidate_id=proposal.get("candidate_id"),
+        )
+        try:
+            result = await self.failures.apply_repair(original.workspace_id, payload, failure_id=failure_id)
+        except Exception as error:
+            await self._record_transition(
+                failure,
+                analysis,
+                "PATCH_READY",
+                "patch.apply_failed",
+                "Repair patch application was rejected",
+                block_reason="PATCH_APPLY_FAILED",
+                error_type=type(error).__name__,
+            )
+            raise
         await self.failures.transaction.commit()
         updated_failure = await self.failures.get_failure_state(failure_id)
         applied_proposal = (
@@ -748,50 +868,45 @@ class FailureWorkflowService:
         await self._history_attach_verification(analysis_id, failure_id, run_id)
 
     async def list_history(self, failure_id: str) -> list[dict[str, Any]]:
-        async with _lock_verification_reconciliation(failure_id):
-            return await self._list_history_unlocked(failure_id)
-
-    async def _list_history_unlocked(self, failure_id: str) -> list[dict[str, Any]]:
+        """Read persisted analysis history and project verification status without writes."""
         rows = await self._history_list(failure_id)
         failure = await self.failures.get_failure_state(failure_id)
         if failure is None:
             return rows
         for row in rows:
-            run_id = row["result"].get("verification_run_id")
+            result = dict(row.get("result") or {})
+            run_id = result.get("verification_run_id")
             if not run_id:
                 continue
             run = await self.failures.run_repo.get_by_id(run_id)
-            if not run or row["result"].get("verification_run_status") == run.status:
+            if run is None:
                 continue
             completed = run.status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
-            executions = await self.failures.run_repo.list_executions(run.id)
-            execution = next((item for item in executions if item.nodeid == failure.test_nodeid), None)
+            if result.get("verification_run_status") == run.status:
+                continue
+            execution = None
+            if completed:
+                executions = await self.failures.run_repo.list_executions(run.id)
+                execution = next((item for item in executions if item.nodeid == failure.test_nodeid), None)
             verified = run.status == "PASSED" and execution is not None and execution.status == "PASSED"
             proposal = failure.repair_proposal or {}
-            applied_to_this_analysis = bool(
+            analysis_proposal = result.get("repair_proposal") or {}
+            applied_to_analysis = bool(
                 proposal.get("applied")
-                and proposal.get("proposed_locator")
-                == (row.get("result", {}).get("repair_proposal") or {}).get("proposed_locator")
+                and proposal.get("proposed_locator") == analysis_proposal.get("proposed_locator")
             )
-            repair_state = (
-                ("VERIFIED" if verified else "FAILED")
-                if applied_to_this_analysis
-                else row["result"].get("repair_state")
-            )
-            result = {
-                **row["result"],
-                "verified": verified,
-                "verification_run_status": run.status,
-                **({"repair_state": repair_state} if repair_state else {}),
-            }
-            event = make_trace_event(
+            if applied_to_analysis:
+                result["repair_state"] = "VERIFIED" if verified else "FAILED" if completed else "VERIFYING_FIX"
+            result.update(verified=verified, verification_run_status=run.status)
+            event_type = "verification.completed" if completed else "verification.started"
+            projected_event = make_trace_event(
                 failure.run_id,
-                "verification.completed" if completed else "verification.started",
+                event_type,
                 stage="verification",
                 step_id=f"{row['id']}:verification",
                 title="验证修复结果",
                 status="COMPLETED" if verified else "FAILED" if completed else "RUNNING",
-                message=f"实际复测 {run.id} · {run.status}" if completed else f"复测 {run.id} 已提交，等待执行结果",
+                message=(f"实际复测 {run.id} · {run.status}" if completed else f"复测 {run.id} 已提交，等待执行结果"),
                 metadata={
                     "analysis_id": row["id"],
                     "verification_run_id": run.id,
@@ -802,112 +917,38 @@ class FailureWorkflowService:
                 },
                 duration_ms=run.duration_ms if completed else None,
             )
-            await self._history_append(row["id"], event, result=result)
-            if completed and applied_to_this_analysis:
-                await self._history_append(
-                    row["id"],
-                    make_trace_event(
-                        failure.run_id,
-                        "repair.verified" if verified else "repair.failed",
-                        stage="repair",
-                        step_id=f"{row['id']}:repair:{str(repair_state).lower()}",
-                        title="Repair verified" if verified else "Repair verification failed",
-                        message=f"Exact-case verification {run.status}",
-                        metadata={"analysis_id": row["id"], "verification_run_id": run.id, "state": repair_state},
-                    ),
-                    result=result,
+            projected_events = list(row.get("events") or [])
+            if not any(
+                event.get("type") == event_type
+                and event.get("step_id") == projected_event.step_id
+                and (event.get("metadata") or {}).get("verification_run_id") == run.id
+                for event in projected_events
+            ):
+                projected_events.append(projected_event.model_dump(mode="json"))
+            if completed and applied_to_analysis:
+                repair_event = make_trace_event(
+                    failure.run_id,
+                    "repair.verified" if verified else "repair.failed",
+                    stage="repair",
+                    step_id=f"{row['id']}:repair:{result['repair_state'].lower()}",
+                    title="Repair verified" if verified else "Repair verification failed",
+                    message=f"Exact-case verification {run.status}",
+                    metadata={
+                        "analysis_id": row["id"],
+                        "verification_run_id": run.id,
+                        "state": result["repair_state"],
+                    },
                 )
-                if not verified:
-                    try:
-                        state = await self.get_repair_workflow(failure_id, row["id"])
-                        if "ROLLBACK" in state.allowed_actions:
-                            await self.rollback_repair(failure_id, row["id"], automatic=True)
-                    except Exception as error:
-                        error_message = SensitiveRedactor.redact_text(str(error))[:300]
-                        latest = next(
-                            (item for item in await self._history_list(failure_id) if item["id"] == row["id"]),
-                            row,
-                        )
-                        latest_state = await self.get_repair_workflow(failure_id, row["id"])
-                        if (
-                            latest_state.state == "ROLLED_BACK"
-                            or latest["result"].get("repair_state") == "ROLLED_BACK"
-                            or latest["result"].get("auto_rolled_back") is True
-                        ):
-                            rolled_back_result = {
-                                **latest["result"],
-                                "repair_state": "ROLLED_BACK",
-                                "verified": False,
-                                "auto_rolled_back": True,
-                                "changes_applied": False,
-                            }
-                            await self._history_append(
-                                row["id"],
-                                make_trace_event(
-                                    failure.run_id,
-                                    "repair.rolled_back",
-                                    stage="repair",
-                                    step_id=f"{row['id']}:repair:rolled_back",
-                                    title="Repair patch rolled back",
-                                    message="The failed repair was safely rolled back",
-                                    metadata={
-                                        "analysis_id": row["id"],
-                                        "verification_run_id": run.id,
-                                        "automatic": True,
-                                        "auto_rolled_back": True,
-                                        "changes_applied": False,
-                                    },
-                                ),
-                                result=rolled_back_result,
-                            )
-                            continue
-                        result = {
-                            **latest["result"],
-                            "auto_rollback_error": error_message or type(error).__name__,
-                            "changes_applied": True,
-                        }
-                        await self._history_append(
-                            row["id"],
-                            make_trace_event(
-                                failure.run_id,
-                                "repair.rollback_failed",
-                                stage="repair",
-                                step_id=f"{row['id']}:repair:rollback-failed",
-                                title="Automatic repair rollback failed",
-                                status="FAILED",
-                                message="The failed repair could not be rolled back safely",
-                                metadata={
-                                    "analysis_id": row["id"],
-                                    "verification_run_id": run.id,
-                                    "error": error_message or type(error).__name__,
-                                },
-                            ),
-                            result=result,
-                        )
-                        logger.exception(
-                            "Automatic repair rollback failed after verification",
-                            extra={"failure_id": failure_id, "analysis_id": row["id"], "run_id": run.id},
-                        )
-        rows = await self._history_list(failure_id)
-        proposal = failure.repair_proposal or {}
-        if proposal.get("applied") and proposal.get("proposed_locator") and proposal.get("applied_at"):
-            browser, page = await self.failures._browser_evidence(failure.execution_id)
-            url = (browser or {}).get("current_url") or (page or {}).get("url")
-            if url:
-                for row in rows:
-                    if row["result"].get("verified") and not row["result"].get("locator_heal_recorded"):
-                        verified_run = await self.failures.run_repo.get_by_id(row["result"]["verification_run_id"])
-                        if not verified_run or verified_run.created_at < datetime.fromisoformat(proposal["applied_at"]):
-                            continue
-                        await LocatorHistoryService(self.repository_scope).record(
-                            url,
-                            proposal["proposed_locator"],
-                            True,
-                            verification=True,
-                            healed=True,
-                            healed_analysis_id=row["id"],
-                        )
-        return await self._history_list(failure_id)
+                if not any(
+                    event.get("type") == repair_event.type
+                    and event.get("step_id") == repair_event.step_id
+                    and (event.get("metadata") or {}).get("verification_run_id") == run.id
+                    for event in projected_events
+                ):
+                    projected_events.append(repair_event.model_dump(mode="json"))
+            row["events"] = projected_events
+            row["result"] = result
+        return rows
 
     async def stream(
         self,
@@ -935,6 +976,15 @@ class FailureWorkflowService:
             return
         if start_new_analysis is None:
             raise ValueError("Analysis claim state is required")
+        repair = await self._ensure_locator_repair(failure_id, analysis_id)
+        if repair.state == FailureRepairState.CREATED:
+            async with self.repository_scope() as repositories:
+                await self.repair_state_machine.move(
+                    repositories.locator_repairs,
+                    repair.id,
+                    FailureRepairState.ANALYZING,
+                )
+                await repositories.commit()
         queue: asyncio.Queue[AITraceEvent | None] = asyncio.Queue()
         active_stage = "context"
         stage_started: dict[str, float] = {}
@@ -1522,7 +1572,7 @@ class FailureWorkflowService:
                 if auto_applied:
                     verification_run = None
                     try:
-                        verification_run = await self.start_verification(failure_id, analysis_id)
+                        verification_run = await self.start_verification(failure_id, analysis_id, monitor=False)
                         workflow = await self.get_repair_workflow(failure_id, analysis_id)
                         run_status = getattr(verification_run.status, "value", str(verification_run.status))
                         terminal_run = run_status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
@@ -1619,6 +1669,12 @@ class FailureWorkflowService:
                 if verification_monitor_run_id:
                     self._schedule_verification_monitor(failure_id, analysis_id, verification_monitor_run_id)
             except asyncio.CancelledError:
+                cancelled_result = {
+                    "repair_state": "BLOCKED",
+                    "block_reason": "ANALYSIS_CANCELLED",
+                    "verified": False,
+                    "changes_applied": False,
+                }
                 await publish(
                     make_trace_event(
                         failure.run_id,
@@ -1627,11 +1683,26 @@ class FailureWorkflowService:
                         title="分析已取消",
                         status="CANCELLED",
                         message="用户中止了分析，未执行修复或复测",
-                    )
+                        metadata=cancelled_result,
+                    ),
+                    result=cancelled_result,
                 )
                 raise
             except Exception as error:
                 await step(active_stage, "FAILED", str(error)[:500])
+                failed_result = dict(result) if isinstance(locals().get("result"), dict) else {}
+                current_state = str(failed_result.get("repair_state") or "ANALYZING")
+                target_state = "FAILED" if failed_result.get("changes_applied") else "BLOCKED"
+                try:
+                    self.repair_state_machine.transition(current_state, target_state)
+                except (ValueError, KeyError):
+                    target_state = current_state
+                failed_result["repair_state"] = target_state
+                block_reason = None
+                if target_state in {"BLOCKED", "FAILED"}:
+                    block_reason = failed_result.pop("block_reason", None) or "WORKFLOW_ERROR"
+                failed_result.setdefault("verified", False)
+                failed_result.setdefault("changes_applied", False)
                 await publish(
                     make_trace_event(
                         failure.run_id,
@@ -1641,13 +1712,14 @@ class FailureWorkflowService:
                         title="Repair workflow failed",
                         status="FAILED",
                         message=SensitiveRedactor.redact_text(str(error))[:500],
-                        metadata={"repair_state": "BLOCKED", "error_type": type(error).__name__},
-                    )
+                        metadata={
+                            "repair_state": target_state,
+                            "block_reason": block_reason,
+                            "error_type": type(error).__name__,
+                        },
+                    ),
+                    result=failed_result,
                 )
-                failed_result = dict(result) if isinstance(locals().get("result"), dict) else {}
-                failed_result.setdefault("repair_state", "BLOCKED")
-                failed_result.setdefault("verified", False)
-                failed_result.setdefault("changes_applied", False)
                 await publish(
                     make_trace_event(
                         failure.run_id,
@@ -1662,7 +1734,11 @@ class FailureWorkflowService:
             finally:
                 await queue.put(None)
 
-        task = asyncio.create_task(analyze(), name=f"failure-workflow-{analysis_id}")
+        locator_repair_token = bind_locator_repair(repair.id)
+        try:
+            task = asyncio.create_task(analyze(), name=f"failure-workflow-{analysis_id}")
+        finally:
+            reset_locator_repair(locator_repair_token)
         try:
             while (event := await queue.get()) is not None:
                 yield event

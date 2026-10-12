@@ -11,15 +11,17 @@ import { RuntimeTrace } from './RuntimeTrace';
 import { RuntimeTimeline } from './RuntimeTimeline';
 import { RuntimeBrowser } from './RuntimeBrowser';
 import { RuntimeArtifacts } from './RuntimeArtifacts';
+import { RuntimeRunResults } from './RuntimeRunResults';
 import { RuntimeTaskActions } from './RuntimeTaskActions';
 import { useRuntimeSnapshot } from './useRuntimeSnapshot';
 import type { RuntimeSourceOpener } from '../../types/runtime';
 import './runtime.css';
 
 export type RuntimeTab =
-  'Overview' | 'Flow' | 'Timeline' | 'Trace' | 'Browser' | 'Artifacts';
+  'Overview' | 'Flow' | 'Timeline' | 'Trace' | 'Browser' | 'Artifacts' | 'Results';
 const tabs: RuntimeTab[] = [
   'Overview',
+  'Results',
   'Flow',
   'Timeline',
   'Trace',
@@ -111,6 +113,9 @@ export function RuntimeDetail({
     }
   }, [snapshot, searchParams, setSearchParams]);
   useEffect(() => {
+    if (snapshot && kind === 'task' && tab === 'Results' && snapshot.runs.length === 0) setTab('Flow');
+  }, [kind, snapshot, tab]);
+  useEffect(() => {
     if (!snapshot || !selectedStepId) return;
     const handle = (event: KeyboardEvent) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -163,7 +168,7 @@ export function RuntimeDetail({
         </div>
       )}
       <nav className="rt-tabs" aria-label={t('runtimeViews')}>
-        {tabs.map((key) => (
+        {tabs.filter((key) => key !== 'Results' || kind === 'run' || snapshot.runs.length > 0).map((key) => (
           <button
             key={key}
             aria-current={key === tab ? 'page' : undefined}
@@ -200,10 +205,12 @@ export function RuntimeDetail({
         </div>
       )}
       <div
-        className={`rt-workspace${selectedStepId && inspectorOpen ? ' is-inspected' : ''}`}
+        className={`rt-workspace${selectedStepId && inspectorOpen && tab !== 'Results' ? ' is-inspected' : ''}`}
       >
         <div className="rt-content">
-          {tab === 'Overview' ? (
+          {tab === 'Results' ? (
+            <RuntimeRunResults snapshot={snapshot} fallbackRunId={kind === 'run' ? id : undefined} />
+          ) : tab === 'Overview' ? (
             <RuntimeOverview
               snapshot={snapshot}
               onOpenFlow={() => setTab('Flow')}
@@ -236,7 +243,7 @@ export function RuntimeDetail({
             />
           )}
         </div>
-        {inspectorOpen && selectedStepId && (
+        {inspectorOpen && selectedStepId && tab !== 'Results' && (
           <RuntimeInspector
             snapshot={snapshot}
             selectedStepId={selectedStepId}

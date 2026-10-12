@@ -726,16 +726,29 @@ async def test_successful_ai_classification_is_not_overwritten_by_rule_classific
 
 
 class RecordingDecision:
-    def __init__(self, *, fallback=False, confidence=0.95):
+    def __init__(self, *, fallback=False, confidence=0.95, probability=0.95):
         self.calls = []
+        self.signal_calls = []
         self.fallback = fallback
         self.confidence = confidence
+        self.probability = probability
 
     async def choose(self, request, **kwargs):
         self.calls.append(request)
         return DecisionResult(
             choice=request.options[0].key,
             provider="jev",
+            model="unit-test-jev",
+            confidence=self.confidence,
+            fallback_used=self.fallback,
+            reason="unit-test-fallback" if self.fallback else None,
+        )
+
+    async def ask_probability(self, request, **kwargs):
+        self.signal_calls.append(request)
+        return DecisionResult(
+            probability=self.probability,
+            provider="fallback" if self.fallback else "jev",
             model="unit-test-jev",
             confidence=self.confidence,
             fallback_used=self.fallback,
@@ -893,6 +906,7 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(client, test
 
     async with test_db_session() as session:
         service = get_failure_service(session)
+        decision = RecordingDecision()
         proposal = await service.generate_repair_proposal(
             failure_id,
             diagnosis_override=FailureAnalysisResponse(
@@ -903,10 +917,15 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(client, test
                 confidence=0.95,
             ),
             resolved_classification="LOCATOR_CHANGED",
-            decision_service=LocatorDecisionService(decision_service=RecordingDecision()),
+            decision_service=LocatorDecisionService(decision_service=decision),
         )
         assert proposal.source_locator == 'page.locator("#old-submit")'
         assert proposal.code_diff
+        assert proposal.decision_summary["same_function_signal"]["probability"] == 0.95
+        assert proposal.decision_summary["same_function_signal"]["advisory_only"] is True
+        assert decision.signal_calls[0].state["candidate"]["candidate_id"] == proposal.candidate_id
+        assert decision.signal_calls[0].state["observed_controls"]
+        assert len(decision.signal_calls) == 1
         session.add(
             FailureAnalysisORM(
                 id=analysis_id,
@@ -942,6 +961,41 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(client, test
         assert rolled_back_analysis["result"]["changes_applied"] is False
         assert rolled_back_analysis["result"]["repair_proposal"]["applied"] is False
         assert await service.workspace_service.read_file(project_id, "tests/test_workflow.py") == source
+
+
+@pytest.mark.asyncio
+async def test_low_same_function_probability_blocks_locator_repair_apply(client, test_db_session):
+    from app.services.failure_service import LocatorRepairNotApplicableError
+
+    project_id, failure_id, _ = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#old-submit")',
+        kind="UI",
+        candidates=[{"kind": "role", "value": "button", "name": "Continue", "exact": True}],
+        source='def test_workflow(page):\n    page.locator("#old-submit").click()\n',
+    )
+    decision = RecordingDecision(probability=0.42)
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        with pytest.raises(LocatorRepairNotApplicableError, match="LOCATOR_IDENTITY_BELOW_THRESHOLD") as blocked:
+            await service.generate_repair_proposal(
+                failure_id,
+                diagnosis_override=FailureAnalysisResponse(
+                    classification="LOCATOR_CHANGED",
+                    root_cause="The observed button may have a new accessible name.",
+                    provider="openai-compatible",
+                    fallback_used=False,
+                    confidence=0.95,
+                ),
+                resolved_classification="LOCATOR_CHANGED",
+                decision_service=LocatorDecisionService(decision_service=decision),
+            )
+
+    assert decision.signal_calls
+    assert blocked.value.decision_summary["same_function_signal"]["probability"] == 0.42
+    assert blocked.value.decision_summary["same_function_signal"]["threshold"] > 0.42
+    assert any(event.type == "locator.same_function_signal" for event in blocked.value.execution_trace)
 
 
 @pytest.mark.asyncio
@@ -984,6 +1038,10 @@ async def test_missing_page_evidence_blocks_locator_decision(client, test_db_ses
         assert next(event for event in events if event.stage == "decision").status == "BLOCKED"
         assert not decision.calls
         assert events[-1].metadata["selection"] is None
+        workflow_dto = await FailureWorkflowService(service).get_repair_workflow(failure_id)
+        assert workflow_dto.failure_snapshot.status == "INSUFFICIENT_EVIDENCE"
+        assert workflow_dto.failure_snapshot.replay.status == "INSUFFICIENT_EVIDENCE"
+        assert "failure_snapshot_not_captured" in workflow_dto.failure_snapshot.evidence_gaps
 
 
 @pytest.mark.asyncio

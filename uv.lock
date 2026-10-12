@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 
 [manifest]
@@ -1089,6 +1089,7 @@ name = "qa-core"
 version = "0.1.0"
 source = { editable = "packages/qa-core" }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "project-model" },
     { name = "pydantic" },
@@ -1097,6 +1098,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=43.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "project-model", editable = "packages/project-model" },
     { name = "pydantic", specifier = ">=2.9.0" },

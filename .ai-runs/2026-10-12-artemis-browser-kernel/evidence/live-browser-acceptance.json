@@ -1,0 +1,52 @@
+{
+  "task_id": "c398584d5746495f83e5d75568995241",
+  "strategy": "agent",
+  "goal": "Search the catalog for a blue wool jacket, open the matching product details, and confirm the product page identifies a Blue Wool Jacket.",
+  "verified": true,
+  "final_url": "http://127.0.0.1:52422/products/blue-wool-jacket",
+  "ai_provider": "openai-compatible",
+  "ai_model": "deepseek-flash",
+  "jev_provider": "jev",
+  "jev_model": "jev-1.13.0",
+  "action_count": 3,
+  "ai_invocation_count": 3,
+  "jev_invocation_count": 3,
+  "actions": [
+    {
+      "sequence": 1,
+      "action": "fill",
+      "status": "success",
+      "decision_provider": "jev",
+      "correlation_id": "c70bf32e28a44968a20214248d923835"
+    },
+    {
+      "sequence": 2,
+      "action": "click",
+      "status": "success",
+      "decision_provider": "jev",
+      "correlation_id": "17c7aefea97943eda68bd59441e99b60"
+    },
+    {
+      "sequence": 3,
+      "action": "open_product",
+      "status": "success",
+      "decision_provider": "jev",
+      "correlation_id": "66126a1bf9a34b7c84e3c0c8db995329"
+    }
+  ],
+  "ai_invocation_run_ids": [
+    "17c7aefea97943eda68bd59441e99b60",
+    "66126a1bf9a34b7c84e3c0c8db995329",
+    "c70bf32e28a44968a20214248d923835"
+  ],
+  "jev_invocation_run_ids": [
+    "17c7aefea97943eda68bd59441e99b60",
+    "66126a1bf9a34b7c84e3c0c8db995329",
+    "c70bf32e28a44968a20214248d923835"
+  ],
+  "screenshot_files": [
+    "live-browser-action-01.png",
+    "live-browser-action-02.png",
+    "live-browser-action-03.png"
+  ]
+}

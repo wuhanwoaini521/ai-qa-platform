@@ -1,0 +1,232 @@
+- generic
+  - generic [ref=e3351] clickable [onclick]
+    - link "跳转到主要内容" [ref=e3352]
+    - banner
+      - button "返回" [ref=e3353]
+      - button "下一步" [ref=e3354]
+      - heading "QA 工作台" [level=1, ref=e3355]
+      - button "系统" [expanded=false, ref=e3362]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e3363]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e3386]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e3387]
+          - option "Northstar · Golden Demo Shop" [ref=e3388]
+          - option "Broken Conftest Probe" [ref=e3389]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e3390]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e3391]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e3392]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e3393]
+          - option "Benchmark Project 0" [ref=e3394]
+          - option "Benchmark Project 1" [ref=e3395]
+          - option "Benchmark Project 2" [ref=e3396]
+          - option "Benchmark Project 3" [ref=e3397]
+          - option "Benchmark Project 4" [ref=e3398]
+          - option "Benchmark Project 5" [ref=e3399]
+          - option "Benchmark Project 6" [ref=e3400]
+          - option "Benchmark Project 7" [ref=e3401]
+          - option "Benchmark Project 8" [ref=e3402]
+          - option "Benchmark Project 9" [ref=e3403]
+          - option "Benchmark Project 10" [ref=e3404]
+          - option "Benchmark Project 11" [ref=e3405]
+          - option "Benchmark Project 12" [ref=e3406]
+          - option "Benchmark Project 13" [ref=e3407]
+          - option "Benchmark Project 14" [ref=e3408]
+          - option "Benchmark Project 15" [ref=e3409]
+          - option "Benchmark Project 16" [ref=e3410]
+          - option "Benchmark Project 17" [ref=e3411]
+          - option "Benchmark Project 18" [ref=e3412]
+          - option "Benchmark Project 19" [ref=e3413]
+      - button "收起侧边栏" [expanded=true, ref=e3356]
+      - generic
+        - searchbox "搜索" [ref=e3364]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e3357]
+        - link "总览" [ref=e3365]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e3366]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e3367]
+          - StaticText "项目管理"
+        - link "运行" [ref=e3368]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e3369]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e3358]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e3359]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "用例分析" [level=1, ref=e3370]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "展开上下文" [expanded=false, ref=e3629]
+          - StaticText "展开上下文"
+        - button "检查器" [expanded=false, ref=e3372]
+        - button "运行控制 · 失败待处理 · D080C3" [expanded=false, ref=e3630]
+          - StaticText "运行控制"
+          - generic
+            - StaticText "失败待处理 · D080C3"
+        - button "查看进度" [ref=e3374]
+      - navigation "工作阶段" [ref=e3360]
+        - button "需求 · 2 项需求" [ref=e3375]
+          - strong
+            - StaticText "需求"
+          - StaticText "2 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e3376]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 2 条用例" [ref=e3377]
+          - strong
+            - StaticText "用例"
+          - StaticText "2 条用例"
+        - button "自动化 · 2/2 已绑定" [ref=e3378]
+          - strong
+            - StaticText "自动化"
+          - StaticText "2/2 已绑定"
+        - button "结果 · 本次运行 FAILED · 已保存 1/1 条逐例结果" [ref=e3379]
+          - strong
+            - StaticText "结果"
+          - StaticText "本次运行 FAILED · 已保存 1/1 条逐例结果"
+      - region "工作内容" [ref=e3361]
+        - StaticText "当前阶段"
+        - heading "结果" [level=2, ref=e3380]
+        - region "test_sign_in_submit_is_activatable" [ref=e3631]
+          - StaticText "失败概览"
+          - heading "test_sign_in_submit_is_activatable" [level=2, ref=e3634]
+          - code
+            - StaticText "tests/test_sign_in_locator_repair.py::test_sign_in_submit_is_activatable"
+          - StaticText "失败"
+          - StaticText "LOCATOR_CHANGED"
+          - DescriptionList
+            - term "运行"
+            - definition
+              - StaticText "#run_22db"
+            - term "环境"
+            - definition
+              - StaticText "未知"
+            - term "浏览器"
+            - definition
+              - StaticText "chromium"
+            - term "时间"
+            - definition
+              - StaticText "2分钟前"
+          - StaticText "失败摘要"
+          - paragraph
+            - StaticText "定位器 未知定位器 未能在页面中找到目标元素。"
+          - StaticText "诊断状态"
+          - StaticText ": "
+          - strong
+            - StaticText "等待分析"
+          - paragraph
+            - StaticText "诊断建议只是参考，不会改代码。生成修复方案后先检查脚本差异；点击批准并应用后才会写回并验证。"
+          - button "生成修复方案并审阅" [ref=e3636]
+          - region "重跑与验证" [ref=e3637]
+            - heading "重跑与验证" [level=3, ref=e3638]
+            - list
+              - listitem [level=1]
+                - StaticText "原始运行"
+                - strong
+                  - StaticText "#run_22db · FAILED"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "失败记录"
+                - strong
+                  - StaticText "test_sign_in_submit_is_activatable"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "诊断"
+                - strong
+                  - StaticText "等待分析"
+                - StaticText "当前阶段"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "修复"
+                - strong
+                  - StaticText "尚未应用"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "重跑"
+                - strong
+                  - StaticText "尚未开始"
+                - StaticText "→"
+              - listitem [level=1]
+                - StaticText "验证结果"
+                - strong
+                  - StaticText "尚未开始"
+          - group
+            - DisclosureTriangle "开发者操作" [expanded=false]
+              - StaticText "开发者操作"
+        - region "证据" [ref=e3632]
+          - StaticText "证据"
+          - tablist "证据"
+            - tab "摘要" [selected, ref=e3639]
+            - tab "堆栈" [ref=e3640]
+            - tab "浏览器" [ref=e3641]
+            - tab "产物" [ref=e3642]
+          - tabpanel "摘要"
+            - strong
+              - StaticText "定位器 未知 未能在页面中找到目标元素。"
+            - StaticText "相关代码帧"
+            - list
+              - listitem [level=1]
+                - ListMarker "• "
+                - code
+                  - StaticText "test_sign_in_locator_repair.py:35"
+              - listitem [level=1]
+                - ListMarker "• "
+                - code
+                  - StaticText "qa_platform_live_browser_plugin.py:175"
+            - StaticText "chromium"
+          - group
+            - DisclosureTriangle "查看原始错误" [expanded=false]
+              - StaticText "查看原始错误"
+        - region "自动修复适用性" [ref=e3633]
+          - StaticText "自动修复适用性"
+          - strong
+            - StaticText "不建议对此失败类型自动修改测试代码。"
+        - region "失败分析流程" [ref=e3644]
+          - strong
+            - StaticText "AI 正在分析"
+          - StaticText "UI 自动化"
+          - button "取消分析" [ref=e3645]
+          - generic
+            - StaticText "真实 AI Provider · openai-compatible · deepseek-flash"
+          - region "分析结论与处理状态" [ref=e3646]
+            - strong
+              - StaticText "分析结论与处理状态"
+            - StaticText "AI 正在分析"
+            - StaticText "失败原因"
+            - paragraph
+              - StaticText "测试等待定位器 未知定位器 时超过 2500 ms，页面上没有找到它，因此点击操作超时。"
+            - StaticText "代码修改：未应用"
+            - StaticText "复测状态：未运行"
+            - group
+              - DisclosureTriangle "展开 AI 原始分析与建议" [expanded=false]
+                - StaticText "展开 AI 原始分析与建议"
+          - group
+            - DisclosureTriangle "查看已发生的分析阶段" [expanded=false]
+              - StaticText "查看已发生的分析阶段"
+          - paragraph
+            - StaticText "建议不是验证结论。系统只会自动应用通过候选与页面检查的补丁；只有原失败用例实际复测通过，才算修复成功。"
+          - strong
+            - StaticText "分析时间线"
+          - list
+            - listitem [level=1]
+              - time
+                - StaticText "2026/10/12 10:32:54"
+              - StaticText "失败已记录 · 规则分类：LOCATOR_ERROR"
+        - StaticText "相似的历史失败（0）"
+        - StaticText "历史记录中尚无与该失败特征相似的出现记录。"
+  - generic
+    - alert
+    - alert

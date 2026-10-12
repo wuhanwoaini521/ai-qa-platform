@@ -1,0 +1,218 @@
+- generic
+  - generic [ref=e2572] clickable [onclick]
+    - link "跳转到主要内容" [ref=e2573]
+    - banner
+      - button "返回" [ref=e2574]
+      - button "下一步" [ref=e2575]
+      - heading "QA 工作台" [level=1, ref=e2576]
+      - button "系统" [expanded=false, ref=e2583]
+        - StaticText "系统"
+    - complementary
+      - combobox "项目" [expanded=false, ref=e2584]: Platform Stability Acceptance 2026-10-12 0955
+        - MenuListPopup
+          - option "Platform Stability Acceptance 2026-10-12 0955" [selected, ref=e2604]
+          - option "V2 Overhaul Sandbox 2026-10-12" [ref=e2605]
+          - option "Northstar · Golden Demo Shop" [ref=e2606]
+          - option "Broken Conftest Probe" [ref=e2607]
+          - option "Reference QA (playwright-test) · #f2e603" [ref=e2608]
+          - option "Reference QA (playwright-test) · #06d7cd" [ref=e2609]
+          - option "Reference QA (playwright-test) · #b3b098" [ref=e2610]
+          - option "Reference QA (playwright-test) · #73b98d" [ref=e2611]
+          - option "Benchmark Project 0" [ref=e2612]
+          - option "Benchmark Project 1" [ref=e2613]
+          - option "Benchmark Project 2" [ref=e2614]
+          - option "Benchmark Project 3" [ref=e2615]
+          - option "Benchmark Project 4" [ref=e2616]
+          - option "Benchmark Project 5" [ref=e2617]
+          - option "Benchmark Project 6" [ref=e2618]
+          - option "Benchmark Project 7" [ref=e2619]
+          - option "Benchmark Project 8" [ref=e2620]
+          - option "Benchmark Project 9" [ref=e2621]
+          - option "Benchmark Project 10" [ref=e2622]
+          - option "Benchmark Project 11" [ref=e2623]
+          - option "Benchmark Project 12" [ref=e2624]
+          - option "Benchmark Project 13" [ref=e2625]
+          - option "Benchmark Project 14" [ref=e2626]
+          - option "Benchmark Project 15" [ref=e2627]
+          - option "Benchmark Project 16" [ref=e2628]
+          - option "Benchmark Project 17" [ref=e2629]
+          - option "Benchmark Project 18" [ref=e2630]
+          - option "Benchmark Project 19" [ref=e2631]
+      - button "收起侧边栏" [expanded=true, ref=e2577]
+      - generic
+        - searchbox "搜索" [ref=e2585]
+        - StaticText "⌘ K"
+      - navigation "主导航" [ref=e2578]
+        - link "总览" [ref=e2586]
+          - StaticText "总览"
+        - link "QA 工作台" [ref=e2587]
+          - StaticText "QA 工作台"
+        - link "项目管理" [ref=e2588]
+          - StaticText "项目管理"
+        - link "运行" [ref=e2589]
+          - StaticText "运行"
+        - link "质量洞察" [ref=e2590]
+          - StaticText "质量洞察"
+        - group
+          - DisclosureTriangle "平台" [expanded=false]
+            - StaticText "平台"
+      - link "系统设置" [ref=e2579]
+        - StaticText "系统设置"
+      - StaticText "中文"
+      - button "界面语言" [ref=e2580]
+        - StaticText "EN"
+    - main
+      - sectionheader
+        - StaticText "项目工作区 · PLATFORM STABILITY ACCEPTANCE 2026-10-12 0955"
+        - heading "用例分析" [level=1, ref=e2591]
+        - paragraph
+          - StaticText "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。"
+        - StaticText "Account sign-in and lockout recovery acceptance"
+        - button "展开上下文" [expanded=false, ref=e3080]
+          - StaticText "展开上下文"
+        - button "检查器" [expanded=false, ref=e2593]
+        - button "运行控制 · 运行通过 · BD2561" [expanded=false, ref=e3081]
+          - StaticText "运行控制"
+          - generic
+            - StaticText "运行通过 · BD2561"
+        - button "查看进度" [ref=e2971]
+      - navigation "工作阶段" [ref=e2581]
+        - button "需求 · 2 项需求" [ref=e2595]
+          - strong
+            - StaticText "需求"
+          - StaticText "2 项需求"
+        - button "发现 · 探索产品并对照需求与覆盖" [ref=e2596]
+          - strong
+            - StaticText "发现"
+          - StaticText "探索产品并对照需求与覆盖"
+        - button "用例 · 1 条用例" [ref=e2597]
+          - strong
+            - StaticText "用例"
+          - StaticText "1 条用例"
+        - button "自动化 · 0/1 已绑定" [ref=e2598]
+          - strong
+            - StaticText "自动化"
+          - StaticText "0/1 已绑定"
+        - button "结果 · 本次运行 PASSED · 已保存 1/1 条逐例结果" [ref=e2599]
+          - strong
+            - StaticText "结果"
+          - StaticText "本次运行 PASSED · 已保存 1/1 条逐例结果"
+      - region "工作内容" [ref=e2582]
+        - StaticText "当前阶段"
+        - heading "用例" [level=2, ref=e2644]
+        - StaticText "当前用例"
+        - strong
+          - StaticText "BD2561"
+        - StaticText "Valid and invalid sign-in feedback is correct"
+        - button "新建测试用例" [ref=e3082]
+        - StaticText "Valid and invalid sign-in feedback is correct"
+        - button "AI Copilot · 生成、审阅并验证此用例" [ref=e3083]
+          - StaticText "AI Copilot"
+        - button "AI 优化" [ref=e3084]
+        - button "AI 审查" [ref=e3085]
+        - StaticText "P1"
+        - combobox "自动化状态" [expanded=false, ref=e3086]: DRAFT
+          - MenuListPopup
+            - option "MANUAL" [ref=e3087]
+            - option "DRAFT" [selected, ref=e3088]
+            - option "AUTOMATED" [ref=e3089]
+        - StaticText "前置条件"
+        - StaticText "The acceptance sandbox contains the local sign-in example; no external account is used."
+        - StaticText "测试步骤（2）"
+        - list
+          - listitem [level=1]
+            - ListMarker "1. "
+            - StaticText "Submit valid credentials."
+          - listitem [level=1]
+            - ListMarker "2. "
+            - StaticText "Submit invalid credentials."
+        - StaticText "预期结果"
+        - StaticText "Valid sign-in opens the account state. Invalid sign-in displays rejection and creates no session."
+        - StaticText "标签"
+        - StaticText "acceptance"
+        - StaticText "sign-in"
+        - group
+          - DisclosureTriangle "自动化绑定与执行 tests/test_case_tc_f5e450bd2_90e8fc.py" [expanded=true]
+            - StaticText "自动化绑定与执行"
+            - StaticText "tests/test_case_tc_f5e450bd2_90e8fc.py"
+          - StaticText "自动化绑定与执行"
+          - button "编辑绑定" [ref=e3105]
+          - region "AI 执行过程" [ref=e3108]
+            - StaticText "AI 执行过程"
+            - StaticText "真实模型"
+            - StaticText " · openai-compatible · deepseek-flash"
+            - group
+              - DisclosureTriangle "收起时间线" [expanded=true]
+              - list
+                - listitem [level=1]
+                  - strong
+                    - StaticText "AI 运行已开始"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "读取工作区上下文"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "请求 AI Provider"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "AI 生成完成"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "验证回答"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "回答已验证"
+                - listitem [level=1]
+                  - strong
+                    - StaticText "AI 分析完成"
+          - StaticText "目标测试文件"
+          - StaticText "tests/test_case_tc_f5e450bd2_90e8fc.py"
+          - StaticText "Pytest 节点 ID"
+          - StaticText "tests/test_case_tc_f5e450bd2_90e8fc.py::test_step_valid_credentials_open_account_state"
+          - button "在自动化工作室打开" [ref=e3106]
+          - button "重新生成 AI 代码" [ref=e3107]
+          - StaticText "AI 生成的测试脚手架（tests/test_case_tc_f5e450bd2_90e8fc.py）"
+          - button "保存并绑定到工作区" [ref=e3109]
+          - StaticText "\"\"\"Executable pytest coverage for the case \"Valid and invalid sign-in feedback is correct\".\n\nEvidence used:\n- flows/login_flow.py: ``login(username, password) -> LoginResult`` is the\n  sign-in system under test. ``LoginResult`` exposes ``authenticated`` and\n  ``destination``.\n- tests/test_login.py: demo credentials (``demo_user`` / ``demo_password``),\n  the rejected password (``wrong_password``) and the expected destinations\n  (``/dashboard`` for accepted, ``/login`` for rejected).\n\nScope note: the project exposes sign-in only as the in-memory ``login`` flow.\nNo page objects, URLs, selectors or HTTP clients exist in the evidence, so the\ncase is driven through that flow directly and only its real attributes are\nasserted.\n\nThe case's \"creates no session\" clause is intentionally NOT asserted:\n``LoginResult`` exposes no session, cookie or token, and no session handle\nexists anywhere in the project context. The gap is recorded by the skipped\ntest at the bottom instead of an invented assertion.\n\"\"\"\n\nimport pytest\n\nfrom flows.login_flow import login\n\n# --- Test data, taken verbatim from tests/test_login.py ---\nVALID_USERNAME = \"demo_user\"\nVALID_PASSWORD = \"demo_password\"\nREJECTED_PASSWORD = \"wrong_password\"\n\nACCOUNT_DESTINATION = \"/dashboard\"\nREJECTION_DESTINATION = \"/login\"\n\n\n@pytest.fixture()\ndef sign_in():\n    \"\"\"Reusable entry point to the sign-in system under test.\"\"\"\n    return login\n\n\n@pytest.fixture()\ndef valid_credentials() -> tuple[str, str]:\n    \"\"\"Credentials the local example accepts.\"\"\"\n    return VALID_USERNAME, VALID_PASSWORD\n\n\n@pytest.fixture()\ndef rejected_credentials() -> tuple[str, str]:\n    \"\"\"A password the local example rejects for a known user.\"\"\"\n    return VALID_USERNAME, REJECTED_PASSWORD\n\n\ndef test_step_valid_credentials_open_account_state(\n    sign_in,\n    valid_credentials: tuple[str, str],\n) -> None:\n    \"\"\"Step 1: submit valid credentials -> the account state is opened.\"\"\"\n    username, password = valid_credentials\n\n    result = sign_in(username, password)\n\n    assert result.authenticated is True\n    assert result.destination == ACCOUNT_DESTINATION\n\n\ndef test_step_invalid_credentials_display_rejection(\n    sign_in,\n    rejected_credentials: tuple[str, str],\n) -> None:\n    \"\"\"Step 2: submit invalid credentials -> rejection feedback is displayed.\"\"\"\n    username, password = rejected_credentials\n\n    result = sign_in(username, password)\n\n    assert result.authenticated is False\n    assert result.destination == REJECTION_DESTINATION\n\n\ndef test_both_steps_in_order_report_independently(\n    sign_in,\n    valid_credentials: tuple[str, str],\n    rejected_credentials: tuple[str, str],\n) -> None:\n    \"\"\"Run the case's steps back-to-back: the acceptance must not mask the\n    rejection, and the two outcomes must not share a destination.\"\"\"\n    accepted = sign_in(*valid_credentials)\n    rejected = sign_in(*rejected_credentials)\n\n    assert accepted.authenticated is True\n    assert accepted.destination == ACCOUNT_DESTINATION\n\n    assert rejected.authenticated is False\n    assert rejected.destination == REJECTION_DESTINATION\n\n    assert accepted.destination != rejected.destination\n\n\ndef test_rejection_repeats_after_an_acceptance(\n    sign_in,\n    valid_credentials: tuple[str, str],\n    rejected_credentials: tuple[str, str],\n) -> None:\n    \"\"\"No leakage: a second invalid submission after a valid one is still\n    rejected and still lands on the rejection destination.\"\"\"\n    sign_in(*valid_credentials)\n\n    repeated_rejection = sign_in(*rejected_credentials)\n\n    assert repeated_rejection.authenticated is False\n    assert repeated_rejection.destination == REJECTION_DESTINATION\n\n\n@pytest.mark.skip(\n    reason=(\n        \"LoginResult exposes only 'authenticated' and 'destination', so the \"\n        \"expected outcome 'creates no session' cannot be asserted from the \"\n        \"available evidence; enable this test once the sign-in flow exposes \"\n        \"a session handle.\"\n    )\n)\ndef test_invalid_sign_in_creates_no_session(\n    sign_in,\n    rejected_credentials: tuple[str, str],\n) -> None:\n    username, password = rejected_credentials\n\n    result = sign_in(username, password)\n\n    # TODO: replace with a real session check once the system under test (or\n    # the acceptance sandbox) exposes the session this expected outcome refers\n    # to, e.g. ``assert result.session is None``.\n    assert result.authenticated is False\n"
+        - StaticText "质量洞察与执行历史"
+        - StaticText "稳定性：INSUFFICIENT_DATA（评分：0.00）"
+        - StaticText "通过 / 失败"
+        - generic
+          - StaticText "2 / 0"
+        - StaticText "平均耗时"
+        - generic
+          - StaticText "0.05s"
+        - StaticText "P95 耗时"
+        - generic
+          - StaticText "0.05s"
+        - StaticText "置信度"
+        - generic
+          - StaticText "20%"
+        - StaticText "最近执行"
+        - table
+          - rowgroup
+            - row
+              - columnheader "状态" [ref=e3100]
+              - columnheader "运行 ID" [ref=e3101]
+              - columnheader "耗时" [ref=e3102]
+              - columnheader "根因分类" [ref=e3103]
+              - columnheader "错误详情" [ref=e3104]
+          - row
+            - cell "PASSED" [ref=e3090]
+            - cell "#run_63ce" [ref=e3091]
+              - StaticText "#run_63ce"
+            - cell "0.05s" [ref=e3092]
+              - StaticText "0.05s"
+            - cell "—" [ref=e3093]
+            - cell "—" [ref=e3094]
+          - row
+            - cell "PASSED" [ref=e3095]
+            - cell "#run_5f5e" [ref=e3096]
+              - StaticText "#run_5f5e"
+            - cell "0.05s" [ref=e3097]
+              - StaticText "0.05s"
+            - cell "—" [ref=e3098]
+            - cell "—" [ref=e3099]
+  - generic
+    - alert
+    - alert

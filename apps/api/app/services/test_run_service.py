@@ -24,11 +24,13 @@ from project_model.models import (
     TestRun,
     TestRunCreate,
 )
+from qa_core.execution.failure_snapshot import capture_failure_snapshot_event
 from qa_core.execution.live_browser_plugin import write_live_browser_plugin
 from qa_core.execution.models import SuiteExecutionResult, TestExecutionStatus
 from qa_core.execution.pytest_runner import PytestRunner
 from qa_core.execution.runner_backend import RunnerTriggerRequest
 from qa_core.failure.redactor import SensitiveRedactor
+from qa_core.failure.snapshot_crypto import FailureSnapshotCipher
 from qa_core.failure.traceback_frames import last_user_code_frame
 from qa_core.onboarding.contract import venv_interpreter
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
@@ -536,8 +538,18 @@ class TestRunService:
                 if browser_config.proxy_bypass:
                     browser_proxy_env["BROWSER_PROXY_BYPASS"] = browser_config.proxy_bypass
 
+                failure_snapshot_key = FailureSnapshotCipher.generate_ephemeral_key()
+                failure_snapshots = []
+
                 async def on_browser_event(event: dict) -> None:
                     await self._record_browser_event(run_id, event)
+                    capture = capture_failure_snapshot_event(
+                        event,
+                        ephemeral_key=failure_snapshot_key,
+                        master_key=get_config().app.secret_key.get_secret_value(),
+                    )
+                    if capture is not None:
+                        failure_snapshots.append(capture)
 
                 project_environment = dict(local_pytest_options.environment) if local_pytest_options else {}
 
@@ -573,6 +585,8 @@ class TestRunService:
                             **browser_proxy_env,
                             **evidence_environment,
                             "QA_ARTIFACT_DIR": str(artifact_dir),
+                            "QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY": failure_snapshot_key,
+                            "QA_FAILURE_SNAPSHOT_TTL_SECONDS": str(failure_policy.storage_state_ttl_seconds),
                             **({"QA_PLATFORM_LIVE_BROWSER_LOG": str(live_browser_log)} if live_browser_enabled else {}),
                             "PYTHONPATH": plugin_pythonpath,
                         },
@@ -593,6 +607,7 @@ class TestRunService:
                         timeout_sec=execution_timeout,
                     )
                 suite_result.artifact_paths = [str(path) for path in artifact_dir.rglob("*") if path.is_file()]
+                suite_result.failure_snapshots = failure_snapshots
 
                 await self.persist_suite_result(
                     run_id, suite_result, workspace_id=data.workspace_id, workspace_dir=ws_dir
@@ -766,6 +781,18 @@ class TestRunService:
                         "duration_ms": res.duration_ms,
                     },
                 )
+
+            for capture in suite_result.failure_snapshots:
+                execution = executions_by_nodeid.get(capture.nodeid)
+                if execution is None or execution.status != RunStatus.FAILED.value:
+                    continue
+                await browser_repo.save_failure_snapshot(
+                    run_id=run_id,
+                    execution_id=execution.id,
+                    capture=capture,
+                    storage_state_ttl_seconds=get_config().failure.storage_state_ttl_seconds,
+                )
+            await repositories.commit()
 
             finish_time = utc_now()
             final_status = self._verdict(suite_result.exit_code, len(suite_result.results), failed_count)
@@ -1231,6 +1258,8 @@ class TestRunService:
                 safe_evidence = (
                     SensitiveRedactor.redact_value(page_evidence) if isinstance(page_evidence, dict) else None
                 )
+                if safe_evidence is not None:
+                    safe_evidence.pop("failure_snapshot", None)
                 row = await repositories.browser_sessions.record_lifecycle_event(
                     run_id=run_id,
                     session_id=session_id,

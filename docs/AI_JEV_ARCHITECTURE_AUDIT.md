@@ -79,7 +79,7 @@ Settings 现在区分 Connectivity 和 Runtime。`POST /decision/runtime-check` 
 ## 未覆盖与剩余风险
 
 - Verification Browser 目前根据失败记录中的 URL 新开浏览器，没有恢复原 browser context、cookies、storage state、环境测试数据，也没有自动重放到失败 step 前。受登录保护的真实应用可能无法恢复到失败页面；当前 live fixture 是公开的 data URL 页面。
-- 后端以 `FailureWorkflowService` stage trace、analysis result 和 repair proposal 字段持久化流程；还没有独立的 LocatorRepair 数据表或统一的强类型状态转换器。
+- （截至 2026-10-08）后端以 `FailureWorkflowService` stage trace、analysis result 和 repair proposal 字段持久化流程；后续 LocatorRepair 持久化/状态机已在 2026-10-12 follow-up 中补齐。
 - 真实 API-only 与浏览器 UI Golden 在本轮最终修复后均通过；普通前端回归为 97 tests passed，TypeScript、ESLint、production build 均通过。最终完整后端回归为 559 passed、6 skipped、45 warnings。PostgreSQL lane 因本机缺少运行中的数据库而 BLOCKED。
 - 其他已接线场景本次只有代码路径/对应自动化测试审计，没有逐一使用真实外部 Jev 做验收。
 - 现有 invocation telemetry 有 provider、model、decision、confidence、fallback 与状态，但尚未形成 Full Repair Success Rate 等修复漏斗指标/仪表盘。
@@ -144,7 +144,7 @@ python -m pytest apps/api/tests/test_live_locator_repair_acceptance.py -q
 1. `TaskBrowserExecutor` 仍约 3,000 行，包含观察、规划、安全、决策、执行和验证职责；`TaskExecutionOrchestrator` 仍约 700 行并保留兼容转发。
 2. BrowserRuntime 暴露的 `Page`/locator 兼容面仍可见 Playwright 类型；Live Browser 的 worker/session 与单进程 BrowserRuntime 生命周期尚未完全统一。
 3. `RuntimeProjection` 是只读查询层，但自身持有 ORM Session/SQL；依靠明确白名单维持边界。
-4. Failure workflow 的部分 GET/read reconciliation 会写状态/事件，需继续梳理幂等和并发语义。
+4. **已修复（2026-10-12）**：Failure workflow GET/read reconciliation 曾写状态/事件；现改为只读投影，状态同步转到写操作及 verification monitor。详见下方 follow-up。
 5. `failureWorkspaceModel` 的分类别名归一、失败 locator/错误摘要解析和相关失败分组属于展示启发式；它们不授予 Repair 动作，也不改变后端 workflow 状态。
 6. Onboarding 重复 POST 尚无幂等 key；增加幂等性需为项目、测试入口、环境和参数建立稳定 fingerprint。
 7. 缺少“强制 Jev + 预算耗尽 → 无浏览器动作”的组合回归测试；现有测试分别覆盖预算拒绝与 forced-Jev fail-closed。
@@ -153,6 +153,14 @@ python -m pytest apps/api/tests/test_live_locator_repair_acceptance.py -q
 
 - 移除旧 `browser_proxy.py`，以 BrowserRuntime port/adapters 作为浏览器生命周期入口。
 - TaskRuntime 不再将职责集中在旧的巨型实现中；运行入口收敛到拆分后的应用服务和共享 TestRunService。
+
+### 2026-10-12 P2 #4 Follow-up
+
+- 新增 `locator_repairs` 持久化表、受约束的 `FailureRepairState` 字段及 `LocatorRepairStateMachine`，非法转换会拒绝且不会更改持久状态。
+- Alembic revision `0010_locator_repair_state_machine` 从 legacy analysis result/events 回填 LocatorRepair；降级不会删除旧 analysis/event 数据，重新升级可再次回填。
+- `GET /api/failures/{id}/analyses` 与 `GET /api/failures/{id}/repair-workflow` 只读取并投影验证状态。过期 snapshot 在 GET 中仅返回 EXPIRED 且不返回密文；清理转为显式写路径。
+- 新增项目范围的 `GET /api/quality/repair-funnel?project_id=...`，返回各状态计数、阻断原因分布和按 repair ID 关联的 AI invocation totals/breakdowns。旧 invocation 没有可靠 repair-level 关联，不进行猜测式回填；新 workflow invocation 通过上下文显式关联。
+- 回归覆盖非法转换、并发 analysis claim、GET 无写入、快照 TTL 只读、迁移升降级/旧数据兼容，以及 funnel 与 invocation 行数对账。
 
 ### 最终判断
 

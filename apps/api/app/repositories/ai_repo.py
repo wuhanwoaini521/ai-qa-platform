@@ -8,6 +8,7 @@ from sqlalchemy import case, desc, func, select
 
 from app.persistence import database
 from app.persistence.models import AIInvocationORM, utc_now
+from app.services.locator_repair_context import current_locator_repair_id
 
 
 class AIRepository:
@@ -38,9 +39,11 @@ class AIRepository:
         decision_name: str | None = None,
         decision_choice: str | None = None,
         decision_confidence: float | None = None,
+        decision_value: float | None = None,
         request_id: str | None = None,
         task_id: str | None = None,
         run_id: str | None = None,
+        locator_repair_id: str | None = None,
     ) -> AIInvocationORM:
         async with self.session_factory() as session:
             inv = AIInvocationORM(
@@ -48,6 +51,7 @@ class AIRepository:
                 request_id=request_id,
                 task_id=task_id,
                 run_id=run_id,
+                locator_repair_id=locator_repair_id or current_locator_repair_id(),
                 task=task,
                 provider=provider,
                 model=model,
@@ -66,6 +70,7 @@ class AIRepository:
                 decision_name=decision_name,
                 decision_choice=decision_choice,
                 decision_confidence=decision_confidence,
+                decision_value=decision_value,
             )
             session.add(inv)
             await session.commit()
