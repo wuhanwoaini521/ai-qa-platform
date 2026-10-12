@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Sparkles, Workflow, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useProjectScope, useRouteProjectScope } from '../../app/ProjectScope';
+import { buildProjectDisplayNames } from '../../app/projectSelectionModel';
 import {
   buildWorkspaceHref,
   readWorkspaceContext,
@@ -561,6 +562,7 @@ export function WorkspacePage() {
     : currentRun?.requested_by ?? (stage === 'failure' ? currentRun?.id : activeRunId);
   const analysisFailed = !analysisRunning && ['FAILED', 'BLOCKED'].includes(latestAnalysisRecord?.status ?? '');
   const project = projects.find((item: Project) => item.id === projectId);
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   const completedGoalResult = stage === 'result'
     && task?.type === 'QA_GOAL'
     && !runtimeActive(runtime.snapshot?.status ?? task.status);
@@ -852,7 +854,7 @@ export function WorkspacePage() {
       ? t('result.analysisTitle')
       : t(`pageHeadings.${view}`);
   const workspaceEyebrow = projectId
-    ? `${t('projectWorkspace')} · ${project?.name ?? projectId}`
+    ? `${t('projectWorkspace')} · ${projectDisplayNames.get(projectId) ?? project?.name ?? projectId}`
     : t('projectWorkspace');
 
   return (
@@ -942,7 +944,7 @@ export function WorkspacePage() {
         <>
         <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${isContextStacked ? ' is-context-stacked' : ''}${showInspector ? ' has-inspector' : ''}${isInspectorModal ? ' is-inspector-modal' : ''}`}>
           <aside id="workspace-context-panel" className="workspace-context-panel" aria-label={t('context.title')}>
-            <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{project?.name ?? projectId}</small></div>
+            <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div>
             {['requirement', 'discover'].includes(stage) && <section className="workspace-context-group">
               <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3></div>
               <div className="workspace-context-list">

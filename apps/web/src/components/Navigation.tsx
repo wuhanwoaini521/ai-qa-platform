@@ -23,6 +23,7 @@ import {
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
 import { buildWorkspaceHref } from '../app/workspaceContext';
+import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import { withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
 
@@ -78,6 +79,7 @@ export const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
+  const projectDisplayNames = buildProjectDisplayNames(projects);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -235,7 +237,7 @@ export const Navigation: React.FC = () => {
           QA
         </div>
         {projects.length > 0 && (
-          <div className="sidebar-project-context" title={projects.find((project) => project.id === selectedProjectId)?.name ?? t('common:allProjects')}>
+          <div className="sidebar-project-context" title={projectDisplayNames.get(selectedProjectId ?? '') ?? t('common:allProjects')}>
             <FolderGit2 className="sidebar-project-icon" size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
             <select
               className="sidebar-project-select"
@@ -245,7 +247,7 @@ export const Navigation: React.FC = () => {
             >
               {!projectScopedRoute && <option value="">{t('common:allProjects')}</option>}
               {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
+                <option key={project.id} value={project.id}>{projectDisplayNames.get(project.id) ?? project.name}</option>
               ))}
             </select>
           </div>

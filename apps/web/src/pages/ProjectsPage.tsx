@@ -5,6 +5,7 @@ import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -40,6 +41,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     bootstrap_workspace: true,
   });
   const [submitting, setSubmitting] = useState(false);
+  const projectDisplayNames = buildProjectDisplayNames(projects);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -144,7 +146,26 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               </button>
             </div>
           ) : (
-            <table className="data-table">
+            <div
+              className="table-responsive"
+              role="region"
+              aria-label={t('titles:projects')}
+              aria-description={t('tableScrollHint')}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                const maxScroll = event.currentTarget.scrollWidth - event.currentTarget.clientWidth;
+                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                  event.preventDefault();
+                  event.currentTarget.scrollLeft = Math.max(0, Math.min(maxScroll, event.currentTarget.scrollLeft + (event.key === 'ArrowRight' ? 80 : -80)));
+                } else if (event.key === 'Home' || event.key === 'End') {
+                  event.preventDefault();
+                  event.currentTarget.scrollLeft = event.key === 'Home' ? 0 : maxScroll;
+                }
+              }}
+            >
+              <p className="projects-table-scroll-hint">{t('tableSwipeHint')}</p>
+              <table className="data-table">
               <thead>
                 <tr>
                   <th>{t('columnName')}</th>
@@ -159,7 +180,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 {projects.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <Link to={`/projects/${p.id}`} onClick={()=>onSelectProject(p.id)} style={{ fontWeight: 600, color: 'var(--text-main)' }}>{p.name}</Link>
+                      <Link to={`/projects/${p.id}`} onClick={()=>onSelectProject(p.id)} style={{ fontWeight: 600, color: 'var(--text-main)' }}>{projectDisplayNames.get(p.id) ?? p.name}</Link>
                       {p.description && (
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                           {p.description}
@@ -203,7 +224,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
         </div>
       </div>

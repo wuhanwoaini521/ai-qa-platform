@@ -2851,6 +2851,11 @@ button, input, select, textarea {
   border-radius: inherit;
 }
 
+.projects-table-scroll-hint { display: none; margin: 0; padding: 8px 12px 0; color: var(--ink-muted); font-size: 11px; }
+@media (max-width: 768px) {
+  .projects-table-scroll-hint { display: block; }
+}
+
 .data-table {
   min-width: 680px;
 }

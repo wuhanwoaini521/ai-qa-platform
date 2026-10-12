@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { RuntimeDetail } from '../features/runtime/RuntimeDetail';
 import { api } from '../api/client';
+import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import { AgentTask, Project } from '../types';
 
 const TERMINAL = new Set(['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED']);
@@ -95,6 +96,7 @@ export const TasksPage: React.FC<{
     return !TERMINAL.has(task.status) && task.status !== 'PAUSED' && !needsApproval(task);
   };
   const visibleTasks = tasks.filter((task) => matchesFilter(task, filter));
+  const projectDisplayNames = buildProjectDisplayNames(projects);
 
   return (
     <div className="page-container tasks-page">
@@ -107,7 +109,7 @@ export const TasksPage: React.FC<{
           <label className="task-navigator-project">{t('project')}
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
               <option value="">{t('allProjects')}</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{projectDisplayNames.get(p.id) ?? p.name}</option>)}
             </select>
           </label>
           <div className="task-navigator-filters" role="group" aria-label={t('statusFilter')}>
