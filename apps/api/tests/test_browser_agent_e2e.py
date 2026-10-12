@@ -10,17 +10,18 @@ from uuid import uuid4
 import pytest
 from app.api.tasks import task_runtime_service
 from app.main import app as fastapi_app
-from app.persistence.models import TaskORM
+from app.persistence.models import TaskEventORM, TaskORM
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.decision_service import DecisionService
 from app.services.task_browser_executor import TaskBrowserExecutor
 from app.services.task_errors import TaskBlocked
 from app.services.task_execution_orchestrator import TaskExecutionOrchestrator
 from app.services.task_runtime_service import TaskRuntimeService
-from app.settings import settings
+from app.settings import get_config, settings
 from project_model.models import DecisionResult
 from qa_core.ai.models import AICompletionResponse, BrowserActionCandidate, BrowserAgentPlan
 from qa_core.ai.registry import AIProviderRegistry
+from sqlalchemy import select
 
 
 class SearchSiteHandler(BaseHTTPRequestHandler):
@@ -69,9 +70,11 @@ class FixturePlanner:
 
     def __init__(self):
         self.calls = 0
+        self.run_ids = []
 
     async def complete(self, request):
         self.calls += 1
+        self.run_ids.append(request.run_id)
         prompt = json.loads(request.prompt)
         page = prompt["current_page"]
         path = urlparse(page["url"]).path
@@ -246,10 +249,12 @@ async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(test
     planner = FixturePlanner()
     monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: planner)
     decisions = []
+    decision_run_ids = []
 
-    async def choose_with_fixture_jev(_service, request, **_kwargs):
+    async def choose_with_fixture_jev(_service, request, **kwargs):
         choice = next(option.key for option in request.options if option.key != "abstain")
         decisions.append(choice)
+        decision_run_ids.append(kwargs.get("run_id"))
         return DecisionResult(
             choice=choice,
             provider="jev",
@@ -291,6 +296,209 @@ async def test_browser_agent_e2e_searches_and_verifies_with_real_playwright(test
         assert result["metrics"]["jev_decisions"] == 3
         assert result["metrics"]["jev_correct"] == 3
         assert len(decisions) == 3
+        assert len(set(planner.run_ids)) == 3
+        assert planner.run_ids == decision_run_ids
+        assert [item["correlation_id"] for item in result["decision_samples"]] == planner.run_ids
+        assert [item["correlation_id"] for item in result["actions"]] == planner.run_ids
+        assert result["history_total"] == 3
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_browser_agent_fast_strategy_keeps_ai_and_skips_optional_jev(test_db_session, tmp_path, monkeypatch):
+    if get_config().agent.browser.require_jev:
+        pytest.skip("Effective policy requires Jev for Fast strategy too.")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
+    planner = FixturePlanner()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: planner)
+
+    async def jev_must_not_be_called(*_args, **_kwargs):
+        pytest.fail("Fast strategy should use AI ranking unless policy explicitly requires Jev.")
+
+    monkeypatch.setattr(DecisionService, "choose", jev_must_not_be_called)
+    task = TaskORM(
+        id=uuid4().hex,
+        type="EXPLORE_PAGE",
+        goal="Search for Selenium",
+        owner_id=uuid4().hex,
+        inputs={
+            "url": f"http://127.0.0.1:{server.server_port}/",
+            "strategy": "fast",
+            "max_browser_actions": 4,
+            "observable_text_criteria": ["Results for Selenium"],
+        },
+    )
+    try:
+        async with test_db_session() as session:
+            session.add(task)
+            await session.commit()
+
+        result = await TaskRuntimeService(
+            repository_scope=TaskRepositoryScopeFactory()
+        ).execution.browser_executor._browser_agent(task, {})
+
+        assert result["verified"] is True
+        assert result["strategy"] == "fast"
+        assert result["kind"] == "fast_browser_agent"
+        assert result["metrics"]["ai_calls"] == 2
+        assert result["metrics"]["jev_decisions"] == 0
+        assert [item["decision_provider"] for item in result["actions"]] == [
+            "fast-single-candidate",
+            "fast-single-candidate",
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_browser_agent_replans_after_same_url_dom_change_before_dispatch(test_db_session, tmp_path, monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
+
+    planner = FixturePlanner()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: planner)
+    decisions = []
+
+    async def choose_with_fixture_jev(_service, request, **_kwargs):
+        choice = next(option.key for option in request.options if option.key != "abstain")
+        decisions.append(choice)
+        return DecisionResult(
+            choice=choice,
+            provider="jev",
+            model="deterministic-jev-fixture",
+            confidence=0.99,
+            probabilities={choice: 0.99},
+        )
+
+    monkeypatch.setattr(DecisionService, "choose", choose_with_fixture_jev)
+    original_observe = TaskBrowserExecutor._observe_browser_page
+    observations = 0
+
+    async def mutate_after_first_observation(self, page, network, *, waited_loading_states=None):
+        nonlocal observations
+        observed = await original_observe(self, page, network, waited_loading_states=waited_loading_states)
+        observations += 1
+        if observations == 1:
+            await page.locator('input[type="search"]').evaluate(
+                "element => { element.placeholder = 'Updated search'; }"
+            )
+        return observed
+
+    monkeypatch.setattr(TaskBrowserExecutor, "_observe_browser_page", mutate_after_first_observation)
+    task = TaskORM(
+        id=uuid4().hex,
+        type="EXPLORE_PAGE",
+        goal="Search for Selenium and open the Selenium site",
+        owner_id=uuid4().hex,
+        inputs={
+            "url": f"http://127.0.0.1:{server.server_port}/",
+            "max_browser_actions": 5,
+            "max_recovery_attempts": 2,
+            "require_jev_decisions": True,
+            "observable_text_criteria": ["Selenium WebDriver documentation"],
+        },
+    )
+    try:
+        async with test_db_session() as session:
+            session.add(task)
+            await session.commit()
+
+        result = await TaskRuntimeService(
+            repository_scope=TaskRepositoryScopeFactory()
+        ).execution.browser_executor._browser_agent(task, {})
+
+        assert result["verified"] is True
+        assert result["metrics"]["browser_actions"] == 3
+        assert result["history_total"] == 3
+        assert len(result["actions"]) == 3
+        assert len(planner.run_ids) == len(decisions) == 4
+        assert result["decision_samples"][0]["action_status"] == "blocked_stale_target"
+        assert len(result["failure_incidents"]) == 1
+        incident = result["failure_incidents"][0]
+        assert incident["category"] == "LOCATOR_CHANGED"
+        assert incident["status"] == "RECOVERED"
+        assert incident["retryable"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_browser_agent_records_unresolved_action_incident_with_evidence(test_db_session, tmp_path, monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SearchSiteHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path)
+    planner = FixturePlanner()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: planner)
+
+    async def choose_with_fixture_jev(_service, request, **_kwargs):
+        choice = next(option.key for option in request.options if option.key != "abstain")
+        return DecisionResult(
+            choice=choice,
+            provider="jev",
+            model="deterministic-jev-fixture",
+            confidence=0.99,
+            probabilities={choice: 0.99},
+        )
+
+    async def fail_browser_action(self, *_args, **_kwargs):
+        raise TimeoutError("Timeout 10000ms exceeded")
+
+    monkeypatch.setattr(DecisionService, "choose", choose_with_fixture_jev)
+    monkeypatch.setattr(TaskBrowserExecutor, "_execute_browser_candidate", fail_browser_action)
+    task = TaskORM(
+        id=uuid4().hex,
+        type="EXPLORE_PAGE",
+        goal="Search for Selenium and open the Selenium site",
+        owner_id=uuid4().hex,
+        inputs={
+            "url": f"http://127.0.0.1:{server.server_port}/",
+            "max_browser_actions": 5,
+            "max_recovery_attempts": 0,
+            "require_jev_decisions": True,
+        },
+    )
+    try:
+        async with test_db_session() as session:
+            session.add(task)
+            await session.commit()
+
+        with pytest.raises(TaskBlocked) as blocked:
+            await TaskRuntimeService(
+                repository_scope=TaskRepositoryScopeFactory()
+            ).execution.browser_executor._browser_agent(task, {})
+
+        incident = blocked.value.details["failure_incidents"][0]
+        assert incident["category"] == "TIMING_ISSUE"
+        assert incident["status"] == "UNRESOLVED"
+        assert incident["retryable"] is False
+        assert incident["evidence_artifact_id"]
+        async with test_db_session() as session:
+            persisted_task = await session.get(TaskORM, task.id)
+            event = await session.scalar(
+                select(TaskEventORM).where(
+                    TaskEventORM.task_id == task.id,
+                    TaskEventORM.type == "browser.execution_incident",
+                )
+            )
+        assert persisted_task is not None
+        persisted_agent = persisted_task.context["browser_agent"]
+        assert persisted_agent["history"][-1]["correlation_id"] == incident["correlation_id"]
+        assert event is not None
+        assert event.payload["id"] == incident["id"]
+        assert event.payload["correlation_id"] == incident["correlation_id"]
     finally:
         server.shutdown()
         server.server_close()
@@ -367,6 +575,11 @@ async def test_browser_agent_api_e2e_persists_jev_decisions_and_browser_evidence
         evidence_types = {item["type"] for item in body["evidence"]}
         assert {"AccessibilityTree", "DOMSnapshot"} <= evidence_types
         event_types = {item["type"] for item in body["events"]}
+        decision_events = [item for item in body["events"] if item["type"] == "decision.created"]
+        action_events = [item for item in body["events"] if item["type"] == "browser.action_completed"]
+        assert {item["payload"]["correlation_id"] for item in decision_events} == {
+            item["payload"]["correlation_id"] for item in action_events
+        }
         assert {
             "decision.created",
             "browser.action_started",

@@ -3840,6 +3840,8 @@ button, input, select, textarea {
 .recorder-natural-flow-actions small { margin: 0; line-height: 1.5; }
 .recorder-natural-flow-actions > div { display: flex; flex-wrap: wrap; gap: 7px; }
 .recorder-natural-flow-actions small { color: var(--ui-success-strong, var(--ui-primary-strong)); }
+.recorder-strategy-control { display: inline-flex; align-items: center; gap: 6px; color: var(--ui-ink-soft); font-size: 11px; font-weight: 650; }
+.recorder-strategy-control select { min-height: 34px; padding: 5px 9px; border: 1px solid var(--ui-line); border-radius: var(--ui-r-xs); background: var(--ui-surface-raised); color: var(--ui-ink); font: inherit; }
 
 .recorder-urlbar {
   display: flex;

@@ -18,7 +18,7 @@ import {
 
 type StepAction = RecorderStep['action'];
 type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][]; selection?: { selected_candidate?: RecorderStep['locator']; summary?: RecorderStep['locator_decision'] } | null } | null; message?: string };
-type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; waitingForNavigation: boolean; trustedDomains: string[]; minimumFrameRevision?: number };
+type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; strategy: 'fast' | 'agent'; waitingForNavigation: boolean; trustedDomains: string[]; minimumFrameRevision?: number };
 
 const actions: StepAction[] = ['navigate','back','scroll','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
 const labels: Record<StepAction, string> = { navigate:'打开页面', back:'返回上一页', scroll:'滚动页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
@@ -69,6 +69,7 @@ export const RecorderPage: React.FC<{
   const [error, setError] = useState('');
   const [caseName, setCaseName] = useState('录制的浏览器用例');
   const [requirement, setRequirement] = useState('');
+  const [browserStrategy, setBrowserStrategy] = useState<'fast' | 'agent'>('agent');
   const [trustedDomainsText, setTrustedDomainsText] = useState('');
   const [filePath, setFilePath] = useState('tests/test_recorded_case.py');
   const [testName, setTestName] = useState('test_recorded_case');
@@ -394,6 +395,7 @@ export const RecorderPage: React.FC<{
   const startNaturalLanguageFlow = async () => {
     const goal = requirement.trim();
     const trustedDomains = normalizeTrustedDomains(trustedDomainsText);
+    const strategy = browserStrategy;
     if (!projectId) { setError('请先创建或选择项目'); return; }
     if (goal.length < 8) { setError('请用自然语言描述完整操作流程'); return; }
     const currentPageUrl = frame?.url && frame.url !== 'about:blank' ? frame.url : url;
@@ -416,13 +418,13 @@ export const RecorderPage: React.FC<{
           setError(recorderErrorMessage(created.navigation_error, created.requested_url));
           return;
         }
-        setPendingAgentGoal({ goal, sessionId: created.id, startUrl, waitingForNavigation: false, trustedDomains });
+        setPendingAgentGoal({ goal, sessionId: created.id, startUrl, strategy, waitingForNavigation: false, trustedDomains });
         return;
       }
       if (!isConnected) throw new Error('浏览器连接尚未就绪，请稍后重试。');
       const currentUrl = normalizedHttpUrl(currentPageUrl);
       const needsNavigation = currentUrl !== startUrl;
-      setPendingAgentGoal({ goal, sessionId, startUrl, waitingForNavigation: needsNavigation, trustedDomains });
+      setPendingAgentGoal({ goal, sessionId, startUrl, strategy, waitingForNavigation: needsNavigation, trustedDomains });
       if (needsNavigation) navigateBrowser(startUrl);
     } catch (cause) {
       setPendingAgentGoal(null);
@@ -490,7 +492,7 @@ export const RecorderPage: React.FC<{
   const canGenerateAgentScript = aiTask.task?.type === 'EXPLORE_PAGE'
     && aiTask.task.status === 'COMPLETED'
     && browserAgentOutput?.verified === true
-    && browserAgentOutput.kind === 'ai_jev_browser_agent'
+    && ['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(browserAgentOutput.kind))
     && Array.isArray(browserAgentOutput.actions);
   const agentTaskRunning = Boolean(aiTask.task && !['COMPLETED','FAILED','BLOCKED','CANCELLED'].includes(aiTask.task.status));
   const locatorDecisionMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'decision_completed')?.metadata ?? {};
@@ -518,7 +520,8 @@ export const RecorderPage: React.FC<{
       inputs: {
         url: pending.startUrl,
         recorder_session_id: pending.sessionId,
-        require_jev_decisions: true,
+        strategy: pending.strategy,
+        require_jev_decisions: pending.strategy === 'agent',
         ...(pending.trustedDomains.length ? { trusted_domains: pending.trustedDomains } : {}),
       },
     });
@@ -611,8 +614,17 @@ export const RecorderPage: React.FC<{
           </details>
         </div>
         <div className="recorder-natural-flow-actions">
-          <p>AI 根据实时页面提出候选；多个安全动作由 Jev 选择，唯一安全候选直接执行。脚本只收录已执行且可复用的操作，页面动作必须有验证过的定位器，并附加页面证据断言。</p>
+          <p>{browserStrategy === 'agent'
+            ? 'Agent 由 AI 根据实时页面提出候选，Jev 在多种安全动作之间选择；所有动作都会重新验证并检查页面结果。'
+            : 'Fast 由 AI 提出候选并优先按 AI 排序选择；除非平台策略要求，否则跳过 Jev。所有动作仍会重新验证目标并检查页面结果。'} 脚本只收录已执行且可复用的操作，并附加页面证据断言。</p>
           <div>
+            <label className="recorder-strategy-control">
+              <span>策略</span>
+              <select aria-label="浏览执行策略" value={browserStrategy} disabled={Boolean(pendingAgentGoal || aiTask.busy || agentTaskRunning)} onChange={(event) => setBrowserStrategy(event.target.value as 'fast' | 'agent')}>
+                <option value="agent">Agent · AI + Jev</option>
+                <option value="fast">Fast · AI 优先</option>
+              </select>
+            </label>
             <button
               type="button"
               className="btn btn-primary"
@@ -620,7 +632,9 @@ export const RecorderPage: React.FC<{
               onClick={() => void startNaturalLanguageFlow()}
             >
               <CirclePlay size={15} aria-hidden="true" />
-              {pendingAgentGoal || aiTask.busy || agentTaskRunning ? 'AI + Jev 正在执行…' : 'AI + Jev 执行流程'}
+              {pendingAgentGoal || aiTask.busy || agentTaskRunning
+                ? `${browserStrategy === 'agent' ? 'Agent' : 'Fast'} 正在执行…`
+                : browserStrategy === 'agent' ? 'AI + Jev 执行流程' : 'Fast 快速执行'}
             </button>
             {canGenerateAgentScript && (
               <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void generateFromAgent()}>

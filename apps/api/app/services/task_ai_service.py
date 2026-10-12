@@ -40,11 +40,18 @@ class TaskAIService:
             await repositories.commit()
             return True
 
-    async def complete_browser_action_candidates(self, task: TaskExecutionRecord, prompt_data: dict[str, Any]):
+    async def complete_browser_action_candidates(
+        self,
+        task: TaskExecutionRecord,
+        prompt_data: dict[str, Any],
+        *,
+        run_id: str | None = None,
+    ):
         provider = AIProviderRegistry.get_provider()
         response = await provider.complete(
             AICompletionRequest(
                 task_id=task.id,
+                run_id=run_id,
                 prompt=json.dumps(prompt_data, ensure_ascii=False, separators=(",", ":")),
                 system_instruction=(
                     "You are a cautious web QA agent. Use the user goal and supplied current-page observation; current observation is authoritative for page state and targets. "

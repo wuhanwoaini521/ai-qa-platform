@@ -14,6 +14,8 @@ from project_model.task_models import EvidenceType, TaskStatus
 from qa_core.ai.browser_safety import classify_browser_action
 from qa_core.ai.models import BrowserActionCandidate, BrowserAgentPlan
 from qa_core.ai.trace import make_trace_event
+from qa_core.failure.classifier import FailureClassifier
+from qa_core.failure.models import ExecutionIncident, FailureCategory
 from qa_core.failure.redactor import SensitiveRedactor
 
 from app.domain.task_records import TaskRecord as TaskExecutionRecord
@@ -24,10 +26,165 @@ from app.services.task_execution_ports import TaskExecutionPorts
 from app.settings import get_config
 
 logger = logging.getLogger("app.task_browser_executor")
+BROWSER_HISTORY_WINDOW = 20
+BROWSER_HISTORY_CHUNK_SIZE = 10
+BROWSER_HISTORY_MAX_CHUNKS = 50
 
 
 class TaskBrowserExecutor:
     """Own browser task policy, page exploration and browser action execution."""
+
+    @staticmethod
+    def _archive_browser_history(state: dict[str, Any]) -> list[dict[str, Any]]:
+        """Keep a short live window and compact old actions into bounded replay chunks."""
+        history = state.setdefault("history", [])
+        archive = state.setdefault("history_archive", [])
+        created: list[dict[str, Any]] = []
+        while len(history) > BROWSER_HISTORY_WINDOW:
+            old = history[:BROWSER_HISTORY_CHUNK_SIZE]
+            del history[:BROWSER_HISTORY_CHUNK_SIZE]
+            start = int(old[0].get("sequence") or 0)
+            end = int(old[-1].get("sequence") or start + len(old) - 1)
+            entries = [
+                SensitiveRedactor.redact_dict(
+                    {
+                        key: item.get(key)
+                        for key in (
+                            "sequence",
+                            "correlation_id",
+                            "action",
+                            "target",
+                            "target_tag",
+                            "value",
+                            "locator",
+                            "locator_verified",
+                            "candidate_id",
+                            "decision_provider",
+                            "decision_model",
+                            "decision_confidence",
+                            "candidate_count",
+                            "status",
+                            "failure_category",
+                            "expected_effect",
+                            "url_before",
+                            "url_after",
+                            "state_hash_before",
+                            "state_hash_after",
+                            "screenshot_artifact_id",
+                            "incident_id",
+                        )
+                        if item.get(key) is not None
+                    }
+                )
+                for item in old
+            ]
+            chunk = {
+                "start_sequence": start,
+                "end_sequence": end,
+                "actions": entries,
+            }
+            archive.append(chunk)
+            created.append(chunk)
+        if len(archive) > BROWSER_HISTORY_MAX_CHUNKS:
+            del archive[: len(archive) - BROWSER_HISTORY_MAX_CHUNKS]
+        return created
+
+    @staticmethod
+    def _search_browser_history(archive: list[dict[str, Any]], query: str, *, limit: int = 5) -> list[dict[str, Any]]:
+        """Retrieve compact historical actions relevant to the active goal/subgoal."""
+        actions = [item for chunk in archive for item in chunk.get("actions", [])]
+        if not actions:
+            return []
+        terms = [term for term in re.findall(r"[a-z0-9_-]{3,}|[\u4e00-\u9fff]{2,}", query.casefold())]
+        ranked = []
+        for index, item in enumerate(actions):
+            haystack = " ".join(
+                str(item.get(key) or "")
+                for key in ("action", "target", "status", "expected_effect", "url_before", "url_after")
+            ).casefold()
+            score = sum(term in haystack for term in terms)
+            if score:
+                ranked.append((score, index, item))
+        if ranked:
+            ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
+            return [item for _, _, item in ranked[:limit]]
+        return actions[-limit:]
+
+    @staticmethod
+    def _browser_action_incident(
+        *,
+        task_id: str,
+        correlation_id: str,
+        browser_session_id: str,
+        action: str,
+        candidate_id: str | None,
+        error: Exception | None,
+        recovery_attempt: int,
+        recovery_limit: int,
+        evidence_artifact_id: str | None = None,
+        code: str | None = None,
+        message: str | None = None,
+    ) -> dict[str, Any]:
+        if error is not None:
+            raw_message = str(error)
+            if type(error).__name__ in {"TargetClosedError", "BrowserClosedError"} or any(
+                marker in raw_message.casefold()
+                for marker in ("target page, context or browser has been closed", "page crashed")
+            ):
+                category = FailureCategory.PAGE_CRASH
+                explanation = "The browser page or context closed during the action."
+            else:
+                category, explanation, _ = FailureClassifier.classify(
+                    raw_message, f"{type(error).__name__}: {raw_message}"
+                )
+            if category == FailureCategory.UNKNOWN and "timeout" in raw_message.casefold():
+                category = FailureCategory.TIMING_ISSUE
+                explanation = "The browser action timed out before completion."
+            code = code or {
+                FailureCategory.LOCATOR_CHANGED: "LOCATOR_INVALID",
+                FailureCategory.TIMING_ISSUE: "ACTION_TIMEOUT",
+                FailureCategory.PAGE_CRASH: "BROWSER_CRASHED",
+                FailureCategory.NETWORK_ERROR: "NETWORK_ERROR",
+                FailureCategory.ENVIRONMENT_ERROR: "BROWSER_ENVIRONMENT_ERROR",
+                FailureCategory.ASSERTION_FAILURE: "ASSERTION_FAILURE",
+                FailureCategory.CODE_ERROR: "ACTION_CODE_ERROR",
+            }.get(category, "BROWSER_ACTION_FAILED")
+            message = message or explanation
+            error_type = type(error).__name__
+        else:
+            category = (
+                FailureCategory.LOCATOR_CHANGED
+                if code in {"TARGET_CHANGED_BEFORE_DISPATCH", "TARGET_REVALIDATION_FAILED"}
+                else FailureCategory.UNKNOWN
+            )
+            error_type = None
+            message = message or "The selected action did not produce its independently observed expected effect."
+        retryable_categories = {
+            FailureCategory.LOCATOR_CHANGED,
+            FailureCategory.TIMING_ISSUE,
+            FailureCategory.PAGE_CRASH,
+            FailureCategory.NETWORK_ERROR,
+            FailureCategory.ENVIRONMENT_ERROR,
+            FailureCategory.UNKNOWN,
+        }
+        retryable = category in retryable_categories and recovery_attempt <= recovery_limit
+        status = "RECOVERING" if retryable else "UNRESOLVED"
+        return ExecutionIncident(
+            task_id=task_id,
+            correlation_id=correlation_id,
+            browser_session_id=browser_session_id,
+            category=category,
+            code=code or "EXPECTED_EFFECT_NOT_OBSERVED",
+            action=action,
+            candidate_id=candidate_id,
+            error_type=error_type,
+            message=message,
+            retryable=retryable,
+            recovery_attempt=recovery_attempt,
+            recovery_limit=recovery_limit,
+            status=status,
+            evidence_artifact_id=evidence_artifact_id,
+        ).model_dump(mode="json")
 
     def __init__(
         self,
@@ -332,9 +489,12 @@ class TaskBrowserExecutor:
         task: TaskExecutionRecord,
         observation: dict[str, Any],
         state: dict[str, Any],
+        *,
+        correlation_id: str | None = None,
     ) -> tuple[BrowserAgentPlan, dict[str, Any]]:
         trusted_domains = self._browser_trusted_domains(self.context.input(task, "trusted_domains", []))
         if state["metrics"].get("ai_fallback_active"):
+            fallback_trace_id = correlation_id or uuid4().hex
             plan = self._browser_rule_fallback_plan(
                 task.goal, observation, state.get("history") or [], trusted_domains=trusted_domains
             )
@@ -343,7 +503,7 @@ class TaskBrowserExecutor:
                 await self.context.record_ai_trace(
                     task.id,
                     make_trace_event(
-                        uuid4().hex,
+                        fallback_trace_id,
                         "workflow.fallback",
                         stage="page_understanding",
                         title="使用本地安全规则生成下一步",
@@ -353,6 +513,7 @@ class TaskBrowserExecutor:
                             "provider_error": state["metrics"].get("ai_fallback_error"),
                             "current_url": observation.get("url"),
                             "candidate_summary": json.dumps(candidate_summary, ensure_ascii=False)[:700],
+                            "correlation_id": fallback_trace_id,
                         },
                         status="FALLBACK",
                     ),
@@ -366,6 +527,7 @@ class TaskBrowserExecutor:
                     "planner_mode": "rule-fallback",
                     "fallback_used": True,
                     "fallback_reason": state["metrics"].get("ai_fallback_error"),
+                    "correlation_id": fallback_trace_id,
                 }
             raise TaskBlocked(
                 "AI Planner 不可用，当前页面也没有可安全验证的规则动作；请检查页面或恢复 AI Provider 后重试。",
@@ -385,7 +547,7 @@ class TaskBrowserExecutor:
                 details={"current_url": observation.get("url"), "action_count": len(state.get("history") or [])},
             )
 
-        trace_id = uuid4().hex
+        trace_id = correlation_id or uuid4().hex
         subgoals = state.get("subgoals") or []
         await self.context.record_ai_trace(
             task.id,
@@ -395,7 +557,11 @@ class TaskBrowserExecutor:
                 stage="page_understanding",
                 title="AI 正在理解页面并生成下一步候选",
                 message=(state.get("current_subgoal") or task.goal)[:240],
-                metadata={"url": observation.get("url"), "title": observation.get("title")},
+                metadata={
+                    "url": observation.get("url"),
+                    "title": observation.get("title"),
+                    "correlation_id": trace_id,
+                },
             ),
         )
         prompt_data = {
@@ -411,6 +577,16 @@ class TaskBrowserExecutor:
                 }
                 for item in (state.get("history") or [])[-5:]
             ],
+            "recalled_history": self._search_browser_history(
+                state.get("history_archive") or [],
+                " ".join((task.goal, str(state.get("current_subgoal") or ""), observation.get("url", ""))),
+                limit=5,
+            ),
+            "history_archive_range": {
+                "start": (state.get("history_archive") or [{}])[0].get("start_sequence"),
+                "end": (state.get("history_archive") or [{}])[-1].get("end_sequence"),
+                "chunks": len(state.get("history_archive") or []),
+            },
             "current_page": {
                 "url": observation.get("url"),
                 "title": observation.get("title"),
@@ -439,7 +615,9 @@ class TaskBrowserExecutor:
         provider_name = "unknown"
         provider_model = ""
         try:
-            provider, response = await self.ai_service.complete_browser_action_candidates(task, prompt_data)
+            provider, response = await self.ai_service.complete_browser_action_candidates(
+                task, prompt_data, run_id=trace_id
+            )
             provider_name = str(getattr(provider, "provider_name", "unknown"))
             provider_model = str(getattr(provider, "model", ""))
         except Exception as error:
@@ -544,6 +722,7 @@ class TaskBrowserExecutor:
                     "input_tokens": response.input_tokens,
                     "output_tokens": response.output_tokens,
                     "operation": "browser_action_candidates",
+                    "correlation_id": trace_id,
                 },
             )
             await repositories.commit()
@@ -592,6 +771,13 @@ class TaskBrowserExecutor:
         parsed = urlparse(requested_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             raise TaskBlocked("浏览器 Agent 需要不含用户名或密码的 http(s) URL。", failure_type="NAVIGATION_FAILED")
+        strategy = str(self.context.input(task, "strategy", "agent") or "agent").strip().casefold()
+        if strategy not in {"fast", "agent"}:
+            raise TaskBlocked(
+                "浏览策略必须是 Fast 或 Agent。",
+                failure_type="BROWSER_STRATEGY_INVALID",
+                details={"strategy": strategy},
+            )
 
         from app.container import recorder_service
         from app.services.recorder_service import RecorderSessionCreate
@@ -601,11 +787,19 @@ class TaskBrowserExecutor:
             raise TaskBlocked("Browser task no longer exists.")
         persisted = (task.context or {}).get("browser_agent") or {}
         state = {
+            "strategy": strategy,
             "current_url": persisted.get("current_url") or SensitiveRedactor.redact_url(requested_url),
             "subgoals": persisted.get("subgoals") or [],
             "current_subgoal": persisted.get("current_subgoal") or task.goal[:300],
             "current_subgoal_index": int(persisted.get("current_subgoal_index") or 0),
-            "history": list(persisted.get("history") or [])[-20:],
+            "history": list(persisted.get("history") or [])[-BROWSER_HISTORY_WINDOW:],
+            "history_archive": list(persisted.get("history_archive") or [])[-BROWSER_HISTORY_MAX_CHUNKS:],
+            "history_total": int(
+                persisted.get("history_total")
+                or ((persisted.get("history_archive") or [{}])[-1].get("end_sequence") or 0)
+                + len(persisted.get("history") or [])
+            ),
+            "incidents": list(persisted.get("incidents") or [])[-100:],
             "decision_samples": list(persisted.get("decision_samples") or [])[-20:],
             "state_hashes": list(persisted.get("state_hashes") or [])[-20:],
             "url_history": list(persisted.get("url_history") or [])[-20:],
@@ -736,13 +930,24 @@ class TaskBrowserExecutor:
                 )
                 if initial_hash and latest_observation["state_hash"] != initial_hash:
                     state["metrics"]["human_takeovers"] += 1
+                    state["history_total"] += 1
                     takeover = {
+                        "sequence": state["history_total"],
                         "action": "human_takeover",
                         "status": "observed_page_changed_while_paused",
                         "url": latest_observation["url"],
                         "state_hash": latest_observation["state_hash"],
                     }
                     state["history"].append(takeover)
+                    for chunk in self._archive_browser_history(state):
+                        await self.context.browser_agent_event(
+                            task.id,
+                            "browser.history_archived",
+                            "旧浏览历史已归档",
+                            f"已压缩操作 {chunk['start_sequence']}–{chunk['end_sequence']}，可按当前子目标检索。",
+                            status="COMPLETED",
+                            metadata={"start_sequence": chunk["start_sequence"], "end_sequence": chunk["end_sequence"]},
+                        )
                     await self.context.browser_agent_event(
                         task.id,
                         "browser.human_takeover",
@@ -752,7 +957,7 @@ class TaskBrowserExecutor:
                         metadata={"url": latest_observation["url"], "state_hash": latest_observation["state_hash"]},
                     )
 
-            for action_index in range(int(state["metrics"].get("browser_actions", 0)), max_actions):
+            while int(state["metrics"].get("browser_actions", 0)) < max_actions:
                 task, _ = await self.context.load_task(task.id)
                 if not task or task.status == TaskStatus.CANCELLED.value:
                     raise TaskBlocked("浏览任务已取消。", failure_type="ACTION_FAILED")
@@ -913,7 +1118,10 @@ class TaskBrowserExecutor:
                     stop_reason = "HUMAN_VERIFICATION_REQUIRED"
                     break
 
-                plan, ai_info = await self._browser_agent_candidates(task, latest_observation, state)
+                correlation_id = uuid4().hex
+                plan, ai_info = await self._browser_agent_candidates(
+                    task, latest_observation, state, correlation_id=correlation_id
+                )
                 state["metrics"]["total_duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
 
                 if plan.goal_status == "completed" and self._browser_goal_verified(
@@ -1293,7 +1501,7 @@ class TaskBrowserExecutor:
                 jev_required = get_config().agent.browser.require_jev or bool(
                     self.context.input(task, "require_jev_decisions", False)
                 )
-                jev_needed = self._browser_jev_needed(len(valid_candidates), jev_required)
+                jev_needed = self._browser_jev_needed(len(valid_candidates), jev_required, strategy=strategy)
                 jev_result = None
                 jev_error = None
                 jev_latency = 0.0
@@ -1303,12 +1511,16 @@ class TaskBrowserExecutor:
                     await self.context.record_ai_trace(
                         task.id,
                         make_trace_event(
-                            uuid4().hex,
+                            correlation_id,
                             "decision_started",
                             stage="decision",
                             title="JEV 正在选择浏览动作",
                             message=state["current_subgoal"],
-                            metadata={"candidate_count": len(valid_candidates), "jev_attempted": True},
+                            metadata={
+                                "candidate_count": len(valid_candidates),
+                                "jev_attempted": True,
+                                "correlation_id": correlation_id,
+                            },
                         ),
                     )
                     try:
@@ -1359,7 +1571,7 @@ class TaskBrowserExecutor:
                         jev_result = await self.decision_service.choose(
                             decision_request,
                             task_id=task.id,
-                            run_id=uuid4().hex,
+                            run_id=correlation_id,
                         )
                     except Exception as error:
                         jev_error = type(error).__name__
@@ -1374,6 +1586,18 @@ class TaskBrowserExecutor:
                     jev_result=jev_result,
                     jev_error=jev_error,
                 )
+                if strategy == "fast" and decision_provider != "jev":
+                    preferred_selected = bool(
+                        plan.preferred_candidate_id and chosen["candidate_id"] == plan.preferred_candidate_id
+                    )
+                    decision_provider = (
+                        "fast-single-candidate"
+                        if len(valid_candidates) == 1
+                        else "fast-ai-ranking"
+                        if preferred_selected
+                        else "fast-local-heuristic"
+                    )
+                    fallback_reason = None
                 if jev_needed and decision_provider != "jev":
                     state["metrics"]["jev_failed"] += 1
                     state["metrics"]["last_jev_error"] = fallback_reason or "no_reliable_decision"
@@ -1481,6 +1705,8 @@ class TaskBrowserExecutor:
                     break
                 decision_sample = {
                     "step": len(state["decision_samples"]) + 1,
+                    "strategy": strategy,
+                    "correlation_id": correlation_id,
                     "url": latest_observation["url"],
                     "state_hash": current_hash,
                     "subgoal": state["current_subgoal"],
@@ -1510,14 +1736,23 @@ class TaskBrowserExecutor:
                 await self.context.record_ai_trace(
                     task.id,
                     make_trace_event(
-                        uuid4().hex,
+                        correlation_id,
                         "decision_completed"
-                        if decision_provider in {"jev", "single-candidate"}
+                        if decision_provider
+                        in {
+                            "jev",
+                            "single-candidate",
+                            "fast-ai-ranking",
+                            "fast-local-heuristic",
+                            "fast-single-candidate",
+                        }
                         else "decision.fallback",
                         stage="decision",
                         title=(
                             "JEV 选择了浏览动作"
                             if decision_provider == "jev"
+                            else "Fast 策略已选择 AI 排序候选"
+                            if decision_provider in {"fast-ai-ranking", "fast-local-heuristic", "fast-single-candidate"}
                             else "仅有一个已验证候选，无需 JEV 决策"
                             if decision_provider == "single-candidate"
                             else "已切换到候选排序回退"
@@ -1535,6 +1770,7 @@ class TaskBrowserExecutor:
                             "fallback_reason": fallback_reason,
                             "candidate_summary": json.dumps(candidate_summary, ensure_ascii=False)[:480],
                             "candidate_scores": json.dumps(decision_sample["scores"], ensure_ascii=False)[:400],
+                            "correlation_id": correlation_id,
                         },
                     ),
                 )
@@ -1558,6 +1794,8 @@ class TaskBrowserExecutor:
                             "name": "browser_action_selection",
                             "choice": stored.choice,
                             "provider": stored.provider,
+                            "strategy": strategy,
+                            "correlation_id": correlation_id,
                             "confidence": stored.confidence,
                         },
                     )
@@ -1575,20 +1813,145 @@ class TaskBrowserExecutor:
                         "action": chosen["action_type"],
                         "locator": json.dumps(selected_locator, ensure_ascii=False) if selected_locator else "page",
                         "candidate_id": chosen["candidate_id"],
+                        "strategy": strategy,
+                        "correlation_id": correlation_id,
                         "url": latest_observation["url"],
                     },
                 )
-                # Persisting the decision and progress event above yields to the event loop.
-                # A page can navigate during that time, so recheck the live tab immediately
-                # before dispatching the selected action.
-                dispatch_url = SensitiveRedactor.redact_url(str(page.url or ""))
-                if dispatch_url != latest_observation["url"]:
-                    navigation_rejection = self._browser_navigation_landing_rejection(
-                        task.goal, latest_observation["url"], dispatch_url, trusted_domains
+                # Re-observe after all decision/event persistence and validate the exact target
+                # again. A stale element ID, changed page, or non-unique locator is never dispatched.
+                dispatch_observation = await self._observe_browser_page(
+                    page, network, waited_loading_states=waited_loading_states
+                )
+                dispatch_url = dispatch_observation["url"]
+                dispatch_element = next(
+                    (item for item in dispatch_observation["elements"] if item.get("id") == chosen.get("target_id")),
+                    None,
+                )
+                page_action = chosen["action_type"] in {"back", "scroll", "wait", "inspect"}
+                target_valid = page_action or self._browser_dispatch_target_matches(selected_element, dispatch_element)
+                if target_valid and selected_locator:
+                    verification_action = {
+                        "fill": "fill",
+                        "press_key": "press",
+                        "select": "select",
+                        "filter": "select" if selected_element.get("tag") == "select" else "click",
+                        "choose_variant": "select" if selected_element.get("tag") == "select" else "click",
+                        "hover": "hover",
+                        "double_click": "double_click",
+                    }.get(chosen["action_type"], "click")
+                    dispatch_locator = await self.browser_runtime.verify_locator(
+                        browser_session_id,
+                        selected_locator,
+                        {"action": verification_action},
                     )
-                    retries = int(state["metrics"].get("stale_candidate_retries", 0)) + 1
-                    state["metrics"]["stale_candidate_retries"] = retries
+                    confirmation_observation = await self._observe_browser_page(
+                        page, network, waited_loading_states=waited_loading_states
+                    )
+                    dispatch_observation = confirmation_observation
+                    dispatch_url = confirmation_observation["url"]
+                    dispatch_element = next(
+                        (
+                            item
+                            for item in confirmation_observation["elements"]
+                            if item.get("id") == chosen.get("target_id")
+                        ),
+                        None,
+                    )
+                    target_valid = bool(dispatch_locator.get("verified")) and self._browser_dispatch_target_matches(
+                        selected_element, dispatch_element
+                    )
+                page_changed = (
+                    dispatch_url != latest_observation["url"] or dispatch_observation["state_hash"] != current_hash
+                )
+                if page_changed or not target_valid:
+                    previous_dispatch_url = latest_observation["url"]
+                    navigation_rejection = self._browser_navigation_landing_rejection(
+                        task.goal, previous_dispatch_url, dispatch_url, trusted_domains
+                    )
+                    recovery_attempt = int(state["metrics"].get("recovery_count", 0)) + 1
+                    stale_message = (
+                        "The page changed after candidate selection; the old action was discarded."
+                        if page_changed
+                        else "The selected target no longer matches the observed visible, enabled control."
+                    )
+                    stale_code = "TARGET_CHANGED_BEFORE_DISPATCH" if target_valid else "TARGET_REVALIDATION_FAILED"
+                    incident_artifact_id = None
+                    try:
+                        incident_screenshot = await self.context.artifact(
+                            task,
+                            "browser_agent",
+                            f"browser-stale-action-{int(state['metrics'].get('stale_candidate_retries', 0)) + 1:02d}.png",
+                            "SCREENSHOT",
+                            await page.screenshot(type="png"),
+                            "image/png",
+                        )
+                        await self.context.persist_browser_agent_artifact(task.id, incident_screenshot)
+                        incident_artifact_id = incident_screenshot.get("artifact_id")
+                    except Exception as error:
+                        logger.warning(
+                            "Could not capture stale browser action evidence task_id=%s error_type=%s",
+                            task.id,
+                            type(error).__name__,
+                        )
+                    incident = self._browser_action_incident(
+                        task_id=task.id,
+                        correlation_id=correlation_id,
+                        browser_session_id=browser_session_id,
+                        action=chosen["action_type"],
+                        candidate_id=chosen["candidate_id"],
+                        error=None,
+                        recovery_attempt=recovery_attempt,
+                        recovery_limit=0 if navigation_rejection else max_recoveries,
+                        evidence_artifact_id=incident_artifact_id,
+                        code=stale_code,
+                        message=stale_message,
+                    )
+                    state["incidents"].append(incident)
+                    state["incidents"] = state["incidents"][-100:]
+                    state["metrics"]["stale_candidate_retries"] = (
+                        int(state["metrics"].get("stale_candidate_retries", 0)) + 1
+                    )
+                    if incident["retryable"]:
+                        state["metrics"]["recovery_count"] = recovery_attempt
                     state["current_url"] = dispatch_url
+                    latest_observation = dispatch_observation
+                    decision_sample["action_status"] = "blocked_stale_target"
+                    decision_sample["incident_id"] = incident["id"]
+                    await self.context.browser_agent_event(
+                        task.id,
+                        "browser.execution_incident",
+                        "已阻止基于过期页面状态的浏览动作",
+                        stale_message,
+                        status=incident["status"],
+                        metadata={
+                            **incident,
+                            "incident_id": incident["id"],
+                            "page_changed": page_changed,
+                            "target_valid": target_valid,
+                        },
+                    )
+                    await self.context.browser_agent_event(
+                        task.id,
+                        "browser.action_blocked",
+                        "动作执行前二次校验失败",
+                        "旧候选动作没有执行；将重新观察并重新规划。",
+                        status="RETRYING" if incident["retryable"] else "BLOCKED",
+                        metadata={
+                            "action": chosen["action_type"],
+                            "candidate_id": chosen["candidate_id"],
+                            "correlation_id": correlation_id,
+                            "url": dispatch_url,
+                            "executed": False,
+                            "incident_id": incident["id"],
+                        },
+                    )
+                    await self.context.persist_browser_agent_state(
+                        task.id,
+                        state,
+                        title="页面变化后正在重新验证浏览动作",
+                        summary=f"已阻止过期候选动作并记录事件 {incident['id']}；正在基于新页面重新规划。",
+                    )
                     if navigation_rejection:
                         stop_reason = "OFFICIAL_DOMAIN_UNVERIFIED"
                         await self.context.browser_agent_event(
@@ -1598,58 +1961,22 @@ class TaskBrowserExecutor:
                             "已丢弃基于旧页面生成的动作；新页面未执行任何浏览操作。",
                             status="BLOCKED",
                             metadata={
-                                "url_before": latest_observation["url"],
+                                "url_before": previous_dispatch_url,
                                 "url_after": dispatch_url,
                                 "trusted_domains": trusted_domains,
                                 "candidate_id": chosen["candidate_id"],
-                            },
-                        )
-                        await self.context.browser_agent_event(
-                            task.id,
-                            "browser.action_blocked",
-                            "旧页面候选动作已阻止",
-                            "页面在动作开始事件写入期间跳转到非可信地址；所选动作没有执行。",
-                            status="BLOCKED",
-                            metadata={
-                                "action": chosen["action_type"],
-                                "candidate_id": chosen["candidate_id"],
-                                "url": dispatch_url,
-                                "executed": False,
+                                "correlation_id": correlation_id,
                             },
                         )
                         break
-                    await self.context.browser_agent_event(
-                        task.id,
-                        "browser.observation_changed",
-                        "动作执行前页面发生变化",
-                        "已丢弃基于旧页面生成的动作；Agent 将重新观察后再规划。",
-                        status="RETRYING" if retries <= 2 else "BLOCKED",
-                        metadata={
-                            "previous_url": latest_observation["url"],
-                            "current_url": dispatch_url,
-                            "candidate_id": chosen["candidate_id"],
-                        },
-                    )
-                    await self.context.browser_agent_event(
-                        task.id,
-                        "browser.action_blocked",
-                        "旧页面候选动作已取消",
-                        "页面在动作开始事件写入期间发生变化；所选动作没有执行，将基于新页面重新规划。",
-                        status="RETRYING" if retries <= 2 else "BLOCKED",
-                        metadata={
-                            "action": chosen["action_type"],
-                            "candidate_id": chosen["candidate_id"],
-                            "url": dispatch_url,
-                            "executed": False,
-                        },
-                    )
-                    if retries <= 2:
+                    if incident["retryable"]:
                         continue
-                    stop_reason = "PAGE_UNSTABLE"
+                    stop_reason = "PAGE_UNSTABLE" if page_changed else "LOCATOR_INVALID"
                     break
 
                 state["metrics"]["browser_actions"] += 1
                 action_error = None
+                action_exception: Exception | None = None
                 opened_pages = []
 
                 def record_opened_page(opened_page: Any) -> None:
@@ -1685,6 +2012,7 @@ class TaskBrowserExecutor:
                     except Exception:
                         pass
                 except Exception as error:
+                    action_exception = error
                     action_error = type(error).__name__
                 finally:
                     self.browser_runtime.remove_page_listener(browser_session_id, record_opened_page)
@@ -1819,7 +2147,32 @@ class TaskBrowserExecutor:
                     "image/png",
                 )
                 await self.context.persist_browser_agent_artifact(task.id, screenshot)
+                incident = None
+                if action_status in {"failed", "unexpected"}:
+                    recovery_attempt = int(state["metrics"].get("recovery_count", 0)) + 1
+                    incident = self._browser_action_incident(
+                        task_id=task.id,
+                        correlation_id=correlation_id,
+                        browser_session_id=browser_session_id,
+                        action=chosen["action_type"],
+                        candidate_id=chosen["candidate_id"],
+                        error=action_exception,
+                        recovery_attempt=recovery_attempt,
+                        recovery_limit=0 if stop_reason == "OFFICIAL_DOMAIN_UNVERIFIED" else max_recoveries,
+                        evidence_artifact_id=screenshot.get("artifact_id"),
+                        code="UNTRUSTED_NAVIGATION" if stop_reason == "OFFICIAL_DOMAIN_UNVERIFIED" else None,
+                        message="Navigation landed outside the verified trusted destination."
+                        if stop_reason == "OFFICIAL_DOMAIN_UNVERIFIED"
+                        else None,
+                    )
+                    state["incidents"].append(incident)
+                    state["incidents"] = state["incidents"][-100:]
                 action_result = {
+                    "sequence": state["history_total"] + 1,
+                    "correlation_id": correlation_id,
+                    "browser_session_id": browser_session_id,
+                    "incident_id": incident["id"] if incident else None,
+                    "failure_category": incident["category"] if incident else None,
                     "action": chosen["action_type"],
                     "target": chosen["target"],
                     "target_tag": selected_element.get("tag"),
@@ -1867,8 +2220,22 @@ class TaskBrowserExecutor:
                 decision_sample["action_status"] = action_status
                 decision_sample["effect_verified"] = effect_verified
                 decision_sample["duration_ms"] = duration
+                state["history_total"] += 1
                 state["history"].append(action_result)
-                state["history"] = state["history"][-20:]
+                archived_chunks = self._archive_browser_history(state)
+                for chunk in archived_chunks:
+                    await self.context.browser_agent_event(
+                        task.id,
+                        "browser.history_archived",
+                        "旧浏览历史已归档",
+                        f"已压缩操作 {chunk['start_sequence']}–{chunk['end_sequence']}，可按当前子目标检索。",
+                        status="COMPLETED",
+                        metadata={
+                            "start_sequence": chunk["start_sequence"],
+                            "end_sequence": chunk["end_sequence"],
+                            "action_count": len(chunk["actions"]),
+                        },
+                    )
                 await self.context.persist_browser_agent_evidence(
                     task.id,
                     EvidenceType.SCREENSHOT,
@@ -1891,10 +2258,21 @@ class TaskBrowserExecutor:
                         "url": after["url"],
                         "artifact_id": screenshot["artifact_id"],
                         "candidate_id": chosen["candidate_id"],
+                        "strategy": strategy,
+                        "correlation_id": correlation_id,
                         "verified": effect_verified,
                         "expected_effect": chosen["expected_effect"],
                     },
                 )
+                if incident:
+                    await self.context.browser_agent_event(
+                        task.id,
+                        "browser.execution_incident",
+                        "浏览动作未通过执行结果校验",
+                        incident["message"],
+                        status=incident["status"],
+                        metadata={**incident, "incident_id": incident["id"]},
+                    )
                 await self.context.browser_agent_event(
                     task.id,
                     "browser.observation",
@@ -1909,6 +2287,7 @@ class TaskBrowserExecutor:
                         "network_requests": after["network"]["requests"],
                         "network_failed": after["network"]["failed"],
                         "artifact_id": screenshot["artifact_id"],
+                        "correlation_id": correlation_id,
                     },
                 )
                 state["current_url"] = after["url"]
@@ -1929,13 +2308,41 @@ class TaskBrowserExecutor:
                     )
                     break
                 if action_status in {"failed", "unexpected"}:
-                    state["metrics"]["recovery_count"] += 1
-                    if state["metrics"]["recovery_count"] > max_recoveries:
+                    if incident and incident["retryable"]:
+                        state["metrics"]["recovery_count"] = incident["recovery_attempt"]
+                    else:
+                        state["metrics"]["recovery_count"] = 0
                         stop_reason = "ACTION_FAILED" if action_error else "UNEXPECTED_STATE"
                         latest_observation = after
                         break
                 elif effect_verified:
-                    state["metrics"]["recovery_count"] = max(0, state["metrics"]["recovery_count"] - 1)
+                    state["metrics"]["recovery_count"] = 0
+                    for prior_incident in state["incidents"]:
+                        stale_candidate_recovered = prior_incident.get("code") in {
+                            "TARGET_CHANGED_BEFORE_DISPATCH",
+                            "TARGET_REVALIDATION_FAILED",
+                        }
+                        same_action_retried = (
+                            prior_incident.get("candidate_id") == chosen["candidate_id"]
+                            and prior_incident.get("action") == chosen["action_type"]
+                        )
+                        if prior_incident.get("status") == "RECOVERING" and (
+                            stale_candidate_recovered or same_action_retried
+                        ):
+                            prior_incident["status"] = "RECOVERED"
+                            await self.context.browser_agent_event(
+                                task.id,
+                                "browser.incident_recovered",
+                                "浏览器执行已从前序问题恢复",
+                                f"后续已验证动作解决了事件 {prior_incident['id']}。",
+                                status="RECOVERED",
+                                metadata={
+                                    "incident_id": prior_incident["id"],
+                                    "incident_correlation_id": prior_incident["correlation_id"],
+                                    "correlation_id": correlation_id,
+                                    "recovery_attempt": prior_incident["recovery_attempt"],
+                                },
+                            )
 
                 goal_completed = self._browser_goal_verified(
                     task.goal,
@@ -1988,6 +2395,28 @@ class TaskBrowserExecutor:
             state["metrics"]["total_duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
             if stop_reason != "OFFICIAL_DOMAIN_UNVERIFIED":
                 state["current_url"] = latest_observation.get("url") or state.get("current_url")
+            for pending_incident in state["incidents"]:
+                if pending_incident.get("status") != "RECOVERING":
+                    continue
+                pending_incident["status"] = "RECOVERED" if goal_completed else "UNRESOLVED"
+                if not goal_completed:
+                    pending_incident["retryable"] = False
+                await self.context.browser_agent_event(
+                    task.id,
+                    "browser.incident_recovered" if goal_completed else "browser.incident_unresolved",
+                    "前序浏览器问题已由最终目标证据恢复" if goal_completed else "浏览任务结束，前序问题仍未解决",
+                    "最终页面证据已独立确认用户目标完成。"
+                    if goal_completed
+                    else "任务停止前未观察到成功的恢复动作；问题已转为未解决。",
+                    status=pending_incident["status"],
+                    metadata={
+                        "incident_id": pending_incident["id"],
+                        "incident_correlation_id": pending_incident["correlation_id"],
+                        "correlation_id": pending_incident["correlation_id"],
+                        "recovery_attempt": pending_incident["recovery_attempt"],
+                        "resolution_evidence": "verified_goal" if goal_completed else "task_stopped",
+                    },
+                )
             state["stop_reason"] = stop_reason
             state["metrics"]["goal_completion"] = bool(goal_completed)
             await self.context.persist_browser_agent_state(
@@ -2011,6 +2440,24 @@ class TaskBrowserExecutor:
                 "application/json",
             )
             await self.context.persist_browser_agent_artifact(task.id, sample_artifact)
+            history_artifact = await self.context.artifact(
+                task,
+                "browser_agent",
+                "browser-action-history.json",
+                "BROWSER_HISTORY",
+                json.dumps(
+                    {
+                        "history_total": state["history_total"],
+                        "archive": state["history_archive"],
+                        "recent_actions": state["history"],
+                        "incidents": state["incidents"],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ).encode("utf-8"),
+                "application/json",
+            )
+            await self.context.persist_browser_agent_artifact(task.id, history_artifact)
             if not goal_completed:
                 failure_type = (
                     stop_reason
@@ -2097,6 +2544,8 @@ class TaskBrowserExecutor:
                         ),
                         "verification_artifact_id": (state.get("human_verification") or {}).get("artifact_id"),
                         "decision_samples_artifact_id": sample_artifact["artifact_id"],
+                        "history_artifact_id": history_artifact["artifact_id"],
+                        "failure_incidents": state["incidents"],
                     },
                 )
             final_haystack = " ".join(
@@ -2117,7 +2566,8 @@ class TaskBrowserExecutor:
             ]
             result = {
                 "verified": True,
-                "kind": "ai_jev_browser_agent",
+                "kind": "ai_jev_browser_agent" if strategy == "agent" else "fast_browser_agent",
+                "strategy": strategy,
                 "goal": task.goal,
                 "final_url": state["current_url"],
                 "final_title": latest_observation.get("title", ""),
@@ -2129,6 +2579,10 @@ class TaskBrowserExecutor:
                 },
                 "subgoals": state["subgoals"],
                 "actions": state["history"],
+                "history_archive": state["history_archive"],
+                "history_total": state["history_total"],
+                "history_artifact_id": history_artifact["artifact_id"],
+                "failure_incidents": state["incidents"],
                 "decision_samples": state["decision_samples"],
                 "decision_samples_artifact_id": sample_artifact["artifact_id"],
                 "metrics": state["metrics"],
@@ -2139,6 +2593,30 @@ class TaskBrowserExecutor:
         finally:
             if owns_browser_session and browser_session_id:
                 await self.browser_runtime.close_session(browser_session_id)
+
+    @staticmethod
+    def _browser_dispatch_target_matches(expected: dict[str, Any], actual: dict[str, Any] | None) -> bool:
+        if not actual or not actual.get("visible") or not actual.get("enabled"):
+            return False
+        identity_fields = (
+            "tag",
+            "role",
+            "name",
+            "type",
+            "label",
+            "placeholder",
+            "test_id",
+            "stable_id",
+            "href",
+            "href_selector",
+            "form_action",
+            "value",
+            "selected",
+            "expanded",
+        )
+        return all(str(expected.get(key) or "") == str(actual.get(key) or "") for key in identity_fields) and (
+            expected.get("options") or []
+        ) == (actual.get("options") or [])
 
     @staticmethod
     def _browser_repeats_same_target(history: list[dict[str, Any]], candidate: dict[str, Any]) -> bool:
@@ -2176,9 +2654,14 @@ class TaskBrowserExecutor:
         )
 
     @staticmethod
-    def _browser_jev_needed(candidate_count: int, explicitly_required: bool) -> bool:
-        """Run Jev for ambiguity, or for every action when the workflow requires it."""
-        return explicitly_required or candidate_count > 1
+    def _browser_jev_needed(
+        candidate_count: int,
+        explicitly_required: bool,
+        *,
+        strategy: str = "agent",
+    ) -> bool:
+        """Agent uses Jev for ambiguity; Fast skips it unless policy explicitly requires it."""
+        return explicitly_required or (strategy != "fast" and candidate_count > 1)
 
     @staticmethod
     def _browser_official_site_brand(goal: str) -> str | None:

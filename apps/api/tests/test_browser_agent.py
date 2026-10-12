@@ -50,6 +50,94 @@ def test_browser_cart_intent_recognizes_common_chinese_request():
     assert not TaskBrowserExecutor._browser_cart_intent("Find black trousers")
 
 
+def test_browser_history_compacts_old_actions_and_bounds_the_archive():
+    state = {
+        "history": [
+            {"sequence": index, "action": "click", "target": f"control-{index}", "status": "success"}
+            for index in range(1, 601)
+        ],
+        "history_archive": [],
+    }
+
+    TaskBrowserExecutor._archive_browser_history(state)
+
+    assert len(state["history"]) <= 20
+    assert len(state["history_archive"]) == 50
+    assert state["history_archive"][-1]["end_sequence"] == 580
+    assert len(TaskBrowserExecutor._search_browser_history(state["history_archive"], "control-575")) == 1
+
+
+def test_browser_history_redacts_secrets_before_archiving():
+    state = {
+        "history": [
+            {
+                "sequence": index,
+                "action": "fill",
+                "target": f"control-{index}",
+                "value": "password=hunter2" if index == 1 else f"query-{index}",
+            }
+            for index in range(1, 22)
+        ],
+        "history_archive": [],
+    }
+
+    TaskBrowserExecutor._archive_browser_history(state)
+
+    assert state["history_archive"][0]["actions"][0]["value"] == "password=***REDACTED***"
+    assert len(state["history"]) <= 20
+
+
+def test_browser_dispatch_revalidation_rejects_changed_targets():
+    selected = {
+        "tag": "button",
+        "role": "button",
+        "name": "Search",
+        "type": "submit",
+        "label": "",
+        "placeholder": "",
+        "test_id": "",
+        "stable_id": "",
+        "href_selector": "",
+    }
+
+    assert TaskBrowserExecutor._browser_dispatch_target_matches(
+        selected, {**selected, "visible": True, "enabled": True}
+    )
+    assert not TaskBrowserExecutor._browser_dispatch_target_matches(
+        selected, {**selected, "name": "Checkout", "visible": True, "enabled": True}
+    )
+    assert not TaskBrowserExecutor._browser_dispatch_target_matches(
+        selected, {**selected, "visible": True, "enabled": False}
+    )
+
+
+def test_browser_execution_incidents_classify_and_bound_recovery():
+    incident = TaskBrowserExecutor._browser_action_incident(
+        task_id="task-1",
+        correlation_id="run-1",
+        browser_session_id="browser-1",
+        action="click",
+        candidate_id="candidate-1",
+        error=TimeoutError("Timeout 10000ms exceeded"),
+        recovery_attempt=1,
+        recovery_limit=2,
+    )
+    exhausted = TaskBrowserExecutor._browser_action_incident(
+        task_id="task-1",
+        correlation_id="run-2",
+        browser_session_id="browser-1",
+        action="click",
+        candidate_id="candidate-1",
+        error=TimeoutError("Timeout 10000ms exceeded"),
+        recovery_attempt=3,
+        recovery_limit=2,
+    )
+
+    assert incident["category"] == "TIMING_ISSUE"
+    assert incident["retryable"] is True and incident["status"] == "RECOVERING"
+    assert exhausted["retryable"] is False and exhausted["status"] == "UNRESOLVED"
+
+
 def test_browser_cart_evidence_requires_a_new_observed_confirmation_or_count():
     before = {"count": 1, "confirmation": False}
     after = {"count": 2, "confirmation": False}
@@ -191,6 +279,8 @@ def test_browser_agent_honors_required_jev_decision_for_a_single_candidate():
     assert TaskBrowserExecutor._browser_jev_needed(candidate_count=1, explicitly_required=True)
     assert TaskBrowserExecutor._browser_jev_needed(candidate_count=2, explicitly_required=False)
     assert not TaskBrowserExecutor._browser_jev_needed(candidate_count=1, explicitly_required=False)
+    assert not TaskBrowserExecutor._browser_jev_needed(candidate_count=3, explicitly_required=False, strategy="fast")
+    assert TaskBrowserExecutor._browser_jev_needed(candidate_count=1, explicitly_required=True, strategy="fast")
 
 
 def test_browser_rule_fallback_searches_only_observed_search_controls():

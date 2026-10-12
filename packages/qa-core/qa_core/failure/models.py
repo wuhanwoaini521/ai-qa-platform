@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +23,26 @@ class FailureCategory(str, Enum):
     INFRASTRUCTURE_ERROR = "INFRASTRUCTURE_ERROR"
     CODE_ERROR = "CODE_ERROR"
     UNKNOWN = "UNKNOWN"
+
+
+class ExecutionIncident(BaseModel):
+    """Structured, replayable failure at a QA execution boundary."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex, min_length=1, max_length=128)
+    task_id: str = Field(min_length=1, max_length=128)
+    correlation_id: str = Field(min_length=1, max_length=128)
+    browser_session_id: str | None = Field(default=None, max_length=128)
+    category: FailureCategory = FailureCategory.UNKNOWN
+    code: str = Field(min_length=1, max_length=100)
+    action: str = Field(min_length=1, max_length=100)
+    candidate_id: str | None = Field(default=None, max_length=48)
+    error_type: str | None = Field(default=None, max_length=128)
+    message: str = Field(min_length=1, max_length=500)
+    retryable: bool = False
+    recovery_attempt: int = Field(default=0, ge=0, le=1000)
+    recovery_limit: int = Field(default=0, ge=0, le=1000)
+    status: Literal["OPEN", "RECOVERING", "RECOVERED", "UNRESOLVED"] = "OPEN"
+    evidence_artifact_id: str | None = Field(default=None, max_length=128)
 
 
 class FailureArtifact(BaseModel):

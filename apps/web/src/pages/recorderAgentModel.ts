@@ -35,7 +35,7 @@ export interface RecorderAgentScript {
 export function recorderStepsFromAgent(output: unknown, startUrl: string): RecorderAgentScript | null {
   const normalizedStartUrl = httpUrl(startUrl);
   const result = asRecord(output);
-  if (!normalizedStartUrl || !result || result.verified !== true || result.kind !== 'ai_jev_browser_agent' || !Array.isArray(result.actions)) return null;
+  if (!normalizedStartUrl || !result || result.verified !== true || !['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(result.kind)) || !Array.isArray(result.actions)) return null;
 
   const makeId = () => crypto.randomUUID().replaceAll('-', '').slice(0, 12);
   const steps: RecorderStep[] = [{ id: makeId(), action: 'navigate', url: normalizedStartUrl, description: `打开起始页面：${normalizedStartUrl}` }];
@@ -96,7 +96,19 @@ export function recorderStepsFromAgent(output: unknown, startUrl: string): Recor
     actionCount += 1;
     if (provider === 'jev') jevCount += 1;
   };
-  for (const action of result.actions) addAction(action);
+  const archivedActions = Array.isArray(result.history_archive)
+    ? result.history_archive.flatMap((rawChunk) => {
+      const chunk = asRecord(rawChunk);
+      return Array.isArray(chunk?.actions) ? chunk.actions : [];
+    })
+    : [];
+  const replayActions = [...archivedActions, ...result.actions].sort((left, right) => {
+    const leftSequence = asRecord(left)?.sequence;
+    const rightSequence = asRecord(right)?.sequence;
+    return (typeof leftSequence === 'number' ? leftSequence : Number.MAX_SAFE_INTEGER)
+      - (typeof rightSequence === 'number' ? rightSequence : Number.MAX_SAFE_INTEGER);
+  });
+  for (const action of replayActions) addAction(action);
 
   const evidence = asRecord(result.goal_evidence) ?? {};
   const addTextAssertion = (value: string, description: string) => {

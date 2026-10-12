@@ -54,6 +54,43 @@ def test_trace_run_id_is_never_misrepresented_as_a_test_run_id_and_cot_is_exclud
     assert "private" not in event.model_dump_json() and "secret" not in event.model_dump_json()
 
 
+def test_browser_incident_correlation_and_recovery_metadata_are_public_but_bounded():
+    event = normalize_event(
+        {
+            "type": "browser.execution_incident",
+            "payload": {
+                "status": "RECOVERING",
+                "correlation_id": "action-123",
+                "incident_id": "incident-456",
+                "category": "LOCATOR_CHANGED",
+                "code": "TARGET_CHANGED_BEFORE_DISPATCH",
+                "retryable": True,
+                "recovery_attempt": 1,
+                "recovery_limit": 2,
+                "evidence_artifact_id": "artifact-789",
+                "api_key": "never expose this",
+            },
+        },
+        source="task",
+        source_id="event-1",
+        runtime_id="task-1",
+        task_id="task-1",
+    )
+
+    assert event.metadata == {
+        "status": "RECOVERING",
+        "correlation_id": "action-123",
+        "incident_id": "incident-456",
+        "category": "LOCATOR_CHANGED",
+        "code": "TARGET_CHANGED_BEFORE_DISPATCH",
+        "retryable": True,
+        "recovery_attempt": 1,
+        "recovery_limit": 2,
+        "evidence_artifact_id": "artifact-789",
+    }
+    assert "never expose this" not in event.model_dump_json()
+
+
 def test_child_run_mapping_and_frame_exclusion():
     event = normalize_event(
         {"type": "step.progress", "payload": {"type": "child_run.started", "run_id": "child", "step_id": "step"}},
