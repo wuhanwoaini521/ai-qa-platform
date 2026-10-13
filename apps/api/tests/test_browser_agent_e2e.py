@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
-from app.api.tasks import task_runtime_service
+from app.container import get_task_runtime_service
 from app.main import app as fastapi_app
 from app.persistence.models import TaskEventORM, TaskORM
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
@@ -22,6 +22,8 @@ from project_model.models import DecisionResult
 from qa_core.ai.models import AICompletionResponse, BrowserActionCandidate, BrowserAgentPlan
 from qa_core.ai.registry import AIProviderRegistry
 from sqlalchemy import select
+
+task_runtime_service = get_task_runtime_service()
 
 
 class SearchSiteHandler(BaseHTTPRequestHandler):

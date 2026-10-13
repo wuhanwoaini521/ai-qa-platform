@@ -362,6 +362,7 @@ def get_quality_discovery_service() -> QualityDiscoveryService:
             browser_runtime=get_browser_runtime(),
             decisions=DecisionService(repository_scope=scope),
             workspace_service=WorkspaceService(),
+            task_commands=get_task_runtime_service().commands,
         )
     return _quality_discovery_service
 

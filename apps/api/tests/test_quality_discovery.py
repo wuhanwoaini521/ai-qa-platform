@@ -3581,8 +3581,10 @@ async def test_discovery_journey_creates_replayable_create_test_draft_without_br
             return SimpleNamespace(id="task-draft", status="PENDING")
 
     tasks = CaptureTasks()
-    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
-    task = await service.create_pytest_draft(run_id, "journey-1", "owner-1", tasks)
+    service = QualityDiscoveryService(
+        test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime(), task_commands=tasks
+    )
+    task = await service.create_pytest_draft(run_id, "journey-1", "owner-1")
 
     assert task.id == "task-draft"
     assert tasks.owner_id == "owner-1"
@@ -3639,9 +3641,13 @@ async def test_discovery_journey_draft_rejects_non_replayable_or_unassertable_jo
         async def create(self, *_args, **_kwargs):
             pytest.fail("A draft must not be created without grounded assertion evidence")
 
-    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    service = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=DiscoveryFixtureBrowserRuntime(),
+        task_commands=CaptureTasks(),
+    )
     with pytest.raises(ValueError, match="assertion|observable"):
-        await service.create_pytest_draft(run_id, "journey-1", "owner-1", CaptureTasks())
+        await service.create_pytest_draft(run_id, "journey-1", "owner-1")
 
     run = await service.get(run_id)
     non_replayable = _replayable_discovery_result()
@@ -3672,8 +3678,10 @@ async def test_discovery_journey_draft_rejects_non_replayable_or_unassertable_jo
 
 @pytest.mark.asyncio
 async def test_discovery_draft_api_waits_for_approval_before_workspace_write(client, test_db_session):
-    from app.api.tasks import task_scheduler_service
+    from app.container import get_task_runtime_service
     from app.services.workspace_service import WorkspaceService
+
+    task_scheduler_service = get_task_runtime_service().scheduler
 
     async def serve_page(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:

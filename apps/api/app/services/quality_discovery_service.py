@@ -4,7 +4,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from project_model.lifecycle import StructuredRequirementModel
@@ -40,6 +40,9 @@ from app.services.quality_discovery_models import (
 )
 from app.services.quality_discovery_projection import QualityDiscoveryProjectionMixin
 from app.settings import get_config
+
+if TYPE_CHECKING:
+    from app.services.task_command_service import TaskCommandService
 
 __all__ = [
     "DiscoveryBlocked",
@@ -95,6 +98,7 @@ class QualityDiscoveryService(
         decisions: DecisionService | None = None,
         provider_factory: Callable | None = None,
         workspace_service=None,
+        task_commands: TaskCommandService | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.browser_runtime = browser_runtime
@@ -106,6 +110,7 @@ class QualityDiscoveryService(
             provider_factory = AIProviderRegistry.get_provider
         self.provider_factory = provider_factory
         self.workspace_service = workspace_service
+        self.task_commands = task_commands
         self._tasks: dict[str, asyncio.Task] = {}
         self._resume_events: dict[str, asyncio.Event] = {}
         self._stop_events: dict[str, asyncio.Event] = {}

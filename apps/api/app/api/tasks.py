@@ -21,14 +21,10 @@ from app.services.api_read_service import TaskEventService
 from app.services.task_command_service import TaskCommandService
 
 router = APIRouter(prefix="/tasks", tags=["Agent Tasks"])
-task_runtime_service = get_task_runtime_service()
-task_command_service = task_runtime_service.commands
-task_execution_service = task_runtime_service.execution
-task_scheduler_service = task_runtime_service.scheduler
 
 
 def get_task_command_service(request: Request) -> TaskCommandService:
-    runtime = getattr(request.app.state, "task_runtime", task_runtime_service)
+    runtime = getattr(request.app.state, "task_runtime", None) or get_task_runtime_service()
     return runtime.commands
 
 

@@ -135,9 +135,9 @@ async def lifespan(app: FastAPI):
             logger.warning("Recovered %d stale run(s) at startup: %s", len(recovered), ", ".join(recovered))
     except Exception as error:  # pragma: no cover - startup must never fail because of recovery
         logger.warning("Stale run recovery skipped: %s", error)
-    from app.api.tasks import task_runtime_service
+    from app.container import get_task_runtime_service
 
-    task_runtime = task_runtime_service
+    task_runtime = get_task_runtime_service()
     app.state.task_runtime = task_runtime
     await task_runtime.start()
     from app.container import get_platform_health_service

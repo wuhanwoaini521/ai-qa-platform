@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from app.api.runs import open_run_service
-from app.api.tasks import task_command_service, task_execution_service, task_scheduler_service
+from app.container import get_task_runtime_service
 from app.persistence.models import TaskORM, TaskStepORM
 from app.repositories.task_repo import TaskRepository
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
@@ -21,6 +21,11 @@ from app.settings import settings
 from project_model.task_models import TaskStatus, TaskStepStatus, TaskType
 
 pytestmark = pytest.mark.integration
+
+task_runtime_service = get_task_runtime_service()
+task_command_service = task_runtime_service.commands
+task_execution_service = task_runtime_service.execution
+task_scheduler_service = task_runtime_service.scheduler
 
 
 @pytest.mark.asyncio
@@ -489,6 +494,13 @@ async def test_task_api_persists_task_steps_and_replayable_terminal_events(clien
     assert stream.status_code == 200
     assert '"type": "task.created"' in stream.text
     assert '"type": "task.completed"' in stream.text
+
+    resumed = await client.get(f"/api/tasks/{task_id}/events", headers={"Last-Event-ID": "1"})
+    assert resumed.status_code == 200
+    assert '"type": "task.completed"' in resumed.text
+    assert '"type": "task.created"' not in resumed.text
+    invalid_cursor = await client.get(f"/api/tasks/{task_id}/events", headers={"Last-Event-ID": "invalid"})
+    assert invalid_cursor.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -1341,7 +1353,7 @@ async def test_regression_task_executes_a_real_local_pytest_run(client):
 async def test_browser_agent_observe_jev_execute_and_reobserve_on_local_page(
     client, monkeypatch, jev_available, scenario
 ):
-    from app.api.tasks import task_scheduler_service
+    task_scheduler_service = get_task_runtime_service().scheduler
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse
     from qa_core.ai.registry import AIProviderRegistry
@@ -1552,7 +1564,7 @@ async def test_browser_agent_completes_second_ecommerce_journey_on_demo_shop(cli
     from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
     from threading import Thread
 
-    from app.api.tasks import task_scheduler_service
+    task_scheduler_service = get_task_runtime_service().scheduler
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse
     from qa_core.ai.registry import AIProviderRegistry
@@ -1770,7 +1782,7 @@ async def test_browser_agent_manual_takeover_resumes_same_recorder_session(clien
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from threading import Thread
 
-    from app.api.tasks import task_scheduler_service
+    task_scheduler_service = get_task_runtime_service().scheduler
     from app.container import recorder_service
     from project_model.models import DecisionResult
     from qa_core.ai.models import AICompletionResponse

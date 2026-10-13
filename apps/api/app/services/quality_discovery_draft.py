@@ -14,7 +14,7 @@ from app.services.recorder_service import RecorderLocator, RecorderStep
 class QualityDiscoveryDraftMixin:
     """Build human-reviewed pytest proposals from verified Discovery graph edges."""
 
-    async def create_pytest_draft(self, run_id: str, journey_id: str, owner_id: str, task_commands):
+    async def create_pytest_draft(self, run_id: str, journey_id: str, owner_id: str):
         run = await self.get(run_id)
         if run is None:
             raise ValueError("Quality Discovery run not found.")
@@ -52,7 +52,9 @@ class QualityDiscoveryDraftMixin:
                 "discovery_journey_id": journey_id,
             },
         )
-        return await task_commands.create(task, owner_id)
+        if self.task_commands is None:
+            raise RuntimeError("Quality Discovery task commands are not configured.")
+        return await self.task_commands.create(task, owner_id)
 
     def _journey_recording_steps(self, run: Any, result: dict[str, Any], journey: dict[str, Any]) -> list[RecorderStep]:
         start_url = str(run.start_url or "").strip()

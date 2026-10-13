@@ -4,7 +4,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from app.api.tasks import task_runtime_service
+from app.container import get_task_runtime_service
 from app.persistence.models import RequirementORM, TaskORM
 from app.repositories.ai_repo import AIRepository
 from app.repositories.requirement_repo import RequirementRepository
@@ -21,6 +21,8 @@ from project_model.models import DecisionResult, RequirementUpdate
 from qa_core.ai.models import AICompletionResponse
 from qa_core.ai.provider import AIProviderError, FakeAIProvider
 from sqlalchemy import select
+
+task_runtime_service = get_task_runtime_service()
 
 
 class TestOrchestrator:

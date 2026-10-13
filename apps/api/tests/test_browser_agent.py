@@ -695,7 +695,9 @@ def test_browser_official_site_verification_rejects_brand_spoofed_domains():
 
 @pytest.mark.asyncio
 async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(client, test_db_session, monkeypatch):
-    from app.api.tasks import task_execution_service
+    from app.container import get_task_runtime_service
+
+    task_execution_service = get_task_runtime_service().execution
     from qa_core.ai.registry import AIProviderRegistry
 
     created = await client.post(
@@ -760,7 +762,9 @@ async def test_browser_agent_uses_explicit_rule_fallback_after_provider_error(cl
 async def test_browser_agent_planner_prompt_is_bounded_and_omits_unrelated_input_values(
     client, test_db_session, monkeypatch
 ):
-    from app.api.tasks import task_execution_service
+    from app.container import get_task_runtime_service
+
+    task_execution_service = get_task_runtime_service().execution
     from qa_core.ai.registry import AIProviderRegistry
 
     created = await client.post(
@@ -956,7 +960,12 @@ def test_browser_agent_runtime_events_keep_plain_status_and_advanced_decision_da
 async def test_browser_agent_pause_keeps_step_pending_for_fresh_observation_on_resume(
     client, test_db_session, monkeypatch
 ):
-    from app.api.tasks import task_command_service, task_execution_service, task_scheduler_service
+    from app.container import get_task_runtime_service
+
+    task_runtime = get_task_runtime_service()
+    task_command_service = task_runtime.commands
+    task_execution_service = task_runtime.execution
+    task_scheduler_service = task_runtime.scheduler
 
     created = await client.post(
         "/api/tasks",
