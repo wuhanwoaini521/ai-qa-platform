@@ -27,3 +27,7 @@
   - `packages/project-model`: Shared domain models and schemas.
   - `packages/integrations`: Connectors and integrations (future TestRail, GitHub, etc.).
   - `runtime/`: Editable workspaces, projects, and runtime artifacts (never commit runtime data).
+
+## Playwright Version
+
+- Playwright-based tests must use Playwright 1.62.0. Do not install or run Playwright 1.63.0 or newer.
