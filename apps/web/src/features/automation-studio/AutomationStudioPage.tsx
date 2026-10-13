@@ -10,6 +10,7 @@ import { CommandPalette } from '../lifecycle/CommandPalette';
 import '../lifecycle/lifecycle.css';
 import { FileOpModalState, SidebarTab } from './types';
 import { errorText } from './errorText';
+import { resolveStudioRunTarget } from './runTarget';
 import { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
 import { useEditorTabs } from './hooks/useEditorTabs';
 import { useWorkspaceGit } from './hooks/useWorkspaceGit';
@@ -215,8 +216,15 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const studioRuntime = useRuntimeSnapshot(runtimeKind, runtimeId);
   useEffect(()=>{if(showBrowser)browserDrawerRef.current?.focus();},[showBrowser]);
   const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
-  const selectedTarget=linkedCase?.binding?.file_path===editor.activeTabPath?linkedCase.binding.nodeid:undefined;
-  const saveAndRun=async(target?:string)=>{if(!editor.activeTabPath&&!target){setDebugPreparationError(lc('noSourceFile'));return;}if(await editor.saveAll())await run.runExecution(target??selectedTarget??editor.activeTabPath??undefined);};
+  const saveAndRun = async (target?: string) => {
+    if (!editor.activeTabPath && !target) {
+      setDebugPreparationError(lc('noSourceFile'));
+      return;
+    }
+    if (await editor.saveAll()) {
+      await run.runExecution(resolveStudioRunTarget(editor.activeTabPath, target));
+    }
+  };
   const runCurrentRef=useRef(saveAndRun);runCurrentRef.current=saveAndRun;
   const debug = useDebugSession({
     projectId: currentProjectId,
