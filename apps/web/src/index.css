@@ -5038,11 +5038,6 @@ button, input, select, textarea {
   border-top: 1px solid transparent;
 }
 
-.link-rows--air .link-row:hover + .link-row,
-.link-rows--air .link-row:hover {
-  background: var(--surface-hover);
-}
-
 .link-rows--air .link-row-icon {
   background: transparent;
   border-color: var(--line-soft);
