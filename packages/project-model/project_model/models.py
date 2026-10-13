@@ -576,6 +576,7 @@ class FailureRepairState(str, Enum):
 class FailureRepairAction(str, Enum):
     START_ANALYSIS = "START_ANALYSIS"
     APPLY = "APPLY"
+    REJECT = "REJECT"
     VERIFY = "VERIFY"
     ROLLBACK = "ROLLBACK"
     RETRY = "RETRY"
@@ -613,6 +614,7 @@ class FailureRepairWorkflow(BaseModel):
     retry_run_id: str | None = None
     retry_run_status: str | None = None
     verified: bool = False
+    block_reason: str | None = None
     failure_snapshot: FailureSnapshotBundle = Field(
         default_factory=lambda: FailureSnapshotBundle(
             evidence_gaps=["failure_snapshot_not_available"],

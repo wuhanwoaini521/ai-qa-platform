@@ -504,12 +504,15 @@ class FailureWorkflowService:
             raise ValueError("Analysis record not found for this failure")
         if analysis is None and rows:
             analysis = rows[0]
+        repair_record = None
+        block_reason = None
         if analysis is None:
             state = "CREATED"
             result: dict[str, Any] = {}
         else:
             result = dict(analysis.get("result") or {})
             repair_record = await self._locator_repair_for_analysis(analysis["id"])
+            block_reason = repair_record.block_reason if repair_record is not None else None
             state = (
                 repair_record.state.value
                 if repair_record is not None
@@ -549,7 +552,13 @@ class FailureWorkflowService:
         )
         if state == "PATCH_READY" and not verified_patch:
             state = "BLOCKED"
-        elif state == "BLOCKED" and verified_patch and analysis and analysis["status"] == "COMPLETED":
+        elif (
+            state == "BLOCKED"
+            and block_reason != "HUMAN_REJECTED"
+            and verified_patch
+            and analysis
+            and analysis["status"] == "COMPLETED"
+        ):
             state = "PATCH_READY"
         if same_repair and proposal.get("rollback_status") == "ROLLED_BACK":
             state = "ROLLED_BACK"
@@ -606,6 +615,7 @@ class FailureWorkflowService:
             retry_run_id=retry_run.id if retry_run else None,
             retry_run_status=retry_run.status if retry_run else None,
             verified=verified,
+            block_reason=block_reason,
             failure_snapshot=failure_snapshot,
             repair_proposal={**selected_proposal, **proposal} if selected_proposal else None,
         )
@@ -668,6 +678,28 @@ class FailureWorkflowService:
         )
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
+
+    async def reject_repair(self, failure_id: str, analysis_id: str) -> FailureRepairWorkflow:
+        workflow = await self.get_repair_workflow(failure_id, analysis_id)
+        if "REJECT" not in workflow.allowed_actions:
+            raise ValueError(f"Repair state {workflow.state} does not allow rejection")
+        if workflow.repair_proposal is None:
+            raise ValueError("No repair proposal is available to reject")
+        failure = await self.failures.get_failure_state(failure_id)
+        analysis = next((row for row in await self._history_list(failure_id) if row["id"] == analysis_id), None)
+        if failure is None or analysis is None:
+            raise ValueError("Failure or analysis record not found")
+        await self._record_transition(
+            failure,
+            analysis,
+            "BLOCKED",
+            "repair.rejected",
+            "Repair proposal rejected by a human",
+            block_reason="HUMAN_REJECTED",
+            changes_applied=False,
+            verified=False,
+        )
+        return await self.get_repair_workflow(failure_id, analysis_id)
 
     async def rollback_repair(
         self,

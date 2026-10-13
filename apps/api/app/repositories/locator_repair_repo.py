@@ -17,7 +17,13 @@ class LocatorRepairRepository:
         self.session = session
 
     async def get_by_id(self, repair_id: str) -> LocatorRepairORM | None:
-        return await self.session.get(LocatorRepairORM, repair_id)
+        result = await self.session.execute(
+            select(LocatorRepairORM)
+            .where(LocatorRepairORM.id == repair_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
 
     async def get_by_analysis(self, analysis_id: str) -> LocatorRepairORM | None:
         result = await self.session.execute(select(LocatorRepairORM).where(LocatorRepairORM.analysis_id == analysis_id))

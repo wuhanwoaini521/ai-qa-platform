@@ -635,6 +635,11 @@ export const api = {
     request<FailureAnalysisRun[]>(
       `/failures/${encodeURIComponent(id)}/analyses`,
     ),
+  rejectRepair: (failureId: string, analysisId: string) =>
+    request<FailureRepairWorkflow>(
+      `/failures/${encodeURIComponent(failureId)}/analyses/${encodeURIComponent(analysisId)}/reject`,
+      { method: 'POST' },
+    ),
   linkFailureVerification: (id: string, analysisId: string, runId: string) =>
     request(
       `/failures/${encodeURIComponent(id)}/analyses/${encodeURIComponent(analysisId)}/verification?run_id=${encodeURIComponent(runId)}`,

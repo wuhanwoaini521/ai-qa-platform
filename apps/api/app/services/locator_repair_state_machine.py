@@ -197,7 +197,7 @@ class LocatorRepairStateMachine:
             FailureRepairState.ANALYZING: (),
             FailureRepairState.DECIDING: (),
             FailureRepairState.VERIFYING_CANDIDATE: (),
-            FailureRepairState.PATCH_READY: ("APPLY", "START_ANALYSIS"),
+            FailureRepairState.PATCH_READY: ("APPLY", "REJECT", "START_ANALYSIS"),
             FailureRepairState.APPLYING: (),
             FailureRepairState.PATCH_APPLIED: ("VERIFY", "ROLLBACK"),
             FailureRepairState.VERIFYING_FIX: (),

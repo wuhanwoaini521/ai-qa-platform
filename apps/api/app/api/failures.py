@@ -75,6 +75,18 @@ async def get_repair_workflow(
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@router.post("/{failure_id}/analyses/{analysis_id}/reject", response_model=FailureRepairWorkflow)
+async def reject_analysis_repair(
+    failure_id: str,
+    analysis_id: str,
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+):
+    try:
+        return await workflow.reject_repair(failure_id, analysis_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.post("/{failure_id}/analyses/{analysis_id}/apply")
 async def apply_analysis_repair(
     failure_id: str,

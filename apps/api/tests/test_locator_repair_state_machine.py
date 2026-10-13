@@ -16,6 +16,7 @@ from project_model.models import FailureRepairState
         (FailureRepairState.DECIDING, FailureRepairState.VERIFYING_CANDIDATE),
         (FailureRepairState.VERIFYING_CANDIDATE, FailureRepairState.PATCH_READY),
         (FailureRepairState.PATCH_READY, FailureRepairState.APPLYING),
+        (FailureRepairState.PATCH_READY, FailureRepairState.BLOCKED),
         (FailureRepairState.APPLYING, FailureRepairState.PATCH_APPLIED),
         (FailureRepairState.PATCH_APPLIED, FailureRepairState.VERIFYING_FIX),
         (FailureRepairState.VERIFYING_FIX, FailureRepairState.VERIFIED),
@@ -49,6 +50,14 @@ def test_locator_repair_state_machine_allows_idempotent_reconciliation():
         )
         is FailureRepairState.VERIFIED
     )
+
+
+def test_patch_ready_offers_explicit_apply_reject_and_reanalysis():
+    actions = LocatorRepairStateMachine.allowed_actions(FailureRepairState.PATCH_READY)
+    assert set(actions) == {"APPLY", "REJECT", "START_ANALYSIS"}
+    assert "APPLY" not in LocatorRepairStateMachine.allowed_actions(FailureRepairState.BLOCKED)
+    assert "REJECT" not in LocatorRepairStateMachine.allowed_actions(FailureRepairState.BLOCKED)
+    assert "START_ANALYSIS" in LocatorRepairStateMachine.allowed_actions(FailureRepairState.BLOCKED)
 
 
 def test_locator_repair_block_reason_is_a_stable_non_sensitive_code():

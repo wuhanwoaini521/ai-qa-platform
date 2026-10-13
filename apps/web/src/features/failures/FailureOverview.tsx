@@ -73,6 +73,7 @@ export const FailureOverview: React.FC<{
   relatedTests: string[];
   repairProposed: boolean;
   repairApplied: boolean;
+  repairRejected: boolean;
   showCodeRepairAction?: boolean;
   codeRepairPending?: boolean;
   hasRepairTask?: boolean;
@@ -108,6 +109,7 @@ export const FailureOverview: React.FC<{
   relatedTests,
   repairProposed,
   repairApplied,
+  repairRejected,
   showCodeRepairAction = false,
   codeRepairPending = false,
   hasRepairTask = false,
@@ -144,8 +146,10 @@ export const FailureOverview: React.FC<{
   const verificationLabel = verifiedStatus
     ? t(`verificationStatuses.${verifiedStatus}`, { defaultValue: verifiedStatus })
     : t('notStarted');
-  const repairLabel = repairApplied
-    ? t('repairAppliedStatus')
+  const repairLabel = repairRejected
+    ? t('proposalRejected')
+    : repairApplied
+      ? t('repairAppliedStatus')
     : repairProposed
       ? t('repairProposalAvailable')
       : t('repairPending');

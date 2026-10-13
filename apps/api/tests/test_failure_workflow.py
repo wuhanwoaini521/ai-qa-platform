@@ -302,7 +302,7 @@ async def test_retryable_terminal_failure_states_allow_fresh_analysis(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("verification_source", ["playwright", "playwright_snapshot"])
 @pytest.mark.parametrize("stored_state", ["PATCH_READY", "BLOCKED"])
-async def test_patch_ready_workflow_keeps_apply_and_allows_fresh_analysis(
+async def test_patch_ready_workflow_keeps_apply_reject_and_fresh_analysis(
     client, test_db_session, verification_source, stored_state
 ):
     from app.persistence.models import FailureRecordORM
@@ -340,7 +340,7 @@ async def test_patch_ready_workflow_keeps_apply_and_allows_fresh_analysis(
         state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id)
 
     assert state.state == "PATCH_READY"
-    assert state.allowed_actions == ["APPLY", "START_ANALYSIS"]
+    assert state.allowed_actions == ["APPLY", "REJECT", "START_ANALYSIS"]
 
 
 @pytest.mark.asyncio
@@ -1391,3 +1391,93 @@ async def test_only_an_actual_matching_rerun_updates_verification(client, test_d
         repeated = await workflow.list_history(failure_id)
         assert repeated[0]["result"]["verified"] is (status == RunStatus.PASSED)
         assert repeated[0]["events"][-1]["metadata"]["verification_run_id"] == second_rerun.id
+
+
+@pytest.mark.asyncio
+async def test_rejected_locator_proposal_persists_and_cannot_be_applied(client, test_db_session):
+    from app.persistence.models import FailureRecordORM, LocatorRepairORM
+    from project_model.models import FailureRepairState
+
+    project_id, failure_id, source = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#checkout")',
+        kind="UI",
+        source='def test_workflow(page):\n    page.locator("#checkout").click()\n',
+    )
+    analysis_id = "analysis-human-rejected"
+    proposal = {
+        "old_locator": "#checkout",
+        "proposed_locator": 'get_by_test_id("checkout-new")',
+        "file_path": "tests/test_workflow.py",
+        "applied": False,
+        "verified": True,
+        "provider": "jev",
+        "decision_summary": {
+            "fallback_used": False,
+            "verification_source": "playwright",
+            "confidence": 0.92,
+        },
+        "ai_provider": "openai-compatible",
+        "ai_fallback_used": False,
+        "candidate_id": "candidate_1",
+        "code_diff": '- page.locator("#checkout")\n+ page.get_by_test_id("checkout-new")',
+        "source_sha256": "source-hash",
+    }
+    async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        failure.repair_proposal = proposal
+        session.add(
+            FailureAnalysisORM(
+                id=analysis_id,
+                failure_id=failure_id,
+                status="COMPLETED",
+                result={
+                    "repair_state": "PATCH_READY",
+                    "repair_proposal": proposal,
+                    "changes_applied": False,
+                    "verified": False,
+                },
+            )
+        )
+        session.add(
+            LocatorRepairORM(
+                id="repair-human-rejected",
+                failure_id=failure_id,
+                analysis_id=analysis_id,
+                state=FailureRepairState.PATCH_READY,
+                candidate_id="candidate_1",
+            )
+        )
+        await session.commit()
+
+    rejected = await client.post(f"/api/failures/{failure_id}/analyses/{analysis_id}/reject")
+    assert rejected.status_code == 200, rejected.text
+    workflow = rejected.json()
+    assert workflow["state"] == "BLOCKED"
+    assert workflow["block_reason"] == "HUMAN_REJECTED"
+    assert workflow["allowed_actions"] == ["START_ANALYSIS"]
+    assert workflow["repair_proposal"]["proposed_locator"] == proposal["proposed_locator"]
+    assert workflow["repair_proposal"]["applied"] is False
+
+    persisted = await client.get(f"/api/failures/{failure_id}/repair-workflow", params={"analysis_id": analysis_id})
+    assert persisted.status_code == 200, persisted.text
+    assert persisted.json()["block_reason"] == "HUMAN_REJECTED"
+    history = await client.get(f"/api/failures/{failure_id}/analyses")
+    assert history.status_code == 200, history.text
+    rejected_analysis = next(row for row in history.json() if row["id"] == analysis_id)
+    assert rejected_analysis["result"]["block_reason"] == "HUMAN_REJECTED"
+    assert any(event["type"] == "repair.rejected" for event in rejected_analysis["events"])
+
+    apply = await client.post(
+        f"/api/failures/{failure_id}/analyses/{analysis_id}/apply",
+        json={
+            "file_path": proposal["file_path"],
+            "old_code": proposal["old_locator"],
+            "new_code": proposal["proposed_locator"],
+        },
+    )
+    assert apply.status_code == 422
+    current_source = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
+    assert current_source.status_code == 200, current_source.text
+    assert current_source.json()["content"] == source

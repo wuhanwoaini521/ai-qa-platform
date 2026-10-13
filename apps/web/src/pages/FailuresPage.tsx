@@ -41,6 +41,7 @@ import {
   History,
   Bug,
   ExternalLink,
+  XCircle,
 } from 'lucide-react';
 
 interface FailuresPageProps {
@@ -258,10 +259,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     useState<JiraCreateBugResponse | null>(null);
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
+  const [rejectingRepair, setRejectingRepair] = useState<boolean>(false);
   const [startingCodeRepair, setStartingCodeRepair] = useState<boolean>(false);
   const [repairTaskId, setRepairTaskId] = useState<string | null>(null);
   const [rollingBackRepair, setRollingBackRepair] = useState<boolean>(false);
   const repairApplied = repairWorkflow?.repair_proposal?.applied === true;
+  const repairRejected = repairWorkflow?.block_reason === 'HUMAN_REJECTED';
   const repairVerified = repairWorkflow?.verified === true;
   const repairReady = repairWorkflow?.allowed_actions.includes('APPLY') === true;
   const diagnosisState = repairWorkflow?.state ?? 'CREATED';
@@ -632,6 +635,35 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
+  const handleRejectRepair = async () => {
+    if (
+      !selectedFailure ||
+      !selectedAnalysisId ||
+      !repairWorkflow?.allowed_actions.includes('REJECT') ||
+      rejectingRepair ||
+      applyingRepair
+    ) return;
+    try {
+      setRejectingRepair(true);
+      setRepairError('');
+      const workflow = await api.rejectRepair(selectedFailure.id, selectedAnalysisId);
+      setRepairWorkflow(workflow);
+      setRepairProposal(workflow.repair_proposal as LocatorRepairProposal | null);
+      setSelectedCandidate('');
+      setSemanticReview(null);
+      const rows = await api.getFailureAnalyses(selectedFailure.id);
+      setAnalysisHistory(rows);
+      const rejectedAnalysis = rows.find((item) => item.id === selectedAnalysisId);
+      if (rejectedAnalysis) restoreAnalysis(rejectedAnalysis);
+    } catch (error) {
+      setRepairError(t('alertRejectRepairFailed', {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setRejectingRepair(false);
+    }
+  };
+
   const handlePrepareCodeRepair = async () => {
     if (!selectedFailure || !currentProjectId || startingCodeRepair) return;
     if (repairTaskId) {
@@ -925,6 +957,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 relatedTests={sharedFailures.map((item) => item.test_nodeid)}
                 repairProposed={Boolean(repairProposal)}
                 repairApplied={repairApplied}
+                repairRejected={repairRejected}
                 rerunMessage={rerunMessage}
                 showCodeRepairAction={canPrepareCodeRepair}
                 codeRepairPending={startingCodeRepair}
@@ -996,14 +1029,18 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           ? t('reviewing')
                           : t('semanticReview')}
                       </button>
-                      {repairApplied ? (
+                      {repairRejected ? (
+                        <span className="badge badge-failed" role="status">
+                          {t('proposalRejected')}
+                        </span>
+                      ) : repairApplied ? (
                         <span className="badge badge-ready">
                           {t('repairApplied')}
                         </span>
                       ) : repairWorkflow?.allowed_actions.includes('APPLY') ? (
                         <button
                           className="btn btn-secondary btn-sm"
-                          disabled={applyingRepair || rerunning || !repairProposal.source_locator || !repairProposal.code_diff}
+                          disabled={applyingRepair || rejectingRepair || rerunning || !repairProposal.source_locator || !repairProposal.code_diff}
                           onClick={handleApplyRepair}
                         >
                           <Check size={13} />{' '}
@@ -1028,16 +1065,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                             {rollingBackRepair ? t('rollingBack') : t('rollbackRepair')}
                           </button>
                       )}
-                      {!repairApplied && repairWorkflow?.allowed_actions.includes('APPLY') && (
+                      {repairWorkflow?.allowed_actions.includes('REJECT') && (
                         <button
                           className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setRepairProposal(null);
-                            setSelectedCandidate('');
-                            setSemanticReview(null);
-                          }}
+                          disabled={rejectingRepair || applyingRepair}
+                          onClick={() => void handleRejectRepair()}
                         >
-                          {t('ignoreProposal')}
+                          <XCircle size={13} />{' '}
+                          {t(rejectingRepair ? 'rejectingProposal' : 'rejectProposal')}
                         </button>
                       )}
                     </div>
@@ -1057,8 +1092,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         }}
                       >
                         <>
-                          {!repairWorkflow?.allowed_actions.includes('APPLY') || !repairProposal.verified
-                            ? t('repairNotVerified')
+                          {repairRejected
+                            ? t('proposalRejectedDetail')
+                            : !repairWorkflow?.allowed_actions.includes('APPLY') || !repairProposal.verified
+                              ? t('repairNotVerified')
                             : repairProposal.decision_summary?.verification_source === 'captured_browser_evidence'
                               ? t('repairCandidateVerifiedFromEvidence')
                               : t('repairCandidateVerifiedByPlaywright')}
