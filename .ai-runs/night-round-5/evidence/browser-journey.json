@@ -1,0 +1,53 @@
+{
+  "environment": {
+    "api": "http://127.0.0.1:8002",
+    "web": "http://127.0.0.1:5173",
+    "database": "disposable SQLite at /tmp/night-round-5/qa.db",
+    "browser": "system Google Chrome attached to agent-browser over CDP",
+    "auth": "seeded local admin in the disposable database"
+  },
+  "runtime": {
+    "api_live_status": 200,
+    "api_live_body": {"status": "alive"},
+    "web_html_title": "AI QA Platform",
+    "browser_login_status": 200
+  },
+  "journey": {
+    "fixture": "synthetic failed run with a PATCH_READY proposal and a test workspace file",
+    "open_failure_workspace": "passed",
+    "reject_action": "clicked the visible Reject proposal control",
+    "reject_post_status": 200,
+    "reload": "rejection remained visible in the proposal and workflow history",
+    "controls_after_reload": {
+      "apply_visible": false,
+      "reject_visible": false,
+      "reanalyze_available": true
+    },
+    "apply_post_status": 422,
+    "source_unchanged": true,
+    "persisted_state": "BLOCKED / HUMAN_REJECTED",
+    "allowed_actions": ["START_ANALYSIS"],
+    "rejection_event_persisted": true
+  },
+  "browser_coverage": {
+    "routes_loaded": ["login", "QA workspace/failure", "dashboard", "projects", "runs"],
+    "page_errors": 0,
+    "network": "post-reject and reload workflow requests returned 200; expected denied Apply returned 422",
+    "axe_version": "4.12.1",
+    "axe_scope": ".failure-repair-proposal",
+    "axe_violations": 0,
+    "axe_incomplete": 0,
+    "responsive_widths": {
+      "1440": {"document_width": 1440, "viewport_width": 1440},
+      "768": {"document_width": 768, "viewport_width": 768},
+      "360": {"document_width": 360, "viewport_width": 360}
+    }
+  },
+  "safety": {
+    "ai_or_jev_invoked": false,
+    "test_execution_triggered": false,
+    "apply_request_attempted": true,
+    "source_apply_succeeded": false,
+    "persistent_user_database_touched": false
+  }
+}

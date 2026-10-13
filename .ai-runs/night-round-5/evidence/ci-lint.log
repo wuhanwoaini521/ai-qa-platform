@@ -1,0 +1,14 @@
+$ python scripts/task.py lint
+Linting Python code with ruff...
+$ mise exec -- uv run ruff check .
+All checks passed!
+Checking Python formatting...
+$ mise exec -- uv run ruff format --check .
+428 files already formatted
+Checking translation parity...
+$ mise exec -- uv run python scripts/i18n_check.py
+i18n check passed: 25 namespace(s), 2 language(s), 2916 keys
+Linting frontend...
+$ mise exec -- pnpm --filter @ai-qa/web lint
+$ eslint .
+All linters passed!

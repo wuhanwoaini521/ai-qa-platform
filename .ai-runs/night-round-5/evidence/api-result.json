@@ -1,0 +1,69 @@
+{
+  "workflow": {
+    "repair_id": "repair-round5-human-rejected",
+    "failure_id": "fail_28b48e786ca0",
+    "analysis_id": "analysis-round5-human-rejected",
+    "state": "BLOCKED",
+    "allowed_actions": [
+      "START_ANALYSIS"
+    ],
+    "verification_run_id": null,
+    "verification_run_status": null,
+    "retry_run_id": null,
+    "retry_run_status": null,
+    "verified": false,
+    "block_reason": "HUMAN_REJECTED",
+    "failure_snapshot": {
+      "status": "INSUFFICIENT_EVIDENCE",
+      "captured_at": null,
+      "url": null,
+      "accessibility_tree": "",
+      "redacted_dom": "",
+      "failed_locator": null,
+      "original_element_baseline": {
+        "status": "MISSING",
+        "fingerprint": null,
+        "reason": "failure_snapshot_not_available"
+      },
+      "storage_state_status": "NOT_CAPTURED",
+      "storage_state_expires_at": null,
+      "replay": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "safe_point": null,
+        "replayed_steps": [],
+        "not_replayed_steps": [],
+        "message": "No live failure snapshot was captured."
+      },
+      "evidence_gaps": [
+        "failure_snapshot_not_captured"
+      ]
+    },
+    "repair_proposal": {
+      "old_locator": "#checkout",
+      "source_locator": "#checkout",
+      "proposed_locator": "get_by_test_id(\"checkout-new\")",
+      "file_path": "tests/test_workflow.py",
+      "applied": false,
+      "verified": true,
+      "provider": "jev",
+      "decision_summary": {
+        "fallback_used": false,
+        "verification_source": "playwright",
+        "confidence": 0.92
+      },
+      "ai_provider": "openai-compatible",
+      "ai_fallback_used": false,
+      "candidate_id": "candidate_round5",
+      "code_diff": "- page.locator(\"#checkout\")\n+ page.get_by_test_id(\"checkout-new\")",
+      "source_sha256": "round5-isolated-fixture",
+      "strategy": "TEST_ID",
+      "reason": "Round 5 isolated regression fixture",
+      "confidence": 0.92
+    }
+  },
+  "analysis_status": "COMPLETED",
+  "history_block_reason": "HUMAN_REJECTED",
+  "rejection_event_persisted": true,
+  "apply_http_status": 422,
+  "source_unchanged": true
+}

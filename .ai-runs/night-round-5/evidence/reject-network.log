@@ -1,0 +1,3 @@
+[44072.476] GET http://127.0.0.1:5173/api/failures/fail_28b48e786ca0/repair-workflow?analysis_id=analysis-round5-human-rejected (Fetch) 200
+[44072.483] POST http://127.0.0.1:5173/api/failures/fail_28b48e786ca0/analyses/analysis-round5-human-rejected/reject (Fetch) 200
+[44072.722] GET http://127.0.0.1:5173/api/failures/fail_28b48e786ca0/repair-workflow?analysis_id=analysis-round5-human-rejected (Fetch) 200
