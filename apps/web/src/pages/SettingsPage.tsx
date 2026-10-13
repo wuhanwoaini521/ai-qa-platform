@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Activity, Check, Globe, LayoutDashboard, Play, RefreshCw, RotateCcw, Wifi } from 'lucide-react';
 import { SUPPORTED_LANGUAGES } from '../i18n';
@@ -47,6 +47,7 @@ export const SettingsPage: React.FC = () => {
   const [configError, setConfigError] = useState('');
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [aiConnection, setAiConnection] = useState<AIProviderConnectionResult | null>(null);
+  const aiTestVersion = useRef(0);
   const [testingAI, setTestingAI] = useState(false);
   const [jevConnection, setJevConnection] = useState<{ connected: boolean; message: string; detail?: string } | null>(null);
   const [testingJev, setTestingJev] = useState(false);
@@ -72,7 +73,10 @@ export const SettingsPage: React.FC = () => {
         if (!active) return;
         setEffective(configResult);
         setSources(sourceResult.sources);
-        void api.getAIStatus().then((status) => { if (active) setAiStatus(status); }).catch(() => undefined);
+        const statusVersion = aiTestVersion.current;
+        void api.getAIStatus().then((status) => {
+          if (active && statusVersion === aiTestVersion.current) setAiStatus(status);
+        }).catch(() => undefined);
       })
       .catch(() => { if (active) setConfigError(t('effective.loadFailed')); })
       .finally(() => { if (active) setLoading(false); });
@@ -102,7 +106,9 @@ export const SettingsPage: React.FC = () => {
   };
 
   const testAI = async () => {
+    aiTestVersion.current += 1;
     setTestingAI(true);
+    setAiStatus(null);
     setAiConnection(null);
     try {
       setAiConnection(await api.testAIProviderConnection());
@@ -201,7 +207,7 @@ export const SettingsPage: React.FC = () => {
               <button type="button" className="btn btn-secondary btn-sm" disabled={testingAI} onClick={() => void testAI()} style={{ marginTop: 12 }}>
                 <Wifi size={13} /> {testingAI ? t('aiConfig.testing') : t('aiConfig.testConnection')}
               </button>
-              {aiConnection && <p role="status" style={{ color: aiConnection.connected ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: 12 }}>
+              {aiConnection && <p role="status" style={{ color: aiConnection.connected && aiConnection.structured_output_supported !== false ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: 12 }}>
                 {aiConnection.message} · {aiConnection.provider} / {aiConnection.model} · {Math.round(aiConnection.latency_ms ?? 0)} ms
               </p>}
             </div></div>

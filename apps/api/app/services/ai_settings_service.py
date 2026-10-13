@@ -235,7 +235,8 @@ class AISettingsService:
                             system_instruction="Reply with OK.",
                             prompt_id="provider_connection",
                             prompt_version="v1.0",
-                            max_tokens=16,
+                            max_tokens=128,
+                            max_retries=0,
                             thinking_mode=probe_thinking_mode,
                         )
                     ):
@@ -246,6 +247,12 @@ class AISettingsService:
                     health.status = ProviderHealth.UNAVAILABLE
                     code = getattr(error, "code", None) or type(error).__name__
                     safe_message = getattr(error, "safe_message", None)
+                    if (
+                        not isinstance(safe_message, str)
+                        and isinstance(error, RuntimeError)
+                        and str(error).startswith("AI provider ")
+                    ):
+                        code = str(error).removeprefix("AI provider ")
                     detail = f": {safe_message}" if isinstance(safe_message, str) else ""
                     health.message = f"Model streaming probe failed ({code}){detail}."
             if verify_structured_output and config.provider != "fake" and health.status == ProviderHealth.AVAILABLE:
@@ -256,7 +263,8 @@ class AISettingsService:
                             system_instruction="Return only the requested JSON object, with no prose or Markdown.",
                             prompt_id="provider_structured_output_probe",
                             prompt_version="v1.0",
-                            max_tokens=32,
+                            max_tokens=128,
+                            max_retries=0,
                             thinking_mode=probe_thinking_mode,
                             response_schema=_StructuredOutputProbe,
                         )
