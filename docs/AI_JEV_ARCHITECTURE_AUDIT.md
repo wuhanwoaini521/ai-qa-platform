@@ -165,3 +165,15 @@ python -m pytest apps/api/tests/test_live_locator_repair_acceptance.py -q
 ### 最终判断
 
 架构 P1 达标，Architecture Boundary V2 为 B+；真实 AI/Jev Locator Golden、API-only Golden、UI Golden 与最终后端回归均通过。Overall 为 **PARTIAL**：PostgreSQL lane 缺少数据库/Docker 环境；本轮验收临时目录清理也因 Windows ACL 在 `runtime/.qa-overnight-acceptance/pytest-budget-focused` 返回 Access Denied，未继续递归重试。`.ai-runs` 等原有运行数据未触碰。
+
+## 2026-10-13 人工批准边界复核
+
+复核发现，历史 `mode=AUTO` 路径会在没有用户 Apply 请求的情况下调用 `apply_repair()` 写入 Locator patch、自动启动原 nodeid 复测，并在失败后自动启动下一轮 AI/Jev workflow。这与 ROADMAP 第 0.2/0.5 节不变量冲突；之前的自动化/opt-in acceptance 证明了自动写回链路，却不能证明人审边界。
+
+现修正为：`AUTO` 仅可自动启动一次失败分析并生成证据支持的 proposal；workflow 始终停在 `PATCH_READY`，源码不变且不创建验证 run。用户必须显式 Apply，之后再显式启动精确用例验证。验证失败时保留配置的自动回滚安全措施，不再触发另一轮 AI/Jev 分析。旧 `repair.max_attempts` 字段为配置兼容保留，不再执行 unattended retries。
+
+回归测试 `test_automatic_failure_analysis_requires_human_approval_before_patch` 覆盖：AUTO proposal 不写源码、不自动复测；显式批准后可以 Apply、精确复测，失败时能回滚且不会自动启动第二轮。真实 provider acceptance 已改为先验证 proposal-only，再通过明确的 Apply 与 verification API 请求验收；真实 AI/Jev 结果仍需显式 opt-in 执行，不以模拟测试冒充。
+
+### 2026-10-13 Live Acceptance Result
+
+本轮显式运行 `test_live_ai_jev_repair_requires_approval_and_exact_rerun` 未通过：analysis 在 assertion 时仍为 `RUNNING`，没有可检查的完成结果；测试因此未证明真实 workflow 从 diagnosis 到 proposal、人工 Apply 和精确复测的全链路。单独调用共享 `DecisionService.choose()` 使用 Jev 返回 `candidate_1`、confidence `1.0`、`fallback_used=false`，但这不替代端到端验收。阻塞原因尚未确认；本次回归结果记为 **FAIL / unresolved**，不应引用更早的 Golden 结果宣称当前验收通过。

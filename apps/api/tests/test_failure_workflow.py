@@ -757,8 +757,8 @@ class RecordingDecision:
 
 
 @pytest.mark.asyncio
-async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_pipeline(
-    client, test_db_session, local_html_url
+async def test_automatic_failure_analysis_requires_human_approval_before_patch(
+    client, test_db_session, local_html_url, monkeypatch
 ):
     url = local_html_url('<button aria-label="Complete order">Continue</button>')
     source = 'def test_workflow(page):\n    page.locator("#checkout").click()\n'
@@ -793,90 +793,81 @@ async def test_ai_resolved_locator_classification_enters_jev_and_verified_patch_
             run_service=runs,
             auto_repair_mode="AUTO",
         )
-        events = [event async for event in workflow.stream(failure_id)]
-        verification_monitors = tuple(workflow._verification_monitors)
 
-    completed = next(event for event in events if event.type == "run.completed")
-    result = completed.metadata
-    assert events[-1].type == "run.completed", [
-        (event.type, event.stage, event.status, event.message) for event in events
-    ]
-    verification = next(
-        (
-            event
+        async def ready_for_analysis():
+            return {"ready": True}
+
+        monkeypatch.setattr(workflow, "_runtime_readiness", ready_for_analysis)
+        events = [event async for event in workflow.stream(failure_id, auto_triggered=True)]
+        completed = next(event for event in events if event.type == "run.completed")
+        result = completed.metadata
+        proposal = result["repair_proposal"]
+        analysis_id = result["analysis_id"]
+
+        assert events[-1].type == "run.completed"
+        assert result["initial_classification"] == "ASSERTION_FAILURE"
+        assert result["resolved_classification"] == "LOCATOR_CHANGED"
+        assert result["classification_source"] == "AI_DIAGNOSIS"
+        assert len(decision.calls) == 1
+        assert result["selection"]["provider"] == "jev"
+        assert proposal["proposed_locator"] == 'get_by_role("button", name="Complete order", exact=True)'
+        assert proposal["verified"] is True
+        assert proposal["code_diff"]
+        assert result["repair_state"] == "PATCH_READY"
+        assert result["changes_applied"] is False
+        assert result.get("verification_run_id") is None
+        assert not any(
+            event.type == "workflow.step" and event.stage == "verification" and event.metadata.get("test_rerun") is True
             for event in events
-            if event.type == "workflow.step"
-            and event.stage == "verification"
-            and event.metadata.get("test_rerun") is True
-        ),
-        None,
-    )
-    assert verification is not None, json.dumps(
-        {
-            "result": result,
-            "steps": [
-                {
-                    "stage": event.stage,
-                    "status": event.status,
-                    "message": event.message,
-                    "metadata": event.metadata,
-                }
-                for event in events
-                if event.type == "workflow.step"
-            ],
-        },
-        ensure_ascii=False,
-    )
-    assert events.index(verification) < len(events) - 1
-    assert result["initial_classification"] == "ASSERTION_FAILURE"
-    assert result["resolved_classification"] == "LOCATOR_CHANGED"
-    assert result["classification_source"] == "AI_DIAGNOSIS"
-    assert len(decision.calls) == 1
-    assert result["selection"]["provider"] == "jev"
-    assert result["repair_proposal"]["proposed_locator"] == 'get_by_role("button", name="Complete order", exact=True)'
-    assert result["repair_proposal"]["verified"] is True, json.dumps(result["repair_proposal"], ensure_ascii=False)
-    assert result["repair_proposal"]["code_diff"]
-    assert result["repair_state"] == "VERIFYING_FIX"
-    assert result["changes_applied"] is True
-    assert verification.status == "RUNNING"
-    assert verification.metadata["test_rerun"] is True
-    assert verification.metadata["verified"] is False
-    history = await workflow.list_history(failure_id)
-    run_id = history[0]["result"]["verification_run_id"]
-    run_response = await client.get(f"/api/runs/{run_id}")
-    assert run_response.status_code == 200, run_response.text
-    assert run_response.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
-    source_response = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
-    assert source_response.status_code == 200, source_response.text
-    repaired_source = source_response.json()["content"]
-    assert 'page.locator("#checkout").click()' not in repaired_source
-    assert result["repair_proposal"]["proposed_locator"] in repaired_source
+        )
+        workflow_state = await workflow.get_repair_workflow(failure_id, analysis_id)
+        assert workflow_state.state == "PATCH_READY"
+        assert "APPLY" in workflow_state.allowed_actions
+        assert await service.workspace_service.read_file(project_id, "tests/test_workflow.py") == source
 
-    async with test_db_session() as session:
-        service = get_failure_service(session)
+        # The explicit approval path still applies the exact reviewed proposal and supports rollback.
+        await workflow.apply_repair(
+            failure_id,
+            analysis_id,
+            ApplyRepairRequest(
+                file_path=proposal["file_path"],
+                old_code=proposal["source_locator"],
+                new_code=proposal["proposed_locator"],
+            ),
+        )
+        verification_run = await workflow.start_verification(failure_id, analysis_id)
+        assert verification_run.nodeids == ["tests/test_workflow.py::test_workflow"]
+        verification_monitors = tuple(workflow._verification_monitors)
         await service.run_repo.update_run_status(
-            run_id,
+            verification_run.id,
             RunStatus.FAILED,
             failed=1,
             total=1,
             log_output="Simulated asynchronous verification failure",
         )
         await service.run_repo.add_execution(
-            run_id,
+            verification_run.id,
             "tests/test_workflow.py::test_workflow",
             RunStatus.FAILED,
             error_message="Simulated asynchronous verification failure",
         )
         await session.commit()
 
+    run_response = await client.get(f"/api/runs/{verification_run.id}")
+    assert run_response.status_code == 200, run_response.text
+    assert run_response.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
+    patched_response = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
+    assert patched_response.status_code == 200, patched_response.text
+    assert proposal["proposed_locator"] in patched_response.json()["content"]
+
     history = []
     for _ in range(30):
         await asyncio.sleep(0.1)
         async with test_db_session() as session:
-            service = get_failure_service(session)
-            history = await FailureWorkflowService(service)._history_list(failure_id)
+            history = await FailureWorkflowService(get_failure_service(session))._history_list(failure_id)
         if history[0]["result"].get("auto_rolled_back"):
             break
+    assert len(history) == 1, "A failed verification must not start another unattended analysis."
     assert history[0]["result"]["repair_state"] == "ROLLED_BACK", history[0]["result"]
     assert history[0]["result"]["auto_rolled_back"] is True
     assert history[0]["result"]["changes_applied"] is False

@@ -232,10 +232,9 @@ export const SettingsPage: React.FC = () => {
             <div className="card" style={{ marginTop: 12 }}><div className="card-header"><strong>{t('effective.repair')}</strong></div><div className="card-body"><ConfigGrid>
               <ConfigField label={t('effective.mode')} value={config?.repair.mode ?? 'OFF'} />
               <ConfigField label={t('effective.autoStart')} value={config?.repair.auto_start_on_failure ?? false} />
-              <ConfigField label={t('effective.maxAttempts')} value={config?.repair.max_attempts ?? 0} />
               <ConfigField label={t('effective.autoRollback')} value={config?.repair.auto_rollback ?? false} />
               <ConfigField label={t('effective.requireJev')} value={config?.repair.require_jev ?? false} />
-            </ConfigGrid></div></div>
+            </ConfigGrid><p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>{t('effective.approvalBoundary')}</p></div></div>
             <div className="card" style={{ marginTop: 12 }}><div className="card-header"><strong>{t('effective.browser')}</strong></div><div className="card-body"><ConfigGrid>
               <ConfigField label={t('effective.timeout')} value={`${config?.browser.timeout_seconds ?? 0}s`} />
               <ConfigField label={t('effective.navigationTimeout')} value={`${config?.browser.navigation_timeout_seconds ?? 0}s`} />

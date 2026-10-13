@@ -490,7 +490,6 @@ class FailureService:
         resolved_classification: str | None = None,
         decision_service: LocatorDecisionService | None = None,
         evidence_execution_id: str | None = None,
-        exclude_locators: list[str] | None = None,
     ) -> LocatorRepairProposal:
         failure = await self.failure_repo.get_by_id(failure_id)
         if not failure:
@@ -607,12 +606,6 @@ class FailureService:
             "candidates": candidates,
         }
         ranked = LocatorDecisionService.generate_candidates(event)
-        excluded = {item.strip() for item in (exclude_locators or []) if item.strip()}
-        ranked = [candidate for candidate in ranked if candidate["locator"] not in excluded]
-        if not ranked and excluded:
-            raise LocatorRepairNotApplicableError(
-                "REPAIR_CANDIDATES_EXHAUSTED: prior failed locator candidates were excluded."
-            )
         verification_session = None
         live_page_available = False
         if ranked and current_url:

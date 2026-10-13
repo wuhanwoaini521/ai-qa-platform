@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from project_model.models import (
-    ApplyRepairRequest,
     FailureRepairState,
     FailureRepairWorkflow,
     TestRun,
@@ -381,7 +380,6 @@ class FailureWorkflowService:
                         history = await workflow.list_history(failure_id)
                         analysis = next((item for item in history if item["id"] == analysis_id), None)
                         result = (analysis or {}).get("result") or {}
-                        attempt = int(result.get("repair_attempt", 1))
                         verified = status == "PASSED" and result.get("verified") is True
                         proposal = result.get("repair_proposal") or {}
                         failure_state = await service.get_failure_state(failure_id)
@@ -439,72 +437,6 @@ class FailureWorkflowService:
                                                 healed=True,
                                                 healed_analysis_id=analysis_id,
                                             )
-                        if (
-                            not verified
-                            and result.get("automatic_triggered") is True
-                            and workflow.auto_repair_mode == "AUTO"
-                        ):
-                            if attempt < get_config().repair.max_attempts:
-                                original_failure = await service.get_failure_state(failure_id)
-                                failed_cases = await service.run_repo.list_failures_by_run(run_id)
-                                failed_case = next(
-                                    (
-                                        item
-                                        for item in failed_cases
-                                        if original_failure and item.test_nodeid == original_failure.test_nodeid
-                                    ),
-                                    None,
-                                )
-                                proposal = result.get("repair_proposal") or {}
-                                if failed_case is not None:
-                                    retry_context = {
-                                        "repair_attempt": attempt + 1,
-                                        "execution_id": failed_case.execution_id,
-                                        "failure_evidence": {
-                                            "classification": failed_case.classification,
-                                            "error": SensitiveRedactor.redact_text(failed_case.error_message or "")[
-                                                :2000
-                                            ],
-                                            "traceback": SensitiveRedactor.redact_text(failed_case.stack_trace or "")[
-                                                -5000:
-                                            ],
-                                            "verification_run_id": run_id,
-                                        },
-                                        "excluded_candidate_ids": [proposal["candidate_id"]]
-                                        if proposal.get("candidate_id")
-                                        else [],
-                                        "excluded_locators": [proposal["proposed_locator"]]
-                                        if proposal.get("proposed_locator")
-                                        else [],
-                                        "excluded_patch_hashes": [
-                                            hashlib.sha256(str(proposal.get("code_diff") or "").encode()).hexdigest()
-                                        ]
-                                        if proposal.get("code_diff")
-                                        else [],
-                                    }
-                                    async for _ in workflow.stream(
-                                        failure_id,
-                                        response_language="zh-CN",
-                                        auto_triggered=True,
-                                        retry_context=retry_context,
-                                    ):
-                                        pass
-                                else:
-                                    await self._mark_auto_repair_failed(
-                                        workflow,
-                                        failure_id,
-                                        analysis_id,
-                                        attempt,
-                                        "Verification failed without a new failure record",
-                                    )
-                            else:
-                                await self._mark_auto_repair_failed(
-                                    workflow,
-                                    failure_id,
-                                    analysis_id,
-                                    attempt,
-                                    "Maximum automatic repair attempts reached",
-                                )
                         return
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
@@ -514,43 +446,6 @@ class FailureWorkflowService:
                 "Could not reconcile automatic repair verification",
                 extra={"failure_id": failure_id, "analysis_id": analysis_id, "run_id": run_id},
             )
-
-    async def _mark_auto_repair_failed(
-        self,
-        workflow: FailureWorkflowService,
-        failure_id: str,
-        analysis_id: str,
-        attempts: int,
-        reason: str,
-    ) -> None:
-        failure = await workflow.failures.get_failure_state(failure_id)
-        row = next((item for item in await workflow._history_list(failure_id) if item["id"] == analysis_id), None)
-        if failure is None or row is None:
-            return
-        result = {
-            **(row.get("result") or {}),
-            "auto_repair_outcome": "AUTO_REPAIR_FAILED",
-            "manual_review_required": True,
-            "repair_attempt": attempts,
-        }
-        await workflow._history_append(
-            analysis_id,
-            make_trace_event(
-                failure.run_id,
-                "auto_repair.failed",
-                stage="repair",
-                step_id=f"{analysis_id}:attempt-limit",
-                title="Automatic repair attempts exhausted",
-                status="FAILED",
-                message=reason,
-                metadata={
-                    "attempts": attempts,
-                    "max_attempts": get_config().repair.max_attempts,
-                    "manual_review_required": True,
-                },
-            ),
-            result=result,
-        )
 
     async def start_retry(self, failure_id: str, analysis_id: str) -> TestRun:
         """Create the server-authorized exact-case retry for a diagnosed failure."""
@@ -682,13 +577,6 @@ class FailureWorkflowService:
                     state = "VERIFIED" if verified else "FAILED"
 
         allowed_actions = self.repair_state_machine.allowed_actions(state)
-        if (
-            state == "ROLLED_BACK"
-            and self.auto_repair_mode == "AUTO"
-            and result.get("automatic_triggered") is True
-            and int(result.get("repair_attempt", 1)) < get_config().repair.max_attempts
-        ):
-            allowed_actions = ("START_ANALYSIS",)
         if state in {"FAILED", "VERIFIED", "PATCH_APPLIED"} and not (same_repair and proposal.get("applied")):
             allowed_actions = tuple(action for action in allowed_actions if action == "START_ANALYSIS")
         if state == "FAILED" and proposal.get("applied"):
@@ -958,7 +846,6 @@ class FailureWorkflowService:
         analysis_id: str | None = None,
         start_new_analysis: bool | None = None,
         auto_triggered: bool = False,
-        retry_context: dict[str, Any] | None = None,
     ) -> AsyncGenerator[AITraceEvent, None]:
         failure = await self.failures.get_failure_state(failure_id)
         if failure is None:
@@ -1025,7 +912,7 @@ class FailureWorkflowService:
             try:
                 category, explanation, locator = FailureClassifier.classify(failure.error_message, failure.stack_trace)
                 initial_classification = category
-                evidence_execution_id = str((retry_context or {}).get("execution_id") or failure.execution_id)
+                evidence_execution_id = failure.execution_id
                 browser, page_evidence = await self.failures._browser_evidence(evidence_execution_id)
                 error_text = f"{failure.exception_type}\n{failure.error_message}\n{failure.stack_trace}"
                 domain = (
@@ -1075,7 +962,6 @@ class FailureWorkflowService:
                                 get_config().repair.require_jev
                                 or not get_config().jev.failure_policy.allow_local_fallback
                             ),
-                            "max_attempts": get_config().repair.max_attempts,
                             "auto_rollback": get_config().repair.auto_rollback,
                             "minimum_jev_confidence": get_config().jev.minimum_confidence,
                         },
@@ -1228,9 +1114,6 @@ class FailureWorkflowService:
                             "region": region,
                             "source_path": file_path,
                             "source_available": bool(source),
-                            "repair_attempt": int((retry_context or {}).get("repair_attempt", 1)),
-                            "previous_failure": (retry_context or {}).get("failure_evidence"),
-                            "excluded_candidate_ids": (retry_context or {}).get("excluded_candidate_ids", []),
                         },
                         ensure_ascii=False,
                     ),
@@ -1285,7 +1168,6 @@ class FailureWorkflowService:
                             resolved_classification=resolved_classification.value,
                             decision_service=self.decisions,
                             evidence_execution_id=evidence_execution_id,
-                            exclude_locators=(retry_context or {}).get("excluded_locators", []),
                         )
                         await self.failures.transaction.commit()
                     except (ValueError, OSError) as error:
@@ -1459,80 +1341,13 @@ class FailureWorkflowService:
                     "changes_applied": False,
                     "auto_repair_mode": self.auto_repair_mode,
                     "automatic_triggered": auto_triggered,
-                    "repair_attempt": int((retry_context or {}).get("repair_attempt", 1)),
-                    "previous_candidate_ids": (retry_context or {}).get("excluded_candidate_ids", []),
                 }
 
-                auto_applied = False
-                if (
-                    repair_state == "PATCH_READY"
-                    and repair_proposal
-                    and self.auto_repair_mode == "AUTO"
-                    and self.run_service is not None
-                ):
-                    # Persist the trusted proposal while the analysis is active so the
-                    # existing apply guard can validate it before touching the workspace.
-                    await step(
-                        "suggestion",
-                        "RUNNING",
-                        "修复候选已通过安全检查，正在自动应用",
-                        candidate_verified=True,
-                        changes_applied=False,
-                        repair_state=repair_state,
-                        _persisted_result=result,
-                    )
-                    try:
-                        applied = await self.apply_repair(
-                            failure_id,
-                            analysis_id,
-                            ApplyRepairRequest(
-                                file_path=repair_proposal.file_path,
-                                old_code=repair_proposal.source_locator or repair_proposal.old_locator,
-                                new_code=repair_proposal.proposed_locator,
-                            ),
-                        )
-                    except (ValueError, OSError, SecurityException) as error:
-                        error_message = SensitiveRedactor.redact_text(str(error))[:300]
-                        repair_state = "BLOCKED"
-                        result.update(
-                            repair_state=repair_state,
-                            auto_apply_error=error_message or type(error).__name__,
-                        )
-                        await step(
-                            "suggestion",
-                            "FAILED",
-                            f"自动应用未完成：{error_message or type(error).__name__}",
-                            candidate_verified=True,
-                            changes_applied=False,
-                            repair_state=repair_state,
-                            _persisted_result=result,
-                        )
-                    else:
-                        auto_applied = True
-                        repair_state = "PATCH_APPLIED"
-                        result.update(
-                            repair_state=repair_state,
-                            changes_applied=True,
-                            repair_proposal=applied["repair"]["repair_proposal"],
-                        )
-                        await step(
-                            "suggestion",
-                            "COMPLETED",
-                            "定位器补丁已自动应用，准备重跑原失败用例",
-                            candidate_verified=True,
-                            changes_applied=True,
-                            file_path=repair_proposal.file_path,
-                            code_diff=repair_proposal.code_diff,
-                            automatic=True,
-                            _persisted_result=result,
-                        )
-                elif repair_state == "PATCH_READY":
+                if repair_state == "PATCH_READY" and repair_proposal:
                     await step(
                         "suggestion",
                         "COMPLETED",
-                        "安全补丁已就绪，等待人工 Apply & Verify"
-                        if self.auto_repair_mode != "AUTO"
-                        else "安全补丁已就绪；当前执行器未配置自动复测",
+                        "安全补丁已就绪，等待人工审核并 Apply & Verify",
                         candidate_verified=True,
                         changes_applied=False,
                         patch_ready=True,
@@ -1550,99 +1365,23 @@ class FailureWorkflowService:
                         changes_applied=False,
                     )
 
-                if not auto_applied:
-                    await step(
-                        "verification",
-                        "PENDING" if repair_state in {"PATCH_READY", "NOT_APPLICABLE"} else "BLOCKED",
-                        "安全补丁已就绪，等待复测"
-                        if repair_state == "PATCH_READY"
-                        else "当前分类不适用定位器修复，复测仍可单独执行"
-                        if repair_state == "NOT_APPLICABLE"
-                        else "候选未通过可信选择或失败页面证据验证，不能应用或标记成功",
-                        test_rerun=False,
-                        candidate_verified=bool(repair_proposal and repair_proposal.verified),
-                        changes_applied=False,
-                        repair_state=repair_state,
-                        verification_source=(
-                            repair_proposal.decision_summary.get("verification_source") if repair_proposal else None
-                        ),
-                    )
+                await step(
+                    "verification",
+                    "PENDING" if repair_state in {"PATCH_READY", "NOT_APPLICABLE"} else "BLOCKED",
+                    "安全补丁已就绪，等待人工审核、应用与复测"
+                    if repair_state == "PATCH_READY"
+                    else "当前分类不适用定位器修复，复测仍可单独执行"
+                    if repair_state == "NOT_APPLICABLE"
+                    else "候选未通过可信选择或失败页面证据验证，不能应用或标记成功",
+                    test_rerun=False,
+                    candidate_verified=bool(repair_proposal and repair_proposal.verified),
+                    changes_applied=False,
+                    repair_state=repair_state,
+                    verification_source=(
+                        repair_proposal.decision_summary.get("verification_source") if repair_proposal else None
+                    ),
+                )
 
-                verification_monitor_run_id = None
-                if auto_applied:
-                    verification_run = None
-                    try:
-                        verification_run = await self.start_verification(failure_id, analysis_id, monitor=False)
-                        workflow = await self.get_repair_workflow(failure_id, analysis_id)
-                        run_status = getattr(verification_run.status, "value", str(verification_run.status))
-                        terminal_run = run_status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
-                        if terminal_run and not workflow.verified and "ROLLBACK" in workflow.allowed_actions:
-                            await self.rollback_repair(failure_id, analysis_id, automatic=True)
-                            workflow = await self.get_repair_workflow(failure_id, analysis_id)
-
-                        patch_still_applied = bool((workflow.repair_proposal or {}).get("applied"))
-                        result.update(
-                            repair_state=workflow.state.value,
-                            verified=workflow.verified,
-                            changes_applied=patch_still_applied,
-                            verification_run_id=verification_run.id,
-                            verification_run_status=run_status,
-                            auto_rolled_back=not patch_still_applied and terminal_run and not workflow.verified,
-                        )
-                        repair_state = workflow.state.value
-                        await step(
-                            "suggestion",
-                            "FAILED" if result["auto_rolled_back"] else "COMPLETED",
-                            "复测未通过，补丁已自动回滚" if result["auto_rolled_back"] else "定位器补丁已自动应用",
-                            candidate_verified=True,
-                            changes_applied=patch_still_applied,
-                            automatic=True,
-                            auto_rolled_back=result["auto_rolled_back"],
-                        )
-                        await step(
-                            "verification",
-                            "RUNNING" if not terminal_run else "COMPLETED" if workflow.verified else "FAILED",
-                            "正在无头重跑原失败用例"
-                            if not terminal_run
-                            else "原失败用例复测通过"
-                            if workflow.verified
-                            else "原失败用例复测未通过",
-                            test_rerun=True,
-                            verified=workflow.verified,
-                            changes_applied=patch_still_applied,
-                            verification_run_id=verification_run.id,
-                            verification_run_status=run_status,
-                            _persisted_result=result,
-                        )
-                        if not terminal_run:
-                            verification_monitor_run_id = verification_run.id
-                    except Exception as error:
-                        error_message = SensitiveRedactor.redact_text(str(error))[:300]
-                        workflow = None
-                        try:
-                            workflow = await self.get_repair_workflow(failure_id, analysis_id)
-                            if workflow.state == "PATCH_APPLIED" and "ROLLBACK" in workflow.allowed_actions:
-                                await self.rollback_repair(failure_id, analysis_id, automatic=True)
-                                workflow = await self.get_repair_workflow(failure_id, analysis_id)
-                        except Exception:
-                            workflow = None
-                        if workflow is not None:
-                            repair_state = workflow.state.value
-                            result.update(
-                                repair_state=workflow.state.value,
-                                changes_applied=bool((workflow.repair_proposal or {}).get("applied")),
-                                auto_rolled_back=workflow.state.value == "ROLLED_BACK",
-                            )
-                        result["verification_error"] = error_message or type(error).__name__
-                        await step(
-                            "verification",
-                            "FAILED",
-                            f"复测未能启动或读取结果：{error_message or type(error).__name__}",
-                            test_rerun=False,
-                            verified=False,
-                            changes_applied=result["changes_applied"],
-                            _persisted_result=result,
-                        )
                 result["repair_state"] = repair_state
                 await publish(
                     make_trace_event(
@@ -1650,13 +1389,7 @@ class FailureWorkflowService:
                         "run.completed",
                         stage="workflow",
                         title=(
-                            "复测通过，修复已验证"
-                            if result.get("verified")
-                            else "复测失败，补丁已自动回滚"
-                            if result.get("auto_rolled_back")
-                            else "修复已自动应用，正在复测原失败用例"
-                            if auto_applied
-                            else "候选已验证，等待应用与复测"
+                            "候选已验证，等待人工审核与应用"
                             if repair_state == "PATCH_READY"
                             else "分析完成，未进入定位器修复"
                             if repair_state == "NOT_APPLICABLE"
@@ -1666,8 +1399,6 @@ class FailureWorkflowService:
                     ),
                     result=result,
                 )
-                if verification_monitor_run_id:
-                    self._schedule_verification_monitor(failure_id, analysis_id, verification_monitor_run_id)
             except asyncio.CancelledError:
                 cancelled_result = {
                     "repair_state": "BLOCKED",

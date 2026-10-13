@@ -53,7 +53,7 @@ def local_http_url():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_live_ai_jev_locator_auto_repair_and_exact_rerun(
+async def test_live_ai_jev_repair_requires_approval_and_exact_rerun(
     client, test_db_session, tmp_path, local_http_url, monkeypatch
 ):
     if os.getenv("AI_QA_RUN_LIVE_JEV_ACCEPTANCE") != "1":
@@ -188,8 +188,7 @@ def test_workflow():
         )
         failure_id = failure["id"]
 
-        # The acceptance must prove the failure subscriber starts the full workflow.
-        # Do not call the manual analyze/apply/verification endpoints here.
+        # AUTO may start a real analysis, but a human Apply request must authorize any source write.
         analysis = None
         for _ in range(240):
             history_response = await client.get(f"/api/failures/{failure_id}/analyses")
@@ -204,10 +203,7 @@ def test_workflow():
             await asyncio.sleep(0.5)
         assert analysis is not None, "Failure did not automatically start an analysis"
         assert analysis["result"].get("automatic_triggered") is True, analysis
-        assert analysis["result"].get("verification_run_id"), {
-            "result": analysis["result"],
-            "event_types": [event["type"] for event in analysis["events"]],
-        }
+        assert analysis["result"].get("verification_run_id") is None, analysis
         workflow_events = analysis["events"]
         completed_events = [event for event in workflow_events if event["type"] == "run.completed"]
         assert completed_events, analysis
@@ -242,8 +238,8 @@ def test_workflow():
             ],
         }
         assert proposal["verified"] is True and proposal["code_diff"]
-        assert result["repair_state"] == "VERIFYING_FIX"
-        assert result["changes_applied"] is True
+        assert result["repair_state"] == "PATCH_READY"
+        assert result["changes_applied"] is False
         assert proposal["proposed_locator"] != 'page.locator("#purchase-now")'
         model_event = next(event for event in workflow_events if event["type"] == "model.completed")
         decision_summary = proposal.get("decision_summary") or {}
@@ -275,22 +271,25 @@ def test_workflow():
             )
         )
         analysis_id = result["analysis_id"]
-        verification_event = next(
-            event
-            for event in reversed(workflow_events)
-            if event["type"] == "workflow.step"
-            and event.get("stage") == "verification"
-            and event.get("metadata", {}).get("test_rerun") is True
+        assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
+        apply_response = await client.post(
+            f"/api/failures/{failure_id}/analyses/{analysis_id}/apply",
+            json={
+                "file_path": proposal["file_path"],
+                "old_code": proposal["source_locator"] or proposal["old_locator"],
+                "new_code": proposal["proposed_locator"],
+            },
         )
-        verification_run_id = verification_event["metadata"]["verification_run_id"]
+        assert apply_response.status_code == 200, apply_response.text
         patched_source = await WorkspaceService().read_file(project_id, "tests/test_workflow.py")
         assert 'page.locator("#purchase-now")' not in patched_source
         assert proposal["proposed_locator"] in patched_source
 
-        verification = await client.get(f"/api/runs/{verification_run_id}")
-        assert verification.status_code == 200, verification.text
-        assert verification.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
-        final_run = verification.json()
+        verification_response = await client.post(f"/api/failures/{failure_id}/analyses/{analysis_id}/verification/run")
+        assert verification_response.status_code == 200, verification_response.text
+        verification_run_id = verification_response.json()["id"]
+        assert verification_response.json()["nodeids"] == ["tests/test_workflow.py::test_workflow"]
+        final_run = verification_response.json()
         for _ in range(120):
             await asyncio.sleep(0.25)
             status_response = await client.get(f"/api/runs/{verification_run_id}")

@@ -82,7 +82,12 @@ class RepairSettings(ConfigSection):
     enabled: bool = True
     mode: Literal["OFF", "ASSISTED", "AUTO"] = "OFF"
     auto_start_on_failure: bool = True
-    max_attempts: int = Field(default=2, ge=1, le=10)
+    max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Legacy compatibility field; automatic repair retries are disabled.",
+    )
     auto_rollback: bool = True
     require_jev: bool = True
     # Automatic repair cannot disable browser evidence verification.

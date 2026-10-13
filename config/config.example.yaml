@@ -60,12 +60,12 @@ jev:
   failure_policy:
     allow_local_fallback: false
 
-# Failure repair policy. AUTO starts after failure; ASSISTED waits for a user action; OFF disables repair.
+# Failure repair policy. AUTO starts analysis after failure; source patches always require explicit human approval.
 repair:
   enabled: true
   mode: "OFF" # OFF, ASSISTED or AUTO
   auto_start_on_failure: true
-  max_attempts: 2 # Maximum automatic repair attempts.
+  max_attempts: 2 # Legacy compatibility only; automatic retry loops are disabled.
   auto_rollback: true
   require_jev: true
   require_candidate_verification: true # safety invariant; the schema rejects false.
