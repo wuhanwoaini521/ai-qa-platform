@@ -1,0 +1,12 @@
+{
+  "isolated_database": "/tmp/night-round-4/qa.db",
+  "analysis_id": "analysis-round4-human-rejected",
+  "workflow_state": "BLOCKED",
+  "block_reason": "HUMAN_REJECTED",
+  "allowed_actions_after_reload": [
+    "START_ANALYSIS"
+  ],
+  "rejection_event_persisted": true,
+  "apply_http_status": 422,
+  "source_unchanged": true
+}
