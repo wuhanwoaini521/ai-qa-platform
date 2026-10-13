@@ -282,7 +282,7 @@ export const FailureOverview: React.FC<{
 
         <section className="failure-verification" aria-label={t('verificationChain')}>
           <h3>{t('verificationChain')}</h3>
-          <ol>
+          <ol tabIndex={0}>
             <li><span>{t('originalRun')}</span><strong>#{failure.run_id.slice(0, 8)} · {sourceRun?.status ?? 'FAILED'}</strong></li>
             <li><span>{t('failureStep')}</span><strong>{failure.test_name || failure.test_nodeid.split('::').at(-1)}</strong></li>
             <li className={currentStage === 'diagnosis' ? 'is-current' : undefined} aria-current={currentStage === 'diagnosis' ? 'step' : undefined}>
