@@ -126,7 +126,7 @@
   "dataSource": "当前用例保存的数据；自动化应通过项目 fixture 加载并验证。",
   "oracles": "验证标准 / Oracle",
   "actions": "执行动作",
-  "readiness": "自动化就绪检查",
+  "readiness": "自动化准备情况",
   "needsInput": "需要补充",
   "readyForDraft": "可生成草稿",
   "missingOracle": "缺少独立验证标准",
