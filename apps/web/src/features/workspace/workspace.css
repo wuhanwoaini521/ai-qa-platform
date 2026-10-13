@@ -1014,23 +1014,29 @@
   .workspace-case-selection { flex-basis: 100%; }
   .workspace-case-selection-control { max-width: none; }
 }
-.workspace-cases-embedded .test-cases-page { gap: 8px; }
-.workspace-cases-embedded .test-cases-grid { gap: 8px; }
-.workspace-cases-embedded .test-case-workspace { min-width: 0; gap: 8px; }
-.workspace-cases-embedded .test-case-detail > .card-header { gap: 8px; padding: 9px 12px; }
-.workspace-cases-embedded .test-case-detail > .card-body { padding: 10px 12px; }
+.workspace-cases-embedded .test-cases-page { gap: 16px; }
+.workspace-cases-embedded .test-cases-grid { gap: 16px; }
+.workspace-cases-embedded .test-case-workspace { min-width: 0; gap: 16px; }
+.workspace-cases-embedded .test-case-detail > .card-header { gap: 12px; padding: 14px 20px; }
+.workspace-cases-embedded .test-case-detail > .card-header .card-title { font-size: 15px; }
+.workspace-cases-embedded .test-case-detail > .card-body { padding: 20px 24px; }
 .workspace-cases-embedded .test-case-detail .lc-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.workspace-cases-embedded .test-case-detail .lc-header { align-items: center; gap: 8px; }
-.workspace-cases-embedded .test-case-detail .lc-chip-list { gap: 5px; margin: 8px 0; }
-.workspace-cases-embedded .test-case-detail .lc-tabs { gap: 5px; }
-.workspace-cases-embedded .test-case-detail .lc-tabs button { padding: 6px 10px; font-size: 12px; }
-.workspace-cases-embedded .test-case-detail .lc-flow { gap: 6px; margin-top: 8px !important; }
-.workspace-cases-embedded .test-case-detail .lc-flow-step { gap: 10px; padding: 8px 10px; }
+.workspace-cases-embedded .test-case-detail .lc-header { align-items: flex-start; gap: 16px; }
+.workspace-cases-embedded .test-case-detail .lc-header h3 { font-size: 18px; }
+.workspace-cases-embedded .test-case-detail .lc-header p { margin-top: 10px; font-size: 15px; line-height: 1.7; }
+.workspace-cases-embedded .test-case-detail .lc-chip-list { gap: 8px; margin: 16px 0; }
+.workspace-cases-embedded .test-case-detail .lc-tabs { gap: 8px; }
+.workspace-cases-embedded .test-case-detail .lc-tabs button { min-height: 44px; padding: 9px 14px; font-size: 13px; }
+.workspace-cases-embedded .test-case-detail .lc-flow { gap: 12px; }
+.workspace-cases-embedded .test-case-detail .lc-flow-step { gap: 14px; padding: 14px 16px; line-height: 1.65; }
+.workspace-cases-embedded .test-case-detail .lc-notice { padding: 18px 20px; }
+.workspace-cases-embedded .test-case-detail details:not(.lc-readiness) > summary { min-height: 44px; padding: 8px 0; line-height: 1.5; }
+.workspace-cases-embedded .test-case-detail .lc-readiness { margin-bottom: 12px; }
 .workspace-cases-embedded .test-case-detail-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .workspace-cases-embedded .test-case-ai-actions { display: flex; align-items: center; gap: 4px; padding-right: 6px; border-right: 1px solid var(--line); }
 .workspace-case-automation { border: 1px solid var(--line-strong); border-radius: var(--r-card); background: var(--surface); }
-.workspace-case-automation > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 8px 12px; cursor: pointer; list-style-position: inside; }
-.workspace-case-automation > summary span { font-size: 12px; font-weight: 650; }
+.workspace-case-automation > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; padding: 12px 16px; cursor: pointer; list-style-position: inside; }
+.workspace-case-automation > summary span { font-size: 13px; font-weight: 650; }
 .workspace-case-automation > summary small { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-case-automation > .card { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
 .workspace-automation-empty { display: grid; align-content: center; justify-items: center; gap: 10px; min-height: 300px; height: 100%; padding: 24px; color: var(--ink-muted); text-align: center; }
@@ -1045,6 +1051,18 @@
 }
 
 @media (max-width: 600px) {
+  .workspace-cases-embedded .test-cases-page,
+  .workspace-cases-embedded .test-cases-grid,
+  .workspace-cases-embedded .test-case-workspace { gap: 12px; }
+  .workspace-cases-embedded .test-case-detail > .card-header { padding: 12px 14px; }
+  .workspace-cases-embedded .test-case-detail > .card-body { padding: 16px 14px; }
+  .workspace-cases-embedded .test-case-detail .lc-header { gap: 12px; }
+  .workspace-cases-embedded .test-case-detail .lc-header h3 { font-size: 17px; }
+  .workspace-cases-embedded .test-case-detail .lc-header p { font-size: 14px; }
+  .workspace-cases-embedded .test-case-detail .lc-flow-step { gap: 12px; padding: 12px; }
+  .workspace-cases-embedded .test-case-detail .lc-notice { padding: 16px; }
+  .workspace-case-automation > summary { gap: 8px; padding: 10px 12px; }
+  .workspace-case-automation > summary small { max-width: 45%; }
   .workspace-stage-nav { grid-template-columns: repeat(5, minmax(68px, 1fr)); gap: 4px; overflow-x: auto; }
   .workspace-stage-nav .workspace-flow-label small { display: none; }
   .workspace-stage-nav .workspace-view-tab { grid-template-columns: 16px minmax(0, 1fr) 6px; gap: 4px; min-height: 48px; padding: 5px; }
