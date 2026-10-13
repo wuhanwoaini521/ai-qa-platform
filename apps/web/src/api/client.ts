@@ -1099,18 +1099,8 @@ export const api = {
     return run.external_artifacts || [];
   },
 
-  downloadArtifact: async (artifactId: string): Promise<Blob> => {
-    const response = await fetch(
-      `${BASE_URL}/api/artifacts/${artifactId}/download`,
-      {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Artifact download failed [${response.status}]`);
-    }
-    return response.blob();
-  },
+  downloadArtifact: (artifactId: string): Promise<Blob> =>
+    requestBlob(`/artifacts/${encodeURIComponent(artifactId)}/download`),
 
   // Failure Intelligence & Locator Healing (Phase 5 & 6)
   getFailures: (projectId?: string, limit = 50) => {

@@ -13,6 +13,7 @@ import { RuntimeBrowser } from './RuntimeBrowser';
 import { RuntimeArtifacts } from './RuntimeArtifacts';
 import { RuntimeRunResults } from './RuntimeRunResults';
 import { RuntimeTaskActions } from './RuntimeTaskActions';
+import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { useRuntimeSnapshot } from './useRuntimeSnapshot';
 import type { RuntimeSourceOpener } from '../../types/runtime';
 import './runtime.css';
@@ -133,12 +134,11 @@ export function RuntimeDetail({
   }, [snapshot, selectedStepId, selectStep]);
   if (!snapshot)
     return (
-      <section className="rt-shell rt-empty" role={error ? 'alert' : 'status'}>
-        {error || t('loadingRuntime')}
-        {error && (
-          <button className="btn btn-secondary" onClick={refresh}>
-            {t('retry')}
-          </button>
+      <section className="rt-shell rt-empty">
+        {error ? (
+          <ErrorState message={error} onRetry={refresh} />
+        ) : (
+          <LoadingState label={t('loadingRuntime')} />
         )}
       </section>
     );
