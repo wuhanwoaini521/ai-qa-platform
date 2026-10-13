@@ -441,7 +441,10 @@ export function WorkspacePage() {
   const automationSetupKey = automationSetup === 'unbound' ? selectedCase?.id
     : automationSetup === 'no-case' ? context.requirementId
       : undefined;
-  const goalTarget = workspaceGoalTarget(goalText, context);
+  const goalFailureId = context.failureId ?? (goalText === t('result.manualAnalysisGoal')
+    ? failures.find((item) => item.run_id === activeRunId)?.id
+    : undefined);
+  const goalTarget = workspaceGoalTarget(goalText, { ...context, failureId: goalFailureId });
   const goalInputs: Record<string, unknown> = aiRunOpen && goalTarget === 'case' && selectedCase && binding?.status === 'ACTIVE' && binding.nodeid
     ? {
       test_case_id: selectedCase.id,
@@ -453,7 +456,7 @@ export function WorkspacePage() {
       file_path: binding.file_path,
     }
     : {
-    ...(goalTarget === 'failure' && context.failureId ? { failure_id: context.failureId } : {}),
+    ...(goalTarget === 'failure' && goalFailureId ? { failure_id: goalFailureId } : {}),
     ...(goalTarget === 'requirement' && context.requirementId ? { requirement_id: context.requirementId } : {}),
     ...(goalTarget === 'case' && context.testCaseId ? { test_case_id: context.testCaseId } : {}),
     ...(goalTarget === 'case' && context.nodeId ? { nodeids: [context.nodeId] } : goalTarget === 'case' && selectedCase?.binding?.nodeid ? { nodeids: [selectedCase.binding.nodeid] } : {}),
