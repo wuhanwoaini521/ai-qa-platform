@@ -1,7 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, repairNoticeForRun, terminalRunStatus, workspaceGoalTarget } = await import('../src/features/workspace/workspaceRunModel.ts');
+const {
+  bindingForSelectedCase,
+  configForRerun,
+  defaultWorkspaceGoal,
+  repairNoticeForRun,
+  terminalRunStatus,
+  workspaceGoalTarget,
+  workspaceRunDockPlacement,
+} = await import('../src/features/workspace/workspaceRunModel.ts');
+
+test('run dock opens below a top trigger and stays within narrow viewport gutters', () => {
+  assert.deepEqual(
+    workspaceRunDockPlacement(
+      { left: 280, top: 56, bottom: 92, right: 370 },
+      { width: 390, height: 844 },
+    ),
+    { left: 12, top: 100, maxHeight: 680 },
+  );
+});
+
+test('run dock opens above a bottom trigger and reserves space from the viewport edge', () => {
+  assert.deepEqual(
+    workspaceRunDockPlacement(
+      { left: 1240, top: 940, bottom: 980, right: 1400 },
+      { width: 1440, height: 1000 },
+    ),
+    { left: 780, bottom: 68, maxHeight: 680 },
+  );
+});
+
+test('run dock constrains its height to whichever side of a trigger has more room', () => {
+  const placement = workspaceRunDockPlacement(
+    { left: 80, top: 270, bottom: 310, right: 180 },
+    { width: 800, height: 600 },
+  );
+
+  assert.equal(placement.top, 318);
+  assert.equal(placement.maxHeight, 270);
+  assert.equal(placement.bottom, undefined);
+});
 
 test('terminal run status includes all completed outcomes and excludes active runs', () => {
   for (const status of ['PASSED', 'FAILED', 'ERROR', 'CANCELLED']) {

@@ -889,20 +889,21 @@
   position: fixed;
   z-index: 35;
   inset: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 16px clamp(16px, 4vw, 76px) max(66px, calc(env(safe-area-inset-bottom) + 58px)) 16px;
+  display: block;
+  padding: 0;
   background: rgb(15 23 42 / 14%);
 }
 
 .workspace-run-dock {
+  position: absolute;
+  right: clamp(12px, 4vw, 76px);
+  bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  width: min(620px, 100%);
-  max-height: min(680px, 100%);
+  width: min(620px, calc(100vw - 24px));
+  max-height: min(680px, calc(100dvh - 24px));
   padding: 14px;
   overflow: auto;
   background: var(--surface);
@@ -1051,7 +1052,6 @@
   .workspace-stage-nav .workspace-flow-label strong { font-size: 10px; }
   .workspace-stage-nav .workspace-flow-label small { font-size: 8px; }
   .workspace-ai-capabilities { grid-template-columns: minmax(0, 1fr); }
-  .workspace-run-overlay { padding: 12px 12px max(62px, calc(env(safe-area-inset-bottom) + 54px)); }
   .workspace-run-launcher {
     position: static;
     right: auto;

@@ -32,6 +32,36 @@ export function workspaceRunCaseLabel(
   return displayId?.trim() || caseId?.slice(-6).toUpperCase() || failureLabel?.trim() || '';
 }
 
+export interface WorkspaceRunDockPlacement {
+  left: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+}
+
+export function workspaceRunDockPlacement(
+  trigger: { left: number; top: number; bottom: number; right: number },
+  viewport: { width: number; height: number },
+): WorkspaceRunDockPlacement {
+  const gap = 8;
+  const gutter = 12;
+  const availableAbove = Math.max(0, trigger.top - gap - gutter);
+  const availableBelow = Math.max(0, viewport.height - trigger.bottom - gap - gutter);
+  const opensAbove = availableAbove > availableBelow;
+  const availableHeight = opensAbove ? availableAbove : availableBelow;
+  const dockWidth = Math.max(0, Math.min(620, viewport.width - gutter * 2));
+  const maxLeft = Math.max(gutter, viewport.width - dockWidth - gutter);
+  const left = Math.max(gutter, Math.min(trigger.right - dockWidth, maxLeft));
+
+  return {
+    left,
+    ...(opensAbove
+      ? { bottom: viewport.height - trigger.top + gap }
+      : { top: trigger.bottom + gap }),
+    maxHeight: Math.max(1, Math.min(680, availableHeight)),
+  };
+}
+
 export function workspaceRunDockState(
   runStatus: TestRun['status'] | null,
   taskStatus?: string | null,

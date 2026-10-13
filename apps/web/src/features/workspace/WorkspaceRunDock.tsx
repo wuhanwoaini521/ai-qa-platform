@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, Bug, ChevronDown, CircleAlert, Play, RotateCcw, Sparkles, Square, Workflow, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TestRun } from '../../types';
-import { workspaceRunDockState } from './workspaceRunModel';
+import { workspaceRunDockPlacement, workspaceRunDockState } from './workspaceRunModel';
 
 export interface WorkspaceRunConfig {
   environment: string;
@@ -59,8 +59,17 @@ export function WorkspaceRunDock({
   const { t } = useTranslation('workspace');
   const [configOpen, setConfigOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(false);
+  const [dockPlacement, setDockPlacement] = useState<ReturnType<typeof workspaceRunDockPlacement> | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dockRef = useRef<HTMLElement>(null);
+  const updateDockPlacement = () => {
+    const trigger = triggerRef.current?.getBoundingClientRect();
+    if (!trigger) return;
+    setDockPlacement(workspaceRunDockPlacement(trigger, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }));
+  };
   const runStatus = run?.status ?? null;
   const { status, active, failed, passed, taskTerminal } = workspaceRunDockState(runStatus, taskStatus);
   const activeExecution = run?.executions.find((item) => item.status === 'RUNNING');
@@ -113,7 +122,10 @@ export function WorkspaceRunDock({
         className={`workspace-run-launcher is-${status}`}
         aria-label={`${t('dock.openControls')} · ${t(`dock.status.${status}`)}${caseLabel ? ` · ${caseLabel}` : ''}`}
         aria-expanded={dockOpen}
-        onClick={() => setDockOpen(true)}
+        onClick={() => {
+          updateDockPlacement();
+          setDockOpen(true);
+        }}
       >
         <span className="workspace-dock-indicator" aria-hidden="true">
           {failed ? <CircleAlert size={14} /> : active ? <Activity size={14} /> : <Play size={13} />}
@@ -124,7 +136,22 @@ export function WorkspaceRunDock({
       </button>
 
       {dockOpen && <div className="workspace-run-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setDockOpen(false); triggerRef.current?.focus(); } }}>
-        <section ref={dockRef} className={`workspace-run-dock is-${status}`} role="dialog" aria-modal="true" aria-label={t('dock.title')} tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
+        <section
+          ref={dockRef}
+          className={`workspace-run-dock is-${status}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('dock.title')}
+          tabIndex={-1}
+          style={dockPlacement ? {
+            left: dockPlacement.left,
+            right: 'auto',
+            top: dockPlacement.top ?? 'auto',
+            bottom: dockPlacement.bottom ?? 'auto',
+            maxHeight: dockPlacement.maxHeight,
+          } : undefined}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <header className="workspace-run-dock-heading">
             <div className="workspace-run-dock-status">
               <span className="workspace-dock-indicator" aria-hidden="true">
