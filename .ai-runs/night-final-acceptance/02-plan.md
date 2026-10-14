@@ -30,4 +30,4 @@
 - Complete: stopped only this run's disposable processes and removed its temporary DB/workspace/artifacts. Existing API/Vite services remained healthy.
 - No product repair was applied. The disabled-provider 500 was recorded as a follow-up; live provider flow passed and stopped before Apply.
 - Blocked: independent Orca review, PostgreSQL, Windows/Linux, separate remote Worker, and human approval/post-approval verification.
-- Git: inherited changes remain unstaged and untouched. Stage only `.ai-runs/night-final-acceptance/`; never stage `mise.toml` or earlier-round records. Commit/push outcome is pending final scoped staging and remote verification.
+- Git: staged only `.ai-runs/night-final-acceptance/`; `mise.toml`, inherited changes, and earlier-round records remain unstaged and untouched. Commit `216395d` (`docs: record final acceptance evidence`) was pushed normally to `origin/agent/night-final-acceptance`; no force push or `main` push.

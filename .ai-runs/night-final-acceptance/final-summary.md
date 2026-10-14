@@ -6,7 +6,7 @@
 
 ## Scope
 
-Final regression on `agent/night-final-acceptance` at `567ab83`, preserving the inherited dirty worktree and `mise.toml`. Coverage included backend/frontend/contracts, SQLite, real AI + Jev, browser execution/failure recovery, debugger, responsive UI, and Quickstart. No inherited product files were edited by this run.
+Final regression on `agent/night-final-acceptance`, based on `567ab83`, preserving the inherited dirty worktree and `mise.toml`. Coverage included backend/frontend/contracts, SQLite, real AI + Jev, browser execution/failure recovery, debugger, responsive UI, and Quickstart. No inherited product files were edited by this run. Only this run's acceptance artifacts were committed as `216395d` and pushed to `origin/agent/night-final-acceptance`.
 
 ## Environment
 
@@ -83,6 +83,10 @@ PostgreSQL concurrency/locking; Windows/Linux behavior; a separate Worker proces
 ## Remaining Risks
 
 The disabled-AI configuration behavior may affect installations that intentionally run without providers. SQLite results do not prove PostgreSQL row-lock behavior. Large frontend chunks may affect load performance; no performance measurement was run.
+
+## Git / Handoff
+
+Commit `216395d` contains only `.ai-runs/night-final-acceptance/` reports and evidence. It is pushed to the task branch; inherited source/config changes, `mise.toml`, and earlier-round records remain unstaged and untouched.
 
 ## Final Verdict
 

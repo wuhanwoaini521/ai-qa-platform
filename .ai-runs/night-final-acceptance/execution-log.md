@@ -26,7 +26,7 @@
 
 ## Final regression and acceptance continuation — 2026-10-14
 
-- Environment: Python 3.13.15, Playwright 1.62.0, Node 24.21.0, pnpm 12.5.1. The task branch remains `agent/night-final-acceptance` at `567ab83`; inherited modified files and `mise.toml` remain untouched by this run. No product-source fix, commit, or push was made.
+- Environment: Python 3.13.15, Playwright 1.62.0, Node 24.21.0, pnpm 12.5.1. The task branch is `agent/night-final-acceptance`, based on `567ab83`; inherited modified files and `mise.toml` remain untouched by this run. No product-source fix was made.
 - First isolated browser attempt intentionally disabled AI/Jev and exposed HTTP 500s from `/api/ai/status`, `/api/runs`, and `/api/failures` during AI-dependent service construction. The test harness was corrected to keep the configured real providers enabled; no product source was changed. Disabled-provider mode is listed for follow-up, not described as a pass.
 - Disposable API/Vite/demo-site acceptance then passed readiness and the real-provider status probe. AI: `openai-compatible` / `deepseek-flash`, streaming probe succeeded, no fallback. Jev: `jev-1.13.0`, valid decision response, no fallback. Platform health was `degraded` only because Python LSP was missing and no remote worker was registered; API-local execution remained available. Playwright launched system Chrome 150 successfully.
 - Browser Golden Journey used a disposable SQLite DB and temporary workspace/artifacts. Through the UI, created a synthetic project, requirement and case; edited a local checkout test; captured an intentional locator failure and failure screenshot; collected tests; debugged and paused at line 13, stepped over to the cleanup line and continued; bound the case to `tests/test_cart.py::test_checkout_order`; then observed two passing runs. The case history showed 2 pass / 1 fail. No repair Apply or source-repository write occurred. The final correction was confined to the disposable workspace; the evidence fixture is `.ai-runs/night-final-acceptance/evidence/test_checkout.py`.
@@ -37,3 +37,9 @@
 - The full Python suite included API, QA-core, integrations, Worker unit tests, architecture boundaries, cancellation/reconnect/runtime, debugger, browser-runtime, failure-workflow, migration and Quickstart coverage. This does not constitute a separate Worker service lane, a PostgreSQL run, or Windows/Linux validation.
 - Independent review reattempt: BLOCKED. `orca skills get orchestration` returned `Unable to determine Orca.app path from symlink: /usr/local/bin/orca`; per the Orca instructions no alternate executable was tried. No independent reviewer is claimed.
 - Final cleanup: stopped only this run's disposable API/Vite/demo-site/Chrome processes (`:8002`, `:5175`, `:8766`, CDP browser); removed the guarded temp root containing its SQLite DB, workspace, and artifacts. Verified no listeners remain on those temporary ports. Existing API/Vite on `:8001` and `:5174` still returned 200 and were not stopped.
+
+## Git handoff
+
+- Reviewed the staged path list and `git diff --cached --check`; staged only `.ai-runs/night-final-acceptance/`. Inherited source/config changes, `mise.toml`, and earlier-round artifacts were not staged.
+- Created scoped documentation/evidence commit `216395d` (`docs: record final acceptance evidence`) and pushed normally to `origin/agent/night-final-acceptance`. No force push and no push to `main`.
+- Inherited dirty modifications and unrelated untracked evidence remain preserved in the worktree; they are not part of the pushed commit.
