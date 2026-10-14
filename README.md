@@ -41,8 +41,8 @@ Bi-directional Sync (GitHub PR Summary / Jira Bug / TestRail)
 
 - Manage requirements, test cases, automation bindings, and execution history in a unified workspace.
 - Author and review automation in the Monaco-based Automation Studio, with browser recording and test exploration.
-- Run isolated pytest projects and stream execution events and test results to the web application.
-- Use configured AI providers for assistance, diagnosis, and repair proposals while keeping test verdicts tied to actual execution.
+- Inspect each run on a live execution canvas with clear per-step status, duration, retry counts, and collected evidence.
+- Check configured AI providers for streaming and structured JSON support before using them for assistance, diagnosis, and repair proposals; keep test verdicts tied to actual execution.
 - Review failure evidence and proposed changes before applying repairs.
 - Connect external workflows through Jira, TestRail, GitHub, and Jenkins integrations.
 - Operate the platform with role-based access, health checks, metrics, and backup/restore procedures.
