@@ -162,6 +162,7 @@ async def test_ai_connection_test_uses_unsaved_settings_and_requires_admin(clien
 
     async def complete(self, request):
         assert request.prompt_id == "provider_structured_output_probe"
+        assert request.max_tokens == 512
         assert request.thinking_mode == "disabled"
         return AICompletionResponse(
             content='{"json_mode":true}',

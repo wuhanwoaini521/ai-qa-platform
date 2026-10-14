@@ -501,6 +501,23 @@
   border-radius: 3px;
   padding: 1px 3px;
 }
+.rt-node-footer > span {
+  align-self: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-inset);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+.rt-node.status-running .rt-node-footer > span { color: var(--primary); background: var(--primary-light); }
+.rt-node.status-completed .rt-node-footer > span { color: #166534; background: var(--success-light); }
+:root[data-theme='dark'] .rt-node.status-completed .rt-node-footer > span { color: var(--accent-green); }
+.rt-node.status-failed .rt-node-footer > span,
+.rt-node.status-blocked .rt-node-footer > span { color: var(--danger); background: var(--danger-light); }
+.rt-node.status-waiting_for_approval .rt-node-footer > span { color: var(--warning); background: var(--warning-light); }
 .rt-node.status-pending,
 .rt-node.status-skipped {
   color: var(--text-muted);

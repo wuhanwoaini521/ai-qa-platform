@@ -263,7 +263,7 @@ class AISettingsService:
                             system_instruction="Return only the requested JSON object, with no prose or Markdown.",
                             prompt_id="provider_structured_output_probe",
                             prompt_version="v1.0",
-                            max_tokens=128,
+                            max_tokens=512,
                             max_retries=0,
                             thinking_mode=probe_thinking_mode,
                             response_schema=_StructuredOutputProbe,
