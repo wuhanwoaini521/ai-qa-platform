@@ -1,0 +1,15 @@
+{
+  "viewport": 1440,
+  "documentWidth": 1440,
+  "navWidth": 1160,
+  "navScrollWidth": 1160,
+  "stageCount": 5,
+  "stageButtonWidths": [
+    229,
+    229,
+    229,
+    229,
+    229
+  ],
+  "keyboardTabFocusIndex": 1
+}

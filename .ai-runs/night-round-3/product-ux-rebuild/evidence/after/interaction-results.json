@@ -1,0 +1,170 @@
+{
+  "playwright": "1.62.0",
+  "project_id": "proj_golden_shop_v1",
+  "embedded_studio": {
+    "project_selector_count": 0,
+    "quick_open_count": 1,
+    "run_button": "运行用例",
+    "run_button_title": "运行所选用例"
+  },
+  "responsive_layout": [
+    {
+      "viewport": 768,
+      "documentWidth": 768,
+      "navWidth": 660,
+      "navScrollWidth": 660,
+      "navStageCount": 5,
+      "stageButtonWidths": [
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
+    },
+    {
+      "viewport": 360,
+      "documentWidth": 360,
+      "navWidth": 324,
+      "navScrollWidth": 324,
+      "navStageCount": 5,
+      "stageButtonWidths": [
+        62,
+        62,
+        62,
+        62,
+        62
+      ]
+    }
+  ],
+  "run_config": {
+    "environment": "staging",
+    "region": "JP",
+    "browser": "chromium",
+    "workers": 1
+  },
+  "run": {
+    "id": "run_0fee81b19f0c",
+    "request": {
+      "project_id": "proj_golden_shop_v1",
+      "workspace_id": "proj_golden_shop_v1",
+      "nodeids": [
+        "tests/test_shop.py::test_search"
+      ],
+      "requested_by": "Automation Studio",
+      "browser": "chromium",
+      "environment": {
+        "QA_ENVIRONMENT": "staging",
+        "QA_REGION": "JP"
+      },
+      "parallel_workers": 1
+    },
+    "status": "PASSED",
+    "executions": [
+      {
+        "nodeid": "tests/test_shop.py::test_search",
+        "status": "PASSED"
+      }
+    ]
+  },
+  "run_details": {
+    "runtime_tab": "浏览器",
+    "browser_panel_text": "实时测试浏览器\n1\n运行已结束 · 最后一帧\nmain · test_search· exec_1f9passed\n用例\ntest_search\nWorker / 用例 ID\nmain / exec_1f9\n网址\nhttp://127.0.0.1:60995/index.html\n状态 / 耗时\npassed · 1.2s\n步骤\n网络\n控制台\n—\nfill\ninternal:role=textbox[name=\"Search products\"i]\nPASSED\n—\nclick\ninternal:role=button[name=\"Search\"s]\nPASSED",
+    "invalid_timestamps_rendered_as_placeholder": true
+  },
+  "existing_repair": {
+    "failure_id": "fail_16d594548ce0",
+    "run_id": "run_d0bf768ba21e",
+    "repair_state": "VERIFIED",
+    "block_reason": null,
+    "ai_or_jev_invoked": false,
+    "apply_clicked": false
+  },
+  "debugger": {
+    "opened_from_failure": true,
+    "visible_status": "test_known_locator.py\nshop.py\n保存\n校验\n—\n运行用例\n调试\n继续\n单步跳过\n单步进入\n单步跳出\n停止\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n        self.page.get_by_label(\"Size\", exact=True).select_option(size)\n    def add(self):\n        self.page.get_by_role(\"button\", name=\"Add to cart\", exact=True).click()\n    def add_with_legacy_locator(self):\n        \"\"\"Retained stale selector for the real failure/repair demonstration.\"\"\"\n        self.page.get_by_role(\"button\", name=\"Add to cart\").click()\n    def cart(self):\n        self.page.get_by_role(\"button\", name=\"Cart (\", exact=False).click()\n4\nclass ShopPage:\nPython 语言服务不可用\nPython 调试器\n已暂停\ntests/test_known_locator.py::test_known_locator_change\n本次仅执行上方指定用例，其他用例中的断点不会命中。\npages/shop.py:35\n已命中\nqa_diagnostics/test_oracle_review.py:12\n调试器已接受\ntests/test_shop.py:20\n调试器已接受\ntests/test_shop.py:42\n调试器已接受\n调用堆栈\nadd_with_legacy_locator:35\ntest_known_locator_change:12\npytest_pyfunc_call:167\n_multicall:121\n_hookexec:120\n__call__:512\nruntest:1707\npytest_runtest_call:184\n_multicall:121\n_hookexec:120\n__call__:512\n<lambda>:250\nfrom_call:361\ncall_and_report:249\nruntestprotocol:139\npytest_runtest_protocol:118\n_multicall:121\n_hookexec:120\n__call__:512\npytest_runtestloop:408\n_multicall:121\n_hookexec:120\n__call__:512\n_main:384\nwrap_session:330\npytest_cmdline_main:377\n_multicall:121\n_hookexec:120\n__call__:512\n_main:229\n_console_main:253\n<module>:9\n_run_code:88\n_run_module_as_main:203\n局部变量\nself\n<pages.shop.ShopPage object at 0x10eade510>\n调试控制台\nptvsddebugpy\n工作区问题与校验\n尚未校验\n展开\n尚未校验工作区\nmain\npages/shop.py\npy\nProduction QA 引擎",
+    "toolbar_layout": {
+      "minButtonWidth": 44,
+      "overlaps": [],
+      "buttons": [
+        {
+          "label": "保存",
+          "x": 758,
+          "y": 357.1875,
+          "right": 822,
+          "bottom": 393.1875,
+          "width": 64
+        },
+        {
+          "label": "校验\n—",
+          "x": 826,
+          "y": 357.1875,
+          "right": 912,
+          "bottom": 393.1875,
+          "width": 86
+        },
+        {
+          "label": "运行用例",
+          "x": 916,
+          "y": 357.1875,
+          "right": 1004,
+          "bottom": 393.1875,
+          "width": 88
+        },
+        {
+          "label": "调试",
+          "x": 1008,
+          "y": 357.1875,
+          "right": 1072,
+          "bottom": 393.1875,
+          "width": 64
+        },
+        {
+          "label": "继续",
+          "x": 1077,
+          "y": 357.1875,
+          "right": 1121,
+          "bottom": 393.1875,
+          "width": 44
+        },
+        {
+          "label": "单步跳过",
+          "x": 1125,
+          "y": 357.1875,
+          "right": 1193,
+          "bottom": 393.1875,
+          "width": 68
+        },
+        {
+          "label": "单步进入",
+          "x": 1197,
+          "y": 357.1875,
+          "right": 1265,
+          "bottom": 393.1875,
+          "width": 68
+        },
+        {
+          "label": "单步跳出",
+          "x": 1269,
+          "y": 357.1875,
+          "right": 1337,
+          "bottom": 393.1875,
+          "width": 68
+        },
+        {
+          "label": "停止",
+          "x": 1341,
+          "y": 357.1875,
+          "right": 1385,
+          "bottom": 393.1875,
+          "width": 44
+        }
+      ]
+    }
+  },
+  "source_unchanged": true,
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "known_console_404": "Reproduced in the isolated local demo shop as GET /favicon.ico; not a platform API failure."
+}
