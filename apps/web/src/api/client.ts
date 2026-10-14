@@ -787,6 +787,29 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+  analyzeRecorderLocator: (sessionId: string, stepId: string) =>
+    request<{
+      status: 'available' | 'unavailable' | 'invalid';
+      provider: string | null;
+      model?: string | null;
+      candidate_id: string | null;
+      alternative_candidate_id?: string | null;
+      reason: string;
+      risk?: string;
+      confidence?: number | null;
+    }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/steps/${encodeURIComponent(stepId)}/ai-analysis`, {
+      method: 'POST',
+    }),
+  requestRecorderJevDecision: (sessionId: string, stepId: string) =>
+    request<{
+      status: 'available' | 'unavailable';
+      provider: string;
+      candidate_id: string | null;
+      summary: Record<string, unknown>;
+      reason: string | null;
+    }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/steps/${encodeURIComponent(stepId)}/jev-decision`, {
+      method: 'POST',
+    }),
   optimizeRecorder: (
     sessionId: string,
     payload: {

@@ -68,6 +68,27 @@ export const FailureEvidence: React.FC<{
   const visibleTab = tabs.includes(activeTab) ? activeTab : 'SUMMARY';
 
   const bundle = failure.evidence_bundle ?? {};
+  const recorderBundle = bundle.element_evidence && typeof bundle.element_evidence === 'object'
+    ? bundle.element_evidence as Record<string, unknown>
+    : null;
+  const currentRecorderSteps = Array.isArray(recorderBundle?.steps)
+    ? recorderBundle.steps.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+  const recorderRevisions = Array.isArray(recorderBundle?.revisions)
+    ? recorderBundle.revisions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+  const withEvidenceRevision = (step: Record<string, unknown>, revision: unknown): Record<string, unknown> => ({
+    ...step,
+    evidence_revision: revision ?? 1,
+  });
+  const recorderSteps: Record<string, unknown>[] = [
+    ...currentRecorderSteps.map((step) => withEvidenceRevision(step, recorderBundle?.revision)),
+    ...recorderRevisions.flatMap((revision) => Array.isArray(revision.steps)
+      ? revision.steps
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        .map((step) => withEvidenceRevision(step, revision.revision))
+      : []),
+  ];
   const relevantFrames = extractRelevantFrames(failure.stack_trace);
   const errorSummary = summarizeFailureError(
     failure.error_message,
@@ -182,6 +203,44 @@ export const FailureEvidence: React.FC<{
                     })}
                   </ul>
                 </div>
+              )}
+              {recorderSteps.length > 0 && (
+                <details className="failure-raw-details">
+                  <summary>{t('recorderElementEvidence', {
+                    version: String(recorderBundle?.version ?? 'unknown'),
+                    count: recorderSteps.length,
+                  })}</summary>
+                  <div className="failure-evidence-frames">
+                    <ul className="failure-recorder-evidence-list">
+                    {recorderSteps.map((step, index) => {
+                      const evidence = step.evidence && typeof step.evidence === 'object'
+                        ? step.evidence as Record<string, unknown>
+                        : {};
+                      const element = evidence.element && typeof evidence.element === 'object'
+                        ? evidence.element as Record<string, unknown>
+                        : {};
+                      const candidates = Array.isArray(evidence.locator_candidates)
+                        ? evidence.locator_candidates.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+                        : [];
+                      const identity = [element.role, element.name ?? element.text ?? element.tag]
+                        .filter((item) => typeof item === 'string' && item).join(' · ');
+                      return <li key={`${String(step.step_id ?? index)}-${index}`}>
+                        <strong>{identity || String(step.action ?? t('unknownValue'))}</strong>
+                        <small>{t('recorderEvidenceRevision', { revision: String(step.evidence_revision ?? 1) })}</small>
+                        <small>{String(step.url ?? '')}</small>
+                        {candidates.map((candidate, candidateIndex) => (
+                          <small key={`${String(candidate.candidate_id ?? candidateIndex)}-${candidateIndex}`}>
+                            {String(candidate.kind)}: {String(candidate.name ?? candidate.value ?? '')}
+                            {(candidate.verification as Record<string, unknown> | undefined)?.verified === true
+                              ? ` · ${t('recordedVerified')}`
+                              : ''}
+                          </small>
+                        ))}
+                      </li>;
+                    })}
+                    </ul>
+                  </div>
+                </details>
               )}
             </div>
           );

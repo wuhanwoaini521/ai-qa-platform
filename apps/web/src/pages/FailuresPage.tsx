@@ -534,6 +534,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         diagnosisController.current = null;
         setDiagnosing(false);
       }
+      void api.getFailure(selectedFailure.id).then((refreshed) => {
+        if (selectedFailureIdRef.current === selectedFailure.id) {
+          setSelectedFailure((current) => current?.id === selectedFailure.id
+            ? { ...current, evidence_bundle: refreshed.evidence_bundle }
+            : current);
+        }
+      }).catch(() => undefined);
       void api
         .getFailureAnalyses(selectedFailure.id)
         .then(async (rows) => {

@@ -1,16 +1,15 @@
+import type { components } from '../api/generated-schema';
 import type {
   ModernTestModel,
   RequirementDocument,
   Scenario,
 } from '../features/lifecycle/types';
-export type FrameworkType = 'playwright_python' | 'pytest_api' | 'custom';
 
-export type RequirementStatus = 'DRAFT' | 'READY' | 'ARCHIVED';
-
-export type TestDesignCategory =
-  'FUNCTIONAL' | 'BOUNDARY' | 'NEGATIVE' | 'ANALYTICS' | 'API' | 'UI';
-
-export type TestCasePriority = 'P0' | 'P1' | 'P2' | 'P3';
+type ApiSchema = components['schemas'];
+export type FrameworkType = ApiSchema['FrameworkType'];
+export type RequirementStatus = ApiSchema['RequirementStatus'];
+export type TestDesignCategory = ApiSchema['TestDesignCategory'];
+export type TestCasePriority = ApiSchema['TestCasePriority'];
 
 export interface RecorderLocator {
   kind:
@@ -27,6 +26,36 @@ export interface RecorderLocator {
   name?: string | null;
   exact?: boolean;
   nth?: number | null;
+}
+
+export interface RecorderLocatorCandidate extends RecorderLocator {
+  candidate_id?: string;
+  strategy?: string;
+  locator?: string;
+  static_score?: number;
+  evidence?: Record<string, unknown>;
+  verification?: {
+    match_count?: number;
+    unique?: boolean;
+    visible?: boolean;
+    enabled?: boolean | null;
+    editable?: boolean | null;
+    clickable?: boolean | null;
+    verified?: boolean;
+  };
+}
+
+export interface RecorderStepEvidence {
+  schema_version: 1;
+  element: Record<string, unknown>;
+  context: Record<string, unknown>;
+  locator_candidates: RecorderLocatorCandidate[];
+  decision: Record<string, unknown>;
+  decision_history?: Record<string, unknown>[];
+  ai_analysis?: Record<string, unknown> | null;
+  jev_analysis?: Record<string, unknown> | null;
+  status: 'available' | 'partial' | 'stale';
+  missing: string[];
 }
 
 export interface RecorderStep {
@@ -53,9 +82,12 @@ export interface RecorderStep {
   frame_path?: string[];
   url?: string | null;
   value?: string | null;
+  value_redacted?: boolean;
+  secret_env_var?: string | null;
   select_by_value?: boolean;
   key?: string | null;
   description: string;
+  evidence?: RecorderStepEvidence | null;
   locator_decision?: {
     provider: string;
     model?: string | null;
@@ -67,21 +99,9 @@ export interface RecorderStep {
   } | null;
 }
 
-export type AutomationStatus = 'MANUAL' | 'DRAFT' | 'AUTOMATED';
-
-export type WorkspaceStatus = 'ACTIVE' | 'INITIALIZING' | 'ARCHIVED' | 'ERROR';
-
-export interface Project {
-  demo_kind?: string | null;
-  id: string;
-  name: string;
-  description: string;
-  repository_url: string | null;
-  default_branch: string;
-  framework_type: FrameworkType;
-  created_at: string;
-  updated_at: string;
-}
+export type AutomationStatus = ApiSchema['AutomationStatus'];
+export type WorkspaceStatus = ApiSchema['WorkspaceStatus'];
+export type Project = ApiSchema['Project'];
 
 export interface ProjectCreate {
   name: string;
@@ -92,21 +112,9 @@ export interface ProjectCreate {
   bootstrap_workspace?: boolean;
 }
 
-export interface Requirement {
-  analysis_stale?: boolean;
+export type Requirement = Omit<ApiSchema['Requirement'], 'qa_model'> & {
   qa_model?: RequirementDocument | null;
-  id: string;
-  project_id: string;
-  title: string;
-  description: string;
-  acceptance_criteria: string;
-  status: RequirementStatus;
-  external_system?: string | null;
-  external_id?: string | null;
-  external_url?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+};
 
 export interface RequirementCreate {
   qa_model?: RequirementDocument | null;
@@ -120,18 +128,9 @@ export interface RequirementCreate {
   external_url?: string | null;
 }
 
-export interface TestDesign {
+export type TestDesign = Omit<ApiSchema['TestDesign'], 'scenario_model'> & {
   scenario_model?: Scenario | null;
-  id: string;
-  requirement_id: string;
-  title: string;
-  category: TestDesignCategory;
-  description: string;
-  risk: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+};
 
 export interface TestDesignCreate {
   requirement_id: string;
@@ -142,26 +141,11 @@ export interface TestDesignCreate {
   status?: string;
 }
 
-export interface TestCase {
+export type TestCase = Omit<ApiSchema['TestCase'], 'test_model' | 'steps' | 'tags'> & {
   test_model?: ModernTestModel | null;
-  id: string;
-  project_id: string;
-  requirement_id?: string | null;
-  test_design_id?: string | null;
-  title: string;
-  preconditions: string;
   steps: string[];
-  expected_result: string;
-  priority: TestCasePriority;
-  automation_status: AutomationStatus;
   tags: string[];
-  external_system?: string | null;
-  external_case_id?: string | null;
-  external_url?: string | null;
-  created_at: string;
-  updated_at: string;
-  binding?: AutomationBinding | null;
-}
+};
 
 export interface TestCaseCreate {
   project_id: string;
@@ -179,21 +163,8 @@ export interface TestCaseCreate {
   external_url?: string | null;
 }
 
-export type AutomationBindingStatus =
-  'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'BROKEN';
-
-export interface AutomationBinding {
-  id: string;
-  test_case_id: string;
-  workspace_id: string;
-  framework: FrameworkType;
-  /** Pytest node id, e.g. tests/test_login.py::test_login_flow */
-  nodeid: string;
-  file_path: string;
-  status: AutomationBindingStatus;
-  created_at: string;
-  updated_at: string;
-}
+export type AutomationBindingStatus = ApiSchema['AutomationBindingStatus'];
+export type AutomationBinding = ApiSchema['AutomationBinding'];
 
 export interface AutomationBindingCreate {
   test_case_id: string;
@@ -391,44 +362,26 @@ export interface ExternalArtifactReference {
   created_at: string;
 }
 
-export type TestRunStatus =
-  'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
+export type TestRunStatus = ApiSchema['RunStatus'];
 
-export interface TestRun {
-  id: string;
-  parent_run_id?: string | null;
-  project_id: string;
-  workspace_id: string;
-  status: TestRunStatus;
-  requested_by: string;
+export type TestRun = Omit<
+  ApiSchema['TestRun'],
+  'environment' | 'executions' | 'external_artifacts' | 'finished_at' | 'markers' | 'nodeids' | 'queue_duration_ms' | 'runner_type' | 'started_at'
+> & {
   triggered_by?: string;
-  runner_type?: string;
-  runner_profile_id?: string | null;
-  external_job_id?: string | null;
-  external_build_url?: string | null;
-  queue_duration_ms?: number;
-  environment: Record<string, string>;
-  browser: string;
-  parallel_workers?: number;
-  markers: string[];
-  nodeids: string[];
-  total: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  cancelled: number;
   total_tests?: number;
   passed_tests?: number;
   failed_tests?: number;
-  duration_ms: number;
-  started_at: string | null;
-  finished_at: string | null;
-  created_at: string;
+  environment: Record<string, string>;
   executions: TestExecution[];
-  browser_sessions?: TestBrowserSession[];
   external_artifacts?: ExternalArtifactReference[];
-  log_output?: string;
-}
+  finished_at: string | null;
+  markers: string[];
+  nodeids: string[];
+  queue_duration_ms: number;
+  runner_type: string;
+  started_at: string | null;
+};
 
 export interface TestBrowserSession {
   page_evidence?: Record<string, unknown>;
@@ -487,8 +440,7 @@ export interface TestRunCreate {
   parameters?: Record<string, unknown>;
 }
 
-export type TestExecutionStatus =
-  'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
+export type TestExecutionStatus = ApiSchema['TestExecutionStatus'];
 
 export interface TestExecution {
   id: string;
@@ -512,87 +464,22 @@ export type FailureCategory =
   | 'ENVIRONMENT_ERROR'
   | 'UNKNOWN';
 
-export interface FailureRecord {
-  failure_kind?: string;
-  evidence_bundle?: Record<string, unknown>;
-  id: string;
-  run_id: string;
-  execution_id: string;
-  test_nodeid: string;
-  test_name: string;
-  classification: FailureCategory | string;
-  exception_type: string;
-  error_message: string;
-  stack_trace: string;
-  failing_locator?: string | null;
-  screenshot_path?: string | null;
-  trace_path?: string | null;
-  dom_snapshot_path?: string | null;
-  console_logs: string[];
-  suggested_action?: string | null;
+export type FailureRecord = Omit<ApiSchema['FailureRecord'], 'repair_proposal'> & {
   repair_proposal?: Partial<LocatorRepairProposal> | null;
-  created_at: string;
-}
+};
 
-export type FailureRepairState =
-  | 'CREATED'
-  | 'ANALYZING'
-  | 'DECIDING'
-  | 'VERIFYING_CANDIDATE'
-  | 'PATCH_READY'
-  | 'APPLYING'
-  | 'PATCH_APPLIED'
-  | 'VERIFYING_FIX'
-  | 'VERIFIED'
-  | 'FAILED'
-  | 'BLOCKED'
-  | 'NOT_APPLICABLE'
-  | 'ROLLED_BACK';
-
-export type FailureRepairAction = 'START_ANALYSIS' | 'APPLY' | 'VERIFY' | 'ROLLBACK' | 'RETRY' | 'CREATE_ISSUE_DRAFT';
-
-export interface ElementBaselineFingerprint {
-  status: 'CAPTURED' | 'MISSING';
-  fingerprint: Record<string, string> | null;
-  reason: string | null;
-}
-
-export interface FailureReplaySummary {
-  status: 'NOT_STARTED' | 'RESTORED' | 'PARTIAL' | 'RESTORE_FAILED' | 'INSUFFICIENT_EVIDENCE';
-  safe_point: string | null;
-  replayed_steps: string[];
-  not_replayed_steps: string[];
-  message: string;
-}
-
-export interface FailureSnapshotBundle {
-  status: 'CAPTURED' | 'PARTIAL' | 'INSUFFICIENT_EVIDENCE';
-  captured_at: string | null;
-  url: string | null;
-  accessibility_tree: string;
-  redacted_dom: string;
-  failed_locator: string | null;
-  original_element_baseline: ElementBaselineFingerprint;
-  storage_state_status: 'AVAILABLE' | 'NOT_CAPTURED' | 'UNAVAILABLE' | 'EXPIRED' | 'RESTORE_FAILED';
-  storage_state_expires_at: string | null;
-  replay: FailureReplaySummary;
-  evidence_gaps: string[];
-}
-
-export interface FailureRepairWorkflow {
-  repair_id: string | null;
-  failure_id: string;
-  analysis_id: string | null;
-  state: FailureRepairState;
-  allowed_actions: FailureRepairAction[];
-  verification_run_id: string | null;
-  verification_run_status: string | null;
-  retry_run_id: string | null;
-  retry_run_status: string | null;
-  verified: boolean;
-  repair_proposal: Partial<LocatorRepairProposal> | null;
-  failure_snapshot: FailureSnapshotBundle;
-}
+export type FailureRepairState = ApiSchema['FailureRepairState'];
+export type FailureRepairAction = ApiSchema['FailureRepairAction'];
+export type ElementBaselineFingerprint = ApiSchema['ElementBaselineFingerprint'];
+export type FailureReplaySummary = ApiSchema['FailureReplaySummary'];
+export type FailureSnapshotBundle = ApiSchema['FailureSnapshotBundle'];
+export type FailureRepairWorkflow = Omit<
+  ApiSchema['FailureRepairWorkflow'],
+  'allowed_actions' | 'repair_proposal'
+> & {
+  allowed_actions: NonNullable<ApiSchema['FailureRepairWorkflow']['allowed_actions']>;
+  repair_proposal?: Partial<LocatorRepairProposal> | null;
+};
 
 /** Body accepted by `POST /api/failures/{id}/analyses/{analysisId}/apply`. */
 export interface ApplyRepairPayload {
@@ -609,34 +496,14 @@ export interface CandidateLocator {
   reason?: string;
 }
 
-export interface LocatorRepairProposal {
-  /** Runtime selector reported for the failed action. */
-  old_locator: string;
-  /** Unique source call mapped to the failed runtime selector; used for reviewed patches. */
-  source_locator?: string | null;
-  proposed_locator: string;
-  confidence: number | null;
-  strategy: string;
-  reason?: string;
-  candidate_id?: string | null;
-  provider?: string;
-  model?: string | null;
-  latency_ms?: number | null;
-  ai_provider?: string | null;
-  ai_fallback_used?: boolean;
-  verified?: boolean;
-  verification_reason?: string | null;
-  verification_replay?: FailureReplaySummary;
-  resolved_classification?: string | null;
+export type LocatorRepairProposal = Omit<
+  ApiSchema['LocatorRepairProposal'],
+  'decision_summary' | 'execution_trace'
+> & {
   decision_summary?: Record<string, unknown>;
-  code_diff?: string;
-  /** File the proposal targets; null when the failure has no bound workspace file. */
-  file_path?: string | null;
-  /** Whether this locator passed Playwright verification on the reconstructed failure page. */
-  applied: boolean;
-  candidates?: CandidateLocator[];
   execution_trace?: AITraceEvent[];
-}
+  candidates?: CandidateLocator[];
+};
 
 export interface ApplyRepairRequest {
   file_path: string;
@@ -1206,7 +1073,7 @@ export interface AIFailureDiagnosisResponse {
 export interface FailureAnalysisRun {
   id: string;
   failure_id: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT' | 'INTERRUPTED';
   events: AITraceEvent[];
   result: {
     domain?: string;

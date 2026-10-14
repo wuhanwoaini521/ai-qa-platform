@@ -3641,6 +3641,10 @@ button, input, select, textarea {
 .failure-evidence-frames { margin-top: 10px; }
 .failure-evidence-frames > span { color: var(--ink-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .failure-evidence-frames ul { margin: 5px 0 0; padding-left: 18px; color: var(--ink); font-size: 12px; }
+.failure-recorder-evidence-list { display: grid; gap: 8px; margin: 8px 0 0 !important; padding: 0 !important; list-style: none; }
+.failure-recorder-evidence-list li { display: grid; gap: 3px; min-width: 0; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--r-xs); }
+.failure-recorder-evidence-list li > * { min-width: 0; overflow-wrap: anywhere; }
+.failure-recorder-evidence-list li > small { color: var(--ink-muted); }
 .failure-evidence-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .failure-evidence-facts span { padding: 4px 7px; border-radius: 999px; background: var(--surface-inset); color: var(--ink-muted); font-size: 10px; }
 .failure-evidence-code { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-xs); background: var(--surface-inset); color: var(--ink); font: 11px/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -4001,6 +4005,17 @@ button, input, select, textarea {
   grid-template-rows: auto minmax(90px, 0.5fr) minmax(140px, 1fr) auto minmax(280px, 1.2fr);
 }
 
+.recorder-inspector-panel.has-element-evidence { grid-template-rows: auto auto minmax(140px, 1fr) auto minmax(280px, 1.2fr); }
+.recorder-inspector-panel.has-locator-trace.has-element-evidence { grid-template-rows: auto auto minmax(90px, .5fr) minmax(140px, 1fr) auto minmax(280px, 1.2fr); }
+.recorder-element-evidence { min-width: 0; max-height: 190px; padding: 8px 10px; overflow: auto; border: 1px solid var(--ui-line-strong); border-radius: var(--ui-r-sm); background: color-mix(in srgb, var(--ui-primary-soft) 45%, var(--ui-surface-raised)); font-size: 11px; }
+.recorder-element-evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.recorder-element-evidence p { margin: 5px 0; color: var(--ui-ink); font-weight: 650; overflow-wrap: anywhere; }
+.recorder-element-evidence small { color: var(--ui-ink-muted); overflow-wrap: anywhere; }
+.recorder-element-evidence details { margin-top: 5px; }
+.recorder-element-evidence pre { max-height: 90px; overflow: auto; font-size: 10px; }
+.recorder-element-evidence ul { display: grid; gap: 3px; margin: 5px 0 0; padding-left: 18px; }
+.recorder-select-mode-active { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-primary-strong) 25%, transparent); }
+
 .recorder-locator-trace {
   min-height: 0;
   display: grid;
@@ -4052,6 +4067,8 @@ button, input, select, textarea {
   overscroll-behavior-y: auto;
 }
 
+.recorder-step-item { display: grid; gap: 4px; min-width: 0; }
+
 .recorder-step-row {
   display: grid;
   grid-template-columns: 92px minmax(90px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr) max-content auto;
@@ -4078,6 +4095,19 @@ button, input, select, textarea {
 .recorder-step-controls { display: flex; gap: 1px; }
 .recorder-step-controls .btn-icon { width: 30px; min-width: 30px; min-height: 30px; }
 .recorder-step-pick { min-height: 32px; padding: 5px 7px; font-size: 10px; white-space: nowrap; }
+.recorder-step-evidence { min-width: 0; padding: 0 8px 7px; color: var(--ui-ink-soft); font-size: 10px; }
+.recorder-step-evidence > summary { padding: 4px 0; color: var(--ui-ink-muted); cursor: pointer; }
+.recorder-step-evidence > small { display: block; margin-top: 5px; color: var(--ui-ink-muted); overflow-wrap: anywhere; }
+.recorder-evidence-actions,.recorder-candidate-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.recorder-evidence-actions { margin: 5px 0; }
+.recorder-evidence-actions > span { color: var(--ui-ink-muted); overflow-wrap: anywhere; }
+.recorder-decision-conflict { margin: 5px 0; padding: 6px 8px; border: 1px solid var(--ui-warning-strong, #d97706); border-radius: 6px; color: var(--ui-ink); background: color-mix(in srgb, #f59e0b 12%, var(--ui-surface-raised)); }
+.recorder-candidate-list { display: grid; gap: 5px; }
+.recorder-candidate { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 6px 7px; border: 1px solid var(--ui-line); border-radius: 6px; background: var(--ui-surface-raised); }
+.recorder-candidate > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.recorder-candidate code { overflow-wrap: anywhere; color: var(--ui-ink); font-size: 10px; }
+.recorder-candidate small { color: var(--ui-ink-muted); }
+.recorder-candidate-actions { justify-content: flex-end; flex: 0 0 auto; }
 
 .recorder-steps-empty {
   display: grid;
@@ -4217,6 +4247,10 @@ button, input, select, textarea {
   .recorder-browser-panel { min-height: 340px; }
   .recorder-inspector-panel { grid-template-rows: auto minmax(160px, 1fr) auto minmax(220px, 300px); min-height: 720px; }
   .recorder-inspector-panel.has-locator-trace { grid-template-rows: auto minmax(90px, auto) minmax(160px, 1fr) auto minmax(220px, 300px); }
+  .recorder-inspector-panel.has-element-evidence { grid-template-rows: auto auto minmax(160px, 1fr) auto minmax(220px, 300px); }
+  .recorder-inspector-panel.has-locator-trace.has-element-evidence { grid-template-rows: auto auto minmax(90px, auto) minmax(160px, 1fr) auto minmax(220px, 300px); }
+  .recorder-candidate { align-items: flex-start; flex-direction: column; }
+  .recorder-candidate-actions { justify-content: flex-start; }
   .recorder-settings-grid { grid-template-columns: minmax(0, 1fr); }
   .recorder-error { align-items: flex-start; flex-direction: column; }
 }

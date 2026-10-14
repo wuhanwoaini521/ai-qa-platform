@@ -128,6 +128,10 @@ test('Evidence tabs only include sections backed by captured evidence', () => {
     }),
     ['SUMMARY', 'STACK', 'BROWSER', 'NETWORK'],
   );
+  assert.deepEqual(
+    availableEvidenceTabs(failure({ evidence_bundle: { element_evidence: { version: 'v1.0', steps: [{ step_id: 's1' }] } } })),
+    ['SUMMARY', 'STACK', 'BROWSER'],
+  );
 });
 
 test('Read-only grouping only joins failures with a specific shared launch signature', () => {

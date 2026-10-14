@@ -6,7 +6,7 @@ import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import { MonacoEditorPane, MonacoEditorInstance } from '../features/automation-studio/components/MonacoEditorPane';
 import { EditorTab } from '../features/automation-studio/types';
-import { AITraceEvent, GitDiffResult, Project, RecorderStep, TestCasePriority, TestRunCreate } from '../types';
+import { AITraceEvent, GitDiffResult, Project, RecorderLocatorCandidate, RecorderStep, TestCasePriority, TestRunCreate } from '../types';
 import { flowStartUrl, isNavigationFrameFresh, normalizeTrustedDomains } from './browserGoalModel';
 import { recorderStepsFromAgent } from './recorderAgentModel';
 import {
@@ -17,7 +17,8 @@ import {
 } from './recorderRunModel';
 
 type StepAction = RecorderStep['action'];
-type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: { action: string; name?: string; frame_path?: string[]; ranked_candidates?: RecorderStep['locator'][]; selection?: { selected_candidate?: RecorderStep['locator']; summary?: RecorderStep['locator_decision'] } | null } | null; message?: string };
+type ElementPreview = { tag?: string; id?: string; class?: string; role?: string | null; name?: string; text?: string; value_redacted?: boolean; attributes?: Record<string, string>; bounding_box?: { x: number; y: number; width: number; height: number }; frame_path?: string[]; shadow_path?: string[]; candidates?: RecorderLocatorCandidate[]; parent_summary?: string; visible?: boolean; actionable?: boolean };
+type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; locator_verification?: Record<string, unknown> | null; hovered?: ElementPreview | null; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: (ElementPreview & { action: string; evidence?: RecorderStep['evidence']; ranked_candidates?: RecorderLocatorCandidate[]; selection?: { selected_candidate?: RecorderLocatorCandidate; summary?: RecorderStep['locator_decision'] } | null }) | null; message?: string };
 type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; strategy: 'fast' | 'agent'; waitingForNavigation: boolean; trustedDomains: string[]; minimumFrameRevision?: number };
 
 const actions: StepAction[] = ['navigate','back','scroll','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
@@ -83,6 +84,11 @@ export const RecorderPage: React.FC<{
   const [pendingAgentGoal, setPendingAgentGoal] = useState<PendingAgentGoal | null>(null);
   const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number } | null>(null);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [pickedElement, setPickedElement] = useState<Frame['picked']>(null);
+  const [aiAnalysisStep, setAiAnalysisStep] = useState<string | null>(null);
+  const [jevDecisionStep, setJevDecisionStep] = useState<string | null>(null);
+  const locatorAnalysisBusy = aiAnalysisStep !== null || jevDecisionStep !== null;
   const [locatorTraceEvents, setLocatorTraceEvents] = useState<AITraceEvent[]>([]);
   const pickTargetStepRef = useRef<string | null>(null);
   const [priority, setPriority] = useState<TestCasePriority>('P2');
@@ -188,13 +194,16 @@ export const RecorderPage: React.FC<{
         if (data.locator_trace?.length) {
           setLocatorTraceEvents((current) => current[0]?.event_id === data.locator_trace?.[0]?.event_id ? current : data.locator_trace ?? []);
         }
+        if (data.picked) setPickedElement(data.picked);
+        if (data.picked) setSelectionMode(false);
         if (data.picked && pickTargetStepRef.current) {
-          const best = data.picked.selection?.selected_candidate ?? data.picked.ranked_candidates?.[0];
+          const recommended = data.picked.selection?.selected_candidate;
+          const best = recommended?.verification?.verified ? recommended : data.picked.ranked_candidates?.find((candidate) => candidate.verification?.verified);
           if (best) {
             setCode('');
             setSteps((current) => current.map((step) => {
               if (step.id !== pickTargetStepRef.current) return step;
-              const updated = { ...step, locator: best, frame_path: data.picked?.frame_path || [], locator_decision: data.picked?.selection?.summary ?? null };
+              const updated = { ...step, locator: best, frame_path: data.picked?.frame_path || [], locator_decision: data.picked?.selection?.summary ?? null, evidence: data.picked?.evidence ?? step.evidence };
               send('edit_step', { step: updated });
               return updated;
             }));
@@ -228,6 +237,8 @@ export const RecorderPage: React.FC<{
   useEffect(() => {
     frameRevisionRef.current = 0;
     setFrame(null);
+    setPickedElement(null);
+    setSelectionMode(false);
     setLocatorTraceEvents([]);
   }, [sessionId]);
 
@@ -287,6 +298,14 @@ export const RecorderPage: React.FC<{
   };
 
   const browserKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && selectionMode) {
+      event.preventDefault();
+      send('cancel_pick');
+      setSelectionMode(false);
+      pickTargetStepRef.current = null;
+      setPickTargetStep(null);
+      return;
+    }
     if (event.key === 'Escape' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       urlInputRef.current?.focus();
@@ -296,12 +315,20 @@ export const RecorderPage: React.FC<{
     else if (['Enter','Tab','Escape','Backspace','Delete','ArrowDown','ArrowUp','ArrowLeft','ArrowRight',' '].includes(event.key)) { event.preventDefault(); send('press', { key: event.key === ' ' ? 'Space' : event.key }); }
   };
 
-  const browserClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const browserPoint = (event: React.MouseEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const scale = Math.min(bounds.width / 1280, bounds.height / 720);
     const offsetX = (bounds.width - 1280 * scale) / 2;
-    const offsetY = 0;
-    send(event.detail > 1 ? 'double_click' : 'click', { x: (event.clientX - bounds.left - offsetX) / scale, y: (event.clientY - bounds.top - offsetY) / scale });
+    return { x: (event.clientX - bounds.left - offsetX) / scale, y: (event.clientY - bounds.top) / scale };
+  };
+  const lastPointerMove = useRef(0);
+  const browserPointerMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectionMode || performance.now() - lastPointerMove.current < 45) return;
+    lastPointerMove.current = performance.now();
+    send('move', browserPoint(event));
+  };
+  const browserClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    send(event.detail > 1 ? 'double_click' : 'click', browserPoint(event));
     event.currentTarget.focus();
   };
 
@@ -311,6 +338,36 @@ export const RecorderPage: React.FC<{
     send('edit_step', { step: updated });
     return updated;
   }));
+  const updateStepEvidence = (stepId: string, patch: Partial<NonNullable<RecorderStep['evidence']>>) => {
+    setSteps((current) => current.map((step) => step.id === stepId
+      ? { ...step, evidence: { ...(step.evidence ?? { schema_version: 1, element: {}, context: {}, locator_candidates: [], decision: {}, status: 'partial', missing: [] }), ...patch } }
+      : step));
+  };
+  const requestAiLocator = async (step: RecorderStep) => {
+    if (!sessionId || locatorAnalysisBusy) return;
+    setAiAnalysisStep(step.id);
+    setError('');
+    try {
+      const result = await api.analyzeRecorderLocator(sessionId, step.id);
+      updateStepEvidence(step.id, { ai_analysis: result });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setAiAnalysisStep(null); }
+  };
+  const requestJevLocator = async (step: RecorderStep) => {
+    if (!sessionId || locatorAnalysisBusy) return;
+    setJevDecisionStep(step.id);
+    setError('');
+    try {
+      const result = await api.requestRecorderJevDecision(sessionId, step.id);
+      updateStepEvidence(step.id, { jev_analysis: result });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setJevDecisionStep(null); }
+  };
+  const verifyCandidate = (step: RecorderStep, candidate?: RecorderLocatorCandidate, source: 'ai' | 'jev' | 'manual' = 'manual') => {
+    if (locatorAnalysisBusy || (!step.locator && !candidate)) return;
+    send('verify_locator', { step_id: step.id, candidate_id: candidate?.candidate_id, source });
+  };
+
   const addAssertion = (action: StepAction) => {
     const step: RecorderStep = { id: crypto.randomUUID().replaceAll('-', '').slice(0,12), action, description: labels[action], locator: action.startsWith('assert_') && !['assert_url','assert_title'].includes(action) ? { kind:'css', value:'#result', exact:false } : undefined, value: action === 'assert_count' ? '1' : '' };
     setSteps((current) => [...current, step]); send('add_step', { step });
@@ -479,10 +536,12 @@ export const RecorderPage: React.FC<{
   const actionInputs = (step: RecorderStep, index: number) => {
     const locatorRequired = !['navigate','back','scroll','wait','assert_url','assert_title'].includes(step.action);
     const locatorValue = step.locator?.value ?? '';
-    const parameter = step.action === 'navigate' ? step.url ?? '' : step.action === 'press' ? step.key ?? '' : step.value ?? '';
+    const parameter = step.value_redacted
+      ? step.secret_env_var ?? `QA_RECORDER_SECRET_${step.id.toUpperCase()}`
+      : step.action === 'navigate' ? step.url ?? '' : step.action === 'press' ? step.key ?? '' : step.value ?? '';
     return <>
       <input className="recorder-step-field recorder-step-locator" aria-label="步骤定位器" value={locatorValue} placeholder={locatorRequired ? '定位器' : '无定位器'} disabled={!locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
-      <input className="recorder-step-field recorder-step-parameter" aria-label="步骤参数" value={parameter} placeholder={step.action==='wait'?'毫秒':step.action==='scroll'?'方向（up/down）':step.action==='assert_count'?'数量':'参数 / 断言值'} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
+      <input className="recorder-step-field recorder-step-parameter" aria-label={step.value_redacted ? '敏感值环境变量名' : '步骤参数'} value={parameter} disabled={step.value_redacted} placeholder={step.value_redacted ? '敏感值已脱敏；由环境变量读取' : step.action==='wait'?'毫秒':step.action==='scroll'?'方向（up/down）':step.action==='assert_count'?'数量':'参数 / 断言值'} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
     </>;
   };
 
@@ -551,6 +610,27 @@ export const RecorderPage: React.FC<{
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
             <Square size={15} /> 停止
+          </button>
+          <button
+            type="button"
+            className={`btn ${selectionMode ? 'btn-primary recorder-select-mode-active' : 'btn-secondary'}`}
+            disabled={!sessionId || !isConnected || agentTaskRunning}
+            aria-pressed={selectionMode}
+            onClick={() => {
+              if (selectionMode) {
+                send('cancel_pick');
+                setSelectionMode(false);
+                pickTargetStepRef.current = null;
+                setPickTargetStep(null);
+              } else {
+                setSelectionMode(true);
+                pickTargetStepRef.current = null;
+                setPickTargetStep(null);
+                send('pick_element', { step_action: 'click' });
+              }
+            }}
+          >
+            <Crosshair size={15} /> {selectionMode ? '取消选择' : '选择元素'}
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || agentTaskRunning} onClick={generate}>
             <Code2 size={16} /> {busy ? '正在处理…' : code ? '重新生成脚本' : '生成脚本'}
@@ -676,7 +756,7 @@ export const RecorderPage: React.FC<{
         <section className="recorder-panel recorder-browser-panel">
           <div className="recorder-panel-heading">
             <strong>浏览器视图</strong>
-            <span className="recorder-keyboard-hint" id="recorder-keyboard-help">Shift + Esc 返回页面控件</span>
+            <span className="recorder-keyboard-hint" id="recorder-keyboard-help">选择模式：悬停预览 · 点击锁定 · Esc 取消</span>
             <span className="recorder-browser-meta" title={`${frame?.title || '远程浏览器画面'} · ${frame?.url || url}`}>
               {frame?.title || '远程浏览器画面'} · {frame?.url || url}
             </span>
@@ -689,6 +769,8 @@ export const RecorderPage: React.FC<{
             aria-label="远程浏览器交互视图"
             aria-describedby="recorder-keyboard-help"
             onClick={browserClick}
+            onMouseMove={browserPointerMove}
+            onMouseLeave={() => send('clear_hover')}
             onKeyDown={browserKeyDown}
             onWheel={(e) => {
               const bounds = browserRef.current?.getBoundingClientRect();
@@ -726,7 +808,21 @@ export const RecorderPage: React.FC<{
           )}
         </section>
 
-        <section className={`recorder-panel recorder-inspector-panel${locatorTraceEvents.length ? ' has-locator-trace' : ''}`}>
+        <section className={`recorder-panel recorder-inspector-panel${locatorTraceEvents.length ? ' has-locator-trace' : ''}${selectionMode || pickedElement ? ' has-element-evidence' : ''}`}>
+          {(selectionMode || pickedElement) && (
+            <div className="recorder-element-evidence" aria-live="polite">
+              <div className="recorder-element-evidence-heading">
+                <strong>{selectionMode ? '选择模式 · 悬停预览' : '已锁定元素'}</strong>
+                {selectionMode && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { send('cancel_pick'); setSelectionMode(false); }}>取消</button>}
+              </div>
+              {selectionMode && frame?.hovered && <p>当前：{frame.hovered.role || frame.hovered.tag} · {frame.hovered.name || frame.hovered.text || '无可访问名称'}</p>}
+              {pickedElement && <>
+                <p>{pickedElement.role || pickedElement.tag} · {pickedElement.name || pickedElement.text || '无名称'}{pickedElement.value_redacted ? ' · 敏感值已脱敏' : ''}</p>
+                <small>{pickedElement.parent_summary || '无父级摘要'}{pickedElement.bounding_box ? ` · ${pickedElement.bounding_box.width}×${pickedElement.bounding_box.height}` : ''}{pickedElement.frame_path?.length ? ` · Frame ${pickedElement.frame_path.join(' › ')}` : ''}{pickedElement.shadow_path?.length ? ` · Shadow ${pickedElement.shadow_path.join(' › ')}` : ''}</small>
+                {pickedElement.attributes && <details><summary>元素属性与 Locator 预览</summary><pre>{JSON.stringify(pickedElement.attributes, null, 2)}</pre><ul>{(pickedElement.ranked_candidates ?? pickedElement.candidates ?? []).slice(0, 8).map((candidate, index) => <li key={`${candidate.kind}-${candidate.value}-${index}`}>{candidate.locator || `${candidate.kind}: ${candidate.value}`}</li>)}</ul></details>}
+              </>}
+            </div>
+          )}
           <div className="recorder-steps-heading">
             <div>
               <strong>执行步骤</strong>
@@ -764,29 +860,65 @@ export const RecorderPage: React.FC<{
           )}
 
           <div className="recorder-steps-list">
-            {steps.map((step, index) => (
-              <div key={step.id} className="recorder-step-row">
-                <select className="recorder-step-field recorder-step-action" aria-label="步骤类型" value={step.action} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
-                  {actions.map((action) => <option key={action} value={action}>{labels[action]}</option>)}
-                </select>
-                <input className="recorder-step-field recorder-step-description" aria-label="步骤说明" value={step.description} onChange={(e) => updateStep(index, { description: e.target.value })} />
-                {actionInputs(step, index)}
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm recorder-step-pick"
-                  title="从内置浏览器拾取此步骤定位器"
-                  disabled={!sessionId}
-                  onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); send('pick_element', { step_action: step.action }); }}
-                >
-                  <Crosshair size={14} />{pickTargetStep === step.id ? '请在页面点击' : '拾取'}
-                </button>
-                <div className="recorder-step-controls">
-                  <button type="button" className="btn btn-secondary btn-icon" aria-label="上移步骤" title="上移" disabled={index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
-                  <button type="button" className="btn btn-secondary btn-icon" aria-label="下移步骤" title="下移" disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
-                  <button type="button" className="btn btn-secondary btn-icon" aria-label="删除步骤" title="删除" onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
+            {steps.map((step, index) => {
+              const evidence = step.evidence;
+              const aiCandidateId = typeof evidence?.ai_analysis?.candidate_id === 'string' ? evidence.ai_analysis.candidate_id : null;
+              const jevCandidateId = typeof evidence?.jev_analysis?.candidate_id === 'string' ? evidence.jev_analysis.candidate_id : null;
+              const conflict = Boolean(aiCandidateId && jevCandidateId && aiCandidateId !== jevCandidateId);
+              return (
+                <div key={step.id} className="recorder-step-item">
+                  <div className="recorder-step-row">
+                    <select className="recorder-step-field recorder-step-action" aria-label="步骤类型" value={step.action} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
+                      {actions.map((action) => <option key={action} value={action}>{labels[action]}</option>)}
+                    </select>
+                    <input className="recorder-step-field recorder-step-description" aria-label="步骤说明" value={step.description} onChange={(e) => updateStep(index, { description: e.target.value })} />
+                    {actionInputs(step, index)}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm recorder-step-pick"
+                      title="从内置浏览器拾取此步骤定位器；页面点击不会触发业务动作"
+                      disabled={!sessionId || !isConnected || locatorAnalysisBusy}
+                      onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); setSelectionMode(true); send('pick_element', { step_action: step.action }); }}
+                    >
+                      <Crosshair size={14} />{pickTargetStep === step.id ? '请在页面点击' : '拾取'}
+                    </button>
+                    <div className="recorder-step-controls">
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label="重新验证当前定位器" title="重新验证当前定位器" disabled={!sessionId || !step.locator || locatorAnalysisBusy} onClick={() => verifyCandidate(step)}><RotateCw size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label="上移步骤" title="上移" disabled={index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label="下移步骤" title="下移" disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label="删除步骤" title="删除" onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                  {evidence && <details className="recorder-step-evidence">
+                    <summary>元素证据 v{evidence.schema_version} · {evidence.locator_candidates.length} 个 Locator · {evidence.status === 'available' ? '证据完整' : evidence.status === 'stale' ? '页面可能已变化' : '部分证据缺失'}</summary>
+                    <div className="recorder-evidence-actions">
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestAiLocator(step)}>{aiAnalysisStep === step.id ? 'AI 分析中…' : '请求 AI 分析'}</button>
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestJevLocator(step)}>{jevDecisionStep === step.id ? 'Jev 决策中…' : '请求 Jev 决策'}</button>
+                      <span>{evidence.ai_analysis?.status === 'available' ? `AI: ${String(evidence.ai_analysis.provider)} · ${String(evidence.ai_analysis.reason || '')}` : evidence.ai_analysis ? `AI: 不可用 (${String(evidence.ai_analysis.reason)})` : 'AI: 尚未分析'}</span>
+                      <span>{evidence.jev_analysis?.status === 'available' ? `Jev: ${String(evidence.jev_analysis.candidate_id)}` : evidence.jev_analysis ? `Jev: 不可用 (${String(evidence.jev_analysis.reason || evidence.jev_analysis.provider)})` : 'Jev: 尚未请求'}</span>
+                    </div>
+                    {conflict && <p className="recorder-decision-conflict" role="status">AI 与 Jev 推荐不同候选。没有自动覆盖；请选择并重新验证：AI {aiCandidateId} · Jev {jevCandidateId}</p>}
+                    <div className="recorder-candidate-list">
+                      {evidence.locator_candidates.map((candidate, candidateIndex) => {
+                        const aiRecommended = candidate.candidate_id === aiCandidateId && evidence.ai_analysis?.status === 'available';
+                        const jevRecommended = candidate.candidate_id === jevCandidateId && evidence.jev_analysis?.status === 'available';
+                        const verification = candidate.verification;
+                        return <div className="recorder-candidate" key={`${candidate.candidate_id ?? candidateIndex}-${candidate.kind}-${candidate.value}`}>
+                          <div><strong>{candidate.kind}</strong><code>{candidate.locator || `${candidate.kind}: ${candidate.value}${candidate.name ? ` · ${candidate.name}` : ''}`}</code><small>{verification?.match_count ?? '—'} 匹配 · {verification?.unique ? '唯一' : verification?.unique === false ? '有歧义' : '未验证'} · {verification?.visible ? '可见' : verification?.visible === false ? '不可见' : '状态未知'} · {verification?.verified ? '已验证' : '待验证'}</small></div>
+                          <div className="recorder-candidate-actions">
+                            <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate)}>{step.locator?.value === candidate.value && step.locator?.kind === candidate.kind ? '验证当前' : '验证并使用'}</button>
+                            {aiRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'ai')}>使用 AI</button>}
+                            {jevRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'jev')}>使用 Jev</button>}
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                    {evidence.missing.length > 0 && <small>缺少：{evidence.missing.join('、')}</small>}
+                    <small>目标：{String(evidence.element.name || evidence.element.text || evidence.element.tag || '未知')} · 页面 {String(evidence.context.url || '未知')} · {String(evidence.context.captured_at || '')}</small>
+                  </details>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {!steps.length && <div className="recorder-steps-empty">浏览器交互会自动记录为步骤，也可以通过“添加断言”补充验证条件。</div>}
           </div>
 

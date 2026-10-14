@@ -203,6 +203,7 @@ export function availableEvidenceTabs(
     failure.dom_snapshot_path ||
     hasEvidence(bundle.page_url) ||
     hasEvidence(bundle.browser) ||
+    hasEvidence(bundle.element_evidence) ||
     hasEvidence(browserEvidence)
   ) {
     tabs.push('BROWSER');
