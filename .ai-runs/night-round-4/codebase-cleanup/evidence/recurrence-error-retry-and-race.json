@@ -1,0 +1,26 @@
+{
+  "tool": "agent-browser 0.39.0",
+  "browser": "Google Chrome 150.0.7871.125",
+  "application": "http://127.0.0.1:5174",
+  "error_retry": {
+    "method": "Aborted the recurrence GET once, then removed the interception and used the visible Retry action.",
+    "result": "The UI showed a translated load error instead of the successful-empty message; Retry loaded the real empty result (HTTP 200).",
+    "screenshots": [
+      "evidence/after/recurrence-load-error.png",
+      "evidence/after/recurrence-retry-success.png"
+    ]
+  },
+  "stale_response_race": {
+    "method": "Intercepted recurrence GETs in the browser. Delayed responses for fail_cbf1a3980f8e by 1.5 seconds with a synthetic stale row; returned an empty list immediately for the selected fail_82b0e6ae03a4; then waited for both responses.",
+    "requests": {
+      "fail_cbf1a3980f8e": 2,
+      "fail_82b0e6ae03a4": 2
+    },
+    "stale_response_finished": true,
+    "selected_response_finished": true,
+    "selected_card_title": "Similar Past Failures (0)",
+    "result_rows": 0,
+    "stale_row_visible": false
+  },
+  "safety": "Only read-only browser navigation and recurrence GETs were used. No AI/Jev action, repair Apply, external write, or source write was performed."
+}
