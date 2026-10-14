@@ -233,6 +233,7 @@ class AutomationBindingORM(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     framework: Mapped[str] = mapped_column(String(50), default="playwright_python")
     status: Mapped[str] = mapped_column(String(50), default="DRAFT", index=True)
+    recorder_evidence_bundle: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 

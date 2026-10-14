@@ -15,13 +15,16 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010_locator_repair_state_machine"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_recorder_element_evidence"
         assert {"decision_value", "locator_repair_id"} <= {
             column["name"] for column in inspect(connection).get_columns("ai_invocations")
         }
         assert "version" in {column["name"] for column in inspect(connection).get_columns("quality_discovery_runs")}
         assert {"failure_snapshot_json", "encrypted_storage_state", "storage_state_expires_at"} <= {
             column["name"] for column in inspect(connection).get_columns("browser_sessions")
+        }
+        assert "recorder_evidence_bundle" in {
+            column["name"] for column in inspect(connection).get_columns("automation_bindings")
         }
     engine.dispose()
 

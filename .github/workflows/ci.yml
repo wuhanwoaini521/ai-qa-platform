@@ -125,6 +125,11 @@ jobs:
       - name: Frontend unit tests
         run: pnpm --filter @ai-qa/web test
 
+      - name: Check generated OpenAPI types
+        run: |
+          pnpm --filter @ai-qa/web api:types
+          git diff --exit-code -- apps/web/src/api/generated-schema.d.ts
+
       - name: Typecheck
         run: pnpm --filter @ai-qa/web typecheck
 

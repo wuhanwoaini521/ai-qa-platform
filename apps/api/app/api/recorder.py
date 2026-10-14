@@ -17,6 +17,7 @@ from app.services.recorder_service import (
     RecorderSaveCaseRequest,
     RecorderSessionCreate,
     generate_python_case,
+    normalize_recording_steps,
     validate_recording_optimization,
 )
 from app.services.recorder_workflow_service import RecorderWorkflowService
@@ -70,6 +71,46 @@ async def generate_case(
     return {"code": generate_python_case(request), "project_id": recorder_service.session_status(session)["project_id"]}
 
 
+@router.post("/sessions/{session_id}/steps/{step_id}/ai-analysis")
+async def analyze_recorder_locator(
+    session_id: str,
+    step_id: str,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+):
+    session = await recorder_service.get(session_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    try:
+        return await recorder_service.analyze_locator_with_ai(session, step_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=503, detail=f"AI locator analysis unavailable ({type(error).__name__})"
+        ) from error
+
+
+@router.post("/sessions/{session_id}/steps/{step_id}/jev-decision")
+async def decide_recorder_locator_with_jev(
+    session_id: str,
+    step_id: str,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+):
+    session = await recorder_service.get(session_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    try:
+        return await recorder_service.request_jev_locator_decision(session, step_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=503, detail=f"Jev locator decision unavailable ({type(error).__name__})"
+        ) from error
+
+
 @router.post("/sessions/{session_id}/save-case")
 async def save_recorded_case(
     session_id: str,
@@ -105,10 +146,38 @@ async def optimize_recording(
 
     template = RECORDER_OPTIMIZATION_PROMPT
     try:
+        private_values: dict[str, str] = {}
+        private_markers: dict[str, str] = {}
+
+        def mask(value):
+            if value is None:
+                return None
+            if value not in private_markers:
+                marker = f"__RECORDER_PRIVATE_{len(private_markers) + 1}__"
+                private_markers[value] = marker
+                private_values[marker] = value
+            return private_markers[value]
+
+        safe_steps = []
+        for step in request.steps:
+            updates = {
+                "description": "",
+                "evidence": None,
+                "locator_decision": None,
+                "value": mask(step.value),
+                "url": mask(step.url),
+                "key": mask(step.key),
+                "frame_path": [mask(selector) for selector in step.frame_path],
+            }
+            if step.locator:
+                updates["locator"] = step.locator.model_copy(
+                    update={"value": mask(step.locator.value), "name": mask(step.locator.name)}
+                )
+            safe_steps.append(step.model_copy(update=updates))
         result = await build_ai_orchestrator().complete(
             AICompletionRequest(
                 prompt=template.format(
-                    steps=json.dumps([step.model_dump() for step in request.steps], ensure_ascii=False)
+                    steps=json.dumps([step.model_dump() for step in safe_steps], ensure_ascii=False)
                 ),
                 system_instruction=template.system_instruction,
                 prompt_id=template.prompt_id,
@@ -120,11 +189,36 @@ async def optimize_recording(
         if result.provider == "fake" or result.fallback_used:
             raise ValueError("A real AI provider is required for recording optimization.")
         proposal = RecorderOptimization.model_validate(result.structured_data)
-        validate_recording_optimization(request.steps, proposal.steps)
-        optimized = request.model_copy(update={"steps": proposal.steps})
+        validate_recording_optimization(safe_steps, proposal.steps)
+        original_steps = normalize_recording_steps(request.steps)
+        optimized_steps = []
+        for step, original in zip(proposal.steps, original_steps, strict=True):
+            optimized_steps.append(
+                step.model_copy(
+                    update={
+                        "id": original.id,
+                        "description": original.description,
+                        "evidence": original.evidence,
+                        "locator_decision": original.locator_decision,
+                        "value": private_values.get(step.value, step.value),
+                        "url": private_values.get(step.url, step.url),
+                        "key": private_values.get(step.key, step.key),
+                        "frame_path": [private_values.get(selector, selector) for selector in step.frame_path],
+                        "locator": step.locator.model_copy(
+                            update={
+                                "value": private_values.get(step.locator.value, step.locator.value),
+                                "name": private_values.get(step.locator.name, step.locator.name),
+                            }
+                        )
+                        if step.locator
+                        else None,
+                    }
+                )
+            )
+        optimized = request.model_copy(update={"steps": optimized_steps})
         return {
             "raw_steps": request.steps,
-            "optimized_steps": proposal.steps,
+            "optimized_steps": optimized_steps,
             "raw_code": generate_python_case(request),
             "optimized_code": generate_python_case(optimized),
             "reasons": proposal.reasons,
@@ -161,10 +255,16 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
         await websocket.close(code=4404, reason="Recorder session not found")
         return
     recorder_service.touch(session)
+    last_steps_revision = -1
     try:
         while True:
             recorder_service.touch(session)
             frame = await recorder_service.page_snapshot(session)
+            revision = frame.get("steps_revision")
+            if revision == last_steps_revision:
+                frame.pop("steps", None)
+            elif revision is not None:
+                last_steps_revision = revision
             await websocket.send_json(frame)
             try:
                 command = await asyncio.wait_for(websocket.receive_json(), timeout=0.35)

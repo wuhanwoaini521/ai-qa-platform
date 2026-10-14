@@ -425,14 +425,12 @@ class PlaywrightBrowserRuntime:
     async def collect_evidence(self, session_id: str) -> BrowserSnapshot:
         return await self.snapshot(session_id)
 
-    async def verify_locator(
-        self, session_id: str, candidate: dict[str, Any], event: dict[str, Any]
-    ) -> dict[str, bool | None]:
+    async def verify_locator(self, session_id: str, candidate: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
         return await verify_locator(await self.get_page(session_id), candidate, event)
 
     async def verify_page_locator(
         self, page: BrowserPage, candidate: dict[str, Any], event: dict[str, Any]
-    ) -> dict[str, bool | None]:
+    ) -> dict[str, Any]:
         return await verify_locator(page, candidate, event)
 
     async def execute_action(self, session_id: str, candidate: dict[str, Any], action: dict[str, Any]) -> Any:

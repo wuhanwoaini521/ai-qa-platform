@@ -12,6 +12,7 @@ from app.persistence.models import BrowserSessionORM, utc_now
 from app.repositories.browser_session_repo import BrowserSessionRepository
 from app.repositories.failure_repo import FailureRepository
 from app.repositories.test_run_repo import TestRunRepository
+from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.secret_store import SecretStore
@@ -365,3 +366,60 @@ def test_checkout(page):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_locator_repair_reuses_only_verified_recorder_candidates_for_the_same_page():
+    bundle = {
+        "version": "v1.0",
+        "steps": [
+            {
+                "action": "click",
+                "url": "https://shop.example/checkout",
+                "evidence": {
+                    "element": {"tag": "button", "role": "button", "name": "Purchase"},
+                    "locator_candidates": [
+                        {
+                            "candidate_id": "candidate_1",
+                            "kind": "role",
+                            "value": "button",
+                            "name": "Purchase",
+                            "exact": True,
+                            "verification": {"verified": True},
+                        },
+                        {
+                            "candidate_id": "candidate_2",
+                            "kind": "css",
+                            "value": ".stale",
+                            "verification": {"verified": False},
+                        },
+                    ],
+                },
+            },
+            {
+                "url": "https://shop.example/cart",
+                "evidence": {
+                    "locator_candidates": [
+                        {
+                            "kind": "test_id",
+                            "value": "other-page",
+                            "verification": {"verified": True},
+                        }
+                    ]
+                },
+            },
+        ],
+    }
+
+    candidates = FailureService._recorder_evidence_candidates(bundle, "https://shop.example/checkout?run=secret")
+
+    assert len(candidates) == 1
+    assert candidates[0]["value"] == "button"
+    assert candidates[0]["name"] == "Purchase"
+    assert candidates[0]["evidence"]["source"] == "recorder_element_evidence"
+    assert candidates[0]["evidence"]["recorded_verification"] is True
+
+    archived = FailureService._recorder_evidence_candidates(
+        {"version": "v1.0", "steps": [], "revisions": [{"revision": 1, "steps": bundle["steps"]}]},
+        "https://shop.example/checkout",
+    )
+    assert archived[0]["evidence"]["evidence_revision"] == 1

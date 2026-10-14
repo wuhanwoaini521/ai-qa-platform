@@ -9,17 +9,40 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncClient, monkeypatch):
+async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncClient, test_db_session, monkeypatch):
     from app.api.recorder import recorder_service
+    from app.persistence.models import AutomationBindingORM
+    from app.repositories.automation_binding_repo import AutomationBindingRepository
+    from app.services.recorder_service import RecorderStep
 
     project = await client.post("/api/projects", json={"name": "Recorder save", "bootstrap_workspace": False})
     assert project.status_code == 201, project.text
     project_id = project.json()["id"]
-    monkeypatch.setattr(
-        recorder_service,
-        "get",
-        AsyncMock(return_value=SimpleNamespace(project_id=project_id)),
+    recorded_step = RecorderStep(
+        action="click",
+        locator={"kind": "role", "value": "button", "name": "Save"},
+        evidence={
+            "schema_version": 1,
+            "element": {"tag": "button", "role": "button", "name": "Save"},
+            "context": {"url": "https://example.test/save?session=private"},
+            "locator_candidates": [
+                {
+                    "candidate_id": "candidate_1",
+                    "kind": "role",
+                    "value": "button",
+                    "name": "Save",
+                    "verification": {"verified": True},
+                }
+            ],
+            "decision": {"selected_candidate_id": "candidate_1", "source": "jev"},
+            "decision_history": [{"candidate_id": "candidate_1", "source": "jev"}],
+            "status": "available",
+        },
     )
+    recording_session = SimpleNamespace(
+        id="recorder-session", project_id=project_id, steps=[recorded_step.model_dump(mode="json")]
+    )
+    monkeypatch.setattr(recorder_service, "get", AsyncMock(return_value=recording_session))
     url = "/api/recorder/sessions/test-session/save-case"
     payload = {
         "test_case": {
@@ -45,6 +68,7 @@ async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncCli
     first_case = first.json()["test_case"]
     first_binding = first.json()["binding"]
 
+    recording_session.steps = []
     retry_payload = {**payload, "test_case": {**payload["test_case"], "title": "Search official Selenium docs"}}
     retry = await client.post(url, json=retry_payload)
     assert retry.status_code == 200, retry.text
@@ -53,6 +77,51 @@ async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncCli
     assert retry.json()["test_case"]["title"] == "Search official Selenium docs"
     assert retry.json()["binding"]["id"] == first_binding["id"]
     assert retry.json()["nodeid"] == "tests/test_search.py::test_search_selenium"
+    async with test_db_session() as session:
+        binding = await session.get(AutomationBindingORM, first_binding["id"])
+        evidence = binding.recorder_evidence_bundle
+        linked_binding = await AutomationBindingRepository(session).get_active_by_nodeid(
+            "tests/test_search.py::test_search_selenium", project_id
+        )
+        from app.api.failures import get_failure_service
+
+        linked_evidence = await get_failure_service(session)._recorder_evidence_bundle(
+            SimpleNamespace(test_nodeid="tests/test_search.py::test_search_selenium"), project_id
+        )
+    from app.services.failure_evidence_service import FailureEvidenceService
+    from app.services.failure_service import FailureService
+
+    failure_evidence = await FailureEvidenceService.collect(
+        SimpleNamespace(
+            test_nodeid="tests/test_search.py::test_search_selenium",
+            screenshot_path=None,
+            trace_path=None,
+            dom_snapshot_path=None,
+            console_logs=[],
+            error_message="Timeout waiting for locator",
+            stack_trace="",
+            failing_locator=None,
+        ),
+        None,
+        None,
+        recorder_evidence=linked_evidence,
+    )
+    repair_candidates = FailureService._recorder_evidence_candidates(
+        failure_evidence.element_evidence, "https://example.test/save"
+    )
+    assert linked_binding.id == first_binding["id"]
+    assert linked_evidence["version"] == "v1.0"
+    assert linked_evidence["binding_id"] == first_binding["id"]
+    assert failure_evidence.element_evidence["binding_id"] == first_binding["id"]
+    assert failure_evidence.element_evidence["step_count"] == 1
+    assert len(str(failure_evidence.element_evidence).encode("utf-8")) < 64_000
+    assert repair_candidates[0]["name"] == "Save"
+    assert evidence["version"] == "v1.0"
+    assert evidence["revision"] == 2
+    assert evidence["steps"] == []
+    assert evidence["revisions"][0]["steps"][0]["evidence"]["decision_history"][0]["source"] == "jev"
+    assert len(evidence["decision_history"]) == 1
+    assert "session=private" not in str(evidence)
 
     cases = await client.get(f"/api/test-cases?project_id={project_id}")
     assert cases.status_code == 200

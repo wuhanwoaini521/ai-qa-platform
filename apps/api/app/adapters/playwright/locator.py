@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 
-async def verify_locator(page: Any, candidate: dict[str, Any], event: dict[str, Any]) -> dict[str, bool | None]:
+async def verify_locator(page: Any, candidate: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
     locator = page
     try:
         for selector in event.get("frame_path") or []:
@@ -28,7 +28,7 @@ async def verify_locator(page: Any, candidate: dict[str, Any], event: dict[str, 
         else:
             locator = locator.locator(value if kind != "xpath" or value.startswith("xpath=") else f"xpath={value}")
         count = await locator.count()
-        target = locator.nth(candidate["nth"]) if candidate.get("nth") is not None else locator
+        target = locator.nth(candidate["nth"] if candidate.get("nth") is not None else 0) if count else locator
         visible = count > 0 and await target.is_visible()
         action = str(event.get("action") or "")
         interactive = action in {"click", "double_click", "fill", "select", "check", "uncheck", "press", "hover"}
@@ -48,11 +48,13 @@ async def verify_locator(page: Any, candidate: dict[str, Any], event: dict[str, 
                   const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
                   if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
                   const hit = document.elementFromPoint(x, y);
-                  return hit === el || el.contains(hit);
+                  const root = el.getRootNode();
+                  return hit === el || el.contains(hit) || (root instanceof ShadowRoot && (hit === root.host || root.host.contains(hit)));
                 }""")
             )
         unique = count == 1
         return {
+            "match_count": count,
             "unique": unique,
             "visible": visible,
             "enabled": enabled,
@@ -66,6 +68,7 @@ async def verify_locator(page: Any, candidate: dict[str, Any], event: dict[str, 
         }
     except Exception:
         return {
+            "match_count": 0,
             "unique": False,
             "visible": False,
             "enabled": False,

@@ -83,4 +83,7 @@ class RecorderWorkflowService:
                 status=AutomationBindingStatus.ACTIVE,
             )
         )
+        evidence_bundle = self.recorder.element_evidence_bundle(recording)
+        evidence_bundle.update(binding_id=binding.id, test_case_id=case_id)
+        await self.binding_service.binding_repo.update_recorder_evidence_bundle(case_id, evidence_bundle)
         return {"test_case": saved_case, "binding": binding, "nodeid": nodeid, "reused": reused}

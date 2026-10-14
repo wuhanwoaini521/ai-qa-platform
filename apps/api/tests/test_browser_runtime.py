@@ -10,6 +10,13 @@ import app.adapters.playwright.browser_runtime as browser_runtime_module
 import pytest
 from app.adapters.playwright.browser_runtime import PlaywrightBrowserRuntime
 from app.ports.browser_runtime import BrowserRuntime
+from app.services.recorder_service import (
+    RECORDER_INIT_SCRIPT,
+    RecorderGenerateRequest,
+    RecorderLocator,
+    RecorderStep,
+    generate_python_case,
+)
 
 BROWSER_REQUEST_LOG = {}
 
@@ -243,6 +250,191 @@ async def test_browser_runtime_create_restore_snapshot_verify_action_and_close(b
         assert await runtime.get_session(restored.id) is None
     finally:
         await runtime.close_session(created.id)
+
+
+@pytest.mark.asyncio
+async def test_recorder_highlight_is_isolated_and_pick_mode_blocks_business_click(browser_test_url):
+    runtime = PlaywrightBrowserRuntime()
+    session = await runtime.create_session()
+    try:
+        await runtime.add_init_script(session.id, RECORDER_INIT_SCRIPT)
+        await runtime.navigate(session.id, browser_test_url)
+        page = await runtime.get_page(session.id)
+        button = page.get_by_role("button", name="Continue")
+        box = await button.bounding_box()
+        assert box
+        await page.evaluate("() => window.__qaRecorderSetPickMode(true)")
+        await page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await page.wait_for_timeout(60)
+        hovered = await page.evaluate("() => window.__qaRecorderHovered")
+        overlay = await page.evaluate("""() => {
+          const host = document.querySelector('html > div[aria-hidden="true"]');
+          const box = host?.shadowRoot?.getElementById('box');
+          return { hostExists: !!host, pointerEvents: host && getComputedStyle(host).pointerEvents, display: box && getComputedStyle(box).display };
+        }""")
+        assert hovered["name"] == "Continue"
+        assert overlay == {"hostExists": True, "pointerEvents": "none", "display": "block"}
+        await page.evaluate("""() => {
+          const button=document.querySelector('button');
+          button.addEventListener('pointerdown',()=>document.querySelector('#status').textContent='PointerDown');
+          button.addEventListener('pointerup',()=>document.querySelector('#status').textContent='PointerUp');
+          button.addEventListener('touchstart',()=>document.querySelector('#status').textContent='TouchStart');
+          button.addEventListener('touchend',()=>document.querySelector('#status').textContent='TouchEnd');
+          window.addEventListener('pointerdown',()=>document.querySelector('#status').textContent='WindowPointerDown',true);
+          button.addEventListener('mousedown',()=>document.querySelector('#status').textContent='MouseDown');
+          button.addEventListener('keydown',()=>document.querySelector('#status').textContent='KeyDown');
+          window.addEventListener('keydown',()=>document.querySelector('#status').textContent='WindowKeyDown',true);
+          window.addEventListener('keyup',()=>document.querySelector('#status').textContent='WindowKeyUp',true);
+          button.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+          button.dispatchEvent(new Event('touchstart',{bubbles:true,cancelable:true}));
+          button.dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+          button.focus();
+        }""")
+        assert await page.locator("#status").inner_text() == "Ready"
+        await page.keyboard.press("Enter")
+        assert await page.locator("#status").inner_text() == "Ready"
+
+        await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        assert await page.locator("#status").inner_text() == "Ready"
+        picked = await page.evaluate("() => window.__qaRecorderDrain()")
+        assert len(picked) == 1 and picked[0]["action"] == "pick"
+
+        duplicate = await page.evaluate("""() => {
+          const button = document.createElement('button'); button.textContent = 'Continue'; document.body.append(button);
+        }""")
+        verification = await runtime.verify_locator(
+            session.id,
+            {"kind": "role", "value": "button", "name": "Continue", "exact": True},
+            {"action": "click"},
+        )
+        assert duplicate is None
+        assert verification["match_count"] == 2
+        assert verification["unique"] is False and verification["verified"] is False
+    finally:
+        await runtime.close_session(session.id)
+
+
+@pytest.mark.asyncio
+async def test_recorder_captures_fill_select_click_and_redacts_credentials(browser_test_url):
+    runtime = PlaywrightBrowserRuntime()
+    session = await runtime.create_session()
+    try:
+        await runtime.add_init_script(session.id, RECORDER_INIT_SCRIPT)
+        await runtime.navigate(session.id, browser_test_url)
+        page = await runtime.get_page(session.id)
+        await page.get_by_role("textbox", name="Search products").fill("winter coat")
+        await page.wait_for_timeout(450)
+        filled = await page.evaluate("() => window.__qaRecorderDrain()")
+        assert any(item["action"] == "fill" and item["value"] == "winter coat" for item in filled)
+
+        await page.locator("#color").select_option("red")
+        selected = await page.evaluate("() => window.__qaRecorderDrain()")
+        assert any(item["action"] == "select" and item["value"] == "red" for item in selected)
+
+        await page.get_by_role("button", name="Continue").click()
+        await page.wait_for_timeout(300)
+        clicked = await page.evaluate("() => window.__qaRecorderDrain()")
+        assert any(item["action"] == "click" and item["name"] == "Continue" for item in clicked)
+
+        await page.evaluate("""() => {
+          const password = document.createElement('input'); password.type='password'; password.name='login-password'; password.setAttribute('value','attribute-password-secret'); document.body.append(password);
+          const email = document.createElement('input'); email.type='text'; email.name='email'; document.body.append(email);
+          const phone = document.createElement('input'); phone.type='text'; phone.name='contact_phone'; document.body.append(phone);
+          const firstName = document.createElement('input'); firstName.type='text'; firstName.name='first_name'; document.body.append(firstName);
+          const privateSelect = document.createElement('select'); privateSelect.name='account_token'; privateSelect.innerHTML='<option value="private-option-secret">private-option-secret</option>'; document.body.append(privateSelect);
+        }""")
+        await page.locator('input[name="login-password"]').fill("recorder-secret-value")
+        await page.locator('input[name="email"]').fill("person@example.test")
+        await page.locator('input[name="contact_phone"]').fill("415-555-0132")
+        await page.locator('input[name="first_name"]').fill("Ada Lovelace")
+        await page.locator('select[name="account_token"]').select_option("private-option-secret")
+        await page.wait_for_timeout(450)
+        private_events = await page.evaluate("() => window.__qaRecorderDrain()")
+        private_fills = [item for item in private_events if item["action"] == "fill"]
+        assert len(private_fills) == 4
+        assert all(item["value"] is None and item["value_redacted"] for item in private_fills), private_fills
+        leaked = [
+            secret
+            for secret in (
+                "recorder-secret-value",
+                "attribute-password-secret",
+                "person@example.test",
+                "415-555-0132",
+                "Ada Lovelace",
+                "private-option-secret",
+            )
+            if secret in str(private_events)
+        ]
+        assert not leaked
+        safe_url = await page.evaluate("""() => {
+          history.pushState({}, '', '?customer=Alice&access_token=private');
+          return window.__qaRecorderDrain().at(-1).url;
+        }""")
+        assert safe_url == browser_test_url
+
+        private_locator = await page.evaluate("""() => {
+          const button=document.createElement('button'); button.textContent='Open profile';
+          button.id='person@example.test'; button.setAttribute('data-testid','415-555-0132');
+          document.body.append(button); window.__qaRecorderSetPickMode(true);
+          button.dispatchEvent(new MouseEvent('click',{bubbles:true,composed:true}));
+          return window.__qaRecorderDrain()[0];
+        }""")
+        assert "person@example.test" not in str(private_locator)
+        assert "415-555-0132" not in str(private_locator)
+        assert not any(item.get("kind") == "test_id" for item in private_locator["candidates"])
+    finally:
+        await runtime.close_session(session.id)
+
+
+def test_generated_recorder_script_executes_in_real_browser(browser_test_url):
+    request = RecorderGenerateRequest(
+        steps=[
+            RecorderStep(action="navigate", url=browser_test_url),
+            RecorderStep(action="click", locator=RecorderLocator(kind="role", value="button", name="Continue")),
+            RecorderStep(
+                action="assert_text",
+                locator=RecorderLocator(kind="id", value="status"),
+                value="Completed",
+            ),
+        ]
+    )
+    source = generate_python_case(request)
+    namespace = {}
+    exec(compile(source, "test_generated_recorder.py", "exec"), namespace)
+    namespace["test_recorded_case"]()
+
+
+@pytest.mark.asyncio
+async def test_recorder_captures_open_shadow_target(browser_test_url):
+    runtime = PlaywrightBrowserRuntime()
+    session = await runtime.create_session()
+    try:
+        await runtime.add_init_script(session.id, RECORDER_INIT_SCRIPT)
+        await runtime.navigate(session.id, browser_test_url)
+        page = await runtime.get_page(session.id)
+        await page.evaluate("""() => {
+          const host = document.createElement('qa-widget');
+          const root = host.attachShadow({mode:'open'});
+          root.innerHTML = '<button aria-label="Shadow action">Run</button>';
+          document.body.append(host);
+        }""")
+        button = page.get_by_role("button", name="Shadow action")
+        box = await button.bounding_box()
+        assert box
+        await page.evaluate("() => window.__qaRecorderSetPickMode(true)")
+        await page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        picked = await page.evaluate("() => window.__qaRecorderDrain()")
+        assert picked[0]["name"] == "Shadow action"
+        assert picked[0]["shadow_path"] == ["qa-widget"]
+        verification = await runtime.verify_locator(
+            session.id,
+            {"kind": "role", "value": "button", "name": "Shadow action", "exact": True},
+            {"action": "click"},
+        )
+        assert verification["verified"] is True
+    finally:
+        await runtime.close_session(session.id)
 
 
 @pytest.mark.asyncio

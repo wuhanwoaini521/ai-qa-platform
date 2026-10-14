@@ -11,6 +11,7 @@
     "lint": "python scripts/task.py lint",
     "lint:web": "pnpm --filter @ai-qa/web lint",
     "typecheck": "pnpm --filter @ai-qa/web typecheck",
+    "api:contract": "uv run --no-sync python scripts/export_openapi.py && pnpm --filter @ai-qa/web api:types",
     "test": "python scripts/task.py test",
     "clean": "python scripts/task.py clean"
   },

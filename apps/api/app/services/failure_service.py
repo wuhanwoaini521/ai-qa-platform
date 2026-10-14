@@ -279,8 +279,14 @@ class FailureService:
         )
         browser_session, page_evidence = await self._browser_evidence(failure.execution_id)
         source_run = await self.run_repo.get_by_id(failure.run_id)
+        recorder_evidence = await self._recorder_evidence_bundle(failure, source_run.project_id if source_run else None)
         evidence = await FailureEvidenceService.collect(
-            failure, source_run, self.workspace_service, browser_session, page_evidence
+            failure,
+            source_run,
+            self.workspace_service,
+            browser_session,
+            page_evidence,
+            recorder_evidence,
         )
         await emit(
             "context.loaded",
@@ -567,6 +573,13 @@ class FailureService:
         pipeline: LocatorDecisionService | None = None
         verification_reason = "page_evidence_unavailable" if not page_evidence else "no_playwright_candidate"
         candidates = self._observed_locator_candidates(page_evidence)
+        recorder_bundle = await self._recorder_evidence_bundle(
+            failure, original_run.project_id if original_run else None
+        )
+        recorder_page_url = str(
+            snapshot.url or (browser_session or {}).get("current_url") or (page_evidence or {}).get("url") or ""
+        )
+        candidates.extend(self._recorder_evidence_candidates(recorder_bundle, recorder_page_url))
         seen: set[tuple[str, str, str | None]] = {
             (str(candidate.get("kind", "")), str(candidate.get("value", "")), candidate.get("name"))
             for candidate in candidates
@@ -993,6 +1006,13 @@ class FailureService:
         )
         return proposal
 
+    async def _recorder_evidence_bundle(self, failure: FailureRecord, project_id: str | None) -> dict:
+        if not self.repository_scope or not project_id:
+            return {}
+        async with self.repository_scope() as repositories:
+            binding = await repositories.automation_bindings.get_active_by_nodeid(failure.test_nodeid, project_id)
+        return binding.recorder_evidence_bundle or {} if binding else {}
+
     async def _latest_trusted_failure_analysis(self, failure_id: str) -> dict | None:
         rows = await self.failure_repo.latest_completed_analyses(failure_id, limit=10)
         for row in rows:
@@ -1014,6 +1034,53 @@ class FailureService:
             except Exception:
                 continue
         return trace
+
+    @classmethod
+    def _recorder_evidence_candidates(cls, bundle: dict | None, page_url: str) -> list[dict]:
+        if not isinstance(bundle, dict) or bundle.get("version") != "v1.0" or not page_url:
+            return []
+        current_url = SensitiveRedactor.redact_url(page_url)
+        candidates: list[dict] = []
+        seen: set[tuple[str, str, str | None]] = set()
+        historical_revisions = bundle.get("revisions", [])
+        versions = [bundle, *reversed(historical_revisions)] if isinstance(historical_revisions, list) else [bundle]
+        for version in versions:
+            for step in version.get("steps", []):
+                if (
+                    not isinstance(step, dict)
+                    or SensitiveRedactor.redact_url(str(step.get("url") or "")) != current_url
+                ):
+                    continue
+                evidence = step.get("evidence") or {}
+                element = evidence.get("element") or {}
+                for item in evidence.get("locator_candidates", []):
+                    if not isinstance(item, dict) or (item.get("verification") or {}).get("verified") is not True:
+                        continue
+                    kind = str(item.get("kind") or "")
+                    value = item.get("value")
+                    if kind not in cls._OBSERVED_LOCATOR_PRIORITY or not isinstance(value, str) or not value:
+                        continue
+                    name = item.get("name")
+                    key = (kind, value, name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    candidates.append(
+                        {key: item[key] for key in ("kind", "value", "name", "exact", "nth") if key in item}
+                        | {
+                            "evidence": {
+                                **(item.get("evidence") or {}),
+                                "source": "recorder_element_evidence",
+                                "evidence_revision": version.get("revision", 1),
+                                "recorded_action": step.get("action"),
+                                "recorded_element": {
+                                    key: element.get(key) for key in ("tag", "role", "name", "text") if element.get(key)
+                                },
+                                "recorded_verification": True,
+                            }
+                        }
+                    )
+        return candidates[:16]
 
     @staticmethod
     def _candidates_from_analysis(analysis: dict | None) -> list[dict]:

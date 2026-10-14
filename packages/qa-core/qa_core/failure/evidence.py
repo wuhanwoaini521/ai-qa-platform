@@ -26,6 +26,7 @@ class FailureEvidenceBundle(BaseModel):
     network: list[Any] = Field(default_factory=list)
     recent_steps: list[Any] = Field(default_factory=list)
     controls: list[Any] = Field(default_factory=list)
+    element_evidence: dict[str, Any] = Field(default_factory=dict)
     source_context: str = ""
     context_paths: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
