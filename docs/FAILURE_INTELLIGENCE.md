@@ -12,7 +12,7 @@ The Failure Intelligence system automates test failure taxonomy classification, 
 | API 测试 | 已捕获的 HTTP 日志、堆栈和测试源码 | 不适用 |
 | Python 测试 | 异常堆栈与测试源码 | 不适用 |
 
-`assert 1 == 2` 保持 `ASSERTION_FAILURE`，不能通过模型输出改成定位器错误。没有页面证据时显示“证据不足”，不会生成 `element → element` 等占位修复。上下文中的区域来自原始运行环境，未记录则明确显示未知；源码记录当前版本的 SHA-256，不能冒充失败发生时的源码。
+`assert 1 == 2` 保持 `ASSERTION_FAILURE`，不能通过模型输出改成定位器错误。没有页面证据时显示“证据不足”，不会生成 `element → element` 等占位修复。上下文中的区域来自原始运行环境，未记录则明确显示未知；源码记录当前版本的 SHA-256，不能冒充失败发生时的源码。失败分析按项目和精确 pytest node id 查找唯一 ACTIVE Automation Binding，并将不超过 64 KB 的脱敏、按失败页 URL 匹配摘要及 binding/revision 引用纳入 Failure Evidence；完整历史保留在 Binding。Locator Repair 仅复用同页、录制时通过 Playwright 验证的候选，并在修复环境重新验证；证据不授权源码修改。
 
 每一步保存状态、时间、耗时、脱敏证据和来源。模型事件记录实际 Provider / model；Fake 显示模拟，回退显示初步建议。Jev 失败后使用 Local Strategy 时记录回退原因，不能标为真实 Jev 选择。缺少真实 token 计数时记录未知。页面快照支持的 Locator 候选选择仍是未验证建议，不能表示实时页面已经验证。
 
@@ -75,5 +75,5 @@ Before failure artifacts and logs are persisted or passed to AI models, `Sensiti
 ## 4. Strict Safety Principle: Proposal-Only
 
 AI self-healing **NEVER** silently modifies code or alters test verdicts in the background:
-- All repair proposals require explicit user inspection and approval (`POST /api/failures/{id}/apply-repair`).
+- All repair proposals require explicit user inspection and approval (`POST /api/failures/{id}/apply-repair`). Recorder-linked evidence informs candidate discovery only; it never authorizes source edits.
 - Re-run verification confirms fix correctness via standard pytest assertion.
