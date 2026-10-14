@@ -1,8 +1,8 @@
-/** Prefer an explicit test, then the selected case binding, then the active file. */
+/** Explicit Test Explorer selections win; the Studio toolbar otherwise runs the active file. */
 export function resolveStudioRunTarget(
   activeTabPath: string | null,
   explicitNodeid?: string,
   caseNodeid?: string,
 ): string | undefined {
-  return explicitNodeid ?? caseNodeid ?? activeTabPath ?? undefined;
+  return explicitNodeid ?? activeTabPath ?? caseNodeid ?? undefined;
 }

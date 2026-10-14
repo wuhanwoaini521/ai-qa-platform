@@ -23,14 +23,14 @@ test('an explicit Test Explorer nodeid still targets only that case', () => {
   );
 });
 
-test('the selected case binding targets one node when Studio is opened from a case', () => {
+test('the active file takes precedence over a linked case for the Studio toolbar', () => {
   assert.equal(
     resolveStudioRunTarget(
       'tests/test_cart.py',
       undefined,
       'tests/test_cart.py::test_cart_total_for_multiple_items',
     ),
-    'tests/test_cart.py::test_cart_total_for_multiple_items',
+    'tests/test_cart.py',
   );
 });
 

@@ -693,10 +693,10 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 onClick={() => {void saveAndRun();}}
                 title={debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'
                   ? t('editor.debugActive')
-                  : t(caseNodeid ? 'editor.runCaseTooltip' : 'editor.runFileTooltip')}
+                  : t('editor.runFileTooltip')}
               >
                 <Play size={14} />
-                {run.runningTest ? t('editor.running') : t(caseNodeid ? 'editor.runCase' : 'editor.runFile')}
+                {run.runningTest ? t('editor.running') : t('editor.runFile')}
               </button>
             )}
             {!showAutomationSetup && <button
