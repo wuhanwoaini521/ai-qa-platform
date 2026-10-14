@@ -53,6 +53,6 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/apps/worker:/app/packages/qa-core:/app/packages/project-model:/app/packages/integrations"
 
 # Install Playwright browser binaries
-RUN pip install playwright && playwright install chromium firefox
+RUN playwright install chromium firefox
 
 CMD ["python", "-m", "worker.main"]

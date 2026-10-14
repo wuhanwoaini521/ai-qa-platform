@@ -6,11 +6,87 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.parse import urlsplit
 
+import app.adapters.playwright.browser_runtime as browser_runtime_module
 import pytest
 from app.adapters.playwright.browser_runtime import PlaywrightBrowserRuntime
 from app.ports.browser_runtime import BrowserRuntime
 
 BROWSER_REQUEST_LOG = {}
+
+
+def _fake_browser_runtime(monkeypatch, *, session_ttl_seconds=60, page_error=None, browser_close_error=None):
+    class FakePage:
+        url = "about:blank"
+
+        def set_default_timeout(self, _timeout):
+            pass
+
+        def set_default_navigation_timeout(self, _timeout):
+            pass
+
+        def on(self, *_args):
+            pass
+
+    class FakeContext:
+        def __init__(self):
+            self.pages = []
+            self.closed = False
+
+        async def new_page(self):
+            if page_error:
+                raise page_error
+            page = FakePage()
+            self.pages.append(page)
+            return page
+
+        def on(self, *_args):
+            pass
+
+        async def close(self):
+            self.closed = True
+
+    browsers = []
+
+    class FakeBrowser:
+        version = "123.0"
+
+        def __init__(self):
+            self.context = FakeContext()
+            self.closed = asyncio.Event()
+            self.close_calls = 0
+
+        async def new_context(self, **_options):
+            return self.context
+
+        async def close(self):
+            self.close_calls += 1
+            self.closed.set()
+            if browser_close_error:
+                raise browser_close_error
+
+    class FakePlaywright:
+        stop_calls = 0
+
+        async def stop(self):
+            self.stop_calls += 1
+
+    playwright = FakePlaywright()
+
+    class FakePlaywrightManager:
+        async def start(self):
+            return playwright
+
+    async def launch(_playwright, **_options):
+        browser = FakeBrowser()
+        browsers.append(browser)
+        return browser
+
+    monkeypatch.setattr(browser_runtime_module, "launch_chromium", launch)
+    runtime = PlaywrightBrowserRuntime(
+        session_ttl_seconds=session_ttl_seconds,
+        playwright_factory=FakePlaywrightManager,
+    )
+    return runtime, browsers, playwright
 
 
 def test_browser_runtime_port_covers_adapter_lifecycle_and_capabilities():
@@ -37,6 +113,7 @@ def test_browser_runtime_port_covers_adapter_lifecycle_and_capabilities():
         "recover_context",
         "is_timeout_error",
         "close_session",
+        "close_all",
     }
     assert all(callable(getattr(BrowserRuntime, name, None)) for name in methods)
     assert all(callable(getattr(PlaywrightBrowserRuntime, name, None)) for name in methods)
@@ -223,14 +300,14 @@ async def test_browser_runtime_can_block_service_workers_for_discovery(browser_t
 
 @pytest.mark.asyncio
 async def test_browser_runtime_rejects_invalid_and_expired_sessions(browser_test_url):
-    runtime = PlaywrightBrowserRuntime(session_ttl_seconds=0.01)
+    runtime = PlaywrightBrowserRuntime(session_ttl_seconds=60)
     with pytest.raises(ValueError, match=r"http\(s\)"):
         await runtime.navigate("missing", "file:///tmp/private")
 
     session = await runtime.create_session()
     with pytest.raises(ValueError, match="invalid, expired or unavailable"):
         await runtime.navigate("missing", browser_test_url)
-    await asyncio.sleep(0.03)
+    session.last_activity_monotonic -= 61
     assert await runtime.get_session(session.id) is None
     assert session.status == "EXPIRED"
 
@@ -252,3 +329,45 @@ async def test_browser_runtime_recovers_context_and_reports_browser_crash(browse
         assert session.status == "CRASHED"
     finally:
         await runtime.close_session(session.id)
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_expires_idle_session_without_another_request(monkeypatch):
+    runtime, browsers, playwright = _fake_browser_runtime(monkeypatch, session_ttl_seconds=0.03)
+    session = await runtime.create_session()
+
+    await asyncio.wait_for(browsers[0].closed.wait(), timeout=1)
+
+    assert session.status == "EXPIRED"
+    assert session.id not in runtime._sessions
+    assert browsers[0].context.closed
+    assert playwright.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_close_all_releases_every_session(monkeypatch):
+    runtime, browsers, playwright = _fake_browser_runtime(monkeypatch)
+    sessions = [await runtime.create_session(), await runtime.create_session()]
+
+    await runtime.close_all()
+
+    assert [session.status for session in sessions] == ["CLOSED", "CLOSED"]
+    assert not runtime._sessions
+    assert all(browser.context.closed and browser.close_calls == 1 for browser in browsers)
+    assert playwright.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_setup_failure_preserves_error_and_attempts_all_cleanup(monkeypatch):
+    runtime, browsers, playwright = _fake_browser_runtime(
+        monkeypatch,
+        page_error=RuntimeError("page setup failed"),
+        browser_close_error=RuntimeError("browser close failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="page setup failed") as failure:
+        await runtime.create_session()
+
+    assert browsers[0].close_calls == 1
+    assert playwright.stop_calls == 1
+    assert any("Browser cleanup failed" in note for note in failure.value.__notes__)

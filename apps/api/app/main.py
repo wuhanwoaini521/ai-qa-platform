@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI
@@ -150,13 +150,15 @@ async def lifespan(app: FastAPI):
         if not readiness_task.done():
             readiness_task.cancel()
         await asyncio.gather(readiness_task, return_exceptions=True)
-        await task_runtime.stop()
-        from app.container import recorder_service
+        from app.container import get_browser_runtime, recorder_service
         from app.services.debug_session_service import debug_session_service
 
-        await recorder_service.close_all()
-        await debug_session_service.close_all()
-        await engine.dispose()
+        async with AsyncExitStack() as shutdown:
+            shutdown.push_async_callback(engine.dispose)
+            shutdown.push_async_callback(get_browser_runtime().close_all)
+            shutdown.push_async_callback(debug_session_service.close_all)
+            shutdown.push_async_callback(recorder_service.close_all)
+            shutdown.push_async_callback(task_runtime.stop)
 
 
 app = FastAPI(

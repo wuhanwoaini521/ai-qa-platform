@@ -52,6 +52,7 @@ class PlaywrightBrowserRuntime:
         self._event_loop = None
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
+        self._expiry_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def is_timeout_error(error: Exception) -> bool:
@@ -62,6 +63,9 @@ class PlaywrightBrowserRuntime:
     async def _start(self):
         current_loop = asyncio.get_running_loop()
         if self._event_loop is not None and self._event_loop is not current_loop:
+            if self._expiry_task is not None:
+                self._expiry_task.cancel()
+                self._expiry_task = None
             for session in self._sessions.values():
                 session.status = "CLOSED"
             self._sessions.clear()
@@ -76,6 +80,33 @@ class PlaywrightBrowserRuntime:
                 factory = importlib.import_module("playwright.async_api").async_playwright
             self._playwright = await factory().start()
         return self._playwright
+
+    def _session_ttl_seconds(self) -> float:
+        return (
+            self._session_ttl_override
+            if self._session_ttl_override is not None
+            else get_config().browser.session_idle_timeout_seconds
+        )
+
+    def _start_expiry_task(self) -> None:
+        if self._expiry_task is None:
+            self._expiry_task = asyncio.create_task(self._expire_idle_sessions(), name="browser-session-expiry")
+
+    async def _expire_idle_sessions(self) -> None:
+        ttl = self._session_ttl_seconds()
+        interval = max(0.01, min(ttl / 2, 30.0))
+        try:
+            while self._sessions:
+                await asyncio.sleep(interval)
+                now = time.monotonic()
+                for session_id, session in list(self._sessions.items()):
+                    if now - session.last_activity_monotonic > ttl:
+                        if self._sessions.get(session_id) is session:
+                            session.status = "EXPIRED"
+                            await self.close_session(session_id)
+        finally:
+            if self._expiry_task is asyncio.current_task():
+                self._expiry_task = None
 
     async def create_session(
         self,
@@ -98,8 +129,11 @@ class PlaywrightBrowserRuntime:
                 if proxy:
                     launch_options["proxy"] = proxy
                 browser = await launch_chromium(playwright, headless=headless, **launch_options)
-            except Exception:
-                await self._stop_if_idle()
+            except BaseException as setup_error:
+                try:
+                    await self._stop_if_idle()
+                except BaseException as cleanup_error:
+                    setup_error.add_note(f"Playwright cleanup failed: {cleanup_error!r}")
                 raise
             try:
                 context_options = {"viewport": viewport}
@@ -116,9 +150,15 @@ class PlaywrightBrowserRuntime:
                 page = await context.new_page()
                 page.set_default_timeout(browser_config.timeout_seconds * 1000)
                 page.set_default_navigation_timeout(browser_config.navigation_timeout_seconds * 1000)
-            except Exception:
-                await browser.close()
-                await self._stop_if_idle()
+            except BaseException as setup_error:
+                try:
+                    await browser.close()
+                except BaseException as cleanup_error:
+                    setup_error.add_note(f"Browser cleanup failed: {cleanup_error!r}")
+                try:
+                    await self._stop_if_idle()
+                except BaseException as cleanup_error:
+                    setup_error.add_note(f"Playwright cleanup failed: {cleanup_error!r}")
                 raise
             now = datetime.now(timezone.utc)
             session = BrowserRuntimeSession(
@@ -143,6 +183,7 @@ class PlaywrightBrowserRuntime:
             page.on("response", lambda response: self._record_network(session, response, failed=False))
             async with self._lock:
                 self._sessions[session.id] = session
+            self._start_expiry_task()
             return session
 
     async def restore_session(
@@ -158,7 +199,7 @@ class PlaywrightBrowserRuntime:
         session = self._sessions.get(session_id)
         if session is None:
             return None
-        session_ttl = self._session_ttl_override or get_config().browser.session_idle_timeout_seconds
+        session_ttl = self._session_ttl_seconds()
         if time.monotonic() - session.last_activity_monotonic > session_ttl:
             session.status = "EXPIRED"
             await self.close_session(session_id)
@@ -232,8 +273,31 @@ class PlaywrightBrowserRuntime:
                         pass
             await self._stop_if_idle()
 
+    async def close_all(self) -> None:
+        async with self._lifecycle_lock:
+            async with self._lock:
+                sessions = list(self._sessions.values())
+                resources = list(self._resources.values())
+                self._sessions.clear()
+                self._resources.clear()
+            for session in sessions:
+                session.status = "CLOSED"
+            for item in resources:
+                for resource in (item.context, item.browser):
+                    try:
+                        await resource.close()
+                    except Exception:
+                        pass
+            await self._stop_if_idle()
+
     async def _stop_if_idle(self) -> None:
-        if not self._sessions and self._playwright is not None:
+        if self._sessions:
+            return
+        expiry_task, self._expiry_task = self._expiry_task, None
+        if expiry_task is not None and expiry_task is not asyncio.current_task():
+            expiry_task.cancel()
+            await asyncio.gather(expiry_task, return_exceptions=True)
+        if self._playwright is not None:
             playwright, self._playwright = self._playwright, None
             await playwright.stop()
 

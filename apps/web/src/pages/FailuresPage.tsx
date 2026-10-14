@@ -5,7 +5,6 @@ import {
   FailureAnalysisRun,
   FailureRepairWorkflow,
   AITraceEvent,
-  FailureCategory,
   FailureRecurrenceItem,
   FailureRecord,
   JiraBugDraft,
@@ -17,25 +16,20 @@ import {
 } from '../types';
 import { api } from '../api/client';
 import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
+import { ErrorState } from '../components/AsyncState';
 import { FailureWorkflowPanel } from '../components/FailureWorkflowPanel';
 import { FailureEvidence } from '../features/failures/FailureEvidence';
 import { FailureOverview } from '../features/failures/FailureOverview';
 import {
   displayedFailureClassification,
   failureSourceLocation,
-  failedLocatorFromFailure,
   normalizeFailureClassification,
   primaryActionForWorkflow,
   relatedFailures,
-  summarizeFailureError,
   storedRepairProposal,
 } from '../features/failures/failureWorkspaceModel';
 import {
-  AlertTriangle,
   Sparkles,
-  RefreshCw,
-  CheckCircle2,
-  ChevronRight,
   Check,
   ShieldCheck,
   History,
@@ -49,8 +43,6 @@ interface FailuresPageProps {
   selectedProjectId: string | null;
   /** Deep-link target: when set, this failure is selected once the list resolves. */
   initialFailureId?: string | null;
-  /** Lets the router shell mirror row selection into the URL. */
-  onSelectFailure?: (failureId: string, runId: string) => void;
   /** Opens the failing test file in the Automation Studio. */
   onOpenInStudio?: (
     filePath: string,
@@ -61,25 +53,20 @@ interface FailuresPageProps {
   onNavigateToRuns?: (runId?: string) => void;
   /** Opens the task runtime while preserving the selected failure context. */
   onTaskStarted: (taskId: string, preserveFailureContext: boolean) => void;
-  /** Reuses the repair lifecycle inside Workspace while the parent owns context navigation. */
-  workspaceMode?: boolean;
 }
 
 export const FailuresPage: React.FC<FailuresPageProps> = ({
   projects,
   selectedProjectId,
   initialFailureId,
-  onSelectFailure,
   onOpenInStudio,
   onNavigateToRuns,
   onTaskStarted,
-  workspaceMode = false,
 }) => {
   const { t, i18n } = useTranslation('failures');
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [failures, setFailures] = useState<FailureRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [selectedFailure, setSelectedFailure] = useState<FailureRecord | null>(
     null,
   );
@@ -248,6 +235,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     [],
   );
   const [loadingRecurrence, setLoadingRecurrence] = useState<boolean>(false);
+  const [recurrenceError, setRecurrenceError] = useState(false);
+  const recurrenceRequestRef = useRef(0);
 
   // Jira Bug Ticket State (Phase 9)
   const [isJiraBugModalOpen, setIsJiraBugModalOpen] = useState<boolean>(false);
@@ -349,7 +338,6 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const fetchFailures = async () => {
     try {
-      setLoading(true);
       const data = await api.getFailures(currentProjectId || undefined);
       setFailures(data);
       const deepLinked = initialFailureId
@@ -364,8 +352,6 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       }
     } catch (err) {
       console.error('Failed to load failures', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -458,15 +444,20 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   }, [initialFailureId, failures, selectedFailure?.id, handleSelectFailure]);
 
   const fetchRecurrence = async (failureId: string) => {
+    const requestId = ++recurrenceRequestRef.current;
+    setLoadingRecurrence(true);
+    setRecurrenceError(false);
+    setRecurrenceList([]);
     try {
-      setLoadingRecurrence(true);
       const list = await api.getFailureRecurrence(failureId);
-      setRecurrenceList(list);
+      if (requestId === recurrenceRequestRef.current) setRecurrenceList(list);
     } catch (err) {
-      console.error('Failed to fetch recurrence', err);
-      setRecurrenceList([]);
+      if (requestId === recurrenceRequestRef.current) {
+        console.error('Failed to fetch recurrence', err);
+        setRecurrenceError(true);
+      }
     } finally {
-      setLoadingRecurrence(false);
+      if (requestId === recurrenceRequestRef.current) setLoadingRecurrence(false);
     }
   };
 
@@ -800,53 +791,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     else if (primaryAction === 'REVIEW_REPAIR') document.getElementById('failure-repair-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const getCategoryBadge = (cat?: FailureCategory | string) => {
-    const classification = normalizeFailureClassification(cat);
-    const style =
-      classification === 'LOCATOR_CHANGED'
-        ? { background: 'var(--accent-violet-soft)', color: 'var(--accent-violet)' }
-        : classification === 'TIMING'
-          ? { background: 'var(--accent-amber-soft)', color: 'var(--accent-amber)' }
-          : classification === 'ASSERTION_FAILURE' || classification === 'PRODUCT_DEFECT'
-            ? { background: 'var(--accent-red-soft)', color: 'var(--accent-red)' }
-            : { background: 'var(--surface-inset)', color: 'var(--ink-muted)' };
-    switch (classification) {
-      case 'LOCATOR_CHANGED':
-      case 'TIMING':
-      case 'ASSERTION_FAILURE':
-      case 'ENVIRONMENT':
-      case 'NETWORK':
-      case 'TEST_DATA':
-      case 'AUTOMATION_DEFECT':
-      case 'PRODUCT_DEFECT':
-      case 'UNKNOWN':
-        return <span className="badge badge-draft" style={style}>{classification}</span>;
-      default:
-        return <span className="badge badge-draft" style={style}>{classification}</span>;
-    }
-  };
-
   return (
-    <div className={workspaceMode ? 'failure-page-workspace-mode' : undefined}>
-      {!workspaceMode && <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '18px',
-        }}
-      >
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('title')}</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {t('subtitle')}
-          </p>
-        </div>
-        <button className="btn btn-secondary btn-sm" onClick={fetchFailures}>
-          <RefreshCw size={14} /> {t('refresh')}
-        </button>
-      </div>}
-
+    <div>
       {projects.length === 0 ? (
         <div className="card">
           <div
@@ -861,70 +807,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           </div>
         </div>
       ) : (
-        <div
-          className="failure-workbench-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: workspaceMode ? 'minmax(0, 1fr)' : 'minmax(0, 1.2fr) minmax(0, 2fr)',
-            gap: '20px',
-          }}
-        >
-          {/* Left: compact failure queue */}
-          {!workspaceMode && <section className="card failure-list-card" aria-label={t('recordedCount', { count: failures.length })}>
-            <div className="card-header">
-              <span className="card-title">{t('recordedCount', { count: failures.length })}</span>
-            </div>
-            <div className="card-body failure-list-body">
-              {loading ? (
-                <div className="failure-list-empty">{t('loading')}</div>
-              ) : failures.length === 0 ? (
-                <div className="failure-list-empty">
-                  <CheckCircle2 size={32} aria-hidden="true" />
-                  <strong>{t('emptyTitle')}</strong>
-                  <p>{t('emptyBody')}</p>
-                </div>
-              ) : failures.map((failure) => {
-                const isSelected = selectedFailure?.id === failure.id;
-                const summary = summarizeFailureError(
-                  failure.error_message,
-                  failure.failure_kind ?? failure.classification,
-                );
-                const summaryText = summary === 'browserLaunchEperm'
-                  ? t('summary.browserLaunch', { platform: '' })
-                  : summary === 'locatorTimeout'
-                    ? t('summary.locatorTimeout', { locator: failedLocatorFromFailure(failure) || t('unknownValue') })
-                  : summary === 'timeout'
-                    ? t('summary.timeout')
-                    : summary === 'assertion'
-                      ? t('summary.assertion')
-                      : t('summary.generic', { detail: summary });
-                return (
-                  <button
-                    key={failure.id}
-                    type="button"
-                    aria-current={isSelected ? 'true' : undefined}
-                    onClick={() => {
-                      handleSelectFailure(failure);
-                      onSelectFailure?.(failure.id, failure.run_id);
-                    }}
-                    className={`failure-select-row${isSelected ? ' is-selected' : ''}`}
-                  >
-                    <span className="failure-select-marker" aria-hidden="true"><AlertTriangle size={15} /></span>
-                    <span className="failure-select-content">
-                      <span className="failure-select-badges">
-                        {getCategoryBadge(failure.classification)}
-                      </span>
-                      <strong>{failure.test_name || failure.test_nodeid.split('::').at(-1)}</strong>
-                      <span className="failure-select-summary">{summaryText}</span>
-                      <time dateTime={failure.created_at}>{new Date(failure.created_at).toLocaleString()}</time>
-                    </span>
-                    <ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          </section>}
-
+        <div className="failure-workbench-grid">
           {selectedFailure ? (
             <div className="failure-workspace-detail">
               <FailureOverview
@@ -1343,7 +1226,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   >
                     <History size={15} color="var(--ink-muted)" />
                     <span className="card-title">
-                      {t('recurrenceTitle', { count: recurrenceList.length })}
+                      {recurrenceError
+                        ? t('recurrenceTitleUnavailable')
+                        : t('recurrenceTitle', { count: recurrenceList.length })}
                     </span>
                   </div>
                 </div>
@@ -1359,6 +1244,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     >
                       {t('recurrenceLoading')}
                     </div>
+                  ) : recurrenceError ? (
+                    <ErrorState
+                      message={t('recurrenceLoadFailed')}
+                      onRetry={() => selectedFailure && void fetchRecurrence(selectedFailure.id)}
+                    />
                   ) : recurrenceList.length === 0 ? (
                     <div
                       style={{
