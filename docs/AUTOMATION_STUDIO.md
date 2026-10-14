@@ -39,6 +39,11 @@ Automation Studio V2 is the in-browser IDE and test engineering environment with
 - **Pytest Collector**: Analyzes `tests/test_*.py` files and builds a live tree of test cases and functions (`test_node_id`).
 - **Targeted Run Trigger**: Run individual tests or test suites directly from the explorer or the active editor tab.
 
+### 1.5 Python Debugger & Session Lineage
+- The debugger continues to run the existing debugpy DAP adapter and pytest target. Session metadata is persisted separately from the process-local adapter and is available through `GET /api/debug/sessions/{id}`. Normal shutdown records `CLOSED`; after an unclean crash, status may remain at its last saved value and the adapter process is not recoverable.
+- Opening Debug from a failure links the session to that failure's exact workspace, pytest node id, run, and execution; mismatched failure targets are rejected. Standalone Studio debugging has no originating run/execution link.
+- DAP debug sessions are not `TestRun` records and do not replace Runner verdicts. Use the normal pytest Runner for persisted PASS/FAIL results; pytest exit codes remain authoritative.
+
 ### 1.5 QA Assistant Sidecar
 - **Grounding**: Automatically loaded with workspace Page Object definitions (`pages/`) and engineering knowledge rules (`knowledge/`).
 - **Actions**:

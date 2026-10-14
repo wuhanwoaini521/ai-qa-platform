@@ -226,7 +226,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     }
   }, [sendRequest, synchronizeBreakpoints]);
 
-  const start = useCallback(async (nodeid: string) => {
+  const start = useCallback(async (nodeid: string, failureId?: string | null) => {
     if (!projectId || state === 'starting' || state === 'running' || state === 'paused') return;
     setState('starting');
     setError('');
@@ -253,7 +253,7 @@ export const useDebugSession = ({ projectId, breakpoints, onOpenFile, onExecutio
     pendingRef.current.clear();
     try {
       if (previousId) await api.closeDebugSession(previousId).catch(() => undefined);
-      const bootstrap = await api.createDebugSession(projectId, nodeid);
+      const bootstrap = await api.createDebugSession(projectId, nodeid, failureId);
       setTargetNodeid(bootstrap.nodeid);
       bootstrapRef.current = bootstrap;
       breakpointsRef.current = bootstrap.breakpoints;

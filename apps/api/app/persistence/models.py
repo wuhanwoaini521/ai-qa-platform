@@ -357,6 +357,27 @@ class BrowserSessionORM(Base):
     execution: Mapped[TestExecutionORM | None] = relationship("TestExecutionORM", back_populates="browser_sessions")
 
 
+class DebugSessionORM(Base):
+    __tablename__ = "debug_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    nodeid: Mapped[str] = mapped_column(String(1000), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_executions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    failure_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("failure_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="STARTING", index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    closed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class BreakpointORM(Base):
     __tablename__ = "breakpoints"
     __table_args__ = (

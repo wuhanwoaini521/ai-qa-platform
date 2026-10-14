@@ -34,6 +34,21 @@ async def create_debug_session(
     if not workspace_dir.is_dir():
         raise HTTPException(status_code=404, detail="Workspace not found")
 
+    lineage = (
+        await debug_session_service.failure_lineage(
+            failure_id=payload.failure_id,
+            workspace_id=payload.workspace_id,
+            nodeid=nodeid,
+        )
+        if payload.failure_id
+        else None
+    )
+    if payload.failure_id and lineage is None:
+        raise HTTPException(status_code=404, detail="Failure execution not found for this debug target")
+    run_id = lineage["run_id"] if lineage else None
+    execution_id = lineage["execution_id"] if lineage else None
+    failure_id = lineage["failure_id"] if lineage else None
+
     breakpoints = await catalog.list_enabled_breakpoints(payload.workspace_id)
     target_interpreter = venv_interpreter(workspace_dir / ".qa-platform-runtime")
     try:
@@ -44,11 +59,26 @@ async def create_debug_session(
             nodeid=nodeid,
             target_interpreter=target_interpreter,
             breakpoints=breakpoints,
+            run_id=run_id,
+            execution_id=execution_id,
+            failure_id=failure_id,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.get("/sessions/{session_id}", response_model=DebugSessionBootstrap)
+async def get_debug_session(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    _: User = Depends(require_permission(Permission.RUN_EXECUTE)),
+) -> DebugSessionBootstrap:
+    session = await debug_session_service.get_record(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+    return session
 
 
 @router.delete("/sessions/{session_id}")
@@ -79,6 +109,7 @@ async def debug_stream(websocket: WebSocket, session_id: str) -> None:
         return
 
     session.connected = True
+    await debug_session_service.activate(session_id)
     try:
         first_message = await asyncio.wait_for(
             websocket.receive_json(), timeout=get_config().debugger.attach_timeout_seconds

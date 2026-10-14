@@ -5,6 +5,7 @@ import { api, getRecorderSocketUrl } from '../api/client';
 import { AIExecutionTimeline } from '../components/AIExecutionTimeline';
 import { ContextTaskProgress, useContextTask } from '../components/ContextTaskProgress';
 import { MonacoEditorPane, MonacoEditorInstance } from '../features/automation-studio/components/MonacoEditorPane';
+import { buildWorkspaceHref } from '../app/workspaceContext';
 import { EditorTab } from '../features/automation-studio/types';
 import { AITraceEvent, GitDiffResult, Project, RecorderLocatorCandidate, RecorderStep, TestCasePriority, TestRunCreate } from '../types';
 import { flowStartUrl, isNavigationFrameFresh, normalizeTrustedDomains } from './browserGoalModel';
@@ -24,6 +25,8 @@ type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; str
 const actions: StepAction[] = ['navigate','back','scroll','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
 const labels: Record<StepAction, string> = { navigate:'打开页面', back:'返回上一页', scroll:'滚动页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
 const blankDiff: GitDiffResult = { diff: '', changed_files: [] };
+const normalizeRecorderFilePath = (path: string): string =>
+  path.replaceAll(String.fromCharCode(92), '/').split('/').filter(Boolean).join('/');
 const normalizeBrowserUrl = (value: string): string => {
   const target = value.trim() || 'about:blank';
   return /^(https?:|about:)/i.test(target) ? target : `https://${target}`;
@@ -50,8 +53,9 @@ export const RecorderPage: React.FC<{
   selectedProjectId: string | null;
   embedded?: boolean;
   onNavigateToRuns?: (runId: string) => void;
+  onOpenRecordedCase?: (savedCase: Awaited<ReturnType<typeof api.saveRecorderCase>>, filePath: string) => void;
   runConfig?: RecorderRunConfig;
-}> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, runConfig }) => {
+}> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, onOpenRecordedCase, runConfig }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedSessionId = searchParams.get('session_id');
@@ -489,30 +493,59 @@ export const RecorderPage: React.FC<{
     } finally { setBusy(false); }
   };
 
+  const saveRecorderCase = async (normalizedPath: string) => {
+    if (!projectId || !sessionId) throw new Error('请先创建录制会话');
+    const tags = [...new Set([...tagsText.split(',').map((tag)=>tag.trim()).filter(Boolean), ...(suiteName.trim() ? [`suite:${suiteName.trim()}`] : [])])];
+    const normalizedTestName = testName.replace(/\\W+/g, '_').replace(/^_+|_+$/g, '') || 'test_recorded_case';
+    const safeTestName = normalizedTestName.startsWith('test_') ? normalizedTestName : `test_${normalizedTestName}`;
+    return api.saveRecorderCase(sessionId, {
+      test_case: {
+        project_id: projectId,
+        title: caseName,
+        steps: steps.map((step) => step.description || labels[step.action]),
+        expected_result: '所有录制步骤及断言执行通过',
+        priority,
+        automation_status: 'AUTOMATED',
+        tags,
+      },
+      file_path: normalizedPath,
+      test_name: safeTestName,
+    });
+  };
+
+  const openRecordedCaseInStudio = async () => {
+    if (!projectId || !sessionId) return;
+    if (!code.trim()) { await generate(); return; }
+    setBusy(true); setError('');
+    try {
+      const normalizedPath = normalizeRecorderFilePath(filePath);
+      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
+      await api.createWorkspaceFile(projectId, normalizedPath, code);
+      const savedCase = await saveRecorderCase(normalizedPath);
+      if (onOpenRecordedCase) onOpenRecordedCase(savedCase, normalizedPath);
+      else navigate(buildWorkspaceHref({
+        projectId,
+        testCaseId: savedCase.test_case.id,
+        automationBindingId: savedCase.binding.id,
+        file: normalizedPath,
+        nodeId: savedCase.nodeid,
+        stage: 'automation',
+        view: 'code',
+        returnTo: 'workspace',
+      }));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+
   const saveAndRun = async () => {
     if (!projectId || !sessionId) return;
     if (!code.trim()) { await generate(); return; }
     setBusy(true); setError('');
     try {
-      const normalizedPath = filePath.replaceAll('\\', '/').replace(/^\/+/, '');
+      const normalizedPath = normalizeRecorderFilePath(filePath);
       if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
-      await api.writeWorkspaceFile(projectId, normalizedPath, code);
-      const tags = [...new Set([...tagsText.split(',').map((tag)=>tag.trim()).filter(Boolean), ...(suiteName.trim() ? [`suite:${suiteName.trim()}`] : [])])];
-      const normalizedTestName = testName.replace(/\W+/g, '_').replace(/^_+|_+$/g, '') || 'test_recorded_case';
-      const safeTestName = normalizedTestName.startsWith('test_') ? normalizedTestName : `test_${normalizedTestName}`;
-      const savedCase = await api.saveRecorderCase(sessionId, {
-        test_case: {
-          project_id: projectId,
-          title: caseName,
-          steps: steps.map((step) => step.description || labels[step.action]),
-          expected_result: '所有录制步骤及断言执行通过',
-          priority,
-          automation_status: 'AUTOMATED',
-          tags,
-        },
-        file_path: normalizedPath,
-        test_name: safeTestName,
-      });
+      await api.createWorkspaceFile(projectId, normalizedPath, code);
+      const savedCase = await saveRecorderCase(normalizedPath);
       const markers = markersText.split(',').map((marker)=>marker.trim()).filter(Boolean);
       const runRequest: Omit<TestRunCreate, 'idempotency_key'> = {
         project_id: projectId,
@@ -942,17 +975,22 @@ export const RecorderPage: React.FC<{
                 <span>Playwright</span>
                 <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || !steps.length || busy} onClick={() => void optimize()}>AI 优化录制</button>
                 {code && (
-                  <button type="button" className="btn btn-secondary btn-sm" aria-label="重新生成 Python 脚本" title="按当前执行步骤重新生成，替换当前脚本内容" disabled={!sessionId || busy} onClick={generate}>
-                    <RotateCw size={13} aria-hidden="true" /> 重新生成
-                  </button>
+                  <>
+                    <button type="button" className="btn btn-secondary btn-sm" aria-label="重新生成 Python 脚本" title="按当前执行步骤重新生成，替换当前脚本内容" disabled={!sessionId || busy} onClick={generate}>
+                      <RotateCw size={13} aria-hidden="true" /> 重新生成
+                    </button>
+                    <button type="button" className="btn btn-primary btn-sm" disabled={!sessionId || busy} onClick={() => void openRecordedCaseInStudio()}>
+                      <Code2 size={13} aria-hidden="true" /> 保存用例并在代码工作台打开
+                    </button>
+                  </>
                 )}
               </div>
             </div>
             {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label="录制优化对照"><button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>Raw · {optimization.raw_steps.length} 步</button> <button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>Optimized · {optimization.optimized_steps.length} 步</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · 待运行验证</p><details><summary>查看优化依据</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
             <div className="recorder-editor-surface">
-              <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
+              <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} readOnly onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
               {showCodeFallback && !editorReady && (
-                <textarea aria-label="生成的 Python 脚本" value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} />
+                <textarea aria-label="生成的 Python 脚本" value={code} readOnly spellCheck={false} />
               )}
             </div>
           </div>

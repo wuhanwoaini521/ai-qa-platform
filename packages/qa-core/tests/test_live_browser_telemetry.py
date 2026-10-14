@@ -166,6 +166,47 @@ def test_fixture_browser(page):
 
 
 @pytest.mark.asyncio
+async def test_failed_generated_recorder_step_keeps_stable_evidence_lineage(tmp_path):
+    _write_test_browser_support(tmp_path)
+    write_live_browser_plugin(tmp_path)
+    (tmp_path / "test_recorded.py").write_text(
+        "from playwright.sync_api import sync_playwright\n"
+        "from browser_support import launch_test_browser\n"
+        "def test_recorded_step():\n"
+        "    with sync_playwright() as p:\n"
+        "        browser = launch_test_browser(p)\n"
+        "        page = browser.new_page()\n"
+        "        page.set_content('<button>Continue</button>')\n"
+        "        # Step 2: Continue qa_step_id=step_continue qa_evidence_id=recorder:step_continue\n"
+        "        page.get_by_role('button', name='Missing').click(timeout=100)\n",
+        encoding="utf-8",
+    )
+    events = []
+
+    async def observe(event):
+        events.append(event)
+
+    telemetry = tmp_path / "live"
+    result = await PytestRunner().run_suite(
+        tmp_path,
+        nodeids=["test_recorded.py::test_recorded_step"],
+        environment={"PYTHONPATH": str(tmp_path), "QA_PLATFORM_LIVE_BROWSER_LOG": str(telemetry)},
+        browser_event_path=telemetry,
+        on_browser_event=observe,
+        extra_pytest_args=["-p", LIVE_BROWSER_PLUGIN_NAME],
+    )
+    assert result.exit_code != 0
+    finished = next(event for event in events if event["type"] == "session.finished")
+    recent = finished["page_evidence"]["recent_steps"]
+    failed = next(step for step in recent if step["status"] == "FAILED")
+    assert failed["step_id"] == "step_continue"
+    assert failed["evidence_id"] == "recorder:step_continue"
+    snapshot = finished["page_evidence"]["failure_snapshot"]
+    assert snapshot["failed_step_id"] == "step_continue"
+    assert snapshot["failed_evidence_id"] == "recorder:step_continue"
+
+
+@pytest.mark.asyncio
 async def test_network_body_is_bounded_redacted_and_has_real_duration(tmp_path):
     import json
 

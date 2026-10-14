@@ -23,12 +23,14 @@ def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
             steps=[
                 RecorderStep(action="navigate", url="http://127.0.0.1:8000/order", description="Open order"),
                 RecorderStep(
+                    id="step-submit",
                     action="click",
                     locator=RecorderLocator(kind="role", value="button", name="Submit"),
                     frame_path=["iframe#checkout"],
                     description="Submit order",
                 ),
                 RecorderStep(
+                    id="step-confirm",
                     action="assert_text",
                     locator=RecorderLocator(kind="css", value="#status"),
                     value="Order saved",
@@ -42,6 +44,8 @@ def test_generator_creates_pytest_case_with_stable_frame_locator() -> None:
     assert "def test_submit_order():" in source
     assert 'page.frame_locator("iframe#checkout").get_by_role' in source
     assert 'expect(page.locator("#status")).to_contain_text("Order saved")' in source
+    assert "qa_step_id=step-submit qa_evidence_id=recorder:step-submit" in source
+    assert "qa_step_id=step-confirm qa_evidence_id=recorder:step-confirm" in source
 
 
 def test_generator_supports_selecting_observed_discovery_values_without_changing_legacy_labels():
@@ -554,6 +558,8 @@ def test_element_evidence_bundle_is_versioned_bounded_and_redacted() -> None:
     bundle = BrowserRecorderService.element_evidence_bundle(session)
     assert bundle["schema"] == "element-evidence-bundle"
     assert bundle["version"] == "v1.0"
+    assert bundle["steps"][0]["step_id"] == step.id
+    assert bundle["steps"][0]["evidence_id"] == f"recorder:{step.id}"
     assert bundle["steps"][0]["url"] == "https://example.test/save"
     assert [item["candidate_id"] for item in bundle["steps"][0]["evidence"]["locator_candidates"]] == ["candidate_1"]
     assert "ada@example.test" not in str(bundle)

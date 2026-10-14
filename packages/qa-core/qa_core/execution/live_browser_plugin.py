@@ -16,6 +16,7 @@ import base64
 import hashlib
 import inspect
 import json
+import linecache
 import os
 import re
 import threading
@@ -160,6 +161,8 @@ class LiveBrowserPlugin:
         return {
             "status": "CAPTURED" if url and (accessibility or dom) else "PARTIAL",
             "captured_at": datetime.now(timezone.utc).isoformat(),
+            "failed_step_id": record.get("failed_step_id"),
+            "failed_evidence_id": record.get("failed_evidence_id"),
             "url": url,
             "accessibility_tree": accessibility,
             "redacted_dom": dom,
@@ -190,6 +193,15 @@ class LiveBrowserPlugin:
         relative_path = os.path.relpath(str(item.path), os.getcwd()).replace(os.sep, "/")
         _, separator, suffix = item.nodeid.partition("::")
         return f"{relative_path}::{suffix}" if separator else relative_path
+
+    @staticmethod
+    def _recorder_lineage(filename, line_number):
+        lines = linecache.getlines(filename)
+        for source_line in reversed(lines[max(0, line_number - 8):line_number]):
+            match = re.search(r"qa_step_id=([A-Za-z0-9_-]+)\\s+qa_evidence_id=([A-Za-z0-9:_-]+)", source_line)
+            if match:
+                return {"step_id": match.group(1), "evidence_id": match.group(2)}
+        return {}
 
     @staticmethod
     def _find_page(item):
@@ -313,7 +325,7 @@ class LiveBrowserPlugin:
                         for frame in inspect.stack(context=0)[1:12]:
                             relative = os.path.relpath(frame.filename, os.getcwd()).replace(os.sep, "/")
                             if not relative.startswith("..") and not relative.startswith((".venv/", "venv/")) and "site-packages" not in relative and "qa_platform_live_browser_plugin" not in relative:
-                                location = {"file": relative, "line": frame.lineno}
+                                location = {"file": relative, "line": frame.lineno, **self._recorder_lineage(frame.filename, frame.lineno)}
                                 break
                         passed = False
                         try:
@@ -328,6 +340,8 @@ class LiveBrowserPlugin:
                             elif not passed:
                                 record["failed_locator"] = locator_text
                                 record["failed_action"] = method
+                                record["failed_step_id"] = location.get("step_id")
+                                record["failed_evidence_id"] = location.get("evidence_id")
                             publish("step", {"action": method, "locator": locator_text,
                                 "status": "PASSED" if passed else "FAILED", "duration_ms": round((time.perf_counter()-started)*1000, 1), **location})
                             evidence = self._page_evidence(page)
@@ -500,11 +514,23 @@ class LiveBrowserPlugin:
             return
         if report.failed:
             try:
+                for entry in reversed(call.excinfo.traceback):
+                    filename = str(entry.path)
+                    relative = os.path.relpath(filename, os.getcwd()).replace(os.sep, "/")
+                    if relative.startswith("..") or "site-packages" in relative or "qa_platform_live_browser_plugin" in relative:
+                        continue
+                    lineage = self._recorder_lineage(filename, entry.lineno + 1)
+                    record.setdefault("failed_step_id", lineage.get("step_id"))
+                    record.setdefault("failed_evidence_id", lineage.get("evidence_id"))
+                    if lineage:
+                        break
                 record["failure_snapshot"] = self._failure_snapshot(record)
             except Exception:
                 record["failure_snapshot"] = {
                     "status": "PARTIAL",
                     "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "failed_step_id": record.get("failed_step_id"),
+                    "failed_evidence_id": record.get("failed_evidence_id"),
                     "url": SensitiveRedactor.redact_url(str(getattr(record["page"], "url", ""))),
                     "failed_locator": self._redact_text(record.get("failed_locator") or "") or None,
                     "original_element_baseline": {"status": "MISSING", "fingerprint": None, "reason": "snapshot_capture_failed"},

@@ -422,6 +422,7 @@ class BreakpointUpsert(BaseModel):
 class DebugSessionCreate(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=36)
     nodeid: str = Field(min_length=1, max_length=1000)
+    failure_id: str | None = Field(default=None, max_length=36)
 
 
 class DebugSessionBootstrap(BaseModel):
@@ -429,6 +430,9 @@ class DebugSessionBootstrap(BaseModel):
     workspace_id: str
     nodeid: str
     status: str = "STARTING"
+    run_id: str | None = None
+    execution_id: str | None = None
+    failure_id: str | None = None
     breakpoints: list[Breakpoint] = Field(default_factory=list)
 
 

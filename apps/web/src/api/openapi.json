@@ -1728,6 +1728,46 @@
       }
     },
     "/api/debug/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "Python Debugger"
+        ],
+        "summary": "Get Debug Session",
+        "operationId": "get_debug_session_api_debug_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebugSessionBootstrap"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "Python Debugger"
@@ -12205,6 +12245,39 @@
             "title": "Status",
             "default": "STARTING"
           },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "failure_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Id"
+          },
           "breakpoints": {
             "items": {
               "$ref": "#/components/schemas/Breakpoint"
@@ -12234,6 +12307,18 @@
             "maxLength": 1000,
             "minLength": 1,
             "title": "Nodeid"
+          },
+          "failure_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Id"
           }
         },
         "type": "object",

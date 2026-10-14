@@ -635,6 +635,29 @@ export function WorkspacePage() {
     view: 'code',
   });
 
+  const openRecordedCase = (saved: Awaited<ReturnType<typeof api.saveRecorderCase>>, filePath: string) => {
+    setCases((current) => [
+      ...current.filter((item) => item.id !== saved.test_case.id),
+      { ...saved.test_case, binding: saved.binding },
+    ]);
+    updateContext({
+      requirementId: saved.test_case.requirement_id ?? context.requirementId,
+      testCaseId: saved.test_case.id,
+      automationBindingId: saved.binding.id,
+      taskId: undefined,
+      runId: undefined,
+      parentRunId: undefined,
+      failureId: undefined,
+      file: filePath,
+      lineNumber: undefined,
+      nodeId: saved.nodeid,
+      stepId: undefined,
+      returnTo: 'workspace',
+      stage: 'automation',
+      view: 'code',
+    }, true);
+  };
+
   const selectRequirement = (id: string) => {
     const relatedCase = cases.find((item) => item.requirement_id === id);
     updateContext({
@@ -1108,7 +1131,7 @@ export function WorkspacePage() {
                 workspaceMode
                 hideRunAction
               />}
-              {(view === 'code' || view === 'debug') && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingEditor')}</div>}><AutomationStudioPage
+              {(view === 'code' || view === 'debug' || view === 'browser') && <div hidden={view === 'browser'}><Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingEditor')}</div>}><AutomationStudioPage
                 key={projectId}
                 projects={projects}
                 selectedProjectId={projectId}
@@ -1124,14 +1147,16 @@ export function WorkspacePage() {
                 onSelectCases={() => setView('cases')}
                 initialOpenLineNumber={context.lineNumber ?? null}
                 initialDebugNodeId={view === 'debug' && context.failureId ? context.nodeId ?? null : null}
+                initialDebugFailureId={view === 'debug' ? context.failureId ?? null : null}
                 embedded
-              /></Suspense>}
+              /></Suspense></div>}
               {view === 'browser' && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingBrowser')}</div>}><RecorderPage
                 projects={projects}
                 selectedProjectId={projectId}
                 embedded
                 runConfig={runConfig}
                 onNavigateToRuns={onRunStarted}
+                onOpenRecordedCase={openRecordedCase}
               /></Suspense>}
               {view === 'results' && stage !== 'failure' && <RunResultSurface
                 context={context}

@@ -701,6 +701,7 @@ class BrowserRecorderService:
             steps.append(
                 {
                     "step_id": step.id,
+                    "evidence_id": f"recorder:{step.id}",
                     "action": step.action,
                     "url": SensitiveRedactor.redact_url(str(step.evidence.context.get("url") or "")),
                     "frame_path": evidence["context"].get("frame_path", []),
@@ -1421,6 +1422,7 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "            page = browser.new_page()",
     ]
     for index, step in enumerate(request.steps, start=1):
+        step_lines_start = len(lines)
         lines.append(f"            # Step {index}: {step.description or step.action}")
         if step.action == "navigate":
             lines.append(f"            page.goto({_py_literal(step.url)})")
@@ -1478,5 +1480,9 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
                 lines.append(f"            expect({locator}).to_contain_text({_py_literal(step.value)})")
             elif step.action == "assert_count":
                 lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
+        marker = f"  # qa_step_id={step.id} qa_evidence_id=recorder:{step.id}"
+        for line_index in range(step_lines_start + 1, len(lines)):
+            if lines[line_index].strip() and not lines[line_index].lstrip().startswith("#"):
+                lines[line_index] += marker
     lines.extend(["        finally:", "            browser.close()", ""])
     return "\n".join(lines)

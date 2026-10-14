@@ -54,6 +54,7 @@ export interface AutomationStudioPageProps {
   initialOpenFilePath?: string | null;
   initialOpenLineNumber?: number | null;
   initialDebugNodeId?: string | null;
+  initialDebugFailureId?: string | null;
   workspaceAutomationSetup?: 'no-case' | 'unbound' | null;
   workspaceAutomationSetupKey?: string;
   onStartRecording?: () => void;
@@ -72,6 +73,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   initialOpenFilePath,
   initialOpenLineNumber,
   initialDebugNodeId,
+  initialDebugFailureId,
   workspaceAutomationSetup,
   workspaceAutomationSetupKey,
   onStartRecording,
@@ -243,13 +245,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       ]);
     },
   });
-  const startDebug = async (nodeid: string) => {
+  const startDebug = async (nodeid: string, failureId?: string | null) => {
     setDebugPreparationError('');
     if (!await editor.saveAll()) {
       setDebugPreparationError(t('debug.saveFailed', { ns: 'studioPanels' }));
       return;
     }
-    await debug.start(nodeid);
+    await debug.start(nodeid, failureId);
   };
   const debugStartRef = useRef(startDebug);
   const autoDebugStartedRef = useRef<string | null>(null);
@@ -266,6 +268,8 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
 
   fetchFilesRef.current = workspace.fetchFiles;
   openFileRef.current = openStudioFile;
+  const refreshTestsRef = useRef(tests.refreshTestsInBackground);
+  refreshTestsRef.current = tests.refreshTestsInBackground;
 
   useEffect(() => {
     workspace.fetchFiles();
@@ -306,18 +310,20 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   };
 
   useEffect(() => {
-    if (initialOpenFilePath) {
-      openStudioFileRef.current(initialOpenFilePath);
-    }
+    if (!initialOpenFilePath) return;
+    void openStudioFileRef.current(initialOpenFilePath).then(() => {
+      void fetchFilesRef.current();
+      refreshTestsRef.current();
+    });
   }, [initialOpenFilePath]);
 
   useEffect(() => {
     if (!initialDebugNodeId || !currentProjectId) return;
-    const target = currentProjectId + '::' + initialDebugNodeId;
+    const target = currentProjectId + '::' + initialDebugNodeId + '::' + (initialDebugFailureId ?? '');
     if (autoDebugStartedRef.current === target) return;
     autoDebugStartedRef.current = target;
-    void debugStartRef.current(initialDebugNodeId);
-  }, [currentProjectId, initialDebugNodeId]);
+    void debugStartRef.current(initialDebugNodeId, initialDebugFailureId);
+  }, [currentProjectId, initialDebugFailureId, initialDebugNodeId]);
 
   useEffect(() => {
     const frame = debug.frames[0];

@@ -30,6 +30,14 @@ async def test_file_create_rename_delete(client: AsyncClient):
     assert read_res.status_code == 200
     assert "test_custom" in read_res.json()["content"]
 
+    conflict_res = await client.post(
+        f"/api/workspaces/{proj_id}/files/create",
+        json={"path": "tests/test_custom_flow.py", "is_directory": False, "content": "overwritten"},
+    )
+    assert conflict_res.status_code == 409
+    unchanged = await client.get(f"/api/workspaces/{proj_id}/file?path=tests/test_custom_flow.py")
+    assert unchanged.json()["content"] == "def test_custom():\n    assert True\n"
+
     # 4. Rename file
     rename_res = await client.patch(
         f"/api/workspaces/{proj_id}/files/rename",

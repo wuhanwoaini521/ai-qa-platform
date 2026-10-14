@@ -29,6 +29,7 @@ interface MonacoEditorPaneProps {
   onToggleBreakpoint?: (filePath: string, lineNumber: number) => void;
   initialFocusLineNumber?: number;
   executionLocation?: { path: string; line: number } | null;
+  readOnly?: boolean;
 }
 
 const getLanguage = (path: string | null): string => {
@@ -59,6 +60,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   onToggleBreakpoint,
   initialFocusLineNumber,
   executionLocation,
+  readOnly = false,
 }) => {
   const { t } = useTranslation('studioShell');
   const { theme } = usePreferences();
@@ -224,6 +226,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
             renderLineHighlight: 'all',
             automaticLayout: true,
             tabSize: 4,
+            readOnly,
           }}
           onChange={onChange}
         />

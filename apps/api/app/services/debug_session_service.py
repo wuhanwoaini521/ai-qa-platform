@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -12,7 +13,10 @@ from uuid import uuid4
 
 from project_model.models import Breakpoint, DebugSessionBootstrap
 
+from app.repositories.debug_session_repo import DebugSessionRepository
 from app.settings import get_config
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_DAP_COMMANDS = frozenset(
     {
@@ -76,6 +80,9 @@ class DebugSession:
     target_interpreter: Path
     breakpoints: list[Breakpoint]
     process: asyncio.subprocess.Process
+    run_id: str | None = None
+    execution_id: str | None = None
+    failure_id: str | None = None
     outgoing: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     reader_task: asyncio.Task[None] | None = None
     stderr_task: asyncio.Task[None] | None = None
@@ -89,10 +96,13 @@ class DebugSession:
 class DebugSessionService:
     """Owns a single debugpy DAP adapter per authenticated debug session."""
 
-    def __init__(self, adapter_interpreter: Path | None = None) -> None:
+    def __init__(
+        self, adapter_interpreter: Path | None = None, repository: DebugSessionRepository | None = None
+    ) -> None:
         # Preserve virtual-environment symlinks: resolving .venv/bin/python escapes the venv and
         # can make debugpy/pytest disappear from the adapter subprocess.
         self.adapter_interpreter = Path(os.path.abspath(adapter_interpreter or Path(sys.executable)))
+        self.repository = repository
         self._sessions: dict[str, DebugSession] = {}
         self._lock = asyncio.Lock()
 
@@ -105,6 +115,9 @@ class DebugSessionService:
         nodeid: str,
         target_interpreter: Path | None,
         breakpoints: list[Breakpoint],
+        run_id: str | None = None,
+        execution_id: str | None = None,
+        failure_id: str | None = None,
     ) -> DebugSessionBootstrap:
         root = workspace_dir.resolve()
         normalized_nodeid = validate_debug_nodeid(root, nodeid)
@@ -146,7 +159,24 @@ class DebugSessionService:
             target_interpreter=interpreter,
             breakpoints=breakpoints,
             process=process,
+            run_id=run_id,
+            execution_id=execution_id,
+            failure_id=failure_id,
         )
+        if self.repository is not None:
+            try:
+                await self.repository.create(
+                    session_id=session_id,
+                    owner_id=owner_id,
+                    workspace_id=workspace_id,
+                    nodeid=normalized_nodeid,
+                    run_id=run_id,
+                    execution_id=execution_id,
+                    failure_id=failure_id,
+                )
+            except Exception as error:
+                await self._stop_process(session)
+                raise RuntimeError("Debug session could not be persisted.") from error
         async with self._lock:
             self._sessions[session_id] = session
         session.reader_task = asyncio.create_task(self._read_adapter(session), name=f"debug-dap-{session_id}")
@@ -155,6 +185,10 @@ class DebugSessionService:
             id=session_id,
             workspace_id=workspace_id,
             nodeid=normalized_nodeid,
+            status="STARTING",
+            run_id=run_id,
+            execution_id=execution_id,
+            failure_id=failure_id,
             breakpoints=breakpoints,
         )
 
@@ -162,6 +196,25 @@ class DebugSessionService:
         async with self._lock:
             session = self._sessions.get(session_id)
         return session if session and session.owner_id == owner_id else None
+
+    async def activate(self, session_id: str) -> None:
+        if self.repository is None:
+            return
+        try:
+            await self.repository.activate(session_id)
+        except Exception:
+            logger.exception("Failed to activate persisted debug session %s", session_id)
+
+    async def failure_lineage(self, *, failure_id: str, workspace_id: str, nodeid: str) -> dict[str, str] | None:
+        if self.repository is None:
+            return None
+        return await self.repository.failure_lineage(failure_id=failure_id, workspace_id=workspace_id, nodeid=nodeid)
+
+    async def get_record(self, session_id: str, owner_id: str) -> DebugSessionBootstrap | None:
+        if self.repository is None:
+            return None
+        record = await self.repository.get(session_id, owner_id)
+        return DebugSessionBootstrap(**record) if record else None
 
     async def forward(self, session: DebugSession, message: dict[str, Any]) -> None:
         if not isinstance(message, dict):
@@ -216,6 +269,11 @@ class DebugSessionService:
             self._sessions.pop(session_id, None)
             session.closing = True
         await self._stop_process(session)
+        if self.repository is not None:
+            try:
+                await self.repository.close(session_id)
+            except Exception:
+                logger.exception("Failed to close persisted debug session %s", session_id)
         return True
 
     async def close_all(self) -> None:
@@ -355,4 +413,4 @@ class DebugSessionService:
         )
 
 
-debug_session_service = DebugSessionService()
+debug_session_service = DebugSessionService(repository=DebugSessionRepository())

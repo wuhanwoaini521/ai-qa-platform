@@ -6,7 +6,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
     with engine.begin() as connection:
         upgrade_database(connection)
-        assert len(inspect(connection).get_table_names()) == 38
+        assert len(inspect(connection).get_table_names()) == 39
         connection.execute(
             text(
                 "INSERT INTO projects (id,name,description,framework_type,default_branch,created_at,updated_at) VALUES ('p','Retain','','playwright_python','main',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"
@@ -15,7 +15,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_recorder_element_evidence"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_debug_session_lineage"
         assert {"decision_value", "locator_repair_id"} <= {
             column["name"] for column in inspect(connection).get_columns("ai_invocations")
         }
@@ -25,6 +25,9 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         }
         assert "recorder_evidence_bundle" in {
             column["name"] for column in inspect(connection).get_columns("automation_bindings")
+        }
+        assert {"run_id", "execution_id", "failure_id", "status"} <= {
+            column["name"] for column in inspect(connection).get_columns("debug_sessions")
         }
     engine.dispose()
 

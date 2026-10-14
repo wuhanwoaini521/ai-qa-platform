@@ -418,6 +418,9 @@ export interface DebugSessionBootstrap {
   workspace_id: string;
   nodeid: string;
   status: string;
+  run_id?: string | null;
+  execution_id?: string | null;
+  failure_id?: string | null;
   breakpoints: Breakpoint[];
 }
 

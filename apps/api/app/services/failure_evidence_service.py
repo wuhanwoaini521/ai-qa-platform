@@ -48,6 +48,7 @@ class FailureEvidenceService:
                 selected.append(
                     {
                         "step_id": step.get("step_id"),
+                        "evidence_id": step.get("evidence_id"),
                         "action": step.get("action"),
                         "url": url,
                         "evidence": {

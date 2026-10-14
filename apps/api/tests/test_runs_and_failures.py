@@ -121,6 +121,47 @@ async def test_last_browser_frame_survives_detail_reload_and_requires_auth(
             assert anonymous.status_code == 401
 
 
+async def test_recorder_evidence_ids_survive_browser_session_persistence(client: AsyncClient, test_db_session):
+    project_id = (await client.post("/api/projects", json={"name": "Recorder evidence lineage"})).json()["id"]
+    async with test_db_session() as session:
+        run = await TestRunRepository(session).create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        run_id = run.id
+        await session.commit()
+
+    service = make_test_run_service(
+        TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
+    )
+    session_id = "1234567890abcdef1234567890abcdef"
+    await service._record_browser_event(
+        run_id,
+        {
+            "type": "session.started",
+            "session_id": session_id,
+            "nodeid": "tests/test_cart.py::test_add_to_cart",
+            "url": "https://example.test/cart",
+        },
+    )
+    await service._record_browser_event(
+        run_id,
+        {
+            "type": "step",
+            "session_id": session_id,
+            "entry": {
+                "action": "click",
+                "status": "FAILED",
+                "step_id": "step-cart-add",
+                "evidence_id": "recorder:step-cart-add",
+            },
+        },
+    )
+
+    response = await client.get(f"/api/runs/{run_id}")
+    assert response.status_code == 200, response.text
+    recent_steps = response.json()["browser_sessions"][0]["page_evidence"]["recent_steps"]
+    assert recent_steps[-1]["step_id"] == "step-cart-add"
+    assert recent_steps[-1]["evidence_id"] == "recorder:step-cart-add"
+
+
 def test_repair_trace_revalidates_serialized_events_before_response_dump():
     event = make_trace_event("run_1", "repair_suggested", stage="repair", title="Repair suggested")
     validated = _validated_trace_events([event.model_dump(mode="json")])

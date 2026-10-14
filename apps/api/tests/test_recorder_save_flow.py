@@ -104,6 +104,16 @@ async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncCli
         ),
         None,
         None,
+        page={
+            "recent_steps": [
+                {
+                    "action": "click",
+                    "step_id": recorded_step.id,
+                    "evidence_id": f"recorder:{recorded_step.id}",
+                    "status": "FAILED",
+                }
+            ]
+        },
         recorder_evidence=linked_evidence,
     )
     repair_candidates = FailureService._recorder_evidence_candidates(
@@ -114,6 +124,11 @@ async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncCli
     assert linked_evidence["binding_id"] == first_binding["id"]
     assert failure_evidence.element_evidence["binding_id"] == first_binding["id"]
     assert failure_evidence.element_evidence["step_count"] == 1
+    assert failure_evidence.element_evidence["revisions"][0]["steps"][0]["step_id"] == recorded_step.id
+    assert (
+        failure_evidence.element_evidence["revisions"][0]["steps"][0]["evidence_id"] == f"recorder:{recorded_step.id}"
+    )
+    assert failure_evidence.recent_steps[0]["evidence_id"] == f"recorder:{recorded_step.id}"
     assert len(str(failure_evidence.element_evidence).encode("utf-8")) < 64_000
     assert repair_candidates[0]["name"] == "Save"
     assert evidence["version"] == "v1.0"

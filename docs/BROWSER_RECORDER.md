@@ -57,6 +57,7 @@ Docker Compose 会把这两个变量传给 API 和 worker 容器；修改后重�
 ## 数据恢复和限制
 
 - 活跃浏览器 session 保存在 API 进程内存中。前端刷新后可重新连接同一 API 进程里的 session；结构化 Steps 和脚本草稿也保存在浏览器 localStorage。API 进程崩溃后浏览器会退出，但草稿步骤仍可恢复并附加到新 session。保存 Case 时，脱敏后的 `element-evidence-bundle` v1.0 会与 Automation Binding 一起写入数据库；每次保存递增 revision，并归档此前 steps 与决策历史，不能静默覆盖。它只保存交互目标、上下文、Locator 候选、验证与决策历史，不保存填写值或截图；当前 bundle 与归档合计最大 1 MB，超限时保存失败并保留旧数据。失败记录只保存 64 KB 以内的当前页摘要/绑定引用；Locator Repair 从唯一匹配的 ACTIVE binding 读取完整证据并重新验证。
+- 生成脚本为每个录制步骤保留 `qa_step_id` 与 `qa_evidence_id=recorder:<step_id>` 源码标记；现有 pytest 浏览器遥测把标记复制到执行步骤和失败快照，使 Run/Execution/Failure/录制证据可按 ID 追溯。标记只是来源元数据，不影响 pytest verdict，也不授权代码修改；手动改写或删除标记会使该关联缺失。
 - 同源页面、常见 SPA 导航、输入控件、下拉框、复选框/单选框、悬停、弹窗新标签和手动断言已覆盖。跨域 iframe 的选择器定位按 iframe 属性和层级路径构造；如果页面运行时重建无稳定属性的 iframe，仍需手动修正定位器。
 - browser viewport 固定为 1280×720；画面以截图流显示，输入坐标会换算回浏览器视口。视频与 Trace 由现有执行 runner 是否配置相关 fixture 决定，录制器本身不附加它们。
 - session 关闭后不会继续运行远程浏览器；录制 Steps 草稿仍保留在浏览器本地，直到用户清理站点存储。跨进程恢复远程浏览器本身尚不支持；持久化的是保存 Case 时的元素证据，而非可恢复的浏览器上下文。

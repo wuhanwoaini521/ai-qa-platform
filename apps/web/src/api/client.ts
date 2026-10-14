@@ -933,10 +933,10 @@ export const api = {
         method: 'DELETE',
       },
     ),
-  createDebugSession: (workspaceId: string, nodeid: string) =>
+  createDebugSession: (workspaceId: string, nodeid: string, failureId?: string | null) =>
     request<DebugSessionBootstrap>('/debug/sessions', {
       method: 'POST',
-      body: JSON.stringify({ workspace_id: workspaceId, nodeid }),
+      body: JSON.stringify({ workspace_id: workspaceId, nodeid, failure_id: failureId ?? undefined }),
     }),
   closeDebugSession: (sessionId: string) =>
     request<{ closed: boolean }>(
