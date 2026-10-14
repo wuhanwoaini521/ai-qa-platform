@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { RuntimeSnapshot, RuntimeSourceOpener } from '../../types/runtime';
 import { LiveBrowserPanel } from '../runs/LiveBrowserPanel';
 import { useRunStore } from '../runs/useRunStore';
-import { browserEntries } from './browserModel';
+import { browserEntries, formatBrowserTimestamp } from './browserModel';
 import { RuntimeFailureWorkspace } from './RuntimeFailureWorkspace';
 import { runtimeActive } from './runtimeModel';
 
@@ -105,11 +105,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
         <div className="rt-browser-entries">
           {entries.map(({ session, entry }, index) => (
             <div key={`${session}:${index}`}>
-              <time>
-                {typeof entry.timestamp === 'string'
-                  ? new Date(entry.timestamp).toLocaleTimeString()
-                  : '—'}
-              </time>
+              <time>{formatBrowserTimestamp(entry.timestamp)}</time>
               <code>
                 {String(entry.action ?? entry.method ?? entry.level ?? '')}
               </code>

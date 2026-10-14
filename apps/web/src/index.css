@@ -1717,6 +1717,17 @@ button, input, select, textarea {
   flex-shrink: 0;
 }
 
+.studio-project-select.is-quick-open { padding: 4px 6px; }
+.studio-project-select .icon-btn.is-labeled {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: left;
+}
+
 /* Segmented view switcher */
 .studio-view-switcher {
   display: flex;
@@ -4622,7 +4633,6 @@ button, input, select, textarea {
 .topbar-nav button,
 .btn-icon,
 .icon-btn,
-.studio-tool,
 .sidebar-lang-toggle {
   padding: 0;
 }

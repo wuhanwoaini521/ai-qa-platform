@@ -4,8 +4,16 @@ import { errorText } from '../errorText';
 import { useRunStore } from '../../runs/useRunStore';
 import type { RunnerType } from '../../../types';
 
+export interface StudioRunConfig {
+  environment: string;
+  region: string;
+  browser: string;
+  workers: number;
+}
+
 interface UseRunExecutionOptions {
   projectId: string | null;
+  runConfig?: StudioRunConfig;
   /** Falls back to the active file when no explicit test nodeid is given. */
   activeTabPath: string | null;
   onNavigateToRuns?: (runId?: string) => void;
@@ -15,6 +23,7 @@ interface UseRunExecutionOptions {
 
 export const useRunExecution = ({
   projectId,
+  runConfig,
   activeTabPath,
   onNavigateToRuns,
   onRunCreated,
@@ -57,6 +66,11 @@ export const useRunExecution = ({
         workspace_id: projectId,
         nodeids: target ?? [],
         requested_by: 'Automation Studio',
+        ...(!retryContext && runConfig ? {
+          browser: runConfig.browser,
+          environment: { QA_ENVIRONMENT: runConfig.environment, QA_REGION: runConfig.region },
+          parallel_workers: runConfig.workers,
+        } : {}),
         ...(retryContext && originalRun ? {
           parent_run_id: originalRun.id,
           origin_failure_id: retryContext.failureId,

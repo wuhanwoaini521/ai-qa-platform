@@ -1115,6 +1115,7 @@ export function WorkspacePage() {
                 onSelectProject={selectProject}
                 onNavigateToRuns={onRunStarted}
                 onRunCreated={onRunStarted}
+                runConfig={runConfig}
                 workspaceView={view === 'debug' ? 'debug' : 'code'}
                 initialOpenFilePath={automationSetup ? null : view === 'debug' || !selectedCase ? context.file ?? automationFilePath : automationFilePath}
                 workspaceAutomationSetup={automationSetup}

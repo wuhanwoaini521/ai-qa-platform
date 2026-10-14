@@ -17,7 +17,7 @@ import { useWorkspaceGit } from './hooks/useWorkspaceGit';
 import { useTestExplorer } from './hooks/useTestExplorer';
 import { useProblems } from './hooks/useProblems';
 import { useQAAssistant } from './hooks/useQAAssistant';
-import { useRunExecution } from './hooks/useRunExecution';
+import { useRunExecution, type StudioRunConfig } from './hooks/useRunExecution';
 import { useDebugSession, type DebugStackFrame } from './hooks/useDebugSession';
 import { RuntimeMiniBar } from '../runtime/RuntimeMiniBar';
 import { useRuntimeSnapshot } from '../runtime/useRuntimeSnapshot';
@@ -48,6 +48,7 @@ export interface AutomationStudioPageProps {
   onSelectProject: (id: string) => void;
   onNavigateToRuns?: (runId?: string) => void;
   onRunCreated?: (runId: string) => void;
+  runConfig?: StudioRunConfig;
   embedded?: boolean;
   workspaceView?: 'code' | 'debug';
   initialOpenFilePath?: string | null;
@@ -65,6 +66,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   onSelectProject,
   onNavigateToRuns,
   onRunCreated,
+  runConfig,
   embedded = false,
   workspaceView,
   initialOpenFilePath,
@@ -206,7 +208,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const failureId = query.get('failureId');
   const parentRunId = query.get('parentRunId');
   const studioContext = readWorkspaceContext(query, currentProjectId);
-  const run = useRunExecution({ projectId: currentProjectId, activeTabPath: editor.activeTabPath, onNavigateToRuns, onRunCreated, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
+  const run = useRunExecution({ projectId: currentProjectId, runConfig, activeTabPath: editor.activeTabPath, onNavigateToRuns, onRunCreated, retryContext: failureId && parentRunId ? { failureId, runId: parentRunId } : undefined });
   useEffect(() => {
     if (!embedded && run.activeRunId) setShowBrowser(true);
   }, [embedded, run.activeRunId]);
@@ -216,13 +218,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const studioRuntime = useRuntimeSnapshot(runtimeKind, runtimeId);
   useEffect(()=>{if(showBrowser)browserDrawerRef.current?.focus();},[showBrowser]);
   const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
+  const caseNodeid = linkedCase?.binding?.nodeid ?? (
+    query.get('caseId') && !linkedCase ? query.get('nodeid') ?? undefined : undefined
+  );
   const saveAndRun = async (target?: string) => {
-    if (!editor.activeTabPath && !target) {
+    if (!editor.activeTabPath && !target && !caseNodeid) {
       setDebugPreparationError(lc('noSourceFile'));
       return;
     }
     if (await editor.saveAll()) {
-      await run.runExecution(resolveStudioRunTarget(editor.activeTabPath, target));
+      await run.runExecution(resolveStudioRunTarget(editor.activeTabPath, target, caseNodeid));
     }
   };
   const runCurrentRef=useRef(saveAndRun);runCurrentRef.current=saveAndRun;
@@ -532,6 +537,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           currentProjectId={currentProjectId}
           onSelectProject={onSelectProject}
           onQuickOpen={() => setShowQuickOpen(true)}
+          hideProjectSelect={embedded}
         />
 
         {/* Sidebar View Switcher: Files vs Tests vs Git vs PR */}
@@ -685,10 +691,12 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
                 className="studio-tool is-primary"
                 disabled={run.runningTest || debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'}
                 onClick={() => {void saveAndRun();}}
-                title={debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused' ? t('editor.debugActive') : t('editor.runTestTooltip')}
+                title={debug.state === 'starting' || debug.state === 'running' || debug.state === 'paused'
+                  ? t('editor.debugActive')
+                  : t(caseNodeid ? 'editor.runCaseTooltip' : 'editor.runFileTooltip')}
               >
                 <Play size={14} />
-                {run.runningTest ? t('editor.running') : t('editor.runTest')}
+                {run.runningTest ? t('editor.running') : t(caseNodeid ? 'editor.runCase' : 'editor.runFile')}
               </button>
             )}
             {!showAutomationSetup && <button
