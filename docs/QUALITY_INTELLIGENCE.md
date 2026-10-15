@@ -1,4 +1,4 @@
-# Phase 10 — Quality Intelligence, Coverage Model & Release Gate
+# Quality Intelligence, Coverage Model & Release Gate
 
 ## Overview
 
@@ -22,13 +22,37 @@ The **Quality Intelligence Platform** provides deterministic quality intelligenc
 
 Rather than relying purely on lines of code executed, the AI QA Platform evaluates coverage across three key dimensions:
 
+```
+Requirement
+    ↓ (30% weight)
+Test Design Dimensions
+    ↓ (40% weight)
+Structured Test Cases
+    ↓ (30% weight)
+Automation Binding (Playwright / Pytest)
+```
+
 1. **Requirement Coverage**:
    - Tests mapped directly to requirements (via Test Design specifications and Test Cases).
    - Weighted score: Test Design (30%) + Test Cases (40%) + Automated Script Binding (30%).
+
+   For each requirement $R_i$:
+   $$\text{Score}(R_i) = \min\left(100.0, 30 \cdot \mathbb{I}(\text{Designs} > 0) + 40 \cdot \mathbb{I}(\text{Cases} > 0) + 30 \cdot \mathbb{I}(\text{Automated} > 0)\right)$$
+
+   A requirement is considered **covered** if $\text{Score}(R_i) \ge 70\%$.
+
+   Overall Requirement Coverage is defined as:
+   $$\text{Cov}_{\text{req}} = \frac{\sum_{i=1}^{N} \mathbb{I}(\text{Score}(R_i) \ge 70\%)}{N} \times 100\%$$
+
 2. **Automation Coverage**:
    - Proportion of test cases with automated Playwright / Pytest implementations (`AUTOMATED` vs `MANUAL` / `DRAFT`).
+
+   $$\text{Cov}_{\text{auto}} = \frac{\text{Count}(\text{Cases with status AUTOMATED})}{\text{Total Test Cases}} \times 100\%$$
+
 3. **Execution & Freshness Coverage**:
    - Proportion of test cases executed in recent runs within the project workspace.
+
+   $$\text{Cov}_{\text{exec}} = \frac{\text{Count}(\text{Cases with executions in recent runs})}{\text{Total Test Cases}} \times 100\%$$
 
 ### API Endpoint
 ```http

@@ -1,79 +1,84 @@
-# AI QA Platform V3 产品架构
+# AI QA Platform 产品架构与运行时集成指南
 
-验收日期：2026-10-03。本文描述本轮代码落地的产品骨架；已有实体和执行能力以仓库实现为准。
+本文描述平台的产品架构骨架以及 Workspace、Automation Studio 与 Live Workflow 如何复用 Task、TaskStep、Run、Failure、Browser、AI、JEV、Artifact 和 Context 领域实体。
 
-## 产品原则
+---
 
-产品日常入口收敛为三个工作区域：
+## 1. 产品原则与三大工作区
 
-1. **Workspace** 承担需求、测试设计、用例、自动化、执行结果和失败恢复的连续工作。
-2. **Live Workflow** 展示已有 Task、TaskStep、Run 及关联证据的运行过程，观察数据来自现有 Runtime Projection。
-3. **Automation Studio** 承担代码编辑、测试运行、真实 debugpy 调试和 Recorder 操作。
+平台日常核心入口收敛为三大协同工作区域：
 
-Requirements、Cases、Runs、Failures 等历史入口仍然可用，主要用于查询、历史和管理；旧 URL 继续兼容。
+1. **Workspace** (`/workspace/:projectId`)：承载需求、测试设计、用例、自动化脚本、执行结果与失败恢复的连续闭环。
+2. **Live Workflow** (`/workflow`)：全景展示持久化 Task、TaskStep、Run 及关联证据的运行 DAG，观察数据源自真实 Runtime Projection。
+3. **Automation Studio** (`/studio`)：全功能桌面级测试工程环境，承载 Monaco 代码编辑、测试收集与运行、真实 debugpy DAP 调试与浏览器录制器。
 
-## Workspace
+> Requirements、Cases、Runs、Failures 等独立列表路由继续兼容保留，主要用于全局审计与跨项目查询。
 
-`/workspace/:projectId` 是主工作台。Context 面板列出当前项目的需求、相关用例、近期运行和文件；主区域按 `requirement → cases → automation → result → failure` 阶段复用现有 Requirements、TestCases、Failures 功能；Inspector 展示当前需求、用例、运行和任务的真实数据。底部 Runtime Mini Bar 是现有 Run Store/Runtime 数据的精简投影，不制造进度或执行实体。
+---
 
-阶段切换在当前 URL 内完成。项目、需求、Test Design、用例、Automation Binding、Task、Run、Failure、Browser Session、文件、行、节点、步骤、阶段和返回位置通过 `workspaceContext` 读写 query string。Workspace 刷新后从 URL 恢复业务对象；失效对象只清理相应的下游 ID。历史 query 别名继续读取。
+## 2. Workspace 主工作台
 
-AI 分析、设计、生成和 TestCase 数据继续调用原服务。生成用例后，已有业务组件将真实生成的 ID 回传 Workspace；没有配置真实 AI Provider 时不展示 fake 结果。
+`/workspace/:projectId` 是日常测试工程的主战场：
+- **Context 侧栏**：列出当前项目关联的需求、测试用例、近期执行 Run 与工作区代码文件。
+- **阶段流转**：主工作区按 `requirement → cases → automation → result → failure` 阶段平滑切换。
+- **Inspector 侧栏**：展示当前选中需求、用例、运行或任务的深度元数据（业务规则、风险、覆盖缺口、最新证据与推荐动作）。
+- **Runtime Mini Bar**：底部常驻条，是真实 Run Store 与 Task Runtime 数据的精简投影，实时显示当前 TaskStep/Execution、运行耗时、Blocker 状态及后端声明的恢复动作。
 
-## Live Workflow
+### 阶段切换与 URL Context
+阶段切换在 URL 中无缝完成。通过 `apps/web/src/app/workspaceContext.ts` 解析和序列化上下文（包含 `project_id`, `stage`, `requirement_id`, `test_design_id`, `case_id`, `automation_id`, `task_id`, `step_id`, `run_id`, `parent_run_id`, `failure_id`, `browser_session_id`, `file`, `line`, `nodeid`）。
+刷新页面完全从 URL 和后端 API 恢复业务状态；切换需求或用例时自动清理失效的下游对象 ID，防止跨实体串位。
 
-`/workflow` 是完整执行观察入口。带 Task 或 Run 上下文时，页面直接复用 `RuntimeDetail` 和只读 Runtime Snapshot；节点与连线来自真实 TaskStep 依赖和 Runtime 实体，不创建 Planner/Research/Worker 等假 Agent。没有 Task/Run 上下文时保留已有 Task 列表。
+---
 
-Workflow 可由 Workspace Mini Bar 或工作台导航进入，并以同一 Context 返回 Workspace。可定位到真实文件的节点向 Studio 传递文件、行、Case、Failure、Run、Task 信息。Run 与 Task 是各自真实的领域对象，页面不会把 Run 伪装成 Task DAG。
+## 3. Workspace ↔ Runtime 深度集成
 
-## Automation Studio
+### 需求分析流水线
+- 触发时创建持久化 `ANALYZE_REQUIREMENT` 类型的 Task。
+- Task 计划包含持久化 `analyze` TaskStep（工具为 `requirement.analyze`）。
+- 服务层复用 `RequirementLifecycleService.stream()`；权威分析历史与结果保存在 Requirement 的 `qa_model.history`。
+- 分析阶段从数据库读取 Requirement、Project 及至多 20 个关联 TestCase，结合验收标准与业务规则执行结构化分析。
+- 细粒度子阶段（Project Context、Existing Cases、验收标准、AI 语义分析、业务规则、风险/歧义、Coverage Gaps、Test Design 草案、Jev 决策与 Coverage）作为持久化 Task Event 投影到 Runtime。
+- **Workflow DAG 呈现真实 `analyze` TaskStep，子阶段作为 Task Event 呈现，不伪装成额外 DAG 节点。**
 
-保留现有 Monaco、文件树、测试收集、代码保存、TestRun、debugpy、Browser 预览和 Recorder。Studio 的 Runtime/Run 状态仍来自共享 Run Store；完整观察跳转到 Workflow。Failure 深链保留原失败、父 Run、nodeid、文件和行，并可启动真实 debugpy 会话。普通源码链接不自动启动调试，只有显式 Failure 调试深链会启动。
+### Run 与 Failure 边界
+TestRun、Task 和 Failure 保持严格分离的独立领域对象：
+- Run 状态来自共享 Run Store 与 Runtime Projection。
+- Task 状态来自 Runtime Snapshot。
+- 失败恢复沿用既有 Failure Intelligence、Task DAG、人工审批、源码验证、目标测试重跑与验证服务。
 
-Recorder 仍使用项目内现有真实 Recorder 流程。本轮没有生成或保存新的 Recorder Case，也没有触发外部浏览器录制。
+---
 
-## Intelligence 与 JEV
+## 4. Automation Studio ↔ Runtime
 
-Requirement、Test、Automation、Locator、Failure、Verification Intelligence 是附着在 Workspace、Studio、Failure 和 Runtime 上的能力，不是一级导航或假 Agent。现有 AI Provider/能力接口继续承担调用与校验；Failure 修复保留批准、校验、目标重跑等已有边界。
+Studio 读取同一 URL Context，支持：
+- **双向上下文传递**：携带当前 Project、Requirement、Case、Task、Run、Failure 和源文件位置。
+- **优先级调度**：正在 Studio 发起的 TestRun 优先于 URL 中的既有 Run；Task Context 优先于其父 Run。
+- **调试器集成**：Failure 深链启动真实的 debugpy DAP 会话，绑定到失败用例的 exact nodeid，Studio 卸载时自动关闭活跃调试会话。
+- **Recorder 联动**：生成的 Python 脚本直接进入 Monaco 编辑器，保存后自动建立 Test Case 与 Automation Binding。
 
-JEV 继续作为已有 Decision Layer，只有实际候选决策需要时才调用。Runtime 仅呈现已记录的 AI/JEV 事件、输入输出和证据；缺失信息显示为 unavailable，不补造虚拟节点。
+---
 
-## Runtime 与数据关系
+## 5. Live Workflow ↔ Runtime
 
-底层实体保持分离：Project、Requirement、TestDesign、TestCase、AutomationBinding、Task、TaskStep、TestRun、Failure、BrowserSession、AIInvocation、Evidence、Artifact。Runtime Projection 组合真实关系，不建立巨型业务表。
+`/workflow` 是统一 Runtime Snapshot 的全景观察视图：
+- **Task 节点**：直接对应持久化 `TaskStep` 实体与依赖连线。
+- **Run 节点**：直接对应真实 `TestRun` 与 `TestCaseExecution` 数据。
+- **实体关联**：AIInvocation、JEV Decision、Evidence、Failure、Browser Session、Artifact 来自真实记录，缺失项标记为 `unknown`/`unavailable`，绝不虚构执行节点。
+- **SSE 断线恢复**：Task SSE 支持 `Last-Event-ID` 回放；Run 状态通过共享 Run Store 进行多客户端聚合。
 
-前端通过按 Run ID 共享的 Run Store 合并实时事件、重连快照与 Browser Telemetry；Workflow 的 Task/Run 快照使用同一 Runtime Hook 和投影，终态刷新只用于持久化校准。Workspace 和 Studio 只呈现 Mini Runtime；Workflow 呈现完整 RuntimeDetail。领域写操作仍由原 API 命令承担。
+---
 
-## V3.1：Workspace、Workflow 与 Studio 联动
+## 6. Failure Lifecycle & 安全闭环
 
-Workspace 中的需求分析通过 `ANALYZE_REQUIREMENT` Task 执行。Task 校验 Requirement 属于请求中的 Project；Runtime 中记录一个真实 `analyze` TaskStep，生命周期服务继续把权威分析历史写入 Requirement 的 `qa_model.history`。Requirement 阶段事件作为持久 Task Event 投影到 Runtime。现有 AI invocation 和 Jev decision 都带同一 Task ID、分析记录 Run ID，并归属当前 TaskStep；公开事件只保留经过筛选的阶段与摘要，不保存模型原始推理内容。
+1. 真实 Failure 由 Run / TestExecution 关联读取。
+2. 诊断流程生成结构化 Repair Proposal 与精准 diff。
+3. **人工审批道钉**：源码改动必须经过显式审批操作，平台严格禁止无人值守自动写文件。
+4. **验证执行**：应用补丁后，平台发起只运行该原失败 nodeid 的新 Run；只有该 Run 真正 `PASSED`，修复历史才标记为 `VERIFIED`。
 
-分析阶段从数据库读取 Requirement、Project 和至多 20 个关联 TestCase，并把这些事实随验收标准、业务规则一起交给现有结构化分析服务。Runtime 以内部 `workflow.step` 事件显示 Project Context、Existing Cases、验收标准、风险、覆盖缺口和测试场景阶段；这些事件来自实际加载、AI 结构化结果和持久化，不由前端定时器伪造。Runtime Mini Bar、Inspector 和 Workflow 都读取同一 Runtime Snapshot。分析仍保存在 Requirement 历史，Task Step 输出只保留关联 ID 和计数。
+---
 
-Runtime TaskStep 与 RequirementLifecycle 的子阶段有意保持两层粒度：Workflow DAG 节点是真实持久化 TaskStep；分析内部细阶段是真实持久化 Task Event，不伪装成额外 DAG 节点。Run 仍是 TestRun，不转换为 Task。Workspace、Studio 和 Workflow 的 Task/Run 选择优先级遵循 URL Context 的显式 ID。
+## 7. AI 与 JEV 的边界职责
 
-用户在 Workspace 成功完成分析后留在同一 Workspace，需求面板切到设计视图；生成设计、创建 Case、打开 Studio、运行及失败处理沿用既有命令与实体。Workspace 嵌入式 TestCase 页面隐藏独立导航列表时使用单列布局，详情卡横跨主工作区，避免沿用独立页面双列网格后内容缩在左侧。
-
-接口映射与失败恢复边界见 `platform-v3.1-runtime-integration.md`。
-
-## Navigation 与 Context
-
-主导航突出 Workspace、Automation Studio、Workflow、Library；项目概览有 Workspace 入口。Legacy `/tasks` 保留查询参数重定向到 `/workflow`，`/runs/tasks` 落在 Workflow，`/automation` 重定向到 Library。其他旧 Requirement、TestCase、Run、Failure、Recorder 路由仍保留。
-
-跨界跳转统一通过 `workspaceContext.ts` 构造链接。Context 由 URL 显式携带；不会因切换需求或用例而意外继承旧 Run/Failure/Task/Browser/File 状态。
-
-## Failure Lifecycle
-
-Workspace 的 Failure 阶段嵌入现有 Failure Intelligence，保留分类、来源 Run、证据、诊断、修复适用性及验证链。不同分类仍由现有规则决定下一步；不在验收时对真实失败点击诊断、应用修复或重跑，避免改变 Golden Demo 业务记录。Failure → Studio 使用原 Failure 和父 Run Context；修复/重跑后结果仍使用原 TestRun、Task 和 Failure 关系。
-
-## Developer Journey
-
-- 日常：Workspace 内切换需求、用例、自动化和结果阶段。
-- 观察：通过 Open Workflow 查看已有执行 DAG 和证据。
-- 深度开发：从 Workspace 或 Workflow 携带 Context 打开 Studio。
-- 调试：Failure 深链启动真实 debugpy；完成后 Studio 卸载关闭仍活动的调试会话。
-- 历史：用 Library 和 legacy management routes 查询资料。
-
-## 适用范围与后续
-
-前端产品骨架复用已有执行数据和服务接口。AI Provider、流式接口、Failure 写操作和 Recorder 保存各自保留现有服务边界，不汇总为单一服务。
+- Requirement Analysis 复用 `ProductionQAOrchestrator` 与 `DecisionService`。
+- Fake Provider 明确标注为模拟，绝不会被伪造成真实分析成功。
+- 原始 Prompt 与隐藏推理过程不复制到公开的 Runtime Event 中；结构化分析存储在 Requirement 域，Runtime 仅保存可观测的运行阶段、关联 ID、计数与脱敏证据摘要。

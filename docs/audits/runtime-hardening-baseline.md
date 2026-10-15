@@ -5,7 +5,7 @@
 **Initial working tree:** clean. No source changes had been present.  
 **Method:** runtime, tests, config, CI, migration and architecture inspection. Secrets were never printed or copied into this report.
 
-This report records the state before hardening. Historical claims in `AI_JEV_ARCHITECTURE_AUDIT.md` are treated as context, not as evidence that the current checkout passes those flows.
+This report records the state before hardening. Historical claims in `ai-jev-architecture-audit.md` are treated as context, not as evidence that the current checkout passes those flows.
 
 ## Environment and runtime baseline
 
@@ -18,7 +18,7 @@ This report records the state before hardening. Historical claims in `AI_JEV_ARC
 | PostgreSQL | No Docker, `psql`, `pg_isready`, PostgreSQL process, or listener on 5432; `AI_QA_TEST_DATABASE_URL` is not set. | NOT AVAILABLE locally. CI defines a PostgreSQL 16 service lane, but that lane was not executed here. |
 | Browser | Playwright Python package is present after environment sync; Playwright browser cache contains no browser installation. | Browser tests requiring a real browser are blocked until a browser binary is installed. |
 | Windows / Linux | CI YAML defines Ubuntu backend/frontend/PostgreSQL jobs and a Windows compatibility job. This host is macOS. | CI definitions inspected; Windows/Linux jobs not run locally. |
-| Existing product evidence | `docs/AI_JEV_ARCHITECTURE_AUDIT.md` contains earlier acceptance claims, including live AI/Jev and locator repair, plus known limitations. | Historical only; not current-run evidence. |
+| Existing product evidence | `docs/audits/ai-jev-architecture-audit.md` contains earlier acceptance claims, including live AI/Jev and locator repair, plus known limitations. | Historical only; not current-run evidence. |
 
 ## Configuration and live Provider baseline
 

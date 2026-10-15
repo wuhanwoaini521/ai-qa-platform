@@ -30,11 +30,11 @@ The demo test automation binding was reviewed and activated before Worker execut
 
 ## Shop and platform UI evidence
 
-`examples/demo-shop/tests/test_shop.py` passed **8/8** in real system Chrome. Playwright's bundled Chromium executable was unavailable, so the fixture used its system Chrome fallback. Screenshots, DOM captures and traces are retained in [`runtime/artifacts/2026-10-11-golden-demo-local/`](../../runtime/artifacts/2026-10-11-golden-demo-local/).
+`examples/demo-shop/tests/test_shop.py` passed **8/8** in real system Chrome. Playwright's bundled Chromium executable was unavailable, so the fixture used its system Chrome fallback. Screenshots, DOM captures and traces are retained in `runtime/artifacts/2026-10-11-golden-demo-local/`.
 
 The checked-in `examples/demo-shop/tests/test_known_locator.py` intentionally retains the stale locator as the pre-repair demonstration. Therefore, the 8/8 result is for `test_shop.py`, not a claim that the unchanged example's entire suite passes. The corresponding project-workspace suite passed after the approved repair.
 
-Platform UI screenshots are in [`runtime/artifacts/2026-10-11-golden-demo-platform-ui/`](../../runtime/artifacts/2026-10-11-golden-demo-platform-ui/):
+Platform UI screenshots are in `runtime/artifacts/2026-10-11-golden-demo-platform-ui/`:
 
 - Dashboard and Project: `dashboard-desktop.png`, `project-desktop.png`
 - Workspace result: `workspace-run-desktop.png`, `workspace-run-tablet.png`, `workspace-run-mobile.png`

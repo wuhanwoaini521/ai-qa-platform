@@ -44,7 +44,7 @@ Automation Studio V2 is the in-browser IDE and test engineering environment with
 - Opening Debug from a failure links the session to that failure's exact workspace, pytest node id, run, and execution; mismatched failure targets are rejected. Standalone Studio debugging has no originating run/execution link.
 - DAP debug sessions are not `TestRun` records and do not replace Runner verdicts. Use the normal pytest Runner for persisted PASS/FAIL results; pytest exit codes remain authoritative.
 
-### 1.5 QA Assistant Sidecar
+### 1.6 QA Assistant Sidecar
 - **Grounding**: Automatically loaded with workspace Page Object definitions (`pages/`) and engineering knowledge rules (`knowledge/`).
 - **Actions**:
   - `Explain Code`: Breaks down test fixtures, async actions, and assertions.

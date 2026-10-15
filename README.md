@@ -161,23 +161,35 @@ pnpm build
 
 ## 📚 Documentation
 
-- [Developer Guide](docs/DEVELOPMENT.md)
-- [System Architecture](docs/ARCHITECTURE.md)
-- [Production Deployment Guide](docs/DEPLOYMENT.md)
-- [Operations & Monitoring Guide](docs/OPERATIONS.md)
-- [Backup & Disaster Recovery](docs/BACKUP_RESTORE.md)
-- [Security](docs/SECURITY.md)
-- [AI Providers](docs/AI_PROVIDER.md)
-- [Production AI Architecture](docs/PRODUCTION_AI.md)
-- [Platform Runtime Guide](docs/PLATFORM_RUNTIME_GUIDE.md)
-- [Browser Recorder](docs/BROWSER_RECORDER.md)
-- [Automation Studio](docs/AUTOMATION_STUDIO.md)
-- [Failure Intelligence](docs/FAILURE_INTELLIGENCE.md)
-- [Platform Roadmap](docs/ROADMAP.md)
-- [Quality Intelligence & Coverage](docs/QUALITY_INTELLIGENCE.md)
-- [Distributed Execution Architecture](docs/DISTRIBUTED_EXECUTION.md)
-- [Enterprise RBAC & Security](docs/RBAC.md)
-- [Jira & TestRail Integration](docs/JIRA_INTEGRATION.md)
-- [TestRail Integration](docs/TESTRAIL_INTEGRATION.md)
-- [GitHub PR Engineering Workflow](docs/GITHUB_INTEGRATION.md)
-- [Complete QA Lifecycle Workflow Guide](docs/PLATFORM_WORKFLOW.md)
+For the complete and authoritative index of all platform specifications, guides, and historical audit reports, visit the **[Documentation Portal](docs/README.md)**.
+
+### Core Architecture & Workflows
+- **[Documentation Portal (Master Index)](docs/README.md)**
+- **[System Architecture](docs/ARCHITECTURE.md)**
+- **[Product Architecture & Workspace Integration](docs/platform-v3-product-architecture.md)**
+- **[Platform Workflow Guide](docs/PLATFORM_WORKFLOW.md)**
+- **[Platform Runtime Guide](docs/PLATFORM_RUNTIME_GUIDE.md)**
+- **[Autonomous QA Agent Guide](docs/autonomous-qa-agent-v1.md)**
+- **[Platform Roadmap & Safety Invariants](docs/ROADMAP.md)**
+
+### Engineering, AI & Tools
+- **[Developer Guide](docs/DEVELOPMENT.md)**
+- **[Automation Studio V2 Guide](docs/AUTOMATION_STUDIO.md)**
+- **[Browser Recorder](docs/BROWSER_RECORDER.md)**
+- **[AI Provider Integration & Configuration](docs/AI_PROVIDER.md)**
+- **[Decision Layer & Signal Evaluation](docs/DECISION_LAYER.md)**
+- **[Failure Intelligence & Human-in-the-Loop Repair](docs/FAILURE_INTELLIGENCE.md)**
+- **[Quality Intelligence & Coverage Model](docs/QUALITY_INTELLIGENCE.md)**
+- **[Distributed Execution & Worker Architecture](docs/DISTRIBUTED_EXECUTION.md)**
+
+### Enterprise, Operations & Integrations
+- **[Enterprise Security & Audit Logging](docs/SECURITY.md)**
+- **[Role-Based Access Control (RBAC)](docs/RBAC.md)**
+- **[Central Runtime Configuration](docs/CONFIGURATION.md)**
+- **[Production Deployment Guide](docs/DEPLOYMENT.md)**
+- **[Operations & Prometheus Monitoring](docs/OPERATIONS.md)**
+- **[Backup & Disaster Recovery](docs/BACKUP_RESTORE.md)**
+- **[Jira Integration Guide](docs/JIRA_INTEGRATION.md)**
+- **[TestRail Integration Guide](docs/TESTRAIL_INTEGRATION.md)**
+- **[GitHub PR Engineering Workflow](docs/GITHUB_INTEGRATION.md)**
+
