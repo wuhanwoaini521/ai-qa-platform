@@ -3,7 +3,7 @@ import { Activity, ArrowDownRight, Code2, ExternalLink, Eye, GitBranch, Pause, P
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type { QualityDiscoveryGap, QualityDiscoveryMode, QualityDiscoveryRun, Requirement } from '../../types';
-import { gapsForCoverageRow } from './qualityDiscoveryMap';
+import { gapsForCoverageRow, sourceRequirementId } from './qualityDiscoveryMap';
 import './quality-discovery.css';
 
 const terminalStatuses = new Set(['COMPLETED', 'BLOCKED', 'FAILED', 'STOPPED', 'BUDGET_EXHAUSTED']);
@@ -319,7 +319,10 @@ export function QualityDiscoveryPanel({
         onOpenRequirement?.(result.requirement_id);
       } else if (action === 'generate_tests') {
         const ids = Array.isArray(result.test_case_ids) ? result.test_case_ids : [];
-        if (typeof ids[0] === 'string') onOpenCase?.(ids[0], feature?.requirement_ids?.[0]);
+        if (typeof ids[0] === 'string') onOpenCase?.(ids[0], sourceRequirementId(
+          feature?.requirement_ids ?? [], refreshed.result.requirements ?? [],
+          feature ? refreshed.result.requirement_drafts?.[feature.feature_id] : undefined,
+        ));
       } else if (action === 'generate_automation') {
         const binding = result.binding as { test_case_id?: string; file_path?: string } | undefined;
         if (binding?.test_case_id && binding.file_path) onOpenAutomation?.(binding.test_case_id, binding.file_path);
@@ -365,7 +368,7 @@ export function QualityDiscoveryPanel({
           <button type="button" className="btn btn-primary" onClick={() => void start()} disabled={historyStatus !== 'ready' || busy || active || !canStartUrl || (needsRequirement && !requirementId && !requirementText.trim())}>
             <Play size={14} aria-hidden="true" />{busy ? t('starting') : t('start')}
           </button>
-          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)}>{runs.map((item) => <option key={item.id} value={item.id}>{item.mode} · {item.status} · {new Date(item.created_at).toLocaleString()}</option>)}</select></label>}
+          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)}>{runs.map((item) => <option key={item.id} value={item.id}>{item.start_url} · {item.mode} · {new Date(item.created_at).toLocaleString()} · {item.status}</option>)}</select></label>}
           {historyStatus === 'loading' && <span className="qd-load-status" role="status">{t('historyLoading')}</span>}
           {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
         </div>
@@ -385,6 +388,12 @@ export function QualityDiscoveryPanel({
             <div><span className="qd-eyebrow">{t('runStatus')}</span><h3>{t(`statuses.${run.status}`, { defaultValue: run.status })}</h3><p>{run.start_url}</p></div>
             <span className={`qd-status-pill is-${run.status.toLowerCase()}`}>{run.status}</span>
           </div>
+          <dl className="qd-scope" aria-label={t('scopeTitle')}>
+            <div><dt>{t('scopeProject')}</dt><dd>{run.project_id}</dd></div>
+            <div><dt>{t('scopeRun')}</dt><dd>{run.id}</dd></div>
+            <div><dt>{t('scopeRequirement')}</dt><dd>{run.requirement_id || (run.result.requirement_model?.source_id === 'PASTED' ? t('scopePasted') : t('scopeIndependent'))}</dd></div>
+          </dl>
+          <p className="qd-scope-note">{t('scopeNote')}</p>
           <div className="qd-progress-grid">
             <div><strong>{run.progress.states}</strong><span>{t('states')}</span></div>
             <div><strong>{run.progress.actions}</strong><span>{t('actions')}</span></div>

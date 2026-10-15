@@ -27,13 +27,16 @@ async def _wait_message(session, predicate, backlog: list[dict[str, Any]], timeo
 @pytest.mark.parametrize("target", ["tests/test_debugger.py", "tests/test_debugger.py::test_debuggable_case"])
 @pytest.mark.parametrize("live_updates", [False, True])
 async def test_debugpy_dap_pauses_steps_reads_locals_and_continues(
-    tmp_path: Path, target: str, live_updates: bool, test_db_session
+    tmp_path: Path, target: str, live_updates: bool, test_db_session, monkeypatch
 ) -> None:
+    monkeypatch.setenv("QA_AI_API_KEY", "synthetic-platform-credential")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "synthetic-cloud-credential")
     workspace = tmp_path / "workspace"
     test_file = workspace / "tests" / "test_debugger.py"
     test_file.parent.mkdir(parents=True)
     test_file.write_text(
-        "def test_first_case():\n    assert True\n\ndef test_debuggable_case():\n    value = 1\n    value += 1\n    assert value == 2\n",
+        "def test_first_case():\n    assert True\n\ndef test_debuggable_case():\n    value = 1\n    value += 1\n"
+        "    assert value == 2 and all(name not in __import__('os').environ for name in ('QA_AI_API_KEY', 'AWS_ACCESS_KEY_ID'))\n",
         encoding="utf-8",
     )
     now = utc_now()

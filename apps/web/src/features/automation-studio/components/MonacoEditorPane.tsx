@@ -220,6 +220,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
             fontFamily: "'JetBrains Mono', Consolas, Menlo, monospace",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
+            wordWrap: 'on',
             stickyScroll: { enabled: stickyScroll },
             lineNumbers: 'on',
             glyphMargin: true,

@@ -30,6 +30,11 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+      # The web contract is generated from the FastAPI app; a stale committed schema would make the
+      # generated TypeScript types diverge from the API without any check noticing.
+      - name: Check the OpenAPI contract is current
+        run: uv run python scripts/export_openapi.py --check
+
       - name: Run backend tests
         run: uv run pytest -v
 

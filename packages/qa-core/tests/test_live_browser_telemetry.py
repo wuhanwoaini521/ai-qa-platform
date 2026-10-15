@@ -1,3 +1,4 @@
+import importlib.util
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -35,6 +36,29 @@ def test_generated_live_browser_plugin_source_compiles():
     compile(LIVE_BROWSER_PLUGIN_SOURCE, "qa_platform_live_browser_plugin.py", "exec")
 
 
+def test_live_browser_redaction_preserves_network_urls_and_iso_timestamps(tmp_path, monkeypatch):
+    write_live_browser_plugin(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    plugin_path = tmp_path / f"{LIVE_BROWSER_PLUGIN_NAME}.py"
+    spec = importlib.util.spec_from_file_location("generated_live_browser_plugin_test", plugin_path)
+    assert spec and spec.loader, "generated plugin module spec is unavailable"
+    plugin = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(plugin)
+
+    timestamp = "2026-10-15T05:54:30.123456+00:00"
+    safe = plugin.LiveBrowserPlugin._safe_value(
+        {
+            "url": "http://127.0.0.1:58493/contact/415-555-0132?email=user@example.test",
+            "timestamp": timestamp,
+            "request": {"body": {"message": "Call 415-555-0132"}},
+        }
+    )
+
+    assert safe["url"] == "http://127.0.0.1:58493/contact/[REDACTED_PHONE]"
+    assert safe["timestamp"] == timestamp
+    assert safe["request"]["body"]["message"] == "Call [REDACTED_PHONE]"
+
+
 @pytest.mark.asyncio
 async def test_short_navigation_captures_actual_page_before_browser_close(tmp_path):
     class Website(BaseHTTPRequestHandler):
@@ -44,7 +68,7 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
             self.end_headers()
             self.wfile.write(b"<h1>Product catalog</h1><button>View product</button>")
 
-        def log_message(self, *args):
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
@@ -97,11 +121,22 @@ async def test_short_navigation_captures_actual_page_before_browser_close(tmp_pa
     assert result.exit_code == 0, "\n".join(result.raw_logs)
     from datetime import datetime
 
-    assert all(datetime.fromisoformat(event["timestamp"]).utcoffset().total_seconds() == 0 for event in events)
+    def _utc_offset_seconds(value: str) -> float:
+        offset = datetime.fromisoformat(value).utcoffset()
+        assert offset is not None, f"timestamp has no UTC offset: {value}"
+        return offset.total_seconds()
+
+    assert all(_utc_offset_seconds(event["timestamp"]) == 0 for event in events)
     finished = next(event for event in events if event["type"] == "session.finished")
     assert finished["page_evidence"]["url"] == url
     assert len(finished["page_evidence"]["network_logs"]) == 100
     assert all(entry.get("timestamp") for entry in finished["page_evidence"]["network_logs"])
+    assert all(entry["url"] == url for entry in finished["page_evidence"]["network_logs"])
+    assert all(_utc_offset_seconds(entry["timestamp"]) == 0 for entry in finished["page_evidence"]["network_logs"])
+    assert all(
+        entry["status"] == 200 and entry["duration_ms"] is not None
+        for entry in finished["page_evidence"]["network_logs"]
+    )
     assert any(event["type"] == "frame" and event.get("url") == url and event.get("frame") for event in events)
     snapshot = artifacts / f"browser-{finished['session_id']}-last.jpg"
     assert snapshot.read_bytes().startswith(b"\xff\xd8\xff")
@@ -226,7 +261,7 @@ async def test_network_body_is_bounded_redacted_and_has_real_duration(tmp_path):
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, *args):
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Website)
@@ -294,9 +329,9 @@ async def test_runner_tails_live_browser_events_from_a_test_worker(tmp_path: Pat
         encoding="utf-8",
     )
     telemetry_path = tmp_path / "live-events"
-    events: list[dict] = []
+    events: list[dict[str, object]] = []
 
-    async def on_event(event: dict) -> None:
+    async def on_event(event: dict[str, object]) -> None:
         events.append(event)
 
     result = await PytestRunner().run_suite(
@@ -361,7 +396,7 @@ async def test_failed_page_emits_redacted_snapshot_encrypted_state_and_explicit_
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, *_args):
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Website)

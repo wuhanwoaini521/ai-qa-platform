@@ -23,6 +23,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 from qa_platform_sensitive_redactor import SensitiveRedactor
@@ -30,6 +31,20 @@ from qa_platform_sensitive_redactor import SensitiveRedactor
 
 PLUGIN_NAME = "qa-platform-live-browser"
 ENV_PATH = "QA_PLATFORM_LIVE_BROWSER_LOG"
+
+
+def _relative_to_cwd(filename):
+    """Workspace-relative posix path, or None when no such path exists.
+
+    On Windows a path on another drive (a virtualenv or pytest install outside the workspace)
+    has no relative form; ``os.path.relpath`` raises ValueError there. Telemetry must skip such
+    frames instead of failing the whole capture.
+    """
+    try:
+        relative = os.path.relpath(str(filename), os.getcwd())
+    except ValueError:
+        return None
+    return relative.replace(os.sep, "/")
 
 
 class LiveBrowserPlugin:
@@ -57,7 +72,25 @@ class LiveBrowserPlugin:
     @classmethod
     def _safe_value(cls, value):
         if isinstance(value, dict):
-            return {str(key): "[REDACTED]" if re.search("password|passwd|secret|token|authorization|cookie|api.?key|email|phone|address|card", str(key), re.I) else cls._safe_value(item) for key, item in value.items()}
+            redacted = {}
+            for key, item in value.items():
+                key_text = str(key)
+                if re.search("password|passwd|secret|token|authorization|cookie|api.?key|email|phone|address|card", key_text, re.I):
+                    redacted[key_text] = "[REDACTED]"
+                elif key_text.lower() in {"url", "href"} and isinstance(item, str):
+                    safe_url = SensitiveRedactor.redact_url(item)
+                    try:
+                        parsed = urlsplit(safe_url)
+                        safe_path = cls._redact_text(parsed.path)
+                        safe_url = urlunsplit((parsed.scheme, parsed.netloc, safe_path, "", ""))
+                    except ValueError:
+                        pass
+                    redacted[key_text] = safe_url
+                elif key_text.lower() == "timestamp" and isinstance(item, str) and re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})", item):
+                    redacted[key_text] = item
+                else:
+                    redacted[key_text] = cls._safe_value(item)
+            return redacted
         if isinstance(value, (list, tuple)):
             return [cls._safe_value(item) for item in value]
         if isinstance(value, str):
@@ -323,8 +356,8 @@ class LiveBrowserPlugin:
                         fingerprint = self._element_fingerprint(locator)
                         location = {}
                         for frame in inspect.stack(context=0)[1:12]:
-                            relative = os.path.relpath(frame.filename, os.getcwd()).replace(os.sep, "/")
-                            if not relative.startswith("..") and not relative.startswith((".venv/", "venv/")) and "site-packages" not in relative and "qa_platform_live_browser_plugin" not in relative:
+                            relative = _relative_to_cwd(frame.filename)
+                            if relative and not relative.startswith("..") and not relative.startswith((".venv/", "venv/")) and "site-packages" not in relative and "qa_platform_live_browser_plugin" not in relative:
                                 location = {"file": relative, "line": frame.lineno, **self._recorder_lineage(frame.filename, frame.lineno)}
                                 break
                         passed = False
@@ -516,8 +549,8 @@ class LiveBrowserPlugin:
             try:
                 for entry in reversed(call.excinfo.traceback):
                     filename = str(entry.path)
-                    relative = os.path.relpath(filename, os.getcwd()).replace(os.sep, "/")
-                    if relative.startswith("..") or "site-packages" in relative or "qa_platform_live_browser_plugin" in relative:
+                    relative = _relative_to_cwd(filename)
+                    if relative is None or relative.startswith("..") or "site-packages" in relative or "qa_platform_live_browser_plugin" in relative:
                         continue
                     lineage = self._recorder_lineage(filename, entry.lineno + 1)
                     record.setdefault("failed_step_id", lineage.get("step_id"))

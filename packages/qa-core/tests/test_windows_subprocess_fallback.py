@@ -9,6 +9,53 @@ from qa_core.onboarding.collector import run_project_command
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fallback", [False, True])
+async def test_project_children_do_not_inherit_platform_or_cloud_credentials(tmp_path, monkeypatch, fallback):
+    credential_names = (
+        "QA_AI_API_KEY",
+        "JEV_API_KEY",
+        "APP_SECRET_KEY",
+        "QA_WORKER_AUTH_TOKEN",
+        "GITHUB_TOKEN",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AZURE_CLIENT_SECRET",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "OPENAI_API_KEY",
+    )
+    for name in credential_names:
+        monkeypatch.setenv(name, "synthetic-host-credential")
+    monkeypatch.setenv("TEST_API_TOKEN", "synthetic-host-test-token")
+    if fallback:
+
+        async def unsupported_subprocess(*_args, **_kwargs):
+            raise NotImplementedError("exercise Windows fallback")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", unsupported_subprocess)
+    environment = {
+        "QA_AI_API_KEY": "synthetic-reinjected-platform-credential",
+        "TEST_API_TOKEN": "explicit-project-token",
+        "QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY": "explicit-run-capability",
+    }
+    check = (
+        f"import os\nfor name in {credential_names!r}:\n"
+        "    if name in os.environ:\n        raise RuntimeError('Reserved credential reached project child: ' + name)\n"
+        "assert os.environ.get('TEST_API_TOKEN') == 'explicit-project-token'\n"
+        "assert os.environ.get('QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY') == 'explicit-run-capability'\n"
+    )
+    command = await run_project_command(["python", "-c", check], tmp_path, sys.executable, environment=environment)
+    assert command.exit_code == 0, command.stderr
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_environment.py").write_text(
+        "def test_environment():\n" + "\n".join("    " + line for line in check.splitlines()) + "\n",
+        encoding="utf-8",
+    )
+    result = await PytestRunner().run_suite(tmp_path, environment=environment)
+    assert result.exit_code == 0, result.raw_logs
+    assert result.total == result.passed == 1
+
+
+@pytest.mark.asyncio
 async def test_pytest_and_collection_run_when_asyncio_subprocesses_are_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

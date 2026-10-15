@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -93,7 +94,7 @@ def require_tools() -> None:
         raise SystemExit(1)
 
 
-def _terminate_tree(process: subprocess.Popen) -> None:
+def _terminate_tree(process: subprocess.Popen[str]) -> None:
     """Stop a child process and everything it spawned.
 
     `uvicorn --reload` runs the app in a grandchild process. On POSIX a process group kill reaches
@@ -110,7 +111,8 @@ def _terminate_tree(process: subprocess.Popen) -> None:
         )
     else:
         try:
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            # POSIX only: the Windows branch above never reaches these attributes.
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # type: ignore[attr-defined]
         except (ProcessLookupError, PermissionError):
             process.terminate()
 
@@ -129,9 +131,9 @@ def _spawn(
     argv: list[str],
     lock: threading.Lock,
     extra_env: dict[str, str] | None = None,
-) -> subprocess.Popen:
+) -> subprocess.Popen[str]:
     log(f"[{label}] $ {' '.join(argv)}")
-    kwargs: dict = {}
+    kwargs: dict[str, Any] = {}
     if IS_WINDOWS:
         # Detach from the console's Ctrl+C handling: this runner decides when both children stop,
         # instead of the signal racing us into a half-torn-down process tree.
@@ -182,7 +184,7 @@ def _dev_port(env_name: str, default: int) -> int:
     return selected
 
 
-def _wait_for_http(process: subprocess.Popen, url: str, *, timeout_sec: float = 60.0) -> bool:
+def _wait_for_http(process: subprocess.Popen[str], url: str, *, timeout_sec: float = 60.0) -> bool:
     """Wait until a child service responds, or stop waiting if it exits or times out."""
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
@@ -269,8 +271,8 @@ def task_dev() -> int:
             {"VITE_DEV_API_TARGET": f"http://127.0.0.1:{api_port}"},
         ),
     ]
-    running: list[tuple[str, subprocess.Popen]] = []
-    processes: list[subprocess.Popen] = []
+    running: list[tuple[str, subprocess.Popen[str]]] = []
+    processes: list[subprocess.Popen[str]] = []
 
     def shutdown(*_: object) -> None:
         for process in processes:
@@ -351,6 +353,10 @@ def task_lint() -> int:
     if uv("run", "python", "scripts/i18n_check.py") != 0:
         return 1
 
+    log("Checking the OpenAPI contract is current...")
+    if uv("run", "python", "scripts/export_openapi.py", "--check") != 0:
+        return 1
+
     log("Linting frontend...")
     if pnpm("--filter", "@ai-qa/web", "lint") != 0:
         return 1
@@ -375,12 +381,22 @@ def task_clean() -> int:
     for target in targets:
         if target.exists():
             log(f"Removing {target.relative_to(ROOT)}")
-            shutil.rmtree(target, ignore_errors=True)
+            try:
+                shutil.rmtree(target, ignore_errors=True)
+            except OSError as error:
+                log(f"Could not remove {target.relative_to(ROOT)}: {error}")
+                return 1
 
     database = ROOT / "runtime" / "ai_qa_platform.db"
     if database.exists():
         log(f"Removing {database.relative_to(ROOT)}")
-        database.unlink()
+        try:
+            database.unlink()
+        except OSError as error:
+            # A running server can hold the SQLite file; report it instead of crashing the cleanup.
+            log(f"Could not remove {database.relative_to(ROOT)}: {error}")
+            return 1
+    return 0
 
 
 TASKS = {

@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from qa_core.execution.environment import project_subprocess_environment
 from qa_core.onboarding.contract import QAProjectContract
 from qa_core.onboarding.pytest_plugin import write_plugin
 
@@ -142,9 +143,8 @@ async def run_project_command(
 ) -> _ProcessResult:
     """Run one platform-built command inside the project workspace with the project's interpreter."""
     resolved = [interpreter, *command[1:]] if command and command[0] in ("python", "python3") else list(command)
-    env = dict(os.environ)
+    env = project_subprocess_environment(environment)
     env.pop("PYTEST_ADDOPTS", None)
-    env.update(environment or {})
 
     start = time.perf_counter()
     try:

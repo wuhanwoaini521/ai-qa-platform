@@ -216,3 +216,53 @@ async def test_ai_connection_reports_safe_provider_probe_error(client, monkeypat
     assert tested.json()["connected"] is False
     assert "output_limit" in tested.json()["message"]
     assert "configured token limit" in tested.json()["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_budget", [0, 1])
+async def test_ai_connection_probe_honors_configured_transient_network_retries(
+    test_db_session, monkeypatch, retry_budget
+):
+    import httpx
+    from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
+
+    configured = AIRuntimeConfig(
+        enabled=True,
+        provider="openai-compatible",
+        api_key="synthetic-key",
+        model="probe-model",
+        base_url="https://probe.invalid/v1",
+        timeout=2,
+        max_retries=retry_budget,
+    )
+
+    async def effective_config(_self):
+        return configured
+
+    async def healthy(self):
+        return ProviderHealthStatus(provider=self.provider_name, status=ProviderHealth.AVAILABLE, model=self.model)
+
+    attempts = []
+
+    def respond(request):
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("synthetic transient timeout", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text='data: {"choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        )
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    monkeypatch.setattr(OpenAICompatibleProvider, "check_health", healthy)
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(respond), **kwargs)
+    )
+    result = await AISettingsService(TaskRepositoryScopeFactory()).test_connection()
+    assert len(attempts) == retry_budget + 1
+    assert result.connected is bool(retry_budget)
+    assert result.streaming is bool(retry_budget)
+    if not retry_budget:
+        assert "timeout" in result.message

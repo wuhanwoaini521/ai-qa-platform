@@ -60,7 +60,12 @@ class FailureWorkflowService:
         self.failures = failure_service
         self.decisions = decision_service or LocatorDecisionService(repository_scope=repository_scope)
         self.run_service = run_service
-        self.repository_scope = repository_scope or failure_service.repository_scope
+        # Narrow the optional constructor input once: the attribute is always usable afterwards, and the
+        # guard below keeps the previous failure mode (same message) for a caller that supplies neither.
+        scope = repository_scope or failure_service.repository_scope
+        if scope is None:
+            raise ValueError("FailureWorkflowService requires a repository scope")
+        self.repository_scope: RepositoryScopeFactory = scope
         configured_mode = (
             get_config().repair.mode if get_config().repair.enabled and get_config().features.auto_repair else "OFF"
         )
@@ -68,8 +73,6 @@ class FailureWorkflowService:
         self._verification_monitors: set[asyncio.Task[None]] = set()
         self._monitored_verification_run_ids: set[str] = set()
         self.repair_state_machine = LocatorRepairStateMachine()
-        if self.repository_scope is None:
-            raise ValueError("FailureWorkflowService requires a repository scope")
 
     async def _history_list(self, failure_id: str) -> list[dict[str, Any]]:
         async with self.repository_scope() as repositories:
@@ -802,8 +805,12 @@ class FailureWorkflowService:
             if run is None:
                 continue
             completed = run.status in {"PASSED", "FAILED", "ERROR", "CANCELLED"}
-            if result.get("verification_run_status") == run.status:
-                continue
+            # The verification monitor persists the outcome as soon as it observes the run, so a later read
+            # sees a matching status. The durable state must not be rewritten then (a subsequent ROLLED_BACK
+            # must win), but the audit events below are still projected: the monitor records
+            # verification.completed only, never repair.verified, so skipping them would lose the
+            # human-approved repair outcome from the history.
+            reconciled = result.get("verification_run_status") == run.status
             execution = None
             if completed:
                 executions = await self.failures.run_repo.list_executions(run.id)
@@ -815,9 +822,10 @@ class FailureWorkflowService:
                 proposal.get("applied")
                 and proposal.get("proposed_locator") == analysis_proposal.get("proposed_locator")
             )
-            if applied_to_analysis:
+            if applied_to_analysis and not reconciled:
                 result["repair_state"] = "VERIFIED" if verified else "FAILED" if completed else "VERIFYING_FIX"
-            result.update(verified=verified, verification_run_status=run.status)
+            if not reconciled:
+                result.update(verified=verified, verification_run_status=run.status)
             event_type = "verification.completed" if completed else "verification.started"
             projected_event = make_trace_event(
                 failure.run_id,

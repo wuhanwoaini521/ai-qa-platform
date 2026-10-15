@@ -27,7 +27,7 @@ from project_model.models import (
 from qa_core.execution.failure_snapshot import capture_failure_snapshot_event
 from qa_core.execution.live_browser_plugin import write_live_browser_plugin
 from qa_core.execution.models import SuiteExecutionResult, TestExecutionStatus
-from qa_core.execution.pytest_runner import PytestRunner
+from qa_core.execution.pytest_runner import PytestRunner, validate_pytest_nodeids
 from qa_core.execution.runner_backend import RunnerTriggerRequest
 from qa_core.failure.redactor import SensitiveRedactor
 from qa_core.failure.snapshot_crypto import FailureSnapshotCipher
@@ -324,6 +324,22 @@ class TestRunService:
         execution_deadline: float | None = None,
         local_pytest_options: LocalPytestExecutionOptions | None = None,
     ) -> TestRun:
+        workspace = await self.workspace_repo.get_by_id(data.workspace_id)
+        if workspace is None:
+            workspace = await self.workspace_repo.get_by_project_id(data.workspace_id)
+        if workspace is None:
+            raise ValueError("Workspace not found")
+        if workspace.project_id != data.project_id:
+            raise ValueError("Workspace does not belong to the selected project")
+        # Workspace row IDs and project IDs address the same project-owned filesystem directory.
+        data = data.model_copy(
+            update={
+                "workspace_id": workspace.project_id,
+                "nodeids": validate_pytest_nodeids(
+                    self.workspace_service.get_workspace_dir(workspace.project_id), data.nodeids
+                ),
+            }
+        )
         config = get_config()
         default_workers = min(config.pytest.workers, config.run.max_parallel_runs)
         data = data.model_copy(
@@ -351,7 +367,7 @@ class TestRunService:
             )
             if existing:
                 self._ensure_same_run_request(existing, data, task_id)
-                self._schedule_local_run_if_queued(
+                self._schedule_run_if_queued(
                     existing.id, existing.status, data, execution_deadline, local_pytest_options
                 )
                 return self._to_run_dto(existing)
@@ -369,25 +385,14 @@ class TestRunService:
             if not existing:
                 raise
             self._ensure_same_run_request(existing, data, task_id)
-            self._schedule_local_run_if_queued(
-                existing.id, existing.status, data, execution_deadline, local_pytest_options
-            )
+            self._schedule_run_if_queued(existing.id, existing.status, data, execution_deadline, local_pytest_options)
             return self._to_run_dto(existing)
         run_id = orm.id
-        # The execution task opens its own database session. Persist the queued run before scheduling
-        # it so the new session cannot race this request's dependency-managed transaction and see no row.
-        await self._repositories().commit()
-
-        # 2. Trigger asynchronous execution in background task depending on runner
         is_jenkins = data.runner_type == RunnerType.JENKINS.value or (
             data.runner_profile_id and "jenkins" in str(data.runner_profile_id).lower()
         )
-
-        if is_jenkins:
-            worker = asyncio.create_task(self._run_jenkins_worker_task(run_id, data), name=f"test-run-{run_id}")
-            _RUN_WORKER_TASKS[run_id] = worker
-            worker.add_done_callback(lambda done, rid=run_id: _RUN_WORKER_TASKS.pop(rid, None))
-        elif data.runner_type == RunnerType.WORKER.value:
+        if data.runner_type == RunnerType.WORKER.value and not is_jenkins:
+            # The queue repository shares this transaction, so a Run cannot survive without its Job.
             await JobQueueService(
                 repository_scope=self.repository_scope,
                 job_repo=self._repositories().jobs,
@@ -398,9 +403,9 @@ class TestRunService:
                 nodeids=data.nodeids,
                 browser=data.browser,
             )
-            await self._repositories().commit()
-        else:
-            self._schedule_local_run(run_id, data, execution_deadline, local_pytest_options)
+        # Background execution opens its own session and must only see committed Runs.
+        await self._repositories().commit()
+        self._schedule_run_if_queued(run_id, orm.status, data, execution_deadline, local_pytest_options)
 
         return self._to_run_dto(orm)
 
@@ -448,7 +453,7 @@ class TestRunService:
 
         worker.add_done_callback(clear_worker)
 
-    def _schedule_local_run_if_queued(
+    def _schedule_run_if_queued(
         self,
         run_id: str,
         status: str,
@@ -458,9 +463,24 @@ class TestRunService:
     ) -> None:
         if status != RunStatus.QUEUED.value:
             return
+        is_jenkins = data.runner_type == RunnerType.JENKINS.value or (
+            data.runner_profile_id and "jenkins" in str(data.runner_profile_id).lower()
+        )
+        if data.runner_type == RunnerType.WORKER.value and not is_jenkins:
+            return
         worker = _RUN_WORKER_TASKS.get(run_id)
         if worker is None or worker.done():
-            self._schedule_local_run(run_id, data, execution_deadline, local_pytest_options)
+            if is_jenkins:
+                worker = asyncio.create_task(self._run_jenkins_worker_task(run_id, data), name=f"test-run-{run_id}")
+                _RUN_WORKER_TASKS[run_id] = worker
+
+                def clear_worker(done: asyncio.Task, *, scheduled_run_id: str = run_id) -> None:
+                    if _RUN_WORKER_TASKS.get(scheduled_run_id) is done:
+                        _RUN_WORKER_TASKS.pop(scheduled_run_id, None)
+
+                worker.add_done_callback(clear_worker)
+            else:
+                self._schedule_local_run(run_id, data, execution_deadline, local_pytest_options)
 
     async def _run_worker_task(
         self,
@@ -582,6 +602,7 @@ class TestRunService:
                         environment={
                             **data.environment,
                             **project_environment,
+                            "QA_BROWSER": data.browser,
                             **browser_proxy_env,
                             **evidence_environment,
                             "QA_ARTIFACT_DIR": str(artifact_dir),
@@ -1286,7 +1307,10 @@ class TestRunService:
                 entry["url"] = SensitiveRedactor.redact_url(entry["url"])
             async with self._open_repository_scope() as repositories:
                 key = {"console": "console_logs", "network": "network_logs", "step": "recent_steps"}[event_type]
-                await repositories.browser_sessions.append_evidence(session_id, key, entry)
+                if not await repositories.browser_sessions.append_evidence(
+                    session_id, key, entry, run_id=run_id, nodeid=nodeid
+                ):
+                    return
                 await repositories.commit()
             if event_type == "step" and entry.get("locator"):
                 from app.services.locator_history_service import LocatorHistoryService
@@ -1306,6 +1330,10 @@ class TestRunService:
                 },
             )
         elif event_type == "frame" and isinstance(event.get("frame"), str):
+            async with self._open_repository_scope() as repositories:
+                owner = await repositories.browser_sessions.get_by_id(session_id)
+                if owner is None or owner.run_id != run_id or (nodeid and owner.nodeid != nodeid):
+                    return
             await event_bus.publish(
                 run_id,
                 {

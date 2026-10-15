@@ -2,6 +2,14 @@ export interface QualityMapGapReference {
   item_id: string;
 }
 
+export function sourceRequirementId(ids: string[], requirements: Array<Record<string, unknown>>, draft?: string): string | undefined {
+  for (const id of ids) {
+    const source = requirements.find((item) => item.id === id)?.source_id;
+    if (typeof source === 'string' && source && source !== 'PASTED') return source;
+  }
+  return draft;
+}
+
 export function gapsForCoverageRow<T extends QualityMapGapReference>(
   row: Record<string, unknown>,
   gaps: T[],

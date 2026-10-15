@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import StaleDataError
@@ -225,7 +226,8 @@ class QualityDiscoveryProjectionMixin:
                         if case_requirements:
                             score = min(score, case_requirement_confidence)
                         if score >= 0.34:
-                            (case_matches if score >= mapping_threshold else case_review_matches).append((case, score))
+                            confirmed = score >= mapping_threshold and row.mode != "EXPLORE"
+                            (case_matches if confirmed else case_review_matches).append((case, score))
                 case_ids = [case.id for case, _ in case_matches]
                 feature["test_case_candidates"] = [
                     {
@@ -240,7 +242,11 @@ class QualityDiscoveryProjectionMixin:
                 automation = []
                 for case, score in case_matches:
                     binding = case.binding
-                    last_execution = self._latest_execution(binding.nodeid, runs) if binding else None
+                    last_execution = (
+                        self._latest_execution(binding.nodeid, runs, binding.workspace_id, row.start_url)
+                        if binding and binding.status == "ACTIVE"
+                        else None
+                    )
                     explored_test = collected_by_nodeid.get(binding.nodeid) if binding else None
                     automation.append(
                         {
@@ -1469,18 +1475,44 @@ class QualityDiscoveryProjectionMixin:
         return bool(value and not re.search(r"^(choose|select|pick|please select|--|none|尺码|请选择)", value, re.I))
 
     @staticmethod
-    def _latest_execution(nodeid: str | None, runs: list[Any]) -> tuple[Any, Any] | None:
+    def _url_origin(url: str) -> tuple[str, str, int] | None:
+        try:
+            parts = urlsplit(url)
+            if parts.scheme not in {"http", "https"} or not parts.hostname:
+                return None
+            port = parts.port if parts.port is not None else (443 if parts.scheme == "https" else 80)
+            return parts.scheme, parts.hostname, port
+        except ValueError:
+            return None
+
+    @classmethod
+    def _latest_execution(
+        cls, nodeid: str | None, runs: list[Any], workspace_id: str, target_url: str
+    ) -> tuple[Any, Any] | None:
         if not nodeid:
             return None
+        origin = cls._url_origin(target_url)
+        if origin is None:
+            return None
         for run in runs:
+            if run.workspace_id != workspace_id:
+                continue
             matching = [execution for execution in run.executions if execution.nodeid == nodeid]
-            if matching:
-                return run, matching[0]
+            for execution in matching:
+                if any(
+                    browser.case_execution_id == execution.id
+                    and browser.nodeid == nodeid
+                    and cls._url_origin(browser.current_url) == origin
+                    for browser in run.browser_sessions
+                ):
+                    return run, execution
         return None
 
     @classmethod
-    def _latest_execution_status(cls, nodeid: str | None, runs: list[Any]) -> str | None:
-        latest = cls._latest_execution(nodeid, runs)
+    def _latest_execution_status(
+        cls, nodeid: str | None, runs: list[Any], workspace_id: str, target_url: str
+    ) -> str | None:
+        latest = cls._latest_execution(nodeid, runs, workspace_id, target_url)
         return latest[1].status if latest else None
 
     @staticmethod

@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent } from 'react';
+import { useCallback, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
+import { fitGraphViewport } from "./graphModel";
 
-/** Shared viewport mechanics for KnowledgeGraph and Runtime DAG. */
+/** Graph pan, zoom and centered fitting. */
 export function useGraphViewport(initialScale = 0.75) {
   const [scale, setScale] = useState(initialScale);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -9,19 +10,26 @@ export function useGraphViewport(initialScale = 0.75) {
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(
     null,
   );
-  const fit = (width: number, height: number) => {
+  const fit = useCallback((width: number, height: number) => {
     const element = viewport.current;
-    setScale(
-      Math.max(
-        0.15,
-        Math.min(
-          1,
-          ((element?.clientWidth ?? 800) - 30) / width,
-          ((element?.clientHeight ?? 420) - 30) / height,
-        ),
-      ),
+    const fitted = fitGraphViewport(
+      width,
+      height,
+      element?.clientWidth ?? 800,
+      element?.clientHeight ?? 420,
     );
-    setOffset({ x: 8, y: 8 });
+    setScale(fitted.scale);
+    setOffset(fitted.offset);
+  }, []);
+  const zoom = (nextScale: number) => {
+    const element = viewport.current;
+    const x = (element?.clientWidth ?? 800) / 2;
+    const y = (element?.clientHeight ?? 420) / 2;
+    setOffset({
+      x: x - ((x - offset.x) * nextScale) / scale,
+      y: y - ((y - offset.y) * nextScale) / scale,
+    });
+    setScale(nextScale);
   };
   const center = (
     position: { x: number; y: number },
@@ -55,7 +63,7 @@ export function useGraphViewport(initialScale = 0.75) {
     }
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button,a,input')) return;
+    if ((event.target as HTMLElement).closest("button,a,input")) return;
     drag.current = {
       x: event.clientX,
       y: event.clientY,
@@ -81,6 +89,7 @@ export function useGraphViewport(initialScale = 0.75) {
     setOffset,
     viewport,
     fit,
+    zoom,
     center,
     handlers: {
       onKeyDown,

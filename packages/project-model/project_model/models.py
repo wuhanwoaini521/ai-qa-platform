@@ -493,8 +493,8 @@ class TestRunCreate(BaseModel):
     def validate_parallel_runner(self) -> TestRunCreate:
         if self.parallel_workers > 1 and self.runner_type.upper() != "LOCAL":
             raise ValueError("Parallel pytest workers are supported by the local runner only.")
-        if self.idempotency_key and self.runner_type.upper() != "LOCAL":
-            raise ValueError("Run request idempotency is currently supported by the local runner only.")
+        if self.idempotency_key and self.runner_type.upper() != "LOCAL" and self.parameters:
+            raise ValueError("Run request idempotency does not support custom runner parameters.")
         return self
 
 

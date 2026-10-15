@@ -15,6 +15,7 @@ from app.container import get_quality_discovery_service
 from app.main import app as fastapi_app
 from app.persistence.models import (
     AutomationBindingORM,
+    BrowserSessionORM,
     ProjectORM,
     QualityDiscoveryRunORM,
     RequirementORM,
@@ -52,6 +53,128 @@ from qa_core.ai.models import TestCaseGenerationItem as _TestCaseGenerationItem
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "quality-discovery"
 SITE = json.loads((FIXTURE_DIR / "site.json").read_text(encoding="utf-8"))["pages"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("linked_requirement", "workspace_matches", "observed_url", "expected"),
+    [
+        (False, True, "https://www.gu-global.com/us/en/", "PARTIAL"),
+        (True, True, None, "AUTOMATED"),
+        (True, False, "https://www.gu-global.com/us/en/", "AUTOMATED"),
+        (True, True, "http://demo-shop.example.test/", "AUTOMATED"),
+        (True, True, "https://www.gu-global.com/us/en/products", "VERIFIED"),
+    ],
+    ids=["unlinked-explore", "unknown-site", "other-workspace", "demo-site", "matching-site"],
+)
+async def test_discovery_coverage_requires_explicit_source_and_execution_site(
+    test_db_session, linked_requirement, workspace_matches, observed_url, expected
+):
+    target = "https://www.gu-global.com/us/en/"
+    nodeid = "tests/test_demo_shop.py::test_search"
+    async with test_db_session() as session:
+        session.add(ProjectORM(id="project_scope", name="Demo project"))
+        session.add(RequirementORM(id="requirement_scope", project_id="project_scope", title="Search"))
+        session.add(
+            _TestCaseORM(
+                id="case_scope",
+                project_id="project_scope",
+                requirement_id="requirement_scope",
+                title="Search",
+                tags=["Search"],
+                automation_status="AUTOMATED",
+            )
+        )
+        await session.flush()
+        session.add(
+            AutomationBindingORM(
+                id="binding_scope",
+                test_case_id="case_scope",
+                workspace_id="project_scope",
+                nodeid=nodeid,
+                file_path="tests/test_demo_shop.py",
+                status="ACTIVE",
+            )
+        )
+        run = _TestRunORM(
+            id="run_scope",
+            project_id="project_scope",
+            status="PASSED",
+            workspace_id="project_scope" if workspace_matches else "other_workspace",
+            executions=[_TestExecutionORM(id="execution_scope", nodeid=nodeid, status="PASSED")],
+        )
+        session.add(run)
+        await session.flush()
+        if observed_url:
+            session.add(
+                BrowserSessionORM(
+                    id="browser_scope",
+                    run_id=run.id,
+                    case_execution_id="execution_scope",
+                    browser_session_id="session_scope",
+                    page_id="page_scope",
+                    nodeid=nodeid,
+                    current_url=observed_url,
+                    status="closed",
+                )
+            )
+        session.add(
+            QualityDiscoveryRunORM(
+                id="discovery_scope",
+                project_id="project_scope",
+                requested_by="fixture",
+                mode="EXPLORE",
+                start_url=target,
+                requirement_id="requirement_scope" if linked_requirement else None,
+                requirement_text="",
+                allowed_domains=[],
+                status="COMPLETED",
+                progress={},
+                result={
+                    "requirements": [
+                        {
+                            "id": "requirement_scope:REQ-001",
+                            "source_id": "requirement_scope",
+                            "feature": "Search",
+                            "expected_behavior": "Search products",
+                            "checks": [],
+                        }
+                    ]
+                    if linked_requirement
+                    else [],
+                    "features": [
+                        {
+                            "feature_id": "feature_search",
+                            "name": "Search",
+                            "status": "OBSERVED",
+                            "evidence_ids": ["evidence_gu_search"],
+                            "state_ids": [],
+                            "requirement_ids": [],
+                        }
+                    ],
+                    "states": [],
+                    "edges": [],
+                    "actions": [],
+                    "gaps": [],
+                },
+            )
+        )
+        await session.commit()
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    await service._build_quality_map("discovery_scope")
+    row = await service.get("discovery_scope")
+    feature = row.result["features"][0]
+    assert feature["coverage_status"] == expected
+    assert feature["status"] == "OBSERVED"
+    assert feature["evidence_ids"] == ["evidence_gu_search"]
+    if not linked_requirement:
+        assert await service._requirement_input(row) is None
+        assert row.result["requirements"] == []
+        assert feature["test_case_ids"] == []
+        assert feature["automation"] == []
+        assert feature["test_case_candidates"][0]["mapping_status"] == "NEEDS_REVIEW"
+    elif expected != "VERIFIED":
+        assert feature["automation"][0]["last_run_id"] is None
 
 
 @pytest.fixture
@@ -1174,6 +1297,20 @@ async def test_quality_map_golden_compares_requirements_tests_automation_and_lat
                 ],
             )
         )
+
+    for run in runs:
+        run.browser_sessions = [
+            BrowserSessionORM(
+                id=f"browser-{uuid4().hex[:12]}",
+                case_execution_id=execution.id,
+                browser_session_id=f"session-{uuid4().hex[:12]}",
+                page_id=f"page-{uuid4().hex[:12]}",
+                nodeid=execution.nodeid,
+                current_url="http://127.0.0.1:1/",
+                status="closed",
+            )
+            for execution in run.executions
+        ]
 
     async with test_db_session() as session:
         session.add(

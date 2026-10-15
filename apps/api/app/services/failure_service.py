@@ -712,6 +712,8 @@ class FailureService:
             )
         if ranked:
             await self.failure_repo.update_failure_snapshot(evidence_execution_id, snapshot)
+            # Jev reserves its budget in another session; release SQLite's snapshot write lock first.
+            await self.transaction.commit()
 
         if ranked:
             try:

@@ -1,9 +1,143 @@
 from __future__ import annotations
 
 import pytest
+from app.persistence.models import (
+    AutomationBindingORM,
+    FailureRecordORM,
+)
+from app.persistence.models import (
+    TestCaseORM as CaseORM,
+)
+from app.persistence.models import (
+    TestExecutionORM as ExecutionORM,
+)
+from app.persistence.models import (
+    TestRunORM as RunORM,
+)
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("execution_status", "binding_status", "workspace_matches", "nodeid_matches", "expected"),
+    [
+        ("PASSED", "ACTIVE", True, True, 1),
+        ("FAILED", "ACTIVE", True, True, 1),
+        ("ERROR", "VALIDATED", True, True, 1),
+        ("SKIPPED", "ACTIVE", True, True, 0),
+        ("QUEUED", "ACTIVE", True, True, 0),
+        ("CANCELLED", "ACTIVE", True, True, 0),
+        ("PASSED", "DRAFT", True, True, 0),
+        ("PASSED", "ACTIVE", False, True, 0),
+        ("PASSED", "ACTIVE", True, False, 0),
+    ],
+)
+async def test_execution_coverage_requires_recorded_binding_target(
+    client, test_db_session, execution_status, binding_status, workspace_matches, nodeid_matches, expected
+):
+    project = (
+        await client.post("/api/projects", json={"name": "Coverage evidence", "bootstrap_workspace": False})
+    ).json()
+    project_id = project["id"]
+    nodeid = "tests/test_checkout.py::test_checkout"
+    async with test_db_session() as session:
+        session.add_all(
+            [
+                CaseORM(id="case_bound", project_id=project_id, title="checkout", automation_status="AUTOMATED"),
+                CaseORM(id="case_unbound", project_id=project_id, title="checkout", automation_status="AUTOMATED"),
+                CaseORM(id="case_manual", project_id=project_id, title="checkout", automation_status="MANUAL"),
+            ]
+        )
+        await session.flush()
+        session.add(
+            AutomationBindingORM(
+                id="binding_coverage",
+                test_case_id="case_bound",
+                workspace_id=project_id,
+                nodeid=nodeid,
+                file_path="tests/test_checkout.py",
+                status=binding_status,
+            )
+        )
+        session.add(
+            RunORM(
+                id="run_coverage",
+                project_id=project_id,
+                workspace_id=project_id if workspace_matches else "other_workspace",
+                status="FAILED",
+            )
+        )
+        await session.flush()
+        session.add(
+            ExecutionORM(
+                id="execution_coverage",
+                run_id="run_coverage",
+                nodeid=nodeid if nodeid_matches else "tests/test_other.py::test_checkout",
+                status=execution_status,
+            )
+        )
+        await session.commit()
+
+    response = await client.get(f"/api/quality/coverage?project_id={project_id}")
+    assert response.status_code == 200, response.text
+    coverage = response.json()
+    assert coverage["total_test_cases"] == 3
+    assert coverage["executed_cases_recent"] == expected
+    assert coverage["execution_coverage_pct"] == (33.3 if expected else 0.0)
+
+
+@pytest.mark.asyncio
+async def test_quality_risk_and_coverage_exclude_other_projects(client, test_db_session):
+    projects = [
+        (await client.post("/api/projects", json={"name": name, "bootstrap_workspace": False})).json()["id"]
+        for name in ("Healthy project", "Failing project")
+    ]
+    nodeid = "tests/test_shared.py::test_shared"
+    async with test_db_session() as session:
+        for index, project_id in enumerate(projects):
+            session.add(
+                CaseORM(id=f"case_{index}", project_id=project_id, title="shared", automation_status="AUTOMATED")
+            )
+        await session.flush()
+        for index, project_id in enumerate(projects):
+            session.add(
+                AutomationBindingORM(
+                    id=f"binding_{index}",
+                    test_case_id=f"case_{index}",
+                    workspace_id=project_id,
+                    nodeid=nodeid,
+                    file_path="tests/test_shared.py",
+                    status="ACTIVE",
+                )
+            )
+        session.add(RunORM(id="foreign_run", project_id=projects[1], workspace_id=projects[1], status="FAILED"))
+        await session.flush()
+        session.add(ExecutionORM(id="foreign_execution", run_id="foreign_run", nodeid=nodeid, status="FAILED"))
+        await session.flush()
+        session.add(
+            FailureRecordORM(
+                id="foreign_failure",
+                run_id="foreign_run",
+                execution_id="foreign_execution",
+                test_nodeid=nodeid,
+                test_name="shared",
+                classification="APPLICATION_BUG",
+                error_message="Other project's private failure evidence",
+            )
+        )
+        await session.commit()
+
+    healthy = (await client.get(f"/api/quality/risk-matrix?project_id={projects[0]}")).json()
+    assert healthy["overall_quality_score"] == 100.0
+    assert healthy["risks"] == []
+    failing = (await client.get(f"/api/quality/risk-matrix?project_id={projects[1]}")).json()
+    assert failing["overall_quality_score"] == 95.0
+    assert any(item["id"] == "risk_fail_foreign_failure" for item in failing["risks"])
+    for project_id, expected in zip(projects, (0, 1)):
+        coverage = (await client.get(f"/api/quality/coverage?project_id={project_id}")).json()
+        assert coverage["executed_cases_recent"] == expected
 
 
 @pytest.mark.asyncio

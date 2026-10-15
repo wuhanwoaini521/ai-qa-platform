@@ -304,6 +304,30 @@ async def test_distributed_endpoints(client: AsyncClient, test_db_session, tmp_p
     assert scoped_claim.json()["id"] == inside_job.id
     assert (await job_service.get_job(outside_job.id)).status == JobStatus.QUEUED
 
+    # A completion notification cannot replace a real execution result or orphan the Run.
+    premature = await client.post(f"/api/jobs/{inside_job.id}/complete", json={"duration_ms": 10})
+    assert premature.status_code == 409
+    assert (await job_service.get_job(inside_job.id)).status == JobStatus.ASSIGNED
+    assert (await client.get(f"/api/runs/{inside_run.id}")).json()["status"] == "QUEUED"
+    submitted = await client.post(
+        f"/api/jobs/{inside_job.id}/result",
+        json={
+            "worker_id": wid,
+            "result": {
+                "exit_code": 0,
+                "total": 1,
+                "passed": 1,
+                "duration_ms": 1250,
+                "results": [{"nodeid": "tests/test_inside.py::test_inside", "status": "PASSED"}],
+            },
+        },
+    )
+    assert submitted.status_code == 200, submitted.text
+    assert (await client.get(f"/api/runs/{inside_run.id}")).json()["status"] == "PASSED"
+    repeated = await client.post(f"/api/jobs/{inside_job.id}/complete", json={"duration_ms": 99})
+    assert repeated.status_code == 200
+    assert repeated.json()["duration_ms"] == 1250
+
     # 3. Cluster status endpoint
     cluster_resp = await client.get("/api/workers/cluster-status")
     assert cluster_resp.status_code == 200

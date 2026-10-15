@@ -236,7 +236,7 @@ class AISettingsService:
                             prompt_id="provider_connection",
                             prompt_version="v1.0",
                             max_tokens=128,
-                            max_retries=0,
+                            max_retries=config.max_retries,
                             thinking_mode=probe_thinking_mode,
                         )
                     ):
@@ -264,7 +264,7 @@ class AISettingsService:
                             prompt_id="provider_structured_output_probe",
                             prompt_version="v1.0",
                             max_tokens=512,
-                            max_retries=0,
+                            max_retries=config.max_retries,
                             thinking_mode=probe_thinking_mode,
                             response_schema=_StructuredOutputProbe,
                         )

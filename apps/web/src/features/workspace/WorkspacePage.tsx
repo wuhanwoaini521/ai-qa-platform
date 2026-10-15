@@ -609,11 +609,15 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (!contextDataLoaded || !['result', 'failure'].includes(stage)) return;
-    const executedNodeId = currentFailure?.test_nodeid
+    const selectedRunNodeId = context.nodeId && currentRun?.executions.some((item) => item.nodeid === context.nodeId)
+      ? context.nodeId
+      : undefined;
+    const executedNodeId = selectedRunNodeId
+      ?? currentFailure?.test_nodeid
       ?? (currentRun?.nodeids.length === 1 ? currentRun.nodeids[0] : undefined);
     if (!executedNodeId) return;
     const executedCase = cases.find((item) => item.binding?.nodeid === executedNodeId);
-    if (!executedCase || executedCase.id === context.testCaseId) return;
+    if (!executedCase || (executedCase.id === context.testCaseId && context.nodeId === executedNodeId)) return;
     updateContext({
       requirementId: executedCase.requirement_id ?? context.requirementId,
       testCaseId: executedCase.id,
@@ -622,7 +626,7 @@ export function WorkspacePage() {
       file: executedCase.binding?.file_path,
       nodeId: executedNodeId,
     }, true);
-  }, [contextDataLoaded, stage, currentFailure?.test_nodeid, currentRun?.id, currentRun?.nodeids, cases, context.testCaseId, context.requirementId]);
+  }, [contextDataLoaded, stage, currentFailure?.test_nodeid, currentRun?.id, currentRun?.nodeids, currentRun?.executions, cases, context.nodeId, context.testCaseId, context.requirementId]);
 
   const openStudio = (filePath?: string, lineNumber?: number) => updateContext({
     testCaseId: selectedCase?.id ?? context.testCaseId,
@@ -1168,7 +1172,6 @@ export function WorkspacePage() {
                 runtimeError={currentRun ? resultRuntime.error : runtime.error}
                 onRefreshRuntime={() => void (currentRun ? resultRuntime : runtime).refresh()}
                 projectId={projectId}
-                onOpenFailure={(failureId) => updateContext({ failureId, stage: 'failure', view: 'results' })}
                 onOpenCode={(filePath, lineNumber) => openStudio(filePath, lineNumber)}
                 onOpenDetails={() => openRunDetails({}, 'Results')}
                 onOpenStep={(stepId) => {
@@ -1176,8 +1179,20 @@ export function WorkspacePage() {
                   openRunDetails({}, 'Flow');
                 }}
                 onStop={() => void stopActiveRun()}
-                onRerun={() => void runSelectedCase(true)}
+                onRerun={() => void runSelectedCase(Boolean(currentRun))}
+                canStartRun={Boolean(selectedCase && binding?.status === 'ACTIVE' && binding.nodeid)}
                 onManualAnalysis={() => { editGoal(t('result.manualAnalysisGoal')); setAiRunOpen(true); }}
+                onSelectExecution={(nodeId, caseId) => {
+                  const selected = cases.find((item) => item.id === caseId);
+                  updateContext({
+                    nodeId,
+                    testCaseId: selected?.id,
+                    testDesignId: selected?.test_design_id ?? undefined,
+                    automationBindingId: selected?.binding?.id,
+                    file: selected?.binding?.file_path ?? nodeId.split('::')[0],
+                    lineNumber: undefined,
+                  });
+                }}
               />}
               {view === 'results' && stage === 'failure' && <FailuresPage
                 projects={projects}
@@ -1309,13 +1324,14 @@ function RunResultSurface({
   runtimeError,
   onRefreshRuntime,
   projectId,
-  onOpenFailure,
   onOpenCode,
   onOpenDetails,
   onOpenStep,
   onStop,
   onRerun,
+  canStartRun,
   onManualAnalysis,
+  onSelectExecution,
 }: {
   context: WorkspaceContext;
   run: TestRun | null;
@@ -1326,13 +1342,14 @@ function RunResultSurface({
   runtimeError: string;
   onRefreshRuntime: () => void;
   projectId: string;
-  onOpenFailure: (failureId: string) => void;
   onOpenCode: (filePath: string, lineNumber?: number) => void;
   onOpenDetails: () => void;
   onOpenStep: (stepId: string) => void;
   onStop: () => void;
   onRerun: () => void;
+  canStartRun: boolean;
   onManualAnalysis: () => void;
+  onSelectExecution: (nodeId: string, caseId: string | null) => void;
 }) {
   const { t } = useTranslation('workspace');
   if (task && !run) {
@@ -1400,7 +1417,7 @@ function RunResultSurface({
       <ol className="workspace-step-list">{steps.map((item) => <li key={item.id} className={`is-${item.status.toLowerCase()}`}><span>{item.status}</span><strong>{item.name}</strong><small>{item.error ?? (Object.keys(item.outputs).length ? JSON.stringify(item.outputs) : '')}</small></li>)}</ol>
     </section>;
   }
-  if (!run) return <section className="workspace-result-card workspace-empty"><Play size={20} aria-hidden="true" /><h3>{t('result.noRun')}</h3><p>{t('result.noRunDescription')}</p></section>;
+  if (!run) return <section className="workspace-result-card workspace-empty"><Play size={20} aria-hidden="true" /><h3>{t('result.noRun')}</h3><p>{t('result.noRunDescription')}</p><div className="workspace-empty-actions"><button type="button" className="btn btn-primary" onClick={onRerun} disabled={!canStartRun}><Play size={14} aria-hidden="true" />{t('result.startRun')}</button><button type="button" className="btn btn-secondary" onClick={() => onOpenCode(context.file ?? '')}>{t('result.configureAutomation')}</button><button type="button" className="btn btn-secondary" onClick={onManualAnalysis}>{t('result.viewExecutionPlan')}</button></div>{!canStartRun && <p className="workspace-muted">{t('result.runRequiresBinding')}</p>}</section>;
 
   return <WorkspaceRunResult
     key={`${projectId}:${run.id}`}
@@ -1412,12 +1429,12 @@ function RunResultSurface({
     runtimeError={runtimeError}
     onRefreshRuntime={onRefreshRuntime}
     projectId={projectId}
-    onOpenFailure={onOpenFailure}
     onOpenCode={onOpenCode}
     onOpenDetails={onOpenDetails}
     onOpenStep={onOpenStep}
     onStop={onStop}
     onRerun={onRerun}
     onManualAnalysis={onManualAnalysis}
+    onSelectExecution={onSelectExecution}
   />;
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AgentTask,
   AIFailureDiagnosisResponse,
   FailureAnalysisRun,
   FailureRepairWorkflow,
@@ -22,6 +23,7 @@ import { FailureEvidence } from '../features/failures/FailureEvidence';
 import { FailureOverview } from '../features/failures/FailureOverview';
 import {
   displayedFailureClassification,
+  failedLocatorFromFailure,
   failureSourceLocation,
   normalizeFailureClassification,
   primaryActionForWorkflow,
@@ -249,7 +251,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
   const [applyingRepair, setApplyingRepair] = useState<boolean>(false);
   const [rejectingRepair, setRejectingRepair] = useState<boolean>(false);
-  const [startingCodeRepair, setStartingCodeRepair] = useState<boolean>(false);
+  const [startingRepairTask, setStartingRepairTask] = useState<boolean>(false);
   const [repairTaskId, setRepairTaskId] = useState<string | null>(null);
   const [rollingBackRepair, setRollingBackRepair] = useState<boolean>(false);
   const repairApplied = repairWorkflow?.repair_proposal?.applied === true;
@@ -268,7 +270,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     : workflowActions.includes('START_ANALYSIS')
       ? t('repairUnavailableUntilDiagnosis')
       : t('repairNotRecommended');
-  const canPrepareCodeRepair = Boolean(
+  const canStartRepairTask = Boolean(
     selectedFailure &&
       currentProjectId &&
       !repairWorkflowLoading &&
@@ -276,6 +278,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       !repairApplied &&
       !repairReady &&
       !['ANALYZING', 'DECIDING', 'VERIFYING_CANDIDATE', 'APPLYING', 'VERIFYING_FIX'].includes(diagnosisState),
+  );
+  const useLocatorDiagnosis = Boolean(
+    selectedFailure &&
+      analysisHistory.length === 0 &&
+      (normalizeFailureClassification(selectedFailure.failure_kind ?? selectedFailure.classification) === 'LOCATOR_CHANGED' ||
+        failedLocatorFromFailure(selectedFailure)),
   );
   const selectedDecision = selectedAnalysis?.result.selection ?? {};
   const decisionBlockReason = String(selectedDecision.fallback_reason ?? '');
@@ -285,10 +293,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const primaryActions = analysisHistory.length > 0
     ? workflowActions.filter((action) => action !== 'START_ANALYSIS')
     : workflowActions;
-  const primaryAction = diagnosing
+  const workflowPrimaryAction = diagnosing
     ? 'ANALYZING'
     : primaryActionForWorkflow(diagnosisState, primaryActions);
-  const showReanalysis = analysisHistory.length > 0 && (
+  const canStartRepairTaskAsPrimary = canStartRepairTask &&
+    ['RUN_DIAGNOSIS', 'BLOCKED'].includes(workflowPrimaryAction);
+  const primaryAction = canStartRepairTaskAsPrimary ? 'RUN_DIAGNOSIS' : workflowPrimaryAction;
+  const showReanalysis = !canStartRepairTaskAsPrimary && analysisHistory.length > 0 && (
     workflowActions.includes('START_ANALYSIS') || diagnosing
   );
   const reanalysisBlockedReason = diagnosisState === 'FAILED' && repairApplied
@@ -304,17 +315,21 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const [rerunMessage, setRerunMessage] = useState<string | null>(null);
   const primaryActionDisabled =
     ['ANALYZING', 'VERIFYING', 'VERIFIED', 'BLOCKED'].includes(primaryAction) ||
-    rerunning || generatingJiraDraft;
+    rerunning || generatingJiraDraft || startingRepairTask ||
+    (primaryAction === 'RUN_DIAGNOSIS' && !useLocatorDiagnosis && !repairTaskId && !currentProjectId);
   const showFailurePrimaryAction = !['ANALYZING', 'VERIFYING', 'VERIFIED'].includes(primaryAction);
-  const primaryActionReason = primaryAction === 'BLOCKED'
-    ? decisionBlockReason === 'below_minimum_confidence'
-      ? t('primaryReasons.jevConfidenceTooLow')
-      : decisionBlockReason === 'selected_candidate_failed_verification' || selectedDecision.verified === false
-        ? t('primaryReasons.candidateNotVerified')
-        : resolvedClassification === 'LOCATOR_CHANGED'
-          ? t('primaryReasons.locatorRepairBlocked')
-          : t('primaryReasons.repairUnavailable')
-    : undefined;
+  const primaryActionReason =
+    primaryAction === 'RUN_DIAGNOSIS' && !useLocatorDiagnosis && !repairTaskId && !currentProjectId
+      ? t('repairRequiresProject')
+      : primaryAction === 'BLOCKED'
+        ? decisionBlockReason === 'below_minimum_confidence'
+          ? t('primaryReasons.jevConfidenceTooLow')
+          : decisionBlockReason === 'selected_candidate_failed_verification' || selectedDecision.verified === false
+            ? t('primaryReasons.candidateNotVerified')
+            : resolvedClassification === 'LOCATOR_CHANGED'
+              ? t('primaryReasons.locatorRepairBlocked')
+              : t('primaryReasons.repairUnavailable')
+        : undefined;
   const handleOpenFailureInStudio = async (startDebug = false) => {
     if (!selectedFailure || !onOpenInStudio) return;
     const sourceLocation = failureSourceLocation(selectedFailure);
@@ -379,11 +394,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     let active = true;
     void api.getTasks(currentProjectId).then((tasks) => {
       if (!active) return;
-      const existing = tasks.find((task) =>
+      const belongsToFailure = (task: AgentTask) =>
         task.type === 'FIX_FAILURE' &&
-        task.inputs.failure_id === failureId &&
+        task.inputs.failure_id === failureId;
+      const existing = tasks.find((task) =>
+        belongsToFailure(task) &&
         !['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED'].includes(task.status),
-      );
+      ) ?? tasks.find(belongsToFailure);
       setRepairTaskId(existing?.id ?? null);
     }).catch(() => {
       if (active) setRepairTaskId(null);
@@ -662,14 +679,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
-  const handlePrepareCodeRepair = async () => {
-    if (!selectedFailure || !currentProjectId || startingCodeRepair) return;
+  const handleStartRepairTask = async () => {
     if (repairTaskId) {
       onTaskStarted(repairTaskId, true);
       return;
     }
+    if (!selectedFailure || !currentProjectId || startingRepairTask) return;
     try {
-      setStartingCodeRepair(true);
+      setStartingRepairTask(true);
       setRepairError('');
       const task = await api.createTask({
         type: 'FIX_FAILURE',
@@ -689,7 +706,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         error: error instanceof Error ? error.message : String(error),
       }));
     } finally {
-      setStartingCodeRepair(false);
+      setStartingRepairTask(false);
     }
   };
 
@@ -791,7 +808,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   };
 
   const handlePrimaryAction = () => {
-    if (primaryAction === 'RUN_DIAGNOSIS') void handleDiagnoseAI();
+    if (primaryAction === 'RUN_DIAGNOSIS') {
+      if (useLocatorDiagnosis && !repairTaskId) void handleDiagnoseAI();
+      else void handleStartRepairTask();
+    }
     else if (primaryAction === 'RETRY') void handleRerunTest();
     else if (primaryAction === 'VERIFY_FIX') void handleVerifyRepair();
     else if (primaryAction === 'CREATE_ISSUE_DRAFT') void handleOpenJiraBugModal();
@@ -826,6 +846,13 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 diagnosis={aiDiagnosis}
                 state={diagnosisState}
                 primaryAction={primaryAction}
+                primaryActionLabel={primaryAction === 'RUN_DIAGNOSIS'
+                  ? startingRepairTask
+                    ? t('preparingCodeRepair')
+                    : repairTaskId
+                      ? t('openCodeRepairTask')
+                      : t('primaryActions.RUN_DIAGNOSIS')
+                  : undefined}
                 primaryDisabled={primaryActionDisabled}
                 showPrimaryAction={showFailurePrimaryAction && !repairWorkflowLoading && !repairWorkflowError}
                 showReanalysis={showReanalysis}
@@ -849,10 +876,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 repairApplied={repairApplied}
                 repairRejected={repairRejected}
                 rerunMessage={rerunMessage}
-                showCodeRepairAction={canPrepareCodeRepair}
-                codeRepairPending={startingCodeRepair}
                 hasRepairTask={Boolean(repairTaskId)}
-                onPrepareCodeRepair={() => void handlePrepareCodeRepair()}
               />
               {repairError && <div className="alert alert-error" role="alert">{repairError}</div>}
 
@@ -902,7 +926,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       <span className="card-title" style={{ color: 'var(--accent-green)' }}>
                         {t('proposalTitle', {
                           value:
-                            repairProposal.confidence === null
+                            repairProposal.confidence == null
                               ? t('unrated')
                               : (repairProposal.confidence * 100).toFixed(0),
                         })}
@@ -1210,7 +1234,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   workflowError={repairWorkflowError}
                   primaryActionReason={primaryActionReason}
                   primaryActionPending={diagnosing}
-                  showPrimaryAction={!repairWorkflowError && (workflowActions.length > 0 || primaryAction === 'BLOCKED')}
+                  showPrimaryAction={
+                    !repairWorkflowError && primaryAction !== 'RUN_DIAGNOSIS' &&
+                    (workflowActions.length > 0 || primaryAction === 'BLOCKED')
+                  }
                   onPrimaryAction={handlePrimaryAction}
                   onOpenStudio={onOpenInStudio ? () => void handleOpenFailureInStudio() : undefined}
                   onDebug={onOpenInStudio ? () => void handleOpenFailureInStudio(true) : undefined}

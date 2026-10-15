@@ -49,9 +49,15 @@ required permission for every non-public request.
 - **Authorization**: a valid credential without the required permission is `403`. The guard runs
   *before* the route handler, so an unauthorised caller cannot reach any handler logic — including
   with a valid-looking but non-existent resource id.
-- **Any-authenticated routes**: cluster infrastructure (`/api/workers`, `/api/jobs`) requires a valid
-  credential but no specific role, because workers and operators both need it. Artifact reads require
-  `project:read`; artifact writes require `automation:edit`.
+- **Cluster infrastructure**: writes to `/api/workers` and `/api/jobs` require `security:admin`.
+  Workers submit authoritative execution results and must use an ADMIN-owned service credential in
+  `AI_QA_AUTH_TOKEN`. Existing Worker keys owned by QA_LEAD or QA_ENGINEER must be replaced by an
+  administrator before restarting those workers; they now receive `403`. Reads require `project:read`.
+  API keys currently inherit their owner's permissions; dedicated worker-only credential scopes are
+  not implemented. Keep this credential on trusted worker hosts. Artifact reads require `project:read`;
+  artifact writes require `automation:edit`.
+- **Job completion**: workers submit real suite results through `/api/jobs/{id}/result`. The legacy
+  `/complete` notification only acknowledges an already completed job; it cannot skip result persistence.
 - **Unknown route families** fall back to `project:read` / `project:write` rather than to "no
   authentication", so a newly added router cannot silently become an open endpoint.
 

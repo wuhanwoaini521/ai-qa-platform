@@ -71,7 +71,7 @@ async def test_run_timeout_can_be_extended_for_a_long_running_task(tmp_path):
     result = await PytestRunner(default_timeout_sec=0.1).run_suite(
         tmp_path,
         nodeids=["tests/test_slow.py::test_slow"],
-        timeout_sec=3,
+        timeout_sec=10,  # Windows pytest startup can take several seconds before the test's 0.4s sleep.
     )
 
     assert result.exit_code == 0

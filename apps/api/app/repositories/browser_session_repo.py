@@ -62,6 +62,8 @@ class BrowserSessionRepository:
         page_evidence: dict | None,
     ) -> BrowserSessionORM | None:
         row = await self.get_by_id(session_id)
+        if row is not None and (row.run_id != run_id or (nodeid and row.nodeid != nodeid)):
+            return None
         if row is None and event_type == "session.started":
             row = BrowserSessionORM(
                 id=session_id,
@@ -87,14 +89,15 @@ class BrowserSessionRepository:
             await self.session.flush()
         return row
 
-    async def append_evidence(self, session_id: str, key: str, entry: dict) -> None:
+    async def append_evidence(self, session_id: str, key: str, entry: dict, *, run_id: str, nodeid: str = "") -> bool:
         row = await self.get_by_id(session_id)
-        if row is None:
-            return
+        if row is None or row.run_id != run_id or (nodeid and row.nodeid != nodeid):
+            return False
         evidence = json.loads(row.page_evidence_json or "{}")
         evidence[key] = [*(evidence.get(key) or []), entry][-100:]
         row.page_evidence_json = json.dumps(evidence, ensure_ascii=False)
         await self.session.flush()
+        return True
 
     async def save_failure_snapshot(
         self,

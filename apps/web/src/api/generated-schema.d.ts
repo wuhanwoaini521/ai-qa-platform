@@ -576,7 +576,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Debug Session */
+        get: operations["get_debug_session_api_debug_sessions__session_id__get"];
         put?: never;
         post?: never;
         /** Close Debug Session */
@@ -2559,23 +2560,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/failures/{failure_id}/analyses/{analysis_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel Failure Analysis */
-        post: operations["cancel_failure_analysis_api_failures__failure_id__analyses__analysis_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/failures/{failure_id}/repair-workflow": {
         parameters: {
             query?: never;
@@ -4343,6 +4327,12 @@ export interface components {
              * @default STARTING
              */
             status: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Execution Id */
+            execution_id?: string | null;
+            /** Failure Id */
+            failure_id?: string | null;
             /** Breakpoints */
             breakpoints?: components["schemas"]["Breakpoint"][];
         };
@@ -4352,6 +4342,8 @@ export interface components {
             workspace_id: string;
             /** Nodeid */
             nodeid: string;
+            /** Failure Id */
+            failure_id?: string | null;
         };
         /** DecisionConnectionResult */
         DecisionConnectionResult: {
@@ -10032,6 +10024,37 @@ export interface operations {
             };
         };
     };
+    get_debug_session_api_debug_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebugSessionBootstrap"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     close_debug_session_api_debug_sessions__session_id__delete: {
         parameters: {
             query?: never;
@@ -14354,38 +14377,6 @@ export interface operations {
             header?: never;
             path: {
                 failure_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_failure_analysis_api_failures__failure_id__analyses__analysis_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                failure_id: string;
-                analysis_id: string;
             };
             cookie?: never;
         };

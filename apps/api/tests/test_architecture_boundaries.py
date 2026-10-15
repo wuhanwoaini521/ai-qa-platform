@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-import re
+import json
 from pathlib import Path
 
 from project_model.models import FailureRepairWorkflow
@@ -221,21 +221,25 @@ def test_shared_packages_do_not_depend_on_application_or_web():
 
 
 def test_failure_repair_typescript_contract_matches_pydantic_dto():
-    schema_fields = set(FailureRepairWorkflow.model_json_schema()["properties"])
-    typescript = (ROOT / "apps/web/src/types/index.ts").read_text(encoding="utf-8")
-    match = re.search(r"export interface FailureRepairWorkflow\s*\{([^}]+)\}", typescript)
-    assert match, "FailureRepairWorkflow TypeScript interface is missing"
-    typescript_fields = set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_]*):", match.group(1), re.MULTILINE))
-    assert typescript_fields == schema_fields
-    definitions = FailureRepairWorkflow.model_json_schema()["$defs"]
+    """The web contract is generated from the Pydantic DTO; validate that generated artifact.
+
+    ``apps/web/src/types/index.ts`` derives its repair types from the generated OpenAPI schema
+    instead of duplicating the interface by hand, so equivalence is guaranteed by regeneration and
+    verified here against the committed schema. The derivation itself is asserted too, so a
+    hand-written copy that could silently drift cannot replace it.
+    """
+    schema = FailureRepairWorkflow.model_json_schema()
+    spec = json.loads((ROOT / "apps/web/src/api/openapi.json").read_text(encoding="utf-8"))
+    schemas = spec["components"]["schemas"]
+    assert set(schemas["FailureRepairWorkflow"]["properties"]) == set(schema["properties"])
+    definitions = schema["$defs"]
     for type_name in ("FailureRepairState", "FailureRepairAction"):
+        generated = set(schemas[type_name]["enum"])
         values = set(definitions[type_name]["enum"])
-        match = re.search(rf"export type {type_name}\s*=([^;]+);", typescript, re.DOTALL)
-        assert match, f"{type_name} TypeScript union is missing"
-        typescript_values = set(re.findall(r"'([^']+)'", match.group(1)))
-        assert typescript_values == values, (
-            f"{type_name} values differ: Python={values}, TypeScript={typescript_values}"
-        )
+        assert generated == values, f"{type_name} values differ: Python={values}, OpenAPI={generated}"
+    typescript = (ROOT / "apps/web/src/types/index.ts").read_text(encoding="utf-8")
+    for type_name in ("FailureRepairWorkflow", "FailureRepairState", "FailureRepairAction"):
+        assert f"ApiSchema['{type_name}']" in typescript, f"{type_name} must derive from the generated ApiSchema"
 
 
 def test_failure_page_renders_backend_owned_workflow_state_and_actions():

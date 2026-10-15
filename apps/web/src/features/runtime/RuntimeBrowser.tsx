@@ -5,6 +5,7 @@ import type { RuntimeSnapshot, RuntimeSourceOpener } from '../../types/runtime';
 import { LiveBrowserPanel } from '../runs/LiveBrowserPanel';
 import { useRunStore } from '../runs/useRunStore';
 import { browserEntries, formatBrowserTimestamp } from './browserModel';
+import { NetworkEvidenceList } from './NetworkEvidenceList';
 import { RuntimeFailureWorkspace } from './RuntimeFailureWorkspace';
 import { runtimeActive } from './runtimeModel';
 
@@ -15,7 +16,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
 }) {
   const { t } = useTranslation('runtime');
   const [selected, setSelected] = useState('');
-  const [selectedFailureId, setSelectedFailureId] = useState('');
+  const [selectedBrowserSessionId, setSelectedBrowserSessionId] = useState<string | null>(null);
   const [channel, setChannel] = useState<
     'recent_steps' | 'network_logs' | 'console_logs'
   >('recent_steps');
@@ -30,7 +31,10 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
   const showLiveBrowser = browserUsed || browserRunActive;
   const recorderSessionId = snapshot.task?.recorder_session_id;
   const failures = snapshot.failures.filter((failure) => !runId || failure.test_run_id === runId);
-  const activeFailure = failures.find((failure) => failure.id === selectedFailureId) ?? failures[0] ?? null;
+  const selectedBrowserSession = live.sessions.find((session) => session.browser_session_id === selectedBrowserSessionId) ?? null;
+  const activeFailure = selectedBrowserSession?.status === 'failed'
+    ? failures.find((failure) => failure.execution_id === selectedBrowserSession.case_execution_id) ?? null
+    : null;
   const failureSession = activeFailure
     ? live.sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
       ?? snapshot.browser_sessions.find((session) => session.case_execution_id === activeFailure.execution_id)
@@ -54,29 +58,20 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
           </select>
         </label>
       )}
-      {failures.length > 1 && (
-        <label className="rt-failure-select">
-          {t('failureWorkspace.failedCase')}{' '}
-          <select value={activeFailure?.id ?? ''} onChange={(event) => setSelectedFailureId(event.target.value)}>
-            {failures.map((failure) => <option key={failure.id} value={failure.id}>{failure.title}</option>)}
-          </select>
-        </label>
-      )}
-      {activeFailure && (
-        <RuntimeFailureWorkspace
-          key={activeFailure.id}
-          failure={activeFailure}
-          projectId={projectId}
-          pageUrl={failureSession?.current_url}
-          onOpenSource={onOpenSource}
-        />
-      )}
       {showLiveBrowser && <LiveBrowserPanel
         sessions={live.sessions}
         frames={live.frames}
         runStatus={live.run?.status ?? snapshot.status}
         streamStatus={live.streamStatus}
         streamError={live.error}
+        onSelectedSessionChange={setSelectedBrowserSessionId}
+        failureWorkspace={activeFailure && <RuntimeFailureWorkspace
+          key={activeFailure.id}
+          failure={activeFailure}
+          projectId={projectId}
+          pageUrl={failureSession?.current_url}
+          onOpenSource={onOpenSource}
+        />}
       />}
       {browserUsed && <>
       {!runId && (
@@ -101,6 +96,8 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
       </div>
       {!entries.length ? (
         <p className="rt-muted">{t('browserEventsUnrecorded')}</p>
+      ) : channel === 'network_logs' ? (
+        <NetworkEvidenceList entries={entries.map(({ entry }) => entry)} />
       ) : (
         <div className="rt-browser-entries">
           {entries.map(({ session, entry }, index) => (

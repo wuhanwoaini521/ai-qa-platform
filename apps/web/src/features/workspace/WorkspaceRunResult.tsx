@@ -1,28 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Activity, AlertCircle, Bot, Check, Circle, Clock3, FileCode2, Image as ImageIcon, RefreshCw, Square, Workflow } from 'lucide-react';
+import { Activity, AlertCircle, Bot, Check, Circle, FileCode2, Maximize2, RefreshCw, Square, Workflow } from 'lucide-react';
 import { api } from '../../api/client';
-import type { FailureRecord, FailureRepairWorkflow, TestCase, TestRun } from '../../types';
+import type { AITraceEvent, FailureRecord, FailureRepairWorkflow, LocatorRepairProposal, TestCase, TestRun } from '../../types';
 import type { RuntimeArtifact, RuntimeEvent, RuntimeSnapshot } from '../../types/runtime';
 import type { WorkspaceContext } from '../../app/workspaceContext';
-import { buildWorkspaceHref } from '../../app/workspaceContext';
 import { failedLocatorFromFailure, failureSourceLocation, normalizeFailureClassification, observedRoleLocatorMismatch, summarizeFailureError } from '../failures/failureWorkspaceModel';
 import { RuntimeArtifactActions } from '../runtime/RuntimeArtifactActions';
-import { TestExecutionResults } from '../runs/TestExecutionResults';
+import { NetworkEvidenceList } from '../runtime/NetworkEvidenceList';
 import { resolveExecutionCase } from '../runs/testExecutionResultsModel';
-import { repairNoticeForRun, terminalRunStatus } from './workspaceRunModel';
 
 type EventFilter = 'all' | 'errors' | 'browser' | 'ai';
-
-interface BrowserStepEvidence {
-  action?: string;
-  locator?: string;
-  status?: string;
-  file?: string;
-  line?: number;
-  duration_ms?: number;
-}
+type EvidenceTab = 'screenshot' | 'snapshot' | 'dom' | 'trace' | 'console' | 'network' | 'source';
+type CaseFilter = 'all' | 'failed' | 'passed' | 'skipped';
+type ResultPanel = 'cases' | 'detail' | 'repair' | 'context';
+type CorrelatedArtifact = RuntimeArtifact & { metadata_json?: Record<string, unknown> };
 
 interface WorkspaceRunResultProps {
   context: WorkspaceContext;
@@ -33,46 +25,42 @@ interface WorkspaceRunResultProps {
   runtimeError: string;
   onRefreshRuntime: () => void;
   projectId: string;
-  onOpenFailure: (failureId: string) => void;
   onOpenCode: (filePath: string, lineNumber?: number) => void;
   onOpenDetails: () => void;
   onOpenStep: (stepId: string) => void;
   onStop: () => void;
   onRerun: () => void;
   onManualAnalysis: () => void;
+  onSelectExecution: (nodeId: string, caseId: string | null) => void;
 }
 
-function browserSteps(run: TestRun): BrowserStepEvidence[] {
-  return (run.browser_sessions ?? []).flatMap((session) => {
-    const values = session.page_evidence?.recent_steps;
-    if (!Array.isArray(values)) return [];
-    return values.filter((value): value is BrowserStepEvidence => Boolean(value) && typeof value === 'object');
-  });
-}
-
-function runArtifacts(run: TestRun, runtime: RuntimeSnapshot | null): RuntimeArtifact[] {
-  const correlatedArtifacts = runtime?.artifacts.filter((artifact) => artifact.test_run_id === run.id) ?? [];
-  if (correlatedArtifacts.length) return correlatedArtifacts;
-  return (run.external_artifacts ?? []).map((artifact) => ({
-    id: artifact.id,
-    artifact_id: typeof artifact.metadata_json.artifact_id === 'string' ? artifact.metadata_json.artifact_id : null,
-    name: artifact.name,
-    type: artifact.type,
+function runArtifacts(run: TestRun, runtime: RuntimeSnapshot | null): CorrelatedArtifact[] {
+  const external = (run.external_artifacts ?? []).map((item): CorrelatedArtifact => ({
+    id: item.id,
+    artifact_id: typeof item.metadata_json.artifact_id === 'string' ? item.metadata_json.artifact_id : null,
+    name: item.name,
+    type: item.type,
     source: 'run',
     step_id: null,
     test_run_id: run.id,
     case_id: null,
-    created_at: artifact.created_at,
+    created_at: item.created_at,
     size_bytes: null,
-    content_type: typeof artifact.metadata_json.content_type === 'string' ? artifact.metadata_json.content_type : null,
-    url: artifact.url,
+    content_type: typeof item.metadata_json.content_type === 'string' ? item.metadata_json.content_type : null,
+    url: item.url,
+    metadata_json: item.metadata_json,
   }));
+  const externalIds = new Set(external.map((item) => item.artifact_id).filter(Boolean));
+  const runtimeItems = runtime?.artifacts.filter((item) =>
+    item.test_run_id === run.id && (!item.artifact_id || !externalIds.has(item.artifact_id)),
+  ) ?? [];
+  return [...external, ...runtimeItems];
 }
 
 function eventTone(status?: string | null): string {
   const normalized = (status ?? '').toUpperCase();
   if (['FAILED', 'ERROR', 'BLOCKED'].includes(normalized)) return 'failed';
-  if (['RUNNING', 'QUEUED', 'WAITING', 'WAITING_FOR_APPROVAL'].includes(normalized)) return 'running';
+  if (['RUNNING', 'QUEUED', 'WAITING', 'WAITING_APPROVAL', 'WAITING_FOR_APPROVAL'].includes(normalized)) return 'running';
   if (['PASSED', 'COMPLETED', 'SUCCESS', 'SUCCEEDED'].includes(normalized)) return 'success';
   return 'muted';
 }
@@ -86,6 +74,22 @@ function formatTime(value?: string | null): string {
   return value ? new Date(value).toLocaleTimeString() : '—';
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function displayEvidence(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+}
+
+function executionState(status: string): CaseFilter | 'other' {
+  if (['FAILED', 'ERROR'].includes(status.toUpperCase())) return 'failed';
+  if (status.toUpperCase() === 'PASSED') return 'passed';
+  if (status.toUpperCase() === 'SKIPPED') return 'skipped';
+  return 'other';
+}
+
 export function WorkspaceRunResult({
   context,
   run,
@@ -95,82 +99,222 @@ export function WorkspaceRunResult({
   runtimeError,
   onRefreshRuntime,
   projectId,
-  onOpenFailure,
   onOpenCode,
   onOpenDetails,
   onOpenStep,
   onStop,
   onRerun,
   onManualAnalysis,
+  onSelectExecution,
 }: WorkspaceRunResultProps) {
-  const { t } = useTranslation('workspace');
+  const { t, i18n } = useTranslation('workspace');
   const { t: tFailures } = useTranslation('failures');
+  const initialNodeId = context.nodeId && run.executions.some((item) => item.nodeid === context.nodeId)
+    ? context.nodeId
+    : run.executions.find((item) => executionState(item.status) === 'failed')?.nodeid ?? run.executions[0]?.nodeid ?? '';
+  const [selectedNodeId, setSelectedNodeId] = useState(initialNodeId);
+  const [activePanel, setActivePanel] = useState<ResultPanel>('detail');
+  const [caseFilter, setCaseFilter] = useState<CaseFilter>('all');
+  const [evidenceTab, setEvidenceTab] = useState<EvidenceTab>('screenshot');
+  const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [failure, setFailure] = useState<FailureRecord | null>(null);
   const [failureLoadState, setFailureLoadState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [failureRefresh, setFailureRefresh] = useState(0);
   const [repair, setRepair] = useState<FailureRepairWorkflow | null>(null);
-  const [repairLoadState, setRepairLoadState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
-  const [repairRefresh, setRepairRefresh] = useState(0);
+  const [repairHistoryLoading, setRepairHistoryLoading] = useState(false);
+  const [repairHistoryError, setRepairHistoryError] = useState('');
+  const [verificationRun, setVerificationRun] = useState<TestRun | null>(null);
+  const [diagnosis, setDiagnosis] = useState<Record<string, unknown> | null>(null);
+  const [analysisEvents, setAnalysisEvents] = useState<AITraceEvent[]>([]);
+  const [analysisId, setAnalysisId] = useState('');
+  const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [actionRunning, setActionRunning] = useState(false);
   const [providerConfig, setProviderConfig] = useState<Awaited<ReturnType<typeof api.getAIProviderSettings>> | null>(null);
   const [jevConfig, setJevConfig] = useState<Awaited<ReturnType<typeof api.getJevSettings>> | null>(null);
   const [configurationUnavailable, setConfigurationUnavailable] = useState(false);
-  const [eventFilter, setEventFilter] = useState<EventFilter>('all');
-  const [logExpanded, setLogExpanded] = useState(false);
-  const [evidenceExpanded, setEvidenceExpanded] = useState(['FAILED', 'ERROR'].includes(run.status));
-  useEffect(() => {
-    setEvidenceExpanded(['FAILED', 'ERROR'].includes(run.status));
-  }, [run.id, run.status]);
+  const analysisController = useRef<AbortController | null>(null);
+  const focusOnPanelCard = (panel: ResultPanel) => (event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, summary')) return;
+    setActivePanel(panel);
+  };
 
   const runRuntime = runtime?.kind === 'run' && runtime.id === run.id ? runtime : null;
-  const runtimeFailureId = runRuntime?.failures.find((item) => item.test_run_id === run.id)?.id ?? null;
-  const runtimeFailureIndexReady = Boolean(runRuntime);
+  const runtimeReady = Boolean(runRuntime);
+  const selectedExecution = run.executions.find((item) => item.nodeid === selectedNodeId) ?? run.executions[0] ?? null;
+  const selectedIdentity = selectedExecution ? resolveExecutionCase(selectedExecution.nodeid, testCases) : null;
+  const runtimeFailure = selectedExecution
+    ? runRuntime?.failures.find((item) => item.test_run_id === run.id && item.execution_id === selectedExecution.id) ?? null
+    : null;
+  const hasFailures = run.executions.some((item) => executionState(item.status) === 'failed');
+  const focusedPanel = activePanel === 'repair' && !hasFailures ? 'detail' : activePanel;
+  const isRunActive = ['RUNNING', 'QUEUED'].includes(run.status);
+  const events = (runRuntime?.events ?? []).filter((event) => event.test_run_id === run.id);
+  const artifacts = useMemo(() => runArtifacts(run, runRuntime), [run, runRuntime]);
+  const browserSession = run.browser_sessions?.find((item) => item.nodeid === selectedExecution?.nodeid) ?? null;
+  const pageEvidence = browserSession?.page_evidence ?? {};
+  const nodeName = selectedExecution?.nodeid.split('::').at(-1) ?? '';
+  const nodeFile = selectedExecution?.nodeid.split('::')[0] ?? '';
+  const selectedArtifacts = useMemo(() => {
+    if (!selectedExecution) return [];
+    const sessionId = browserSession?.browser_session_id;
+    const expectedNames = new Set((selectedExecution.artifact_paths ?? []).map((path) => path.split(/[\\/]/).at(-1)?.toLowerCase()));
+    return artifacts.filter((item) => {
+      const metadata = item.metadata_json ?? {};
+      const artifactSession = metadata.browser_session_id;
+      const name = item.name.split(/[\\/]/).at(-1)?.toLowerCase() ?? '';
+      return (Boolean(sessionId) && artifactSession === sessionId)
+        || name === nodeName.toLowerCase() + '.png'
+        || name === nodeName.toLowerCase() + '.zip'
+        || name === nodeName.toLowerCase() + '.html'
+        || expectedNames.has(name)
+        || Boolean(selectedIdentity?.caseId && item.case_id === selectedIdentity.caseId);
+    });
+  }, [artifacts, browserSession?.browser_session_id, nodeName, selectedExecution, selectedIdentity?.caseId]);
+  const screenshots = selectedArtifacts.filter((item) => item.type.toUpperCase().includes('SCREENSHOT') || item.content_type?.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(item.name));
+  const traces = selectedArtifacts.filter((item) => item.type.toUpperCase().includes('TRACE') || /\.zip$/i.test(item.name));
+  const domArtifacts = selectedArtifacts.filter((item) => /dom|snapshot/i.test(item.type + ' ' + item.name) && !item.type.toUpperCase().includes('SCREENSHOT'));
+  const locator = failure ? failure.failing_locator || failedLocatorFromFailure(failure) : '';
+  const source = failure ? failureSourceLocation(failure) : null;
+  const selectedSteps = Array.isArray(pageEvidence.recent_steps) ? pageEvidence.recent_steps.map(asRecord).filter(Boolean) : [];
+  const failedStep = [...selectedSteps].reverse().find((item) => String(item?.status ?? '').toUpperCase() === 'FAILED');
+  const sourcePath = source?.filePath ?? (typeof failedStep?.file === 'string' ? failedStep.file : nodeFile || null);
+  const sourceLine = source?.lineNumber ?? (typeof failedStep?.line === 'number' ? failedStep.line : undefined);
+  const selectedEvents = useMemo(() => {
+    const linked = events.filter((event) => String(event.metadata.nodeid ?? event.metadata.test_nodeid ?? '') === selectedExecution?.nodeid);
+    return linked.length ? linked : [...events].sort((a, b) => {
+      const aError = ['FAILED', 'ERROR', 'BLOCKED'].includes((a.status ?? '').toUpperCase()) ? 1 : 0;
+      const bError = ['FAILED', 'ERROR', 'BLOCKED'].includes((b.status ?? '').toUpperCase()) ? 1 : 0;
+      return bError - aError;
+    });
+  }, [events, selectedExecution?.nodeid]);
+  const filteredEvents = selectedEvents.filter((event) => {
+    if (eventFilter === 'errors') return ['FAILED', 'ERROR', 'BLOCKED'].includes((event.status ?? '').toUpperCase()) || event.category === 'failure';
+    if (eventFilter === 'browser') return event.category === 'browser';
+    if (eventFilter === 'ai') return event.category === 'ai' || event.category === 'decision';
+    return true;
+  });
+  const eventAssociationIsExact = selectedEvents.some((event) => String(event.metadata.nodeid ?? event.metadata.test_nodeid ?? '') === selectedExecution?.nodeid);
+  const aiEvent = [...analysisEvents].reverse().find((item) => item.type.startsWith('model.') || item.stage === 'diagnosis');
+  const jevEvent = [...analysisEvents].reverse().find((item) =>
+    item.stage === 'decision' || String(item.metadata.provider ?? '').toLowerCase() === 'jev',
+  );
+  const proposal = (repair?.repair_proposal ?? failure?.repair_proposal ?? null) as LocatorRepairProposal | null;
+  const codeDiff = proposal?.code_diff ?? null;
+  const jevCalled = Boolean(jevEvent || proposal?.provider?.toLowerCase() === 'jev');
+  const aiProviderLabel = aiEvent?.metadata.provider
+    ? [String(aiEvent.metadata.provider), aiEvent.metadata.model ? String(aiEvent.metadata.model) : ''].filter(Boolean).join(' · ')
+    : diagnosis?.provider
+      ? [String(diagnosis.provider), typeof diagnosis.model === 'string' ? diagnosis.model : ''].filter(Boolean).join(' · ')
+      : providerConfig
+        ? [providerConfig.provider, providerConfig.model].filter(Boolean).join(' · ')
+        : configurationUnavailable ? t('result.configUnavailable') : t('result.configLoading');
+  const caseRows = useMemo(() => run.executions.map((execution) => ({
+    execution,
+    identity: resolveExecutionCase(execution.nodeid, testCases),
+  })).sort((a, b) => {
+    const order: Record<CaseFilter | 'other', number> = { failed: 0, other: 1, passed: 2, skipped: 3, all: 4 };
+    const rank = (value: string) => order[executionState(value)];
+    return rank(a.execution.status) - rank(b.execution.status);
+  }), [run.executions, testCases]);
+  const filteredCases = caseRows.filter(({ execution }) => caseFilter === 'all' || executionState(execution.status) === caseFilter);
+  const counts = {
+    total: run.executions.length,
+    passed: run.executions.filter((item) => executionState(item.status) === 'passed').length,
+    failed: run.executions.filter((item) => executionState(item.status) === 'failed').length,
+    skipped: run.executions.filter((item) => executionState(item.status) === 'skipped').length,
+  };
+  const isSelectedError = selectedExecution ? executionState(selectedExecution.status) === 'failed' : false;
+  const diagnosisRootCause = typeof diagnosis?.root_cause === 'string' ? diagnosis.root_cause : '';
+  const diagnosisEvidence = Array.isArray(diagnosis?.evidence) ? diagnosis.evidence.filter((value): value is string => typeof value === 'string') : [];
+  const repairState = repair?.state ?? null;
+  const canRestartAnalysis = repair?.allowed_actions.includes('START_ANALYSIS') === true
+    || Boolean(!repair && analysisId && analysisError && !repairHistoryError);
+  const canStartInitialAnalysis = !repair && !analysisId && !repairHistoryLoading && !repairHistoryError;
+  const canStartAnalysis = canRestartAnalysis || canStartInitialAnalysis;
+  const canApplyPatch = Boolean(failure && analysisId && proposal && repair?.allowed_actions.includes('APPLY'));
+  const canVerifyPatch = Boolean(failure && analysisId && repair?.allowed_actions.includes('VERIFY'));
+  const canRollbackPatch = Boolean(failure && analysisId && repair?.allowed_actions.includes('ROLLBACK'));
+  const workflowStages = [
+    { id: 'evidence', label: t('result.repairStages.evidence'), status: failure ? 'SUCCEEDED' : failureLoadState === 'loading' ? 'PENDING' : 'UNAVAILABLE', detail: failure ? t('result.caseEvidenceReady', { count: selectedArtifacts.length }) : t('result.caseEvidenceUnavailable') },
+    { id: 'diagnosis', label: t('result.repairStages.diagnosis'), status: analysisRunning ? 'RUNNING' : analysisError ? 'FAILED' : diagnosisRootCause ? 'SUCCEEDED' : 'NOT_STARTED', detail: diagnosisRootCause || analysisError || (analysisEvents.length ? aiEvent?.message ?? '' : t('result.aiNotStarted')) },
+    { id: 'decision', label: t('result.repairStages.decision'), status: jevCalled ? jevEvent?.status ?? 'SUCCEEDED' : analysisRunning ? 'RUNNING' : 'NOT_CALLED', detail: jevCalled ? jevEvent?.message ?? t('result.jevActuallyCalled') : analysisError ? t('result.jevNotReached') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : jevConfig ? t('result.jevDisabled') : t('result.configUnavailable') },
+    { id: 'patch', label: t('result.repairStages.patch'), status: codeDiff ? 'SUCCEEDED' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : analysisError ? 'FAILED' : 'NOT_STARTED', detail: codeDiff ? proposal?.file_path ?? t('result.diffReady') : repairState === 'BLOCKED' ? t('result.repairWorkflowBlocked') : repairState === 'NOT_APPLICABLE' ? t('result.repairNotApplicable') : t('result.diffNotGenerated') },
+    { id: 'apply', label: t('result.repairStages.apply'), status: repairState === 'APPLYING' ? 'RUNNING' : repairState === 'ROLLED_BACK' ? 'ROLLED_BACK' : proposal?.applied || ['PATCH_APPLIED', 'VERIFYING_FIX', 'VERIFIED'].includes(repairState ?? '') ? 'SUCCEEDED' : canApplyPatch ? 'WAITING_APPROVAL' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : 'NOT_STARTED', detail: canApplyPatch ? t('result.patchApprovalPending') : repair?.repair_id ?? t('result.patchNotApplied') },
+    { id: 'verify', label: t('result.repairStages.verify'), status: repairState === 'VERIFYING_FIX' ? 'RUNNING' : repair?.verified || repairState === 'VERIFIED' ? 'SUCCEEDED' : ['FAILED', 'ERROR', 'CANCELLED'].includes(repair?.verification_run_status ?? '') ? repair?.verification_run_status ?? 'FAILED' : canVerifyPatch ? 'WAITING' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : 'NOT_STARTED', detail: canVerifyPatch ? t('result.verificationReady') : repair?.verification_run_id ?? t('result.verificationNotStarted') },
+  ];
+
+  useEffect(() => {
+    if (context.nodeId && run.executions.some((item) => item.nodeid === context.nodeId)) setSelectedNodeId(context.nodeId);
+  }, [context.nodeId, run.executions]);
 
   useEffect(() => {
     let active = true;
+    analysisController.current?.abort();
     setFailure(null);
     setRepair(null);
-    if (!runtimeFailureIndexReady) {
+    setVerificationRun(null);
+    setRepairHistoryError('');
+    setDiagnosis(null);
+    setAnalysisEvents([]);
+    setAnalysisId('');
+    setAnalysisError('');
+    setActionError('');
+    if (!isSelectedError) {
+      setFailureLoadState('loaded');
+      return () => { active = false; };
+    }
+    if (!runtimeReady) {
       setFailureLoadState(runtimeError ? 'error' : 'loading');
       return () => { active = false; };
     }
-    if (!runtimeFailureId) {
-      setFailure(null);
+    if (!runtimeFailure) {
       setFailureLoadState('loaded');
       return () => { active = false; };
     }
     setFailureLoadState('loading');
-    void api.getFailure(runtimeFailureId).then((item) => {
+    void api.getFailure(runtimeFailure.id).then((item) => {
       if (!active) return;
-      if (item.run_id !== run.id) throw new Error('Failure record does not belong to the selected Run');
+      if (item.run_id !== run.id || item.execution_id !== selectedExecution?.id) throw new Error('Failure record does not belong to the selected execution');
       setFailure(item);
       setFailureLoadState('loaded');
     }).catch(() => {
-      if (!active) return;
-      setFailure(null);
-      setFailureLoadState('error');
+      if (active) {
+        setFailure(null);
+        setFailureLoadState('error');
+      }
     });
     return () => { active = false; };
-  }, [projectId, run.id, run.status, failureRefresh, runtimeFailureId, runtimeFailureIndexReady, runtimeError]);
+  }, [projectId, run.id, runtimeReady, runtimeError, runtimeFailure?.id, selectedExecution?.id, isSelectedError, failureRefresh]);
 
   useEffect(() => {
-    let active = true;
-    setRepair(null);
     if (!failure) {
-      setRepairLoadState('idle');
-      return () => { active = false; };
+      setRepairHistoryLoading(false);
+      setRepairHistoryError('');
+      return;
     }
-    setRepairLoadState('loading');
-    void api.getFailureRepairWorkflow(failure.id).then((value) => {
+    let active = true;
+    setRepairHistoryLoading(true);
+    setRepairHistoryError('');
+    void api.getFailureAnalyses(failure.id).then(async (rows) => {
       if (!active) return;
-      setRepair(value);
-      setRepairLoadState('loaded');
-    }).catch(() => {
-      if (!active) return;
-      setRepair(null);
-      setRepairLoadState('error');
-    });
+      const latest = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      if (!latest) return;
+      setAnalysisId(latest.id);
+      setAnalysisEvents(latest.events);
+      setDiagnosis(asRecord(latest.result.diagnosis));
+      const failedEvent = [...latest.events].reverse().find((event) =>
+        event.type === 'run.failed' || (event.stage === 'diagnosis' && event.status === 'FAILED'),
+      );
+      setAnalysisError(failedEvent?.message ?? (latest.status === 'FAILED' ? t('result.aiAnalysisFailed') : ''));
+      const workflow = await api.getFailureRepairWorkflow(failure.id, latest.id);
+      if (active) setRepair(workflow);
+    }).catch((error) => {
+      if (active) setRepairHistoryError(error instanceof Error ? error.message : String(error));
+    }).finally(() => { if (active) setRepairHistoryLoading(false); });
     return () => { active = false; };
-  }, [failure?.id, repairRefresh]);
+  }, [failure?.id]);
 
   useEffect(() => {
     let active = true;
@@ -179,361 +323,283 @@ export function WorkspaceRunResult({
       setProviderConfig(provider);
       setJevConfig(jev);
       setConfigurationUnavailable(false);
-    }).catch(() => {
-      if (active) setConfigurationUnavailable(true);
-    });
+    }).catch(() => { if (active) setConfigurationUnavailable(true); });
     return () => { active = false; };
   }, []);
 
-  const events = (runRuntime?.events ?? []).filter((event) => event.test_run_id === run.id);
-  const allRunRuntimeInvocations = runRuntime?.ai_invocations ?? [];
-  const runInvocations = allRunRuntimeInvocations.filter((item) => item.test_run_id === run.id);
-  const unlinkedAiInvocation = [...allRunRuntimeInvocations].reverse().find((item) => item.test_run_id !== run.id) ?? null;
-  const unlinkedJevDecision = [...(runRuntime?.decisions ?? [])].reverse().find((item) => item.provider.trim().toLowerCase() === 'jev') ?? null;
-  const unlinkedEvidenceExists = Boolean(runRuntime?.evidence.length);
-  const browserEvidence = useMemo(() => browserSteps(run), [run]);
-  const failedBrowserStep = [...browserEvidence].reverse().find((step) => step.status?.toUpperCase() === 'FAILED');
-  const failedBrowserEvent = [...events].reverse().find((event) =>
-    event.category === 'browser' && ['FAILED', 'ERROR'].includes((event.status ?? '').toUpperCase()),
-  );
-  const artifacts = useMemo(() => runArtifacts(run, runRuntime), [run, runRuntime]);
-  const screenshots = artifacts.filter((item) => item.type.toUpperCase().includes('SCREENSHOT') || item.content_type?.startsWith('image/'));
-  const traces = artifacts.filter((item) => item.type.toUpperCase().includes('TRACE'));
-  const reports = artifacts.filter((item) => item.type.toUpperCase().includes('REPORT') || item.type.toUpperCase().includes('HTML'));
-  const aiInvocation = runInvocations.at(-1) ?? null;
-  const aiEvent = [...events].reverse().find((event) => event.category === 'ai') ?? null;
-  const aiStep = aiInvocation?.step_id ? runRuntime?.steps.find((item) => item.id === aiInvocation.step_id) ?? null : null;
-  const decisionEvent = [...events].reverse().find((event) =>
-    event.category === 'decision'
-    && (String(event.metadata.provider ?? '').trim().toLowerCase() === 'jev' || event.type.toLowerCase().includes('jev')),
-  ) ?? null;
-  const aiProvider = aiInvocation?.provider ?? (typeof aiEvent?.metadata.provider === 'string' ? aiEvent.metadata.provider : null);
-  const aiModel = aiInvocation?.model ?? (typeof aiEvent?.metadata.model === 'string' ? aiEvent.metadata.model : null);
-  const aiOutputSummary = aiStep?.outputs_summary?.trim()
-    || (typeof aiEvent?.metadata.output_summary === 'string' ? aiEvent.metadata.output_summary : '');
-  const repairState = repair?.state ?? null;
-  const verificationRunStatus = repair?.verification_run_status?.toUpperCase() ?? null;
-  const proposal = repair?.repair_proposal ?? failure?.repair_proposal ?? null;
-  const repairHasJevDecision = proposal?.provider?.trim().toLowerCase() === 'jev';
-  const diff = proposal?.code_diff ?? null;
-  const source = failure ? failureSourceLocation(failure) : null;
-  const sourcePath = failedBrowserStep?.file ?? source?.filePath ?? run.nodeids[0]?.split('::')[0] ?? null;
-  const sourceLine = failedBrowserStep?.line ?? source?.lineNumber ?? undefined;
-  const isTimeout = run.status === 'ERROR' && /execution timed out|timed out|timeout/i.test(run.log_output ?? '');
-  const isRunActive = ['RUNNING', 'QUEUED'].includes(run.status);
-  const terminalStatus = terminalRunStatus(run.status);
-  const repairNotice = repairNoticeForRun(run.status, Boolean(failure), Boolean(runRuntime?.ai_invocations.length));
-  const resultCount = run.executions.length;
-  const passedCount = run.executions.filter((item) => item.status === 'PASSED').length;
-  const failedCount = run.executions.filter((item) => item.status === 'FAILED').length;
-  const filteredEvents = useMemo(() => events.filter((event) => {
-    if (eventFilter === 'errors') return ['FAILED', 'ERROR', 'BLOCKED'].includes((event.status ?? '').toUpperCase()) || event.category === 'failure';
-    if (eventFilter === 'browser') return event.category === 'browser';
-    if (eventFilter === 'ai') return event.category === 'ai' || event.category === 'decision';
-    return true;
-  }), [events, eventFilter]);
+  useEffect(() => () => analysisController.current?.abort(), []);
 
-  const stageStatus = (status: string) => t('result.stageState.' + status, { defaultValue: status.replaceAll('_', ' ') });
-  const rawInvocationStatus = (aiInvocation?.status ?? aiEvent?.status ?? (unlinkedAiInvocation ? 'UNAVAILABLE' : runRuntime ? 'NOT_STARTED' : 'UNAVAILABLE')).toUpperCase();
-  const aiHasRecordedOutput = Boolean(aiOutputSummary);
-  const invocationCompleted = ['SUCCESS', 'SUCCEEDED', 'COMPLETED', 'PASSED'].includes(rawInvocationStatus);
-  const invocationStatus = invocationCompleted
-    ? aiHasRecordedOutput ? 'SUCCEEDED' : 'UNAVAILABLE'
-    : rawInvocationStatus;
-  const jevStatus = decisionEvent?.status?.toUpperCase()
-    ?? (repairHasJevDecision ? 'SUCCEEDED' : unlinkedJevDecision ? 'UNAVAILABLE' : runRuntime ? 'NOT_CALLED' : 'UNAVAILABLE');
-  const jevCallObserved = Boolean(decisionEvent || repairHasJevDecision);
-  const patchStatus = diff
-    ? 'SUCCEEDED'
-    : failureLoadState === 'loading' || repairLoadState === 'loading'
-      ? 'PENDING'
-      : failureLoadState === 'error' || repairLoadState === 'error'
-        ? 'UNAVAILABLE'
-        : repairState === 'PATCH_READY'
-          ? proposal ? 'WAITING_APPROVAL' : 'UNAVAILABLE'
-          : repairState === 'BLOCKED' ? 'BLOCKED' : 'NOT_STARTED';
-  const applyStatus = repairState === 'APPLYING'
-    ? 'RUNNING'
-    : repairState === 'ROLLED_BACK'
-      ? 'ROLLED_BACK'
-      : proposal?.applied === true || ['PATCH_APPLIED', 'VERIFYING_FIX', 'VERIFIED'].includes(repairState ?? '')
-      ? 'SUCCEEDED'
-      : failureLoadState === 'loading' || repairLoadState === 'loading'
-        ? 'PENDING'
-        : failureLoadState === 'error' || repairLoadState === 'error'
-          ? 'UNAVAILABLE'
-          : repairState === 'BLOCKED' ? 'SKIPPED' : 'NOT_STARTED';
-  const verificationFailureStatus = repairState === 'FAILED'
-    ? 'FAILED'
-    : ['FAILED', 'ERROR', 'CANCELLED'].includes(verificationRunStatus ?? '')
-      ? verificationRunStatus
-      : null;
-  const verifyStatus = verificationFailureStatus
-    ?? (repairState === 'VERIFYING_FIX'
-      ? 'RUNNING'
-      : repair?.verified === true || repairState === 'VERIFIED'
-      ? 'SUCCEEDED'
-      : failureLoadState === 'loading' || repairLoadState === 'loading'
-        ? 'PENDING'
-        : failureLoadState === 'error' || repairLoadState === 'error'
-          ? 'UNAVAILABLE'
-          : repairState === 'BLOCKED'
-            ? 'SKIPPED'
-            : verificationRunStatus === 'PASSED'
-              ? 'UNAVAILABLE'
-              : 'NOT_STARTED');
-  const evidenceStatus = artifacts.length || failedBrowserEvent || failure
-    ? 'SUCCEEDED'
-    : unlinkedEvidenceExists || runRuntime ? 'UNAVAILABLE' : 'PENDING';
-  const timeoutMessage = (run.log_output ?? '').split(/\r?\n/).reverse().find((line) => /timed out|timeout/i.test(line));
-  const resultMessage = isTimeout
-    ? timeoutMessage || t('result.runTimedOutDescription')
-    : run.status === 'ERROR'
-      ? t('result.runErrorDescription')
-      : t('result.runStatusDescription.' + run.status, { defaultValue: run.status });
-  const resultUnavailableDescription = isRunActive
-    ? t('result.resultUnavailableActive', { status: t('result.runStatus.' + run.status, { defaultValue: run.status }) })
-    : run.status === 'ERROR'
-      ? t('result.resultUnavailableError')
-      : t('result.resultUnavailableTerminal', { status: t('result.runStatus.' + run.status, { defaultValue: run.status }) });
-  const verificationDetail = verificationRunStatus === 'PASSED' && repair?.verified !== true
-    ? t('result.verificationNotConfirmed')
-    : null;
-  const aiProviderLabel = aiProvider
-    ? [aiProvider, aiModel].filter(Boolean).join(' · ')
-    : unlinkedAiInvocation
-      ? [unlinkedAiInvocation.provider, unlinkedAiInvocation.model, t('result.unlinked')].filter(Boolean).join(' · ')
-    : providerConfig
-      ? [providerConfig.provider, providerConfig.model].filter(Boolean).join(' · ')
-      : configurationUnavailable ? t('result.configUnavailable') : t('result.configLoading');
-  const primaryFailureText = failure?.error_message
-    ?? (failedBrowserStep
-      ? [failedBrowserStep.action, failedBrowserStep.locator].filter(Boolean).join(' · ')
-      : failedBrowserEvent?.summary)
-    ?? (failureLoadState === 'loading'
-      ? t('result.failureLoading')
-      : failureLoadState === 'error' ? t('result.failureLoadError') : t('result.noFailureEvidence'));
-  const failedNodeId = failure?.test_nodeid
-    ?? run.executions.find((item) => ['FAILED', 'ERROR'].includes(item.status))?.nodeid;
-  const failedIdentity = failedNodeId ? resolveExecutionCase(failedNodeId, testCases) : null;
-  const failureCaseLabel = failedIdentity?.mapping === 'matched'
-    ? `${failedIdentity.displayId} · ${failedIdentity.title}`
-    : failedNodeId;
-  const expectedCase = failedIdentity?.mapping === 'matched'
-    ? testCases.find((item) => item.id === failedIdentity.caseId)
-    : undefined;
-  const expectedResult = expectedCase?.expected_result.trim();
-  const locatorMismatch = failure ? observedRoleLocatorMismatch(failure) : null;
+  const verificationId = verificationRun?.id ?? repair?.verification_run_id ?? null;
+  const verificationPending = repair?.state === 'VERIFYING_FIX'
+    || ['QUEUED', 'RUNNING'].includes(verificationRun?.status ?? repair?.verification_run_status ?? '');
+  useEffect(() => {
+    if (!failure || !analysisId || !verificationId) return;
+    let active = true;
+    const refreshVerification = async () => {
+      try {
+        const [nextRun, nextWorkflow] = await Promise.all([
+          api.getTestRun(verificationId),
+          api.getFailureRepairWorkflow(failure.id, analysisId),
+        ]);
+        if (!active) return;
+        setVerificationRun(nextRun);
+        setRepair(nextWorkflow);
+      } catch (error) {
+        if (active) setActionError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void refreshVerification();
+    if (!verificationPending) return () => { active = false; };
+    const timer = window.setInterval(() => void refreshVerification(), 2000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [failure?.id, analysisId, verificationId, verificationPending]);
+
+  const selectExecution = (nodeId: string, caseId: string | null) => {
+    setSelectedNodeId(nodeId);
+    setEvidenceTab('screenshot');
+    setActivePanel('detail');
+    onSelectExecution(nodeId, caseId);
+  };
+
+  const startAnalysis = async () => {
+    if (!failure || analysisRunning) return;
+    analysisController.current?.abort();
+    const controller = new AbortController();
+    analysisController.current = controller;
+    setAnalysisRunning(true);
+    setAnalysisError('');
+    setDiagnosis(null);
+    setRepair(null);
+    setAnalysisEvents([]);
+    setAnalysisId('');
+    setActionError('');
+    setRepairHistoryError('');
+    try {
+      let completedAnalysisId = '';
+      await api.streamFailureWorkflow(failure.id, (event) => {
+        if (controller.signal.aborted) return;
+        setAnalysisEvents((previous) => [...previous, event]);
+        const eventDiagnosis = asRecord(event.metadata.diagnosis);
+        if (eventDiagnosis) setDiagnosis(eventDiagnosis);
+        if (typeof event.metadata.analysis_id === 'string') {
+          completedAnalysisId = event.metadata.analysis_id;
+          setAnalysisId(event.metadata.analysis_id);
+        }
+        const eventProposal = asRecord(event.metadata.repair_proposal);
+        if (eventProposal) setRepair((current) => current ? { ...current, repair_proposal: eventProposal as LocatorRepairProposal } : current);
+        if (event.type === 'run.failed') setAnalysisError(event.message || t('result.aiAnalysisFailed'));
+      }, controller.signal, i18n.resolvedLanguage ?? i18n.language);
+      if (controller.signal.aborted) return;
+      const rows = await api.getFailureAnalyses(failure.id);
+      const analysis = rows.find((item) => item.id === completedAnalysisId) ?? rows[0];
+      if (!analysis) throw new Error(t('result.analysisRecordMissing'));
+      setAnalysisId(analysis.id);
+      setDiagnosis(asRecord(analysis.result.diagnosis));
+      const workflow = await api.getFailureRepairWorkflow(failure.id, analysis.id);
+      setRepair(workflow);
+    } catch (error) {
+      if (!controller.signal.aborted) setAnalysisError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (analysisController.current === controller) {
+        analysisController.current = null;
+        setAnalysisRunning(false);
+      }
+    }
+  };
+
+  const applyPatch = async () => {
+    if (!failure || !analysisId || !proposal || !repair?.allowed_actions.includes('APPLY')) return;
+    const oldCode = proposal.source_locator || proposal.old_locator || '';
+    const newCode = proposal.proposed_locator || '';
+    if (!oldCode || !newCode || oldCode.trim() === newCode.trim()) {
+      setActionError(t('result.patchNotApplicable'));
+      return;
+    }
+    setActionRunning(true);
+    setActionError('');
+    try {
+      const result = await api.applyRepair(failure.id, analysisId, {
+        file_path: proposal.file_path || failure.test_nodeid.split('::')[0],
+        old_code: oldCode,
+        new_code: newCode,
+      });
+      setRepair(result.repair);
+      setFailure(await api.getFailure(failure.id));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActionRunning(false);
+    }
+  };
+
+  const verifyPatch = async () => {
+    if (!failure || !analysisId || !repair?.allowed_actions.includes('VERIFY')) return;
+    setActionRunning(true);
+    setActionError('');
+    try {
+      const startedRun = await api.startFailureVerification(failure.id, analysisId);
+      setVerificationRun(startedRun);
+      const refreshedWorkflow = await api.getFailureRepairWorkflow(failure.id, analysisId);
+      setRepair(refreshedWorkflow);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActionRunning(false);
+    }
+  };
+
+  const retryFailure = () => {
+    setFailureLoadState('loading');
+    setFailureRefresh((value) => value + 1);
+    onRefreshRuntime();
+  };
+
+  const stageLabel = (status: string) => t('result.stageState.' + status, { defaultValue: status.replaceAll('_', ' ') });
+  const statusMessage = selectedExecution
+    ? executionState(selectedExecution.status) === 'failed'
+      ? (failure?.error_message || selectedExecution.error_message || t('result.failureLoading'))
+      : executionState(selectedExecution.status) === 'passed'
+        ? t('result.selectedCasePassed')
+        : executionState(selectedExecution.status) === 'skipped'
+          ? t('result.selectedCaseSkipped')
+          : t('result.selectedCaseInProgress')
+    : t('result.caseExecutionResults.empty');
   const failureKind = failure
-    ? locatorMismatch || summarizeFailureError(failure.error_message, failure.classification) === 'locatorTimeout'
+    ? observedRoleLocatorMismatch(failure) || summarizeFailureError(failure.error_message, failure.classification) === 'locatorTimeout'
       ? 'LOCATOR_CHANGED'
       : normalizeFailureClassification(failure.classification)
     : null;
-  const failureTypeLabel = failureKind
-    ? t(`result.failureTypes.${failureKind}`, { defaultValue: failureKind.replaceAll('_', ' ') })
-    : t('result.failureClassificationUnavailable');
-  const observedFailureSummary = locatorMismatch
-    ? t('result.locatorMismatch', {
-        role: t(`result.controlRoles.${locatorMismatch.role}`, { defaultValue: locatorMismatch.role }),
-        expectedName: locatorMismatch.expectedName,
-        observedNames: locatorMismatch.observedNames.map((name) => `“${name}”`).join('、'),
-      })
-    : failure?.error_message
-    ? (() => {
-        const summary = summarizeFailureError(failure.error_message, failure.classification);
-        if (summary === 'browserLaunchEperm') return tFailures('summary.browserLaunch');
-        if (summary === 'locatorTimeout') {
-          return tFailures('summary.locatorTimeout', { locator: failure.failing_locator || failedLocatorFromFailure(failure) || '—' });
-        }
-        if (summary === 'timeout') return tFailures('summary.timeout');
-        if (summary === 'assertion') return tFailures('summary.assertion');
-        return tFailures('summary.generic', { detail: summary });
-      })()
-    : failedBrowserStep
-      ? [failedBrowserStep.action, failedBrowserStep.locator].filter(Boolean).join(' · ')
-      : failedBrowserEvent?.summary ?? primaryFailureText;
-
-  const workflowStages = [
-    { id: 'evidence', label: t('result.repairStages.evidence'), status: evidenceStatus, meta: artifacts.length ? t('result.artifactCount', { count: artifacts.length }) : unlinkedEvidenceExists ? t('result.evidenceUnlinked') : t('result.noEvidenceYet'), duration: null },
-    { id: 'diagnosis', label: t('result.repairStages.diagnosis'), status: invocationStatus, meta: aiProvider ? [aiProvider, aiModel].filter(Boolean).join(' · ') : unlinkedAiInvocation ? t('result.aiInvocationUnlinked') : t('result.aiNotStarted'), detail: aiStep?.error ?? aiOutputSummary ?? (invocationCompleted && !aiHasRecordedOutput ? t('result.aiOutputNotRecorded') : unlinkedAiInvocation ? t('result.aiInvocationUnlinkedDetail') : aiEvent?.summary ?? null), duration: aiInvocation?.duration_ms ?? aiEvent?.duration_ms ?? null },
-    { id: 'decision', label: t('result.repairStages.decision'), status: jevStatus, meta: decisionEvent ? (typeof decisionEvent.metadata.selected === 'string' ? `Jev · ${decisionEvent.metadata.selected}` : 'Jev') : repairHasJevDecision ? `Jev · ${proposal?.proposed_locator ?? proposal?.candidate_id ?? ''}` : unlinkedJevDecision ? t('result.jevDecisionUnlinked') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : t('result.jevDisabled'), detail: decisionEvent?.summary ?? null, duration: decisionEvent?.duration_ms ?? null },
-    { id: 'patch', label: t('result.repairStages.patch'), status: patchStatus, meta: diff ? (proposal?.file_path ?? t('result.diffReady')) : t('result.diffNotGenerated'), duration: null },
-    { id: 'apply', label: t('result.repairStages.apply'), status: applyStatus, meta: repair?.repair_id ?? t('result.patchNotApplied'), duration: null },
-    { id: 'verify', label: t('result.repairStages.verify'), status: verifyStatus, meta: repair?.verification_run_id ?? t('result.verificationNotStarted'), detail: verificationDetail, duration: null },
-  ];
-  const retryFailureLoad = () => {
-    setFailureRefresh((value) => value + 1);
-    if (!runtimeFailureIndexReady) onRefreshRuntime();
-  };
+  const failureTypeLabel = failureKind ? t(`result.failureTypes.${failureKind}`, { defaultValue: failureKind.replaceAll('_', ' ') }) : '';
+  const errorLines = Array.isArray(pageEvidence.console_logs) ? pageEvidence.console_logs : failure?.console_logs ?? [];
+  const networkLines = Array.isArray(pageEvidence.network_logs) ? pageEvidence.network_logs : [];
+  const controls = Array.isArray(pageEvidence.controls) ? pageEvidence.controls : [];
+  const domPathArtifact = failure?.dom_snapshot_path
+    ? selectedArtifacts.find((item) => item.name.split(/[\\/]/).at(-1) === failure.dom_snapshot_path?.split(/[\\/]/).at(-1))
+    : domArtifacts[0];
 
   return (
-    <section className="workspace-result-surface" aria-label={t('result.runResult')}>
-      <header className="workspace-result-topbar">
-        <div className="workspace-result-identity">
+    <section className="workspace-result-surface workspace-result-v2" aria-label={t('result.runResult')}>
+      <header className="workspace-result-overview">
+        <div className="workspace-result-overview-title">
+          <div><span className="workspace-eyebrow">{t('result.overviewEyebrow')}</span><h2>{t('result.runTitle')} <code>{run.id}</code></h2></div>
           <span className={'workspace-result-badge is-' + run.status.toLowerCase()}>{t('result.runStatus.' + run.status, { defaultValue: run.status })}</span>
-          <div>
-            <h2>{run.requested_by || t('result.runTitle')}</h2>
-            <p><code>{run.id}</code><span>{run.nodeids[0] ?? t('result.noCaseId')}</span></p>
+          <div className="workspace-result-overview-actions">
+            <details className="workspace-plan-disclosure"><summary>{t('result.viewExecutionPlan')}</summary><div><p>{t('result.planDisclosureDescription')}</p><button type="button" className="btn btn-secondary btn-sm" onClick={onManualAnalysis}>{t('result.openExecutionPlan')}</button></div></details>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('result.fullRuntime')}</button>
+            {isRunActive ? <button type="button" className="btn btn-danger btn-sm" onClick={onStop}><Square size={13} aria-hidden="true" />{t('dock.stop')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={onRerun} disabled={!selectedExecution}><RefreshCw size={14} aria-hidden="true" />{t('result.rerun')}</button>}
           </div>
         </div>
-        <div className="workspace-result-actions">
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onManualAnalysis} disabled={isRunActive} title={isRunActive ? t('result.waitForRunToFinish') : undefined}><Bot size={14} aria-hidden="true" />{t('result.manualAnalysis')}</button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('result.fullRuntime')}</button>
-          {isRunActive
-            ? <button type="button" className="btn btn-danger btn-sm" onClick={onStop}><Square size={13} aria-hidden="true" />{t('dock.stop')}</button>
-            : <button type="button" className="btn btn-primary btn-sm" onClick={onRerun} disabled={!context.testCaseId && !run.nodeids.length}><RefreshCw size={14} aria-hidden="true" />{t('result.rerun')}</button>}
-        </div>
+        <dl className="workspace-result-summary-stats">
+          <div><dt>{t('result.total')}</dt><dd>{counts.total}</dd></div>
+          <div className="is-passed"><dt>{t('result.passed')}</dt><dd>{counts.passed}</dd></div>
+          <div className="is-failed"><dt>{t('result.failed')}</dt><dd>{counts.failed}</dd></div>
+          <div><dt>{t('result.skipped')}</dt><dd>{counts.skipped}</dd></div>
+          <div><dt>{t('result.duration')}</dt><dd>{formatDuration(run.duration_ms)}</dd></div>
+          <div className="workspace-result-overview-meta"><dt>{t('result.environment')} · {t('result.browser')} · {t('result.started')}</dt><dd>{[run.environment.QA_ENVIRONMENT, run.environment.QA_REGION, run.browser, formatTime(run.started_at)].filter(Boolean).join(' · ')}</dd></div>
+        </dl>
       </header>
 
-      <div className="workspace-result-execution-panel">
-        <TestExecutionResults
-          executions={run.executions}
-          testCases={testCases}
-          failures={runRuntime?.failures.filter((item) => item.test_run_id === run.id) ?? []}
-          onOpenFailure={onOpenFailure}
-        />
-      </div>
-
-      <div className="workspace-result-columns">
-        <section className="workspace-result-panel workspace-result-diagnosis" aria-labelledby="workspace-result-summary-title">
-          <header className="workspace-result-panel-heading"><div><span>{t('result.overviewEyebrow')}</span><h3 id="workspace-result-summary-title">{t('result.summary')}</h3></div><Clock3 size={16} aria-hidden="true" /></header>
-          <dl className="workspace-result-stats">
-            <div><dt>{t('result.plannedTests')}</dt><dd>{run.total || run.nodeids.length || '—'}</dd></div>
-            <div><dt>{t('result.savedTestResults')}</dt><dd>{resultCount}/{run.total || run.nodeids.length || '—'}</dd></div>
-            <div><dt>{t('result.confirmedPassed')}</dt><dd>{resultCount ? passedCount : '—'}</dd></div>
-            <div><dt>{t('result.confirmedFailed')}</dt><dd>{resultCount ? failedCount : '—'}</dd></div>
-            <div><dt>{t('result.runTerminalStatus')}</dt><dd>{terminalStatus ? t(`result.runStatus.${terminalStatus}`) : '—'}</dd></div>
-            <div><dt>{t('result.duration')}</dt><dd>{formatDuration(run.duration_ms)}</dd></div>
-          </dl>
-
-          <div className={'workspace-result-incident is-' + (run.status === 'ERROR' ? 'error' : run.status === 'FAILED' ? 'failed' : 'info')} role={run.status === 'ERROR' || run.status === 'FAILED' ? 'alert' : 'status'}>
-            <AlertCircle size={17} aria-hidden="true" />
-            <div>
-              <strong>{isTimeout ? t('result.runTimedOut') : t('result.runOutcome.' + run.status, { defaultValue: run.status })}</strong>
-              <p>{resultMessage}</p>
-            </div>
-          </div>
-
-          {!resultCount && <p className="workspace-result-not-recorded"><strong>{t('result.resultUnavailable')}</strong>{resultUnavailableDescription}</p>}
-
-          <section className="workspace-result-observation">
-            <h4>{t('result.observedFailure')}</h4>
-            {failureCaseLabel && <small className="workspace-result-failure-case">{t('result.failureCaseContext', { case: failureCaseLabel })}</small>}
-            <dl className="workspace-result-failure-facts">
-              <div><dt>{t('result.expectedResult')}</dt><dd>{expectedResult || t('result.expectedResultUnavailable')}</dd></div>
-              <div><dt>{t('result.observedResult')}</dt><dd>{observedFailureSummary}</dd></div>
-              <div><dt>{t('result.failureClassification')}</dt><dd>{failureTypeLabel}</dd></div>
-            </dl>
-            {failedBrowserStep && <small>{t('result.browserStepObserved')} · {failedBrowserStep.file ?? run.nodeids[0]?.split('::')[0] ?? '—'}{failedBrowserStep.line ? ':' + failedBrowserStep.line : ''}</small>}
-            {failure?.error_message && <details><summary>{tFailures('viewRawError')}</summary><pre>{failure.error_message}</pre></details>}
-            {failure?.stack_trace && <details><summary>{tFailures('viewFullStack')}</summary><pre>{failure.stack_trace}</pre></details>}
-          </section>
-
-          <section className="workspace-result-next">
-            <h4>{t('result.nextAction')}</h4>
-            <p>{failureLoadState === 'loading'
-              ? t('result.failureLoading')
-              : failureLoadState === 'error'
-                ? t('result.failureLoadError')
-              : failureKind === 'LOCATOR_CHANGED'
-                  ? t('result.checkLocatorAgainstControls')
-                  : failure?.suggested_action ?? (failure ? t('result.repairAvailable') : t('result.failureRecordMissing'))}</p>
-            <div>
-              {failure && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenFailure(failure.id)}>{t('result.openFailureWorkflow')}</button>}
-              {sourcePath && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenCode(sourcePath, sourceLine)}><FileCode2 size={13} aria-hidden="true" />{t('result.openSource')}</button>}
-            </div>
-          </section>
-        </section>
-
-        <section className="workspace-result-panel workspace-result-repair" aria-labelledby="workspace-repair-title">
-          <header className="workspace-result-panel-heading"><div><span>{t('result.repairEyebrow')}</span><h3 id="workspace-repair-title">{t('result.repairTitle')}</h3></div><Bot size={17} aria-hidden="true" /></header>
-          <div className="workspace-result-provider-row">
-            <div><small>{t('result.aiProvider')}</small><strong>{aiProviderLabel}</strong><span>{aiInvocation || aiEvent ? t('result.providerUsed') : unlinkedAiInvocation ? t('result.aiInvocationUnlinked') : t('result.providerConfiguredOnly')}</span></div>
-            <div><small>Jev</small><strong>{jevConfig ? jevConfig.model || t('result.modelNotSet') : configurationUnavailable ? t('result.configUnavailable') : t('result.configLoading')}</strong><span>{jevCallObserved ? t('result.jevActuallyCalled') : unlinkedJevDecision ? t('result.jevDecisionUnlinked') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : t('result.jevDisabled')}</span></div>
-          </div>
-          {failureLoadState === 'error' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.failureLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={retryFailureLoad}>{t('result.retryLoad')}</button></p>}
-          {failureLoadState === 'loaded' && failure && repairLoadState === 'error' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.repairLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRepairRefresh((value) => value + 1)}>{t('result.retryLoad')}</button></p>}
-          {failureLoadState === 'loaded' && repairNotice === 'BLOCKED' && <p className="workspace-result-blocker" role="alert"><AlertCircle size={14} aria-hidden="true" />{t('result.repairBlockedWithoutFailure')}</p>}
-          {failureLoadState === 'loaded' && repairNotice === 'NOT_NEEDED' && <p className="workspace-result-notice" role="status"><Check size={14} aria-hidden="true" />{t('result.repairNotNeededWithoutFailure')}</p>}
-          <ol className="workspace-repair-timeline">
-            {workflowStages.map((item) => {
-              const tone = eventTone(item.status);
-              const Icon = tone === 'success' ? Check : tone === 'failed' ? AlertCircle : tone === 'running' ? Activity : Circle;
-              return <li key={item.id} className={'is-' + tone}>
-                <span className="workspace-repair-marker"><Icon size={14} aria-hidden="true" /></span>
-                <div><div className="workspace-repair-stage-heading"><strong>{item.label}</strong><span className={'workspace-result-state is-' + tone}>{stageStatus(item.status)}</span></div><p>{item.meta}</p>
-                  {item.detail && <small className="workspace-repair-detail">{item.detail}</small>}
-                  {item.id === 'diagnosis' && aiStep?.inputs_summary && <details className="workspace-repair-input"><summary>{t('result.viewAIInput')}</summary><p>{aiStep.inputs_summary}</p></details>}
-                  {item.id === 'decision' && typeof decisionEvent?.metadata.confidence === 'number' && <small>{t('result.confidence', { value: Math.round(decisionEvent.metadata.confidence * 100) })}</small>}
-                  {(item.duration != null || (item.id === 'diagnosis' && aiInvocation?.started_at)) && <small>{item.id === 'diagnosis' && aiInvocation?.started_at ? formatTime(aiInvocation.started_at) + ' · ' : ''}{formatDuration(item.duration)}</small>}
-                </div>
-              </li>;
+      <div className={`workspace-result-workspace ${hasFailures ? 'has-repair-panel ' : ''}is-focus-${focusedPanel}`}>
+        <nav onClickCapture={focusOnPanelCard('cases')} className={`workspace-result-card workspace-case-navigator ${focusedPanel === 'cases' ? 'is-focused' : 'is-compact'}`} aria-label={t('result.caseExecutionResults.title')}>
+          <header><div><span className="workspace-eyebrow" title={t('result.caseExecutionResults.title')}>{t('result.caseExecutionResults.title')}</span><strong>{counts.total}</strong></div><div className="workspace-panel-header-actions"><button type="button" className="btn btn-icon btn-sm" aria-label={t('result.fullRuntime')} title={t('result.fullRuntime')} onClick={onOpenDetails}><Workflow size={14} /></button><button type="button" className="btn btn-icon btn-sm workspace-panel-focus" aria-pressed={focusedPanel === 'cases'} aria-label={t('result.focusPanel', { panel: t('result.caseExecutionResults.title') })} title={t('result.focusPanel', { panel: t('result.caseExecutionResults.title') })} onClick={() => setActivePanel('cases')}><Maximize2 size={14} aria-hidden="true" /></button></div></header>
+          <div className="workspace-case-filters" role="group" aria-label={t('result.filterCases')}>
+            {(['all', 'failed', 'passed', 'skipped'] as const).map((filter) => {
+              const count = filter === 'all' ? counts.total : counts[filter];
+              return <button key={filter} type="button" aria-pressed={caseFilter === filter} className={caseFilter === filter ? 'is-active' : ''} onClick={() => {
+                setCaseFilter(filter);
+                if (filter !== 'all' && executionState(selectedExecution?.status ?? '') !== filter) {
+                  const firstVisible = caseRows.find(({ execution }) => executionState(execution.status) === filter);
+                  if (firstVisible) selectExecution(firstVisible.execution.nodeid, firstVisible.identity.caseId);
+                }
+              }}>{t('result.caseFilters.' + filter)} <b>{count}</b></button>;
             })}
-          </ol>
-          {repair?.state === 'FAILED' && <p className="workspace-result-blocker"><AlertCircle size={14} aria-hidden="true" />{t('result.repairWorkflowFailed')}</p>}
-          {repair?.state === 'BLOCKED' && <p className="workspace-result-blocker"><AlertCircle size={14} aria-hidden="true" />{t('result.repairWorkflowBlocked')}</p>}
-        </section>
-
-        <aside className="workspace-result-panel workspace-result-activity" aria-label={t('result.currentRunAndLogs')}>
-          <header className="workspace-result-panel-heading"><div><span>{runtimeConnection === 'connected' ? t('result.live') : t('result.runContext')}</span><h3>{t('result.currentTask')}</h3></div><span className={'workspace-result-state is-' + eventTone(run.status)}>{run.status}</span></header>
-          <dl className="workspace-result-context">
-            <div><dt>{t('result.case')}</dt><dd>{run.nodeids[0] ?? '—'}</dd></div>
-            <div><dt>{t('result.environment')}</dt><dd>{run.environment.QA_ENVIRONMENT ?? '—'} · {run.environment.QA_REGION ?? '—'}</dd></div>
-            <div><dt>{t('result.browser')}</dt><dd>{run.browser}</dd></div>
-            <div><dt>{t('result.started')}</dt><dd>{formatTime(run.started_at)}</dd></div>
-          </dl>
-          <div className="workspace-result-event-heading"><h4>{t('result.eventLog')}</h4><button type="button" className="btn btn-icon btn-sm" aria-label={t('result.viewRuntimeDetails')} title={t('result.viewRuntimeDetails')} onClick={onOpenDetails}><Workflow size={13} aria-hidden="true" /></button></div>
-          <div className="workspace-result-event-filters" role="group" aria-label={t('result.filterEvents')}>
-            {(['all', 'errors', 'browser', 'ai'] as const).map((filter) => <button type="button" key={filter} className={eventFilter === filter ? 'is-active' : ''} aria-pressed={eventFilter === filter} onClick={() => setEventFilter(filter)}>{t('result.eventFilters.' + filter)}</button>)}
           </div>
-          {filteredEvents.length ? <ol className="workspace-result-events">
-            {filteredEvents.map((event) => <EventRow key={event.id} event={event} onOpenDetails={onOpenDetails} onOpenStep={onOpenStep} t={t} />)}
-          </ol> : runtimeError
-            ? <p className="workspace-result-empty-inline" role="alert">{t('result.runtimeLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={onRefreshRuntime}>{t('result.retryLoad')}</button></p>
-            : <p className="workspace-result-empty-inline">{runRuntime ? t('result.noMatchingEvents') : t('result.runtimeLoading')}</p>}
-          {run.log_output && <details className="workspace-result-raw-log" open={logExpanded} onToggle={(event) => setLogExpanded(event.currentTarget.open)}>
-            <summary>{t('result.rawRunnerLog')} · {run.log_output.split(/\r?\n/).length} {t('result.logLines')}</summary>
-            <pre>{run.log_output.slice(-12000)}</pre>
-          </details>}
+          {filteredCases.length ? <ol className="workspace-case-list">
+            {filteredCases.map(({ execution, identity }) => {
+              const status = execution.status.toLowerCase();
+              const selected = selectedExecution?.id === execution.id;
+              const Icon = status === 'passed' ? Check : ['failed', 'error'].includes(status) ? AlertCircle : Circle;
+              return <li key={execution.id}><button type="button" title={`${identity.displayId ? identity.displayId + ' · ' : ''}${identity.title}\n${execution.nodeid}`} aria-current={selected ? 'true' : undefined} className={`${selected ? 'is-selected ' : ''}is-${status}`} onClick={() => selectExecution(execution.nodeid, identity.caseId)}>
+                <Icon size={15} aria-hidden="true" /><span><strong>{identity.displayId ? identity.displayId + ' · ' : ''}{identity.title}</strong><small>{execution.nodeid}</small></span><time>{formatDuration(execution.duration_ms)}</time>
+              </button></li>;
+            })}
+          </ol> : <p className="workspace-muted">{t('result.noCasesForFilter')}</p>}
+        </nav>
+
+        <main onClickCapture={focusOnPanelCard('detail')} className={`workspace-result-card workspace-case-detail ${focusedPanel === 'detail' ? 'is-focused' : 'is-compact'}`}>
+          {selectedExecution && selectedIdentity ? <>
+            <header className="workspace-case-detail-heading">
+              <div><span className="workspace-eyebrow">{selectedIdentity.displayId ?? t('result.case')}</span><h3 title={selectedIdentity.title}>{selectedIdentity.title}</h3><code>{selectedExecution.nodeid} · {selectedExecution.id}</code></div>
+              <div className="workspace-panel-header-actions"><span className={'workspace-case-status is-' + selectedExecution.status.toLowerCase()}>{t('result.runStatus.' + selectedExecution.status, { defaultValue: selectedExecution.status })} · {formatDuration(selectedExecution.duration_ms)}</span><button type="button" className="btn btn-icon btn-sm workspace-panel-focus" aria-pressed={focusedPanel === 'detail'} aria-label={t('result.focusPanel', { panel: t('result.evidence') })} title={t('result.focusPanel', { panel: t('result.evidence') })} onClick={() => setActivePanel('detail')}><Maximize2 size={14} aria-hidden="true" /></button></div>
+            </header>
+            {isSelectedError ? <section className="workspace-case-error" role={failure ? 'alert' : 'status'}>
+              <div><strong>{failure?.exception_type || failureTypeLabel || t('result.failureLoading')}</strong>{locator && <code>{locator}</code>}</div>
+              <p>{statusMessage}</p>
+              {failure?.stack_trace && <details><summary>{tFailures('viewFullStack')}</summary><pre>{failure.stack_trace}</pre></details>}
+              {!failure && failureLoadState === 'error' && <button type="button" className="btn btn-secondary btn-sm" onClick={retryFailure}>{t('result.retryLoad')}</button>}
+            </section> : <p className={'workspace-case-outcome is-' + selectedExecution.status.toLowerCase()}>{statusMessage}</p>}
+
+            <div className="workspace-evidence-tabs" role="tablist" aria-label={t('result.evidence')}>
+              {(['screenshot', 'snapshot', 'dom', 'trace', 'console', 'network', 'source'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={evidenceTab === tab} className={evidenceTab === tab ? 'is-active' : ''} onClick={() => setEvidenceTab(tab)}>{t('result.evidenceTabs.' + tab)}</button>)}
+            </div>
+            <section className="workspace-evidence-content" role="tabpanel" aria-label={t('result.evidenceTabs.' + evidenceTab)}>
+              {evidenceTab === 'screenshot' && (screenshots.length ? <div className="workspace-evidence-artifacts">{screenshots.map((item, index) => <article key={item.id}><strong>{item.name}</strong><RuntimeArtifactActions artifact={item} autoPreview={index === 0} /></article>)}</div> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.screenshot')}</p>)}
+              {evidenceTab === 'snapshot' && (browserSession ? <div className="workspace-evidence-snapshot"><dl>{typeof pageEvidence.title === 'string' && <div><dt>{t('result.pageTitle')}</dt><dd>{pageEvidence.title}</dd></div>}{typeof pageEvidence.url === 'string' && <div><dt>URL</dt><dd>{pageEvidence.url}</dd></div>}</dl>{selectedSteps.length ? <ol>{selectedSteps.map((step, index) => <li key={index}>{displayEvidence(step)}</li>)}</ol> : <p>{t('result.evidenceMissing.snapshotSteps')}</p>}</div> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.snapshot')}</p>)}
+              {evidenceTab === 'dom' && (domPathArtifact ? <RuntimeArtifactActions artifact={domPathArtifact} /> : controls.length ? <><p className="workspace-evidence-missing">{t('result.evidenceMissing.fullDom')}</p><pre>{controls.map(displayEvidence).join('\n')}</pre></> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.dom')}</p>)}
+              {evidenceTab === 'trace' && (traces.length ? <div className="workspace-evidence-artifacts">{traces.map((item) => <article key={item.id}><strong>{item.name}</strong><RuntimeArtifactActions artifact={item} /></article>)}</div> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.trace')}</p>)}
+              {evidenceTab === 'console' && (errorLines.length ? <pre>{errorLines.map(displayEvidence).join('\n')}</pre> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.console')}</p>)}
+              {evidenceTab === 'network' && (networkLines.length ? <NetworkEvidenceList entries={networkLines} /> : <p className="workspace-evidence-missing">{t('result.evidenceMissing.network')}</p>)}
+              {evidenceTab === 'source' && (sourcePath ? <div className="workspace-evidence-source"><FileCode2 size={18} aria-hidden="true" /><code>{sourcePath}{sourceLine ? ':' + sourceLine : ''}</code>{locator && <pre>{locator}</pre>}<button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenCode(sourcePath, sourceLine)}>{t('result.openSource')}</button></div> : <p className="workspace-evidence-missing">{t('result.noCodeLocation')}</p>)}
+            </section>
+          </> : <p className="workspace-muted">{t('result.caseExecutionResults.empty')}</p>}
+        </main>
+
+        {hasFailures && <aside onClickCapture={focusOnPanelCard('repair')} className={`workspace-result-card workspace-repair-workspace ${focusedPanel === 'repair' ? 'is-focused' : 'is-compact'}`} aria-label={t('result.repairTitle')}>
+          <header><div><span className="workspace-eyebrow">{t('result.repairEyebrow')}</span><h3>{t('result.repairTitle')}</h3></div><div className="workspace-panel-header-actions"><Bot size={18} aria-hidden="true" /><button type="button" className="btn btn-icon btn-sm workspace-panel-focus" aria-pressed={focusedPanel === 'repair'} aria-label={t('result.focusPanel', { panel: t('result.repairTitle') })} title={t('result.focusPanel', { panel: t('result.repairTitle') })} onClick={() => setActivePanel('repair')}><Maximize2 size={14} aria-hidden="true" /></button></div></header>
+          {isSelectedError && failure ? <>
+            <div className="workspace-repair-providers"><p><small>{t('result.aiProvider')}</small><strong>{aiProviderLabel}</strong></p><p><small>Jev</small><strong>{jevCalled ? t('result.jevActuallyCalled') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : jevConfig ? t('result.jevDisabled') : t('result.configUnavailable')}</strong></p></div>
+            <ol className="workspace-repair-stages">{workflowStages.map((stage, index) => {
+              const tone = eventTone(stage.status);
+              const Icon = tone === 'success' ? Check : tone === 'failed' ? AlertCircle : tone === 'running' ? Activity : Circle;
+              return <li key={stage.id} className={'is-' + tone}><span className="workspace-repair-marker"><Icon size={13} aria-hidden="true" /></span><div>
+                <div><strong>{index + 1}. {stage.label}</strong><small className={'workspace-result-state is-' + tone}>{stageLabel(stage.status)}</small></div>
+                <p>{stage.detail}</p>
+                {stage.id === 'diagnosis' && analysisRunning && <div className="workspace-repair-stage-actions"><button type="button" className="btn btn-secondary btn-sm" onClick={() => analysisController.current?.abort()}>{tFailures('workflow.cancel')}</button></div>}
+                {stage.id === 'patch' && !analysisRunning && canStartAnalysis && <div className="workspace-repair-stage-actions"><button type="button" className={`btn ${canRestartAnalysis ? 'btn-secondary' : 'btn-primary'} btn-sm`} disabled={actionRunning || repairHistoryLoading} onClick={() => void startAnalysis()}><Bot size={13} aria-hidden="true" />{analysisId || diagnosisRootCause || analysisError ? t('result.rerunAIAnalysis') : t('result.startAIAnalysis')}</button></div>}
+                {stage.id === 'apply' && (canApplyPatch || canRollbackPatch) && <div className="workspace-repair-stage-actions">
+                  {canApplyPatch && <button type="button" className="btn btn-primary btn-sm" disabled={actionRunning} onClick={() => void applyPatch()}>{t('result.approveAndApplyPatch')}</button>}
+                  {canRollbackPatch && <button type="button" className="btn btn-secondary btn-sm" disabled={actionRunning} onClick={async () => {
+                    if (!failure || !analysisId) return;
+                    setActionRunning(true); setActionError('');
+                    try { const result = await api.rollbackRepair(failure.id, analysisId); setRepair(result.repair); }
+                    catch (error) { setActionError(error instanceof Error ? error.message : String(error)); }
+                    finally { setActionRunning(false); }
+                  }}>{t('result.rollbackPatch')}</button>}
+                </div>}
+                {stage.id === 'verify' && canVerifyPatch && <div className="workspace-repair-stage-actions"><button type="button" className="btn btn-primary btn-sm" disabled={actionRunning} onClick={() => void verifyPatch()}>{t('result.verifyRepair')}</button></div>}
+              </div></li>;
+            })}</ol>
+            {actionError && <p className="workspace-result-error" role="alert">{actionError}</p>}
+            {diagnosisRootCause && <section className="workspace-diagnosis-result"><h4>{t('result.aiRootCause')}</h4><p>{diagnosisRootCause}</p>{diagnosisEvidence.length > 0 && <ul>{diagnosisEvidence.map((item, index) => <li key={index}>{item}</li>)}</ul>}</section>}
+            {codeDiff && <details className="workspace-repair-diff" open><summary>{t('result.openDiff')} · {proposal?.file_path ?? t('result.diffReady')}</summary><pre>{codeDiff}</pre></details>}
+            {analysisEvents.length > 0 && <details className="workspace-repair-events"><summary>{t('result.analysisEvents', { count: analysisEvents.length })}</summary><ol>{analysisEvents.map((event, index) => <li key={`${event.type}-${index}`}><strong>{event.type}</strong><span>{event.message}</span></li>)}</ol></details>}
+            {analysisError && <p className="workspace-result-error" role="alert">{analysisError}</p>}
+            {repairHistoryError && <p className="workspace-result-error" role="alert">{t('result.repairLoadError')} {repairHistoryError}</p>}
+            {repairHistoryLoading && <p className="workspace-repair-selection-note" role="status">{t('result.repairHistoryLoading')}</p>}
+            {verificationRun && <p className="workspace-verification-relation">{t('result.verificationRelation', { original: run.id, verification: verificationRun.id, status: t('result.runStatus.' + verificationRun.status, { defaultValue: verificationRun.status }), passed: verificationRun.executions.filter((item) => item.status === 'PASSED').length, failed: verificationRun.executions.filter((item) => ['FAILED', 'ERROR'].includes(item.status)).length })}</p>}
+          </> : <p className="workspace-repair-selection-note">{isSelectedError ? failureLoadState === 'loading' ? t('result.failureLoading') : t('result.failureLoadError') : t('result.selectFailureToAnalyze')}</p>}
+        </aside>}
+
+        <aside onClickCapture={focusOnPanelCard('context')} className={`workspace-result-card workspace-run-context ${focusedPanel === 'context' ? 'is-focused' : 'is-compact'}`} aria-label={t('result.runContext')}>
+          <header><span><span className="workspace-eyebrow">{runtimeConnection === 'connected' ? t('result.live') : t('result.runContext')}</span><strong>{t('result.currentTask')} · {run.id}</strong></span><button type="button" className="btn btn-icon btn-sm workspace-panel-focus" aria-pressed={focusedPanel === 'context'} aria-label={t('result.focusPanel', { panel: t('result.runContext') })} title={t('result.focusPanel', { panel: t('result.runContext') })} onClick={() => setActivePanel('context')}><Maximize2 size={14} aria-hidden="true" /></button></header>
+          <dl><div><dt>{t('result.case')}</dt><dd>{selectedExecution?.nodeid ?? '—'}</dd></div><div><dt>{t('result.environment')}</dt><dd>{[run.environment.QA_ENVIRONMENT, run.environment.QA_REGION].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>{t('result.browser')}</dt><dd>{run.browser || '—'}</dd></div><div><dt>{t('result.started')}</dt><dd>{formatTime(run.started_at)} · {formatDuration(run.duration_ms)}</dd></div></dl>
+          <div className="workspace-result-event-heading"><h4>{t('result.eventLog')}</h4><button type="button" className="btn btn-icon btn-sm" aria-label={t('result.viewRuntimeDetails')} onClick={onOpenDetails}><Workflow size={13} /></button></div>
+          {!eventAssociationIsExact && events.length > 0 && <small className="workspace-event-association-note">{t('result.runEventsNotCaseLinked')}</small>}
+          <div className="workspace-result-event-filters" role="group" aria-label={t('result.filterEvents')}>{(['all', 'errors', 'browser', 'ai'] as const).map((filter) => <button type="button" key={filter} aria-pressed={eventFilter === filter} className={eventFilter === filter ? 'is-active' : ''} onClick={() => setEventFilter(filter)}>{t('result.eventFilters.' + filter)}</button>)}</div>
+          {filteredEvents.length ? <div className="workspace-result-events-viewport" role="region" aria-label={t('result.eventLog')} tabIndex={0}><ol className="workspace-result-events">{filteredEvents.map((event) => <EventRow key={event.id} event={event} onOpenDetails={onOpenDetails} onOpenStep={onOpenStep} t={t} />)}</ol></div> : runtimeError ? <p className="workspace-result-empty-inline" role="alert">{t('result.runtimeLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={onRefreshRuntime}>{t('result.retryLoad')}</button></p> : <p className="workspace-result-empty-inline">{runRuntime ? t('result.noMatchingEvents') : t('result.runtimeLoading')}</p>}
+          {run.log_output && <details className="workspace-result-raw-log"><summary>{t('result.rawRunnerLog')} · {run.log_output.split(/\r?\n/).length} {t('result.logLines')}</summary><pre>{run.log_output.slice(-12000)}</pre></details>}
         </aside>
       </div>
-
-      <details
-        className="workspace-result-evidence"
-        open={evidenceExpanded}
-        onToggle={(event) => setEvidenceExpanded(event.currentTarget.open)}
-      >
-        <summary className="workspace-result-evidence-heading"><div><span>{t('result.evidenceEyebrow')} · {run.id}</span><span className="workspace-result-evidence-title" id="workspace-evidence-title">{t('result.evidence')}</span></div><small>{t('result.evidenceCounts', { screenshots: screenshots.length, traces: traces.length, reports: reports.length })}</small></summary>
-        <div className="workspace-result-evidence-grid">
-          <section className="workspace-result-evidence-panel">
-            <h4><ImageIcon size={14} aria-hidden="true" />{t('result.screenshots')}</h4>
-            {screenshots.length ? screenshots.map((artifact) => <article className="workspace-result-artifact" key={artifact.id}><div><strong>{artifact.name}</strong><small>{formatTime(artifact.created_at)}</small></div><RuntimeArtifactActions artifact={artifact} /></article>) : <p>{t('result.noScreenshot')}</p>}
-          </section>
-          <section className="workspace-result-evidence-panel">
-            <h4><FileCode2 size={14} aria-hidden="true" />{t('result.codeLocation')}</h4>
-            {sourcePath ? <><code className="workspace-result-source-path">{sourcePath}{sourceLine ? ':' + sourceLine : ''}</code>{failedBrowserStep?.locator && <pre>{failedBrowserStep.locator}</pre>}<button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenCode(sourcePath, sourceLine)}>{t('result.openSource')}</button></> : <p>{t('result.noCodeLocation')}</p>}
-          </section>
-          <section className="workspace-result-evidence-panel">
-            <h4><Workflow size={14} aria-hidden="true" />{t('result.repairDiff')}</h4>
-            {diff ? <details className="workspace-result-diff"><summary>{t('result.openDiff')} · {proposal?.file_path ?? t('result.diffReady')}</summary><pre>{diff}</pre></details> : <p>{t('result.diffNotGenerated')}</p>}
-          </section>
-          <section className="workspace-result-evidence-panel">
-            <h4><Activity size={14} aria-hidden="true" />{t('result.artifactsAndTrace')}</h4>
-            {[...traces, ...reports, ...artifacts.filter((item) => !screenshots.includes(item) && !traces.includes(item) && !reports.includes(item))].length
-              ? [...traces, ...reports, ...artifacts.filter((item) => !screenshots.includes(item) && !traces.includes(item) && !reports.includes(item))].map((artifact) => <article className="workspace-result-artifact" key={artifact.id}><div><strong>{artifact.name}</strong><small>{artifact.type} · {formatTime(artifact.created_at)}</small></div><RuntimeArtifactActions artifact={artifact} /></article>)
-              : <p>{t('result.noArtifacts')}</p>}
-          </section>
-        </div>
-        <footer className="workspace-result-evidence-footer">
-            <span>{t('result.runtimeEventCount', { count: events.length })}</span>
-          <span>{t('result.browserFailureCount', { count: Math.max(
-            browserEvidence.filter((step) => step.status?.toUpperCase() === 'FAILED').length,
-            events.filter((event) => event.category === 'browser' && event.status?.toUpperCase() === 'FAILED').length,
-          ) })}</span>
-          <span>{t('result.savedExecutionCount', { count: resultCount })}</span>
-          {context.testCaseId && <Link to={buildWorkspaceHref({ ...context, projectId, stage: 'cases', view: 'cases' })}>{t('result.openCase')}</Link>}
-        </footer>
-      </details>
     </section>
   );
 }
@@ -547,17 +613,8 @@ function EventRow({ event, onOpenDetails, onOpenStep, t }: {
   const tone = eventTone(event.status);
   const metadata = Object.entries(event.metadata ?? {}).filter(([, value]) => value !== null && value !== undefined && ['string', 'number', 'boolean'].includes(typeof value));
   return <li className={'workspace-result-event is-' + tone}>
-    <details>
-      <summary>
-        <span className="workspace-result-event-dot" aria-hidden="true" />
-        <time>{formatTime(event.timestamp)}</time>
-        <span className="workspace-result-event-content"><strong>{event.title || event.type}</strong><small>{event.summary || event.category}</small></span>
-        <span className={'workspace-result-state is-' + tone}>{event.status ?? event.category}</span>
-      </summary>
-      <div className="workspace-result-event-detail"><code>{event.type}</code>{event.duration_ms != null && <small>{formatDuration(event.duration_ms)}</small>}
-        {metadata.length > 0 && <dl>{metadata.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}</dl>}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => event.step_id ? onOpenStep(event.step_id) : onOpenDetails()}>{event.step_id ? t('result.openRelatedStep') : t('result.openRuntimeEvidence')}</button>
-      </div>
+    <details><summary><span className="workspace-result-event-dot" aria-hidden="true" /><time>{formatTime(event.timestamp)}</time><span className="workspace-result-event-content"><strong>{event.title || event.type}</strong><small>{event.summary || event.category}</small></span><span className={'workspace-result-state is-' + tone}>{event.status ?? event.category}</span></summary>
+      <div className="workspace-result-event-detail"><code>{event.type}</code>{event.duration_ms != null && <small>{formatDuration(event.duration_ms)}</small>}{metadata.length > 0 && <dl>{metadata.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}</dl>}<button type="button" className="btn btn-secondary btn-sm" onClick={() => event.step_id ? onOpenStep(event.step_id) : onOpenDetails()}>{event.step_id ? t('result.openRelatedStep') : t('result.openRuntimeEvidence')}</button></div>
     </details>
   </li>;
 }

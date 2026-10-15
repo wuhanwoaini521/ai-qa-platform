@@ -12,7 +12,7 @@ class EmptyTestCaseRepository:
 
 
 class EmptyRunRepository:
-    async def list_failures(self, limit: int = 20):
+    async def list_failures(self, limit: int = 20, project_id: str | None = None):
         return []
 
 

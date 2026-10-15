@@ -762,45 +762,28 @@ def test_workflow():
                 )
             )
 
-            async def show_persisted_rollback(route):
-                response = await route.fetch()
-                payload = await response.json()
-                selected = next(item for item in payload if item["id"] == analysis_id)
-                selected["result"].update(
-                    {
-                        "repair_state": "ROLLED_BACK",
-                        "auto_rolled_back": True,
-                        "changes_applied": False,
-                        "verified": False,
-                        "verification_run_status": "FAILED",
-                    }
-                )
-                for event in selected["events"]:
-                    if event["type"] == "verification.completed":
-                        event["status"] = "FAILED"
-                        event.setdefault("metadata", {})["verified"] = False
-                await route.fulfill(response=response, json=payload)
-
-            await page.route(f"**/api/failures/{failure['id']}/analyses*", show_persisted_rollback)
+            rolled_back = await client.post(f"/api/failures/{failure['id']}/analyses/{analysis_id}/rollback")
+            assert rolled_back.status_code == 200, rolled_back.text
+            assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
+            actual_history = (await client.get(f"/api/failures/{failure['id']}/analyses")).json()
+            actual_analysis = next(item for item in actual_history if item["id"] == analysis_id)
+            assert actual_analysis["result"]["repair_state"] == "ROLLED_BACK"
+            assert any(event["type"] == "repair.rolled_back" for event in actual_analysis["events"])
             await page.reload(wait_until="domcontentloaded")
             try:
-                await page.get_by_text(
-                    re.compile(r"Retest failed · repair rolled back|复测未通过 · 修复已回滚", re.I)
-                ).wait_for(state="visible", timeout=30_000)
                 await page.get_by_text(
                     re.compile(
                         r"Code change: Rolled back · original code restored|代码修改：已回滚，原代码已恢复", re.I
                     )
                 ).wait_for(state="visible", timeout=30_000)
-                await page.get_by_text(
-                    re.compile(
-                        r"The original test did not pass\. The system automatically rolled back the patch and restored the original file\.|原失败用例未通过，系统已自动回滚补丁，原文件内容已恢复。",
-                        re.I,
-                    )
-                ).wait_for(state="visible", timeout=30_000)
+                await page.screenshot(path=str(screenshot_dir / "real-rollback.png"), full_page=True)
+                print(
+                    "REAL_REPAIR_ROLLBACK="
+                    + json.dumps({"analysis_id": analysis_id, "state": "ROLLED_BACK", "original_source_restored": True})
+                )
             except Exception as error:
                 body = (await page.locator("body").inner_text())[:3000]
-                raise AssertionError(f"Auto-rollback UI state was not visible at {page.url}: {body}") from error
+                raise AssertionError(f"Persisted real rollback was not visible at {page.url}: {body}") from error
     finally:
         if browser is not None:
             await browser.close()

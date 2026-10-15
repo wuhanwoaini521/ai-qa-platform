@@ -1,5 +1,7 @@
 import type { RuntimeArtifact } from '../../types/runtime';
 export function artifactPreviewKind(artifact: RuntimeArtifact) {
+  if (artifact.type?.toUpperCase().includes('TRACE') || /\.zip$/i.test(artifact.name))
+    return 'trace';
   if (
     artifact.content_type?.startsWith('image/') ||
     /\.(png|jpe?g|webp|gif)$/i.test(artifact.name)

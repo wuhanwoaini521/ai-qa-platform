@@ -46,12 +46,14 @@ class QualityIntelligenceService:
         requirements = await self.requirement_repo.list_by_project(project_id)
         test_cases = await self.test_case_repo.list_by_project(project_id)
         recent_runs = await self.test_run_repo.list_runs(project_id=project_id, limit=10)
+        bindings = await self.binding_repo.list_by_project(project_id)
 
-        # Collect executed nodeids
-        executed_nodeids: set[str] = set()
-        for run in recent_runs:
-            for exc in run.executions or []:
-                executed_nodeids.add(exc.nodeid)
+        executed_targets = {
+            (run.workspace_id, execution.nodeid)
+            for run in recent_runs
+            for execution in run.executions or []
+            if execution.status in {"PASSED", "FAILED", "ERROR"}
+        }
 
         # Map test cases by requirement
         cases_by_req: dict[str, list[Any]] = {}
@@ -102,13 +104,14 @@ class QualityIntelligenceService:
         draft_count = sum(1 for c in test_cases if c.automation_status == "DRAFT")
         automated_count = sum(1 for c in test_cases if c.automation_status == "AUTOMATED")
 
-        # Check executed cases
-        executed_cases_count = 0
-        for tc in test_cases:
-            # Check if title or nodeid was executed
-            matching = any(tc.title.lower() in node.lower() or tc.id in node for node in executed_nodeids)
-            if matching or (automated_count > 0 and tc.automation_status == "AUTOMATED" and executed_nodeids):
-                executed_cases_count += 1
+        executed_cases_count = len(
+            {
+                binding.test_case_id
+                for binding in bindings
+                if binding.status in {"ACTIVE", "VALIDATED"}
+                and (binding.workspace_id, binding.nodeid) in executed_targets
+            }
+        )
 
         req_cov_pct = round((covered_reqs / total_reqs * 100.0), 1) if total_reqs > 0 else 0.0
         auto_cov_pct = round((automated_count / total_cases * 100.0), 1) if total_cases > 0 else 0.0
@@ -130,7 +133,7 @@ class QualityIntelligenceService:
 
     async def calculate_risk_matrix(self, project_id: str) -> QualityRiskMatrix:
         test_cases = await self.test_case_repo.list_by_project(project_id)
-        failures = await self.test_run_repo.list_failures(limit=20)
+        failures = await self.test_run_repo.list_failures(limit=20, project_id=project_id)
         history_items = await self.history_repo.list_flaky_tests(project_id=project_id)
         flaky_items = [
             item for item in history_items if item.flaky_score.classification == FlakyClassification.LIKELY_FLAKY

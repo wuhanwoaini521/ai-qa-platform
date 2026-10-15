@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from project_model.models import Breakpoint, DebugSessionBootstrap
+from qa_core.execution.environment import project_subprocess_environment
 
 from app.repositories.debug_session_repo import DebugSessionRepository
 from app.settings import get_config
@@ -129,6 +130,7 @@ class DebugSessionService:
         session_id = str(uuid4())
         process_options: dict[str, Any] = {
             "cwd": str(root),
+            "env": project_subprocess_environment(),
             "stdin": asyncio.subprocess.PIPE,
             "stdout": asyncio.subprocess.PIPE,
             "stderr": asyncio.subprocess.PIPE,

@@ -101,7 +101,8 @@ async def test_verified_locator_heal_is_counted_once_and_unverified_is_not(clien
 
 
 @pytest.mark.asyncio
-async def test_repair_verification_command_creates_and_links_exact_idempotent_run(client, test_db_session):
+@pytest.mark.parametrize("runner_type", ["LOCAL", "WORKER", "JENKINS"])
+async def test_repair_verification_command_creates_and_links_exact_idempotent_run(client, test_db_session, runner_type):
     from app.persistence.models import FailureRecordORM, TestRunORM
     from sqlalchemy import select
 
@@ -111,6 +112,8 @@ async def test_repair_verification_command_creates_and_links_exact_idempotent_ru
     analysis_id = "repair-analysis-command"
     async with test_db_session() as session:
         failure = await session.get(FailureRecordORM, failure_id)
+        original_run = await session.get(TestRunORM, failure.run_id)
+        original_run.runner_type = runner_type
         failure.repair_proposal = {"applied": True, "proposed_locator": "#checkout-new"}
         session.add(
             FailureAnalysisORM(
@@ -128,15 +131,16 @@ async def test_repair_verification_command_creates_and_links_exact_idempotent_ru
     async with test_db_session() as session:
         failure_service = get_failure_service(session)
         runs = make_run_service(failure_service, session)
-        runs._schedule_local_run = lambda *_args, **_kwargs: None
+        runs._schedule_run_if_queued = lambda *_args, **_kwargs: None
         workflow = FailureWorkflowService(failure_service, run_service=runs)
-        run = await workflow.start_verification(failure_id, analysis_id)
-        repeated = await workflow.start_verification(failure_id, analysis_id)
+        run = await workflow.start_verification(failure_id, analysis_id, monitor=False)
+        repeated = await workflow.start_verification(failure_id, analysis_id, monitor=False)
         assert run.id == repeated.id
         assert run.project_id == project_id
         assert run.workspace_id == project_id
         assert run.nodeids == ["tests/test_workflow.py::test_workflow"]
         assert run.origin_failure_id == failure_id
+        assert run.runner_type == runner_type
 
         history = await workflow.list_history(failure_id)
         assert history[0]["result"]["verification_run_id"] == run.id
@@ -494,10 +498,18 @@ async def test_rolled_back_patch_allows_fresh_analysis(client, test_db_session):
 
 
 @pytest.mark.asyncio
-async def test_workflow_authorizes_retry_from_real_diagnosis_and_starts_one_server_run(client, test_db_session):
+@pytest.mark.parametrize("runner_type", ["LOCAL", "WORKER", "JENKINS"])
+async def test_workflow_authorizes_retry_from_real_diagnosis_and_starts_one_server_run(
+    client, test_db_session, runner_type
+):
+    from app.persistence.models import FailureRecordORM, TestRunORM
+
     project_id, failure_id, _ = await seed(client, test_db_session, error="Connection timed out")
     analysis_id = "failure-retry-command"
     async with test_db_session() as session:
+        failure = await session.get(FailureRecordORM, failure_id)
+        original = await session.get(TestRunORM, failure.run_id)
+        original.runner_type = runner_type
         session.add(
             FailureAnalysisORM(
                 id=analysis_id,
@@ -518,7 +530,7 @@ async def test_workflow_authorizes_retry_from_real_diagnosis_and_starts_one_serv
     async with test_db_session() as session:
         service = get_failure_service(session)
         runs = make_run_service(service, session)
-        runs._schedule_local_run = lambda *_args, **_kwargs: None
+        runs._schedule_run_if_queued = lambda *_args, **_kwargs: None
         workflow = FailureWorkflowService(service, run_service=runs)
         state = await workflow.get_repair_workflow(failure_id, analysis_id)
         assert "RETRY" in state.allowed_actions
@@ -528,6 +540,7 @@ async def test_workflow_authorizes_retry_from_real_diagnosis_and_starts_one_serv
         assert retry.project_id == project_id
         assert retry.nodeids == ["tests/test_workflow.py::test_workflow"]
         assert retry.origin_failure_id == failure_id
+        assert retry.runner_type == runner_type
         refreshed = await workflow.get_repair_workflow(failure_id, analysis_id)
         assert refreshed.retry_run_id == retry.id
         assert "RETRY" not in refreshed.allowed_actions
@@ -878,6 +891,66 @@ async def test_automatic_failure_analysis_requires_human_approval_before_patch(
     assert restored_response.status_code == 200, restored_response.text
     assert restored_response.json()["content"] == source
     await asyncio.gather(*verification_monitors, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_repair_releases_snapshot_write_transaction_before_jev_budget_reservation(client, test_db_session):
+    from types import SimpleNamespace
+
+    from app.services.ai_execution_service import AIExecutionService
+    from app.services.failure_service import LocatorRepairNotApplicableError
+    from project_model.models import FailureSnapshotBundle
+
+    _, failure_id, _ = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#checkout")',
+        kind="UI",
+        source='def test_workflow(page):\n    page.locator("#checkout").click()\n',
+    )
+    async with test_db_session() as session:
+        browser = await session.get(BrowserSessionORM, "workflow-browser")
+        browser.failure_snapshot_json = FailureSnapshotBundle(
+            status="PARTIAL", url="http://localhost/checkout", failed_locator="#checkout"
+        ).model_dump_json()
+        await session.commit()
+
+    class Browser:
+        async def create_session(self):
+            return SimpleNamespace(id="verification-session")
+
+        async def navigate(self, *_args, **_kwargs):
+            pass
+
+        async def close_session(self, *_args):
+            pass
+
+    reservations = []
+
+    class BudgetedDecision:
+        async def decide(self, **_kwargs):
+            reservations.append("started")
+            await AIExecutionService.reserve_daily_limit(100, TaskRepositoryScopeFactory())
+            reservations.append("reserved")
+            return {}
+
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        service.browser_runtime = Browser()
+        with pytest.raises(LocatorRepairNotApplicableError):
+            await service.generate_repair_proposal(
+                failure_id,
+                diagnosis_override=FailureAnalysisResponse(
+                    classification="LOCATOR_CHANGED",
+                    root_cause="The checkout selector changed.",
+                    provider="openai-compatible",
+                    fallback_used=False,
+                    confidence=0.95,
+                ),
+                resolved_classification="LOCATOR_CHANGED",
+                decision_service=BudgetedDecision(),
+            )
+    assert reservations == ["started", "reserved"]
 
 
 @pytest.mark.asyncio

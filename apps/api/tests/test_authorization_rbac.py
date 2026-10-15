@@ -101,6 +101,8 @@ async def test_viewer_can_read_but_never_mutate(client: AsyncClient, credentials
     async with credentials_client(*VIEWER_CREDENTIALS) as viewer:
         assert (await viewer.get("/api/projects")).status_code == 200
         assert (await viewer.get(f"/api/projects/{project_id}")).status_code == 200
+        assert (await viewer.get("/api/workers")).status_code == 200
+        assert (await viewer.get("/api/jobs")).status_code == 200
 
         denied = {
             "create project": await viewer.post("/api/projects", json={"name": "nope"}),
@@ -115,6 +117,14 @@ async def test_viewer_can_read_but_never_mutate(client: AsyncClient, credentials
             "import jira": await viewer.post("/api/jira/import", json={"issue_keys": []}),
             "list users": await viewer.get("/api/users"),
             "security audit": await viewer.get("/api/audit/security"),
+            "register worker": await viewer.post("/api/workers", json={"hostname": "untrusted"}),
+            "heartbeat worker": await viewer.post("/api/workers/unknown/heartbeat", json={}),
+            "delete worker": await viewer.delete("/api/workers/unknown"),
+            "claim job": await viewer.post("/api/jobs/claim", json={"worker_id": "untrusted"}),
+            "forge result": await viewer.post("/api/jobs/unknown/result", json={}),
+            "complete job": await viewer.post("/api/jobs/unknown/complete", json={}),
+            "fail job": await viewer.post("/api/jobs/unknown/fail", json={}),
+            "cancel job": await viewer.post("/api/jobs/unknown/cancel"),
         }
         for label, response in denied.items():
             assert response.status_code == 403, f"{label} -> {response.status_code} {response.text}"
@@ -169,8 +179,11 @@ def test_policy_table_covers_every_privileged_route_family():
         ("POST", "/api/jira/import"): Permission.INTEGRATION_MANAGE,
         ("POST", "/api/users"): Permission.SECURITY_ADMIN,
         ("GET", "/api/projects"): Permission.PROJECT_READ,
-        ("POST", "/api/workers"): None,
-        ("POST", "/api/jobs/claim"): None,
+        ("POST", "/api/workers"): Permission.SECURITY_ADMIN,
+        ("POST", "/api/workers/x/heartbeat"): Permission.SECURITY_ADMIN,
+        ("DELETE", "/api/workers/x"): Permission.SECURITY_ADMIN,
+        ("POST", "/api/jobs/claim"): Permission.SECURITY_ADMIN,
+        ("POST", "/api/jobs/x/result"): Permission.SECURITY_ADMIN,
     }
     for (method, path), expected in expectations.items():
         assert required_permission(method, path) == expected, f"{method} {path}"

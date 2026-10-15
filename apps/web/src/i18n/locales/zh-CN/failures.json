@@ -226,7 +226,7 @@
   }
   ,"primaryAction": "推荐下一步"
   ,"primaryActions": {
-    "RUN_DIAGNOSIS": "运行 AI 诊断",
+    "RUN_DIAGNOSIS": "运行 AI 诊断并准备修复提案",
     "GENERATE_LOCATOR_REPAIR": "生成定位器修复提案",
     "RETRY": "重跑测试用例",
     "CREATE_ISSUE_DRAFT": "创建 Jira 缺陷草稿",
@@ -249,19 +249,19 @@
     "locatorRepairBlocked": "该 Locator 修复未通过 Jev 决策或页面验证门槛，因此没有修改代码。请检查下方决策与页面证据。",
     "repairUnavailable": "该分类没有安全且受支持的自动修复路径。"
   }
-  ,"manualNextStep": "可以打开失败代码手动检查，或生成修复方案审阅差异。只有点击批准并应用后才会写入脚本，之后再验证失败用例。"
-  ,"manualNextStepOverview": "当前没有通过定位器安全校验的自动修复。诊断建议不会修改脚本；你可以生成脚本修复方案并审阅差异，批准后才会写入。"
-  ,"codeRepairReviewHint": "诊断建议只是参考，不会改代码。生成修复方案后先检查脚本差异；点击批准并应用后才会写回并验证。"
-  ,"prepareCodeRepair": "生成修复方案并审阅"
-  ,"preparingCodeRepair": "正在准备修复方案…"
-  ,"openCodeRepairTask": "打开修复方案审阅"
+  ,"manualNextStep": "请在调试视图检查失败脚本；当前没有可应用的提案。修改脚本前必须由你审阅并批准，之后再复测失败用例。"
+  ,"manualNextStepOverview": "当前没有可安全应用的补丁。请检查失败证据，或在调试视图手动检查脚本；源代码只会在人工批准后写入。"
+  ,"preparingCodeRepair": "正在启动分析与修复任务…"
+  ,"openCodeRepairTask": "打开分析与修复任务"
+  ,"repairTaskExists": "已有分析与修复任务"
+  ,"repairRequiresProject": "请先选择项目，再启动分析与修复任务。"
   ,"codeRepairTaskGoal": "请根据失败证据为用例 {{nodeid}} 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。"
   ,"codeRepairTaskFailed": "无法启动修复任务：{{error}}"
   ,"openFailureCode": "在调试视图检查代码"
   ,"classification": "分类"
   ,"run": "运行"
   ,"whatFailed": "失败摘要"
-  ,"analysisNotRun": "诊断尚未运行。"
+  ,"analysisNotRun": "一次完成失败分析和修复提案；脚本只有在你批准后才会写入。"
   ,"evidenceWorkspace": "证据"
   ,"evidenceTabs": {
     "SUMMARY": "摘要",
@@ -337,7 +337,7 @@
   ,"repairEligible": "适合生成定位器提案；仍需审阅与验证"
   ,"nextAction": "下一步操作"
   ,"nextActionDescriptions": {
-    "RUN_DIAGNOSIS": "使用 AI + Jev 修复：诊断失败、从页面观测候选中决策、由 Playwright 验证并生成补丁。",
+    "RUN_DIAGNOSIS": "分析失败证据并准备脚本差异；检查提案后由你决定是否批准写入。",
     "ANALYZING": "AI 正在分析当前失败证据。",
     "GENERATE_LOCATOR_REPAIR": "生成定位器修复提案并检查差异；代码不会自动修改，需你审阅后再应用。",
     "REVIEW_REPAIR": "候选和补丁已生成。检查差异后点击“应用并复测原用例”。",

@@ -12,6 +12,8 @@ test('Artifact previews reflect actual type and safe external schemes', () => {
   );
   assert.equal(artifactPreviewKind({ name: 'report.html' }), 'report');
   assert.equal(artifactPreviewKind({ name: 'generated.py' }), 'text');
+  assert.equal(artifactPreviewKind({ name: 'test_product_detail.zip' }), 'trace');
+  assert.equal(artifactPreviewKind({ name: 'trace.data', type: 'PLAYWRIGHT_TRACE' }), 'trace');
   assert.equal(artifactPreviewKind({ name: 'unknown.bin' }), null);
   assert.equal(safeArtifactUrl('javascript:alert(1)'), null);
   assert.equal(safeArtifactUrl('https://user:pass@host/report'), null);

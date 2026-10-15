@@ -96,9 +96,12 @@ async def submit_job_result(
 async def complete_job(
     job_id: str, request: CompleteJobRequest, service: JobQueueService = Depends(get_job_queue_service)
 ) -> ExecutionJob:
-    job = await service.complete_job(job_id, duration_ms=request.duration_ms)
-    if not job:
+    try:
+        job = await service.get_job(job_id)
+    except JobNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    if job.status != JobStatus.COMPLETED:
+        raise HTTPException(status_code=409, detail="Submit an execution result before completing the job")
     return job
 
 

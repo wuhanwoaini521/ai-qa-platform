@@ -11,8 +11,9 @@ import tempfile
 import threading
 import time
 from collections.abc import Awaitable, Callable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
+from qa_core.execution.environment import project_subprocess_environment
 from qa_core.execution.models import (
     SingleTestResult,
     SuiteExecutionResult,
@@ -22,6 +23,28 @@ from qa_core.onboarding.collector import parse_execution, parse_report_log
 from qa_core.onboarding.pytest_plugin import write_plugin
 
 logger = logging.getLogger("qa_core.execution.pytest_runner")
+
+
+def validate_pytest_nodeids(workspace_dir: Path | str, nodeids: list[str]) -> list[str]:
+    """Keep test selections inside their workspace and out of pytest's option parser."""
+    root = Path(workspace_dir).resolve()
+    validated = []
+    for nodeid in nodeids or ["tests"]:
+        file_part, separator, target = nodeid.strip().partition("::")
+        file_part = file_part.replace("\\", "/")
+        normalized = file_part + separator + target
+        relative = PurePosixPath(file_part)
+        if (
+            not file_part
+            or normalized.startswith(("-", "@"))
+            or "\x00" in normalized
+            or ":" in file_part
+            or relative.is_absolute()
+            or not (root / Path(*relative.parts)).resolve().is_relative_to(root)
+        ):
+            raise ValueError("Test selection must use a relative path inside the workspace, not pytest options.")
+        validated.append(normalized)
+    return validated if nodeids else []
 
 
 class PytestRunner:
@@ -146,6 +169,7 @@ class PytestRunner:
         ws_path = Path(workspace_dir).resolve()
         if not ws_path.exists():
             raise FileNotFoundError(f"Workspace directory not found: {ws_path}")
+        nodeids = validate_pytest_nodeids(ws_path, nodeids or [])
 
         # Run pytest through an explicit interpreter: an imported project must use its own virtualenv
         # (its dependencies, its Python version), not whichever pytest happens to be on PATH.
@@ -172,9 +196,7 @@ class PytestRunner:
         else:
             cmd.append("tests")
 
-        env = dict(os.environ)
-        if environment:
-            env.update(environment)
+        env = project_subprocess_environment(environment)
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"

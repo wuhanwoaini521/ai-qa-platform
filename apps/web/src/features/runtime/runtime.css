@@ -968,6 +968,121 @@
 .rt-browser-entries span {
   overflow-wrap: anywhere;
 }
+.rt-network-list {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  font: 11px var(--font-mono);
+}
+.rt-network-list-header,
+.rt-network-list summary {
+  display: grid;
+  grid-template-columns: 14px 76px 54px minmax(150px, 1fr) 54px 62px 54px;
+  align-items: center;
+  gap: 8px;
+  min-width: 500px;
+}
+.rt-network-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px;
+  color: var(--text-muted);
+  background: var(--surface-subtle, #f4f7fb);
+  border-bottom: 1px solid var(--border-color);
+  font: 10px var(--font-sans);
+}
+.rt-network-list ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rt-network-list li {
+  border-bottom: 1px solid var(--border-color);
+}
+.rt-network-list li:last-child {
+  border-bottom: 0;
+}
+.rt-network-list details > summary {
+  position: relative;
+  padding: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.rt-network-list details > summary::-webkit-details-marker {
+  display: none;
+}
+.rt-network-list details > summary::before {
+  color: var(--text-muted);
+  content: '›';
+  font: 15px var(--font-sans);
+}
+.rt-network-list details[open] > summary::before {
+  content: '⌄';
+}
+.rt-network-url {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-network-list .is-success {
+  color: var(--success-text, #12804a);
+}
+.rt-network-list .is-failed,
+.rt-network-failure {
+  color: var(--danger-text, #c62828);
+}
+.rt-network-details-label {
+  color: var(--accent, #245de8);
+  font: 10px var(--font-sans);
+}
+.rt-network-detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 10px 12px 12px 30px;
+  background: var(--surface-subtle, #f4f7fb);
+  font: 12px var(--font-sans);
+}
+.rt-network-detail h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.rt-network-detail dl,
+.rt-network-detail dl > div {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.rt-network-detail dl > div + div {
+  margin-top: 8px;
+}
+.rt-network-detail dt {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.rt-network-detail dd {
+  min-width: 0;
+  margin: 0;
+}
+.rt-network-detail pre {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  font: 11px/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rt-network-failure {
+  overflow-wrap: anywhere;
+}
 .rt-retry-chain {
   display: flex;
   flex-wrap: wrap;
@@ -1014,6 +1129,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.rt-artifact-actions .rt-trace-viewer-hint { flex-basis: 100%; }
 .rt-artifact-preview {
   width: 100%;
   min-width: 0;

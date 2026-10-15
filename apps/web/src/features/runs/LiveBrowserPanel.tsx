@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Maximize2, Minimize2, PanelTopClose, PanelTopOpen, MonitorPlay } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TestBrowserSession } from '../../types';
@@ -10,6 +10,8 @@ interface LiveBrowserPanelProps {
   runStatus: string;
   streamStatus: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
   streamError?: string | null;
+  onSelectedSessionChange?: (sessionId: string | null) => void;
+  failureWorkspace?: React.ReactNode;
 }
 
 const statusColor = (status: string) => {
@@ -19,7 +21,7 @@ const statusColor = (status: string) => {
   return 'var(--ink-muted)';
 };
 
-export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, frames, runStatus, streamStatus, streamError }) => {
+export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, frames, runStatus, streamStatus, streamError, onSelectedSessionChange, failureWorkspace }) => {
   const { t } = useTranslation('runs');
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => a.started_at.localeCompare(b.started_at)),
@@ -36,6 +38,10 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
     ?? [...ordered].reverse().find((session) => session.status === 'running') ?? latest;
   const snapshotId = typeof selected?.page_evidence?.last_frame_artifact_id === 'string'
     ? selected.page_evidence.last_frame_artifact_id : null;
+
+  useLayoutEffect(() => {
+    onSelectedSessionChange?.(selected?.browser_session_id ?? null);
+  }, [onSelectedSessionChange, selected?.browser_session_id]);
 
   useEffect(() => {
     if (selectedId && !ordered.some((session) => session.browser_session_id === selectedId)) {
@@ -112,7 +118,10 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
                 type="button"
                 role="tab"
                 aria-selected={selected?.browser_session_id === session.browser_session_id}
-                onClick={() => setSelectedId(session.browser_session_id)}
+                onClick={() => {
+                  setSelectedId(session.browser_session_id);
+                  onSelectedSessionChange?.(session.browser_session_id);
+                }}
                 style={{
                   flex: '0 0 auto', padding: '7px 10px', borderRadius: 'var(--r-xs)',
                   border: selected?.browser_session_id === session.browser_session_id ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
@@ -148,6 +157,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
               </dl>
             </div>
           )}
+          {failureWorkspace}
         </div>
       )}
     </section>

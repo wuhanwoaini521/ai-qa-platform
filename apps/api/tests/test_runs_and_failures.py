@@ -48,6 +48,165 @@ def make_test_run_service(*args):
     )
 
 
+@pytest.mark.parametrize("runner_type", ["WORKER", "LOCAL", "JENKINS"])
+@pytest.mark.parametrize("workspace_key", ["project_id", "row_id", "unknown"])
+async def test_run_rejects_workspace_outside_selected_project(client, test_db_session, runner_type, workspace_key):
+    project_id = (await client.post("/api/projects", json={"name": "Run owner"})).json()["id"]
+    foreign_project = (await client.post("/api/projects", json={"name": "Other workspace"})).json()["id"]
+    async with test_db_session() as session:
+        foreign_workspace = await WorkspaceRepository(session).get_by_project_id(foreign_project)
+        workspace_id = {"project_id": foreign_project, "row_id": foreign_workspace.id, "unknown": "missing-workspace"}[
+            workspace_key
+        ]
+    response = await client.post(
+        "/api/runs",
+        json={"project_id": project_id, "workspace_id": workspace_id, "runner_type": runner_type},
+    )
+    assert response.status_code == 422, response.text
+    assert (await client.get("/api/runs", params={"project_id": project_id})).json() == []
+    assert (await client.get("/api/jobs", params={"project_id": project_id})).json() == []
+
+
+async def test_run_normalizes_workspace_row_id_before_idempotency_check(client, test_db_session, monkeypatch):
+    scheduled_workspaces = []
+    monkeypatch.setattr(
+        _TestRunService,
+        "_schedule_local_run",
+        lambda _self, _run_id, data, *_args: scheduled_workspaces.append(data.workspace_id),
+    )
+    project_id = (await client.post("/api/projects", json={"name": "Canonical run workspace"})).json()["id"]
+    async with test_db_session() as session:
+        workspace = await WorkspaceRepository(session).get_by_project_id(project_id)
+        workspace_id = workspace.id
+    payload = {
+        "project_id": project_id,
+        "workspace_id": workspace_id,
+        "runner_type": "LOCAL",
+        "idempotency_key": "same-canonical-workspace",
+    }
+    response = await client.post("/api/runs", json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json()["workspace_id"] == project_id
+    retry = await client.post("/api/runs", json={**payload, "workspace_id": project_id})
+    assert retry.status_code == 201, retry.text
+    assert retry.json()["id"] == response.json()["id"]
+    assert len((await client.get("/api/runs", params={"project_id": project_id})).json()) == 1
+    assert scheduled_workspaces == [project_id, project_id]
+
+
+@pytest.mark.parametrize("runner_type", ["LOCAL", "WORKER", "JENKINS"])
+async def test_run_rejects_escaping_nodeids_and_pytest_argument_injection(client, runner_type):
+    project_id = (await client.post("/api/projects", json={"name": "Bounded test selection"})).json()["id"]
+    for nodeid in [
+        "../other/tests/test_case.py::test_case",
+        "--version",
+        "@pytest-args.txt",
+        "C:\\other\\test_case.py",
+    ]:
+        response = await client.post(
+            "/api/runs",
+            json={
+                "project_id": project_id,
+                "workspace_id": project_id,
+                "runner_type": runner_type,
+                "nodeids": [nodeid],
+            },
+        )
+        assert response.status_code == 422, response.text
+    assert (await client.get("/api/runs", params={"project_id": project_id})).json() == []
+    assert (await client.get("/api/jobs", params={"project_id": project_id})).json() == []
+
+
+@pytest.mark.parametrize("runner_type", ["WORKER", "JENKINS"])
+async def test_remote_run_concurrent_retries_dispatch_once(client, monkeypatch, runner_type):
+    from app.services.test_run_service import _RUN_WORKER_TASKS
+
+    project_id = (await client.post("/api/projects", json={"name": "Remote idempotent run"})).json()["id"]
+    triggered = asyncio.Event()
+    release = asyncio.Event()
+    remote_triggers = []
+
+    class JenkinsBackend:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def trigger(self, request):
+            remote_triggers.append(request.run_id)
+            triggered.set()
+            await release.wait()
+            return SimpleNamespace(external_job_id="123")
+
+        async def get_status(self, _run_id, external_job_id=None):
+            return RunnerStatusResult(status=RunStatus.PASSED, external_job_id=external_job_id)
+
+        async def stream_logs(self, *_args, **_kwargs):
+            if False:
+                yield ""
+
+        async def stop(self, *_args, **_kwargs):
+            return True
+
+    def reject_local_dispatch(*_args, **_kwargs):
+        raise AssertionError("A remote Run must never dispatch locally")
+
+    monkeypatch.setattr("app.services.test_run_service.JenkinsRunnerBackend", JenkinsBackend)
+    monkeypatch.setattr(_TestRunService, "_schedule_local_run", reject_local_dispatch)
+    payload = {
+        "project_id": project_id,
+        "workspace_id": project_id,
+        "runner_type": runner_type,
+        "idempotency_key": "remote-run-retry",
+        "nodeids": ["tests/test_remote.py::test_remote"],
+    }
+    run_id = None
+    try:
+        responses = await asyncio.gather(*(client.post("/api/runs", json=payload) for _ in range(3)))
+        assert all(response.status_code == 201 for response in responses), [r.text for r in responses]
+        run_id = responses[0].json()["id"]
+        assert {response.json()["id"] for response in responses} == {run_id}
+        if runner_type == "JENKINS":
+            await asyncio.wait_for(triggered.wait(), timeout=10)
+        retry = await client.post("/api/runs", json=payload)
+        assert retry.status_code == 201, retry.text
+        assert retry.json()["id"] == run_id
+        jobs = (await client.get("/api/jobs", params={"run_id": run_id})).json()
+        assert len(jobs) == (1 if runner_type == "WORKER" else 0)
+        assert remote_triggers == ([run_id] if runner_type == "JENKINS" else [])
+        mismatch = await client.post("/api/runs", json={**payload, "browser": "firefox"})
+        assert mismatch.status_code == 422, mismatch.text
+    finally:
+        release.set()
+        if run_id and (worker := _RUN_WORKER_TASKS.get(run_id)) is not None:
+            await asyncio.wait_for(worker, timeout=10)
+
+
+async def test_worker_enqueue_failure_does_not_leave_an_orphan_run(client, monkeypatch):
+    project_id = (await client.post("/api/projects", json={"name": "Atomic distributed dispatch"})).json()["id"]
+
+    async def fail_enqueue(*_args, **_kwargs):
+        raise RuntimeError("queue insert failed")
+
+    monkeypatch.setattr("app.services.test_run_service.JobQueueService.enqueue_job", fail_enqueue)
+    with pytest.raises(RuntimeError, match="queue insert failed"):
+        await client.post(
+            "/api/runs", json={"project_id": project_id, "workspace_id": project_id, "runner_type": "WORKER"}
+        )
+    assert (await client.get("/api/runs", params={"project_id": project_id})).json() == []
+
+
+def test_remote_idempotency_rejects_unrecorded_custom_runner_parameters():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="custom runner parameters"):
+        TestRunCreate(
+            project_id="project",
+            workspace_id="project",
+            runner_type="JENKINS",
+            idempotency_key="same-run-123",
+            parameters={"TARGET_REGION": "eu"},
+        )
+
+
 async def test_late_browser_subscriber_gets_the_last_actual_frame_and_terminal_run_releases_it():
     from app.services.test_run_service import TestRunEventBus
 
@@ -160,6 +319,64 @@ async def test_recorder_evidence_ids_survive_browser_session_persistence(client:
     recent_steps = response.json()["browser_sessions"][0]["page_evidence"]["recent_steps"]
     assert recent_steps[-1]["step_id"] == "step-cart-add"
     assert recent_steps[-1]["evidence_id"] == "recorder:step-cart-add"
+
+
+async def test_browser_session_events_cannot_overwrite_another_run(client: AsyncClient, test_db_session):
+    project_id = (await client.post("/api/projects", json={"name": "Browser evidence ownership"})).json()["id"]
+    async with test_db_session() as session:
+        repo = TestRunRepository(session)
+        owner = await repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        other = await repo.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+        owner_id, other_id = owner.id, other.id
+        await session.commit()
+    service = make_test_run_service(
+        TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
+    )
+    session_id = "owned-browser-session"
+    initial = {"session_id": session_id, "nodeid": "tests/test_owner.py::test_owner", "url": "https://owner.test/"}
+    await service._record_browser_event(owner_id, {**initial, "type": "session.started"})
+    queue = event_bus.subscribe(other_id)
+    try:
+        for event_type in ("session.started", "navigation", "session.finished", "console", "network", "step", "frame"):
+            await service._record_browser_event(
+                other_id,
+                {
+                    **initial,
+                    "type": event_type,
+                    "url": "https://unrelated.test/",
+                    "frame": "forged-frame",
+                    "entry": {"message": "foreign evidence"},
+                    "page_evidence": {"title": "foreign page"},
+                },
+            )
+        assert queue.empty()
+        owner = (await client.get(f"/api/runs/{owner_id}")).json()["browser_sessions"][0]
+        assert owner["current_url"] == "https://owner.test/"
+        assert owner["page_evidence"] == {}
+        assert owner["status"] == "running"
+        for event_type in ("navigation", "session.finished", "console", "network", "step", "frame"):
+            await service._record_browser_event(
+                owner_id,
+                {
+                    **initial,
+                    "nodeid": "tests/test_other.py::test_other",
+                    "type": event_type,
+                    "url": "https://unrelated.test/",
+                    "frame": "forged-frame",
+                    "entry": {"message": "other test evidence"},
+                    "page_evidence": {"title": "other test page"},
+                },
+            )
+        unchanged = (await client.get(f"/api/runs/{owner_id}")).json()["browser_sessions"][0]
+        assert unchanged["current_url"] == "https://owner.test/"
+        assert unchanged["page_evidence"] == {}
+        await service._record_browser_event(
+            owner_id, {**initial, "type": "console", "entry": {"message": "owned evidence"}}
+        )
+        saved = (await client.get(f"/api/runs/{owner_id}")).json()["browser_sessions"][0]
+        assert saved["page_evidence"]["console_logs"][-1]["message"] == "owned evidence"
+    finally:
+        event_bus.unsubscribe(other_id, queue)
 
 
 def test_repair_trace_revalidates_serialized_events_before_response_dump():
@@ -1467,6 +1684,8 @@ async def test_task_run_worker_uses_remaining_budget_without_a_short_hard_cap(cl
         workspace_id=project_id,
         nodeids=["tests/test_smoke.py::test_ok"],
         requested_by=task.owner_id,
+        browser="firefox",
+        environment={"QA_BROWSER": "webkit"},
     )
     async with test_db_session() as session:
         session.add(task)
@@ -1479,9 +1698,11 @@ async def test_task_run_worker_uses_remaining_budget_without_a_short_hard_cap(cl
         TestRunRepository(test_db_session), WorkspaceRepository(test_db_session), WorkspaceService()
     )
     observed: dict[str, float] = {}
+    observed_environment: dict[str, str] = {}
 
     async def record_timeout(**kwargs):
         observed["timeout_sec"] = kwargs["timeout_sec"]
+        observed_environment.update(kwargs["environment"])
         raise RuntimeError("stop after timeout was captured")
 
     monkeypatch.setattr(service.pytest_runner, "run_suite", record_timeout)
@@ -1489,6 +1710,7 @@ async def test_task_run_worker_uses_remaining_budget_without_a_short_hard_cap(cl
     await service._run_worker_task(run_id, run_data, execution_deadline=execution_deadline)
 
     assert 900 < observed["timeout_sec"] < 1000
+    assert observed_environment["QA_BROWSER"] == "firefox"
 
 
 @pytest.mark.unit

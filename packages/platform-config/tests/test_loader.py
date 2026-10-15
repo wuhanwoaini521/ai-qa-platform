@@ -6,6 +6,39 @@ from pathlib import Path
 import pytest
 from platform_config import ConfigLoadError, ConfigManager, sanitize_config_value
 
+#: Process-environment overrides the loader applies on top of YAML. ``ConfigManager`` loads the
+#: repository ``.env``, and this module writes its fixtures under the repository root, so without
+#: isolation a developer's local ``.env`` would mask the YAML each test is asserting on.
+ENVIRONMENT_OVERRIDES = (
+    "QA_AI_ENABLED",
+    "QA_AI_PROVIDER",
+    "QA_AI_API_KEY",
+    "QA_AI_BASE_URL",
+    "QA_AI_MODEL",
+    "QA_AI_TIMEOUT_SECONDS",
+    "QA_AI_MAX_RETRIES",
+    "JEV_ENABLED",
+    "JEV_API_KEY",
+    "JEV_BASE_URL",
+    "JEV_MODEL",
+    "JEV_TIMEOUT_SECONDS",
+    "JEV_RETRIES",
+    "JEV_MINIMUM_CONFIDENCE",
+)
+
+
+@pytest.fixture(autouse=True)
+def isolate_environment_overrides(monkeypatch):
+    """Keep ambient environment from masking the YAML under test.
+
+    ``ConfigManager`` loads the repository ``.env`` next to these fixtures' config files, and the
+    loader applies documented process-environment overrides on top of YAML. Both would replace the
+    values a test writes into its temporary config whenever a developer has a local ``.env``.
+    """
+    monkeypatch.setattr("platform_config.loader.load_dotenv", lambda *args, **kwargs: False)
+    for name in ENVIRONMENT_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture
 def tmp_path():
@@ -27,23 +60,6 @@ def write_config(path: Path, body: str) -> None:
 
 
 def test_loads_yaml_values_and_secret_environment_interpolation(tmp_path, monkeypatch):
-    for name in (
-        "QA_AI_ENABLED",
-        "QA_AI_PROVIDER",
-        "QA_AI_API_KEY",
-        "QA_AI_BASE_URL",
-        "QA_AI_MODEL",
-        "QA_AI_TIMEOUT_SECONDS",
-        "QA_AI_MAX_RETRIES",
-        "JEV_ENABLED",
-        "JEV_API_KEY",
-        "JEV_BASE_URL",
-        "JEV_MODEL",
-        "JEV_TIMEOUT_SECONDS",
-        "JEV_RETRIES",
-        "JEV_MINIMUM_CONFIDENCE",
-    ):
-        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("QA_TEST_CONFIG_KEY", "test-secret")
     isolated = tmp_path / "isolated"
     isolated.mkdir()

@@ -23,6 +23,35 @@ def tmp_path():
             shutil.rmtree(resolved)
 
 
+#: Process-environment overrides the loader applies on top of YAML. The temporary configs live
+#: under the repository root, so ``ConfigManager`` would also load the repository ``.env`` and
+#: replace the very values each test writes into its config.
+ENVIRONMENT_OVERRIDES = (
+    "QA_AI_ENABLED",
+    "QA_AI_PROVIDER",
+    "QA_AI_API_KEY",
+    "QA_AI_BASE_URL",
+    "QA_AI_MODEL",
+    "QA_AI_TIMEOUT_SECONDS",
+    "QA_AI_MAX_RETRIES",
+    "JEV_ENABLED",
+    "JEV_API_KEY",
+    "JEV_BASE_URL",
+    "JEV_MODEL",
+    "JEV_TIMEOUT_SECONDS",
+    "JEV_RETRIES",
+    "JEV_MINIMUM_CONFIDENCE",
+)
+
+
+@pytest.fixture(autouse=True)
+def isolate_environment_overrides(monkeypatch):
+    """Keep a developer's local ``.env`` from masking the YAML these tests assert on."""
+    monkeypatch.setattr("platform_config.loader.load_dotenv", lambda *args, **kwargs: False)
+    for name in ENVIRONMENT_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.mark.asyncio
 async def test_ai_and_jev_runtime_services_read_reloaded_shared_config(tmp_path, monkeypatch):
     import app.settings as settings_module
@@ -87,23 +116,6 @@ async def test_effective_config_api_redacts_secrets_and_reload_is_atomic(client,
     import app.services.effective_config_service as effective_config_module
     import app.settings as settings_module
 
-    for name in (
-        "QA_AI_ENABLED",
-        "QA_AI_PROVIDER",
-        "QA_AI_API_KEY",
-        "QA_AI_BASE_URL",
-        "QA_AI_MODEL",
-        "QA_AI_TIMEOUT_SECONDS",
-        "QA_AI_MAX_RETRIES",
-        "JEV_ENABLED",
-        "JEV_API_KEY",
-        "JEV_BASE_URL",
-        "JEV_MODEL",
-        "JEV_TIMEOUT_SECONDS",
-        "JEV_RETRIES",
-        "JEV_MINIMUM_CONFIDENCE",
-    ):
-        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("QA_CONFIG_API_TEST_SECRET", "must-not-be-returned")
     monkeypatch.setenv(
         "DATABASE_URL",

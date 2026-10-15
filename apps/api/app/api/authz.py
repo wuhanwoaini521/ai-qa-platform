@@ -66,9 +66,9 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/users", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
     Rule("/api/teams", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
     Rule("/api/audit", Permission.SECURITY_ADMIN, Permission.SECURITY_ADMIN),
-    # Cluster infrastructure: any authenticated principal may register/heartbeat or work the queue.
-    Rule("/api/workers", ANY_AUTHENTICATED, ANY_AUTHENTICATED),
-    Rule("/api/jobs", ANY_AUTHENTICATED, ANY_AUTHENTICATED),
+    # Workers can submit authoritative test results; their credentials are infrastructure secrets.
+    Rule("/api/workers", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),
+    Rule("/api/jobs", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),
     Rule("/api/artifacts", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
     Rule("/api/projects", Permission.PROJECT_READ, Permission.PROJECT_WRITE),
     Rule("/api/requirements", Permission.PROJECT_READ, Permission.REQUIREMENT_WRITE),
