@@ -28,25 +28,27 @@
 
 ## 3. 授权模型
 
-`apps/api/app/api/authz.py` 提供两级控制：
+`apps/api/app/api/authz.py` 有全局角色权限和路由策略：`authorize_request` 在 `apps/api/app/main.py:171` 应用，
+`required_permission(method,path)` 匹配路径/方法；`require_permission(Permission.X)` 提供路由级细化。
+这些控制只回答“该用户角色能否执行这类动作”，不回答“这个项目/资源是否属于该用户”。
 
-1. **应用级**：`authorize_request`（`authz.py:214`）挂在主路由
-   `apps/api/app/main.py:171` 的 `dependencies=` 上，对每个非公开请求
-   （`is_public_path`）做完认证后按中央策略表 `required_permission(method, path)` 校验。
-2. **路由级**：`require_permission(Permission.X)`（`authz.py:250`）用于需要更细粒度控制的端点。
+**重要缺口（跨项目隔离未实现）**：`ProjectORM` 无 owner/team 关系；`User` 只有全局 role；`TeamMemberORM` 只关联 team/user，
+没有 project 关联或 team→project 权限映射（`apps/api/app/persistence/models.py:100-121,624-655`；
+`packages/project-model/project_model/models.py:1381-1480`）。因此中央规则中的 `PROJECT_READ`、`RUN_EXECUTE` 等权限对所有项目相同。
+部分服务主动核对相关项目 ID，但不能由此推断所有 path/query/body/opaque-ID 资源都经过同样验证。
+`runs/{run_id}`、workspace files, failures/repair, tasks/artifacts, discovery-run IDs, streams 等必须先解析拥有项目，不能只看 URL 的 `project_id`。
+D5 refresh 路由单独限制为 run requester/Admin，但这不等于系统级 project ACL。
 
-39 个 router 中 14 个显式声明了权限依赖，其余由中央策略表覆盖 —— **这是有意的设计，不是漏洞**；
-`test_authorization_rbac.py` 覆盖策略表。
+审计能力是存在的真实后端（`apps/api/app/api/audit.py` 与 `apps/api/app/repositories/security_audit_repo.py`），但当前审计查询主要按 actor/action，
+尚未形成以 project_id 为核心的访问审计。
 
-审计能力已存在且是真实后端：`apps/api/app/api/audit.py`（`/audit/integrations`、`/audit/security`）
-+ `apps/api/app/repositories/security_audit_repo.py`。
-
-> 因此「RBAC / 审计日志」**不应再新建第二套**，后续如需扩展应扩展现有策略表与审计表。
+> 不应新建第二套全局 RBAC。安全实现应扩展现有策略：先定义 project/team membership、角色映射与 legacy project 兼容规则，再集中解析/校验资源所属项目，涵盖 project-id 和 opaque-ID 路由、列表查询、websocket/stream、写请求的关联 ID 一致性与后台任务。未完成该完整闭环前，不要只给少数路由加 ACL 并声称隔离完成。
 
 ## 4. 主要架构风险（未修复，记录在案）
 
 | 级别 | 风险 | 位置 | 说明 |
 | --- | --- | --- | --- |
+| P0（企业多项目部署 blocker） | 无 project/resource-level ACL | `ProjectORM`, `User`, `TeamMemberORM`, central authz | 全局角色权限不与项目绑定；query/list 与 opaque resource ID 路由缺少统一 owner resolution。需要跨 API 完整设计与迁移，不能靠单路由补丁假装隔离 |
 | P2 | Studio 前端 chunk 4.03 MB | `apps/web/src/features/automation-studio/monaco.ts:1`（`import * as monaco from 'monaco-editor'` 拉入全部语言） | 构建产物告警；也是构建内存峰值的主要来源。改为按需引入 `esm/vs/editor/editor.api` + 需要的语言可同时降低包体与构建内存，但对 Studio 有回归风险，需配浏览器验收 |
 | P2 | 33 个 service 文件直接使用 `session.execute/text(` | `apps/api/app/services/` | 部分查询绕过仓储层，一致性由测试保障；长期应收敛到仓储 |
 | P3 | 健康探针预算与各 provider 请求超时的对齐是逐组件手写的 | `platform_health_service._probe_timeouts` | 本轮已修 `ai`（见 implementation-log），`jev`/`browser` 仍为常量 |
@@ -54,5 +56,5 @@
 
 ## 5. 结论
 
-架构评分：**健康（B+）**。分层清晰、依赖方向正确、不变量保持、授权与审计是真实后端实现。
-主要技术债集中在 Studio 打包体积与少量绕过仓储的查询，均非阻断项。
+架构评分：分层/运行时边界 **B+**；企业安全隔离 **PARTIAL / P0 阻断**。Runtime 与层次边界健康，但当前 RBAC 是全局角色模型，缺 project membership/owner resolution；跨项目 API 数据隔离不能宣称完成。
+主要后续工作：完整 project ACL 与 legacy migration/backward-compat policy；其次 Studio 打包体积和少量绕过仓储的查询。

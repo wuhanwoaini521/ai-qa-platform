@@ -130,13 +130,13 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 | --- | --- | --- |
 | 架构 | **B+** | 分层清晰、依赖方向正确、不变量保持；债务在打包体积与少量越层查询 |
 | 可靠性 | **B** | 全仓 829 passed / 9 skipped；执行隔离与失败隔离有测试；Worker 集群、PostgreSQL、多进程 refresh 未验证 |
-| 安全 | **B** | 两级授权 + 中央策略表 + 安全审计表 + 凭据擦洗 + 工作区边界；未做渗透式验证 |
+| 安全 | **PARTIAL / C+** | 中央全局 RBAC、安全审计、凭据擦洗与部分工作区边界已存在；缺 project/resource-level ACL，跨项目隔离不能宣称完成，也未做渗透式验证 |
 | 业务功能 | **B+** | 三条核心链路真实跑通，含真实 Discovery→Coverage；全平台项目级 ACL 仍缺失 |
 | 自动化 | **A-** | 后端 829 用例、前端 160 用例、真实浏览器 acceptance、OpenAPI 契约由 lint 强制；strict D5 harness仍待provider可用后重跑 |
 | AI / Jev | **A-** | 真实 provider 全链路、零 fallback、低置信度诚实阻断实证 |
 | UI / UX | **B** | 13 页真实数据可用、三档无溢出、D5 refresh UI 点击成功；strict live harness 最新代码未重新跑绿，Studio 深度交互未验收 |
 | 可维护性 | **B+** | 单一客户端、契约同步强制、i18n 一致性强校验、交接机制已建立 |
-| 企业部署准备度 | **C+** | 缺 PostgreSQL 验证、集群 Worker、环境管理、CI/CD 端到端；RBAC/审计已有基础 |
+| 企业部署准备度 | **C** | 缺 project-level ACL、PostgreSQL 验证、集群 Worker、环境管理及 CI/CD 端到端 |
 
 ## 10. 最终业务目标达成情况
 
@@ -144,7 +144,7 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 
 | 环节 | 是否真实达成 | 证据 |
 | --- | --- | --- |
-| 项目上下文正确 | ✅ | Golden Demo 与验收项目均按 project_id 隔离 |
+| 项目上下文正确 | **PARTIAL** | D5 isolated acceptance uses matching project_id; system-wide resource ACL is absent because Project has no owner/team membership |
 | 需求 → AI/Jev 分析 | ✅ | 链路 A，真实 provider + 真实 Jev，零 fallback |
 | 场景 → 用例 | ✅ | Jev `SCN-002` → 用例绑定需求 |
 | 自动化开发 | ✅ | 生成真实 Playwright 测试写入工作区 |

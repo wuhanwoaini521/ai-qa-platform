@@ -16,10 +16,11 @@
 | 更早基准 | `02c5f3c` |
 | D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
 | 最近独立安全测试提交 | `81550e6 test(repair): cover Jev upstream outage fail-closed` |
-| Handoff 更新基点 HEAD | `6b56261`；D5 代码、回归证据与真实 UI screenshots 已本地提交；本次仅有该交接元数据待提交 |
+| 上一份 handoff 更新提交 | `9437ee0`（D5 code/evidence commit `6b56261` 的 SHA 与后续工作状态） |
+| 本轮 architecture audit 更新基点 | `9437ee0`；当前追加的 project-level ACL 风险说明待文档 commit |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 本次交接提交内容 | 仅本文件记录 D5 SHA/验证及下一步；代码与 screenshots 已由 `6b56261` 提交 |
+| 当前文档提交内容 | architecture-audit/final-report 补充 project ACL 风险；handoff 记录完整迁移/安全 blocker。生产代码未修改 |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
