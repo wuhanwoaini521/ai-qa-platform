@@ -14,12 +14,12 @@
 | --- | --- |
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
-| 最新已提交代码 | `6b139b5`；当前 D5 refresh 改动尚未提交 |
+| D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
 | 最近独立安全测试提交 | `81550e6 test(repair): cover Jev upstream outage fail-closed` |
-| 当前 HEAD | `6b139b5`（更新本文件前由 `git rev-parse --short HEAD` 核实） |
+| Handoff 更新基点 HEAD | `6b56261`；D5 代码、回归证据与真实 UI screenshots 已本地提交；本次仅有该交接元数据待提交 |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 未提交修改 | D5 API/service/projection、测试、OpenAPI、web client/Discover panel/i18n 与本轮 evidence/handoff；提交前确认 `git status --short` |
+| 本次交接提交内容 | 仅本文件记录 D5 SHA/验证及下一步；代码与 screenshots 已由 `6b56261` 提交 |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
@@ -27,7 +27,7 @@
 
 阶段 8 / 第二轮 D5：Discovery → Coverage refresh API/UI 已实现；真实 AI/Jev/API 链通过，真实 UI 按钮点击成功过一次。当前 strict opt-in harness 加强了 HTTP 200 / API error / per-run screenshot 断言，但后续两次重跑在 AI discovery 阶段遭遇 20s Provider timeout，按夜间规则暂停消耗额度；该 strict harness 状态 **NOT VERIFIED**。
 当前基线完整回归：全仓 backend 829 passed / 9 skipped / 55 warnings（431.17s），web 160 passed，typecheck/lint/build 均 PASS。已有 D8、repair CAS/recovery、Jev 503 fail-closed、Discovery finalization/terminal map、Studio/AI-Jev UI 工作。
-下一步：独立 reviewer 对最终 diff 复查 → 更新 Git SHA 并本地提交 D5 → 继续项目级 ACL 架构和未完成 UI/数据库/Worker 验证。No push/main merge/deploy。refresh lock 为进程内，PostgreSQL/多 worker 未验证。
+Final independent reviewer checked the committed D5 diff and found no blockers. D5 commit: `6b56261`; no push/main merge/deploy. 下一步：审计并规划跨 API 项目级 ACL 架构，再继续未完成 UI/数据库/Worker 验证。refresh lock 为进程内，PostgreSQL/多 worker 未验证。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
 ## 4. 环境基线（WSL / Linux）
