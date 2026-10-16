@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, readWorkspaceContext, writeWorkspaceContext } =
+const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, readWorkspaceContext, resolveCanonicalFile, writeWorkspaceContext } =
   await import('../src/app/workspaceContext.ts');
 const { withProjectId } = await import('../src/app/projectPaths.ts');
 
@@ -107,4 +107,21 @@ test('opens run progress in the Workspace drawer instead of navigating to a seco
   assert.equal(params.get('view'), 'results');
   assert.equal(params.get('panel'), 'runtime');
   assert.equal(buildWorkflowHref({ projectId: 'project-a' }), '/runs/tasks?projectId=project-a');
+});
+
+test('keeps the file named by a deep link instead of the first bound case file', () => {
+  // /projects/<id>/studio/file/tests/test_known_locator.py must not open tests/test_shop.py.
+  const linked = readWorkspaceContext('?view=code&file=tests/test_known_locator.py', 'project-a');
+  assert.equal(resolveCanonicalFile(linked, 'tests/test_shop.py'), 'tests/test_known_locator.py');
+});
+
+test('falls back to the bound case file when the link names no file', () => {
+  const linked = readWorkspaceContext('?view=code&caseId=case-a', 'project-a');
+  assert.equal(resolveCanonicalFile(linked, 'tests/test_shop.py'), 'tests/test_shop.py');
+  assert.equal(resolveCanonicalFile(linked, undefined), undefined);
+});
+
+test('failure debug links keep their own file even when a case binding exists', () => {
+  const linked = readWorkspaceContext('?view=debug&failureId=failure-a&file=tests/test_known_locator.py', 'project-a');
+  assert.equal(resolveCanonicalFile(linked, 'tests/test_shop.py'), 'tests/test_known_locator.py');
 });

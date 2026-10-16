@@ -8,6 +8,7 @@ import { buildProjectDisplayNames } from '../../app/projectSelectionModel';
 import {
   buildWorkspaceHref,
   readWorkspaceContext,
+  resolveCanonicalFile,
   writeWorkspaceContext,
   type WorkspaceContext,
   type WorkspaceStage,
@@ -398,7 +399,7 @@ export function WorkspacePage() {
         testCaseId: nextCase?.id,
         testDesignId: nextCase?.test_design_id ?? undefined,
         automationBindingId: nextCase?.binding?.id,
-        file: preserveFailureDebugContext ? context.file : nextCase?.binding?.file_path,
+        file: resolveCanonicalFile(context, nextCase?.binding?.file_path),
         lineNumber: preserveFailureDebugContext ? context.lineNumber : undefined,
         nodeId: preserveFailureDebugContext ? context.nodeId : nextCase?.binding?.nodeid,
         stage: context.stage ?? 'requirement',
@@ -1144,7 +1145,7 @@ export function WorkspacePage() {
                 onRunCreated={onRunStarted}
                 runConfig={runConfig}
                 workspaceView={view === 'debug' ? 'debug' : 'code'}
-                initialOpenFilePath={automationSetup ? null : view === 'debug' || !selectedCase ? context.file ?? automationFilePath : automationFilePath}
+                initialOpenFilePath={automationSetup ? null : context.file ?? automationFilePath}
                 workspaceAutomationSetup={automationSetup}
                 workspaceAutomationSetupKey={automationSetupKey}
                 onStartRecording={() => setView('browser')}

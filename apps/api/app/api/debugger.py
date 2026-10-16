@@ -87,10 +87,12 @@ async def close_debug_session(
     user: User = Depends(get_current_user),
     _: User = Depends(require_permission(Permission.RUN_EXECUTE)),
 ) -> dict[str, bool]:
+    # Closing is idempotent: the adapter teardown already closes the session when the debuggee
+    # finishes, so a client DELETE that loses that race must not surface as an error.
     closed = await debug_session_service.close(session_id, user.id)
-    if not closed:
+    if not closed and await debug_session_service.get_record(session_id, user.id) is None:
         raise HTTPException(status_code=404, detail="Debug session not found")
-    return {"closed": True}
+    return {"closed": closed}
 
 
 @router.websocket("/sessions/{session_id}/stream")

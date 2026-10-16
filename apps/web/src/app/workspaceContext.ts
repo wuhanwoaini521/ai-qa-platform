@@ -146,6 +146,18 @@ export function writeWorkspaceContext(
   return params;
 }
 
+/**
+ * A link that names a file wins over the canonical case binding: replacing the
+ * requested file would silently point edits, breakpoints and debug runs at another module.
+ */
+export function resolveCanonicalFile(
+  context: Pick<WorkspaceContext, 'file' | 'failureId' | 'view'>,
+  boundFilePath?: string | null,
+): string | undefined {
+  if (context.failureId && context.view === 'debug') return context.file;
+  return context.file?.trim() ? context.file : boundFilePath ?? undefined;
+}
+
 function queryFor(context: WorkspaceContext): string {
   const params = writeWorkspaceContext('', context);
   const query = params.toString();

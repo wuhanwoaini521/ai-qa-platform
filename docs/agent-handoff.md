@@ -21,7 +21,9 @@
 
 ## 3. 当前开发阶段
 
-阶段 7：真实 AI + Jev 验收与跨平台缺陷修复。
+阶段 8 / 第二轮：Studio 真实调试能力验收与修复（里程碑 1 已完成）。
+本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
+本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -36,6 +38,7 @@
 
 | 项目 | 证据 |
 | --- | --- |
+| **Studio 真实调试全流程（第二轮）** | `round-2/studio-debug-acceptance.md`（两脚本 31 项全 PASS） |
 | 仓库/环境恢复，无 Windows 路径残留导致的功能缺失 | `environment-audit.md` |
 | 后端测试基线（真实运行，非沿用旧报告） | `test-results.md` / `.ai-runs/enterprise-continuation/logs/` |
 | 前端 typecheck / lint / build | `test-results.md` |
@@ -46,6 +49,22 @@
 | UI 12 个主页面渲染 + 无控制台错误 + 截图 | `screenshots/*.png`、`ui-ux-audit.md` |
 
 ## 6. 本次修复的缺陷
+
+### P1（第二轮 D7）— Studio 深链会静默打开另一个文件
+
+- 现象：`/projects/<id>/studio/file/tests/test_known_locator.py` 最终把 URL 的 `file=` 改成
+  `tests/test_shop.py`，编辑器、断点与调试目标全部落到另一个文件；用户以为在给 A 设断点，实际调试 B。
+- 根因：`WorkspacePage.tsx` 的上下文归一化用「第一条绑定用例的文件」覆盖显式 `file=`；
+  `initialOpenFilePath` 只要选中用例就优先绑定文件。
+- 修复：`workspaceContext.ts` 新增 `resolveCanonicalFile()`（显式 file > 失败调试上下文 > 绑定文件），
+  归一化与 `initialOpenFilePath` 都改用它；新增 3 个前端回归用例。
+- 回归：`pnpm --filter @ai-qa/web test` → 160 passed；真实浏览器复验断点落在 `test_known_locator.py:12`。
+
+### P2（第二轮 D6）— `DELETE /api/debug/sessions/{id}` 对已关闭会话返回 404
+
+- 现象：DAP `terminated` 后前端调用关闭接口，浏览器控制台出现 404 报错。
+- 修复：DELETE 改为幂等（已关闭 → 200 `{"closed": false}`），未知/他人会话仍 404；
+  新增 `test_debug_close_is_idempotent_for_already_closed_sessions`。
 
 ### P1 — 验收夹具把浏览器 channel 写死为系统 Chrome（跨平台缺陷）
 
@@ -81,13 +100,18 @@
 
 ## 7. 未完成 / 待办
 
-- [ ] 链路 C 的覆盖率独立外层复验（需求 → 用例 → 执行 → 结果 → 知识图已复验）
-- [ ] Studio 深度交互验收（Monaco 编辑 → 运行 → 调试 → 证据 → AI 修复闭环）；页面加载与截图已完成
-- [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
+（第二轮，按优先级）
+
+- [ ] AI + Jev 修复安全决策矩阵（11 类场景：高/低置信度、不可用、人工拒绝/批准、应用成功/失败、
+  精确验证成功/失败、回滚、重复提交审批、会话中断）；拒绝/阻断场景必须验证正式文件逐字节不变
+- [ ] Discovery → Coverage 完整闭环独立复验（探索 → 发现 → Quality Map → 缺口 → 场景 → 用例 →
+  自动化绑定 → 执行 → 覆盖率更新；项目/网站隔离、真实持久化、Feature 去重、刷新后一致）
+- [ ] 逐页真实交互式 UI 验收（不只页面加载）+ P2 UI/UX 优化（关系图布局/Studio 上下文连续性/Result 分层）
 - [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
 - [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
-- [ ] 暗色主题验收
-- [ ] 图谱连线与节点布局的视觉密度人工评估（功能与单测已覆盖）
+- [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
+- [ ] 构建峰值内存与新 Bundle 体积证据（第二轮性能小节）
+- [ ] 暗色主题验收（低优先级，不得抢占核心功能时间）
 
 > RBAC 与审计日志**已经存在真实后端实现**（`apps/api/app/api/authz.py` 中央策略表 +
 > `apps/api/app/api/audit.py` + `apps/api/app/repositories/security_audit_repo.py`），
@@ -138,8 +162,12 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. 端到端复验链路 C，并把结果写入 `.ai-runs/enterprise-continuation/test-results.md`。
-2. 对 Studio 做真实浏览器交互验收（编辑 → 运行 → 调试 → 证据 → AI 修复），产出前后截图。
-3. 补齐多分辨率与移动端截图。
-4. 从企业级能力清单中选一条最小可交付完整链路实现（建议：审计日志或 RBAC），不得只加 UI 不加后端。
-5. 每完成一轮：更新本文件 → 保存真实测试输出 → commit（不 push main）。
+1. **第二轮里程碑 2**：AI + Jev 修复安全决策矩阵（11 类场景），写入 `round-2/`。
+2. **里程碑 3**：Discovery → Coverage 端到端独立复验。
+3. **里程碑 4**：评估 WSL 内轻量 PostgreSQL 可行性；本地 Worker 进程集成验收（不得冒充集群）。
+4. **里程碑 5**：逐页真实交互 UI 验收 + before/after 多分辨率截图。
+5. **里程碑 6**：最终全量回归（后端/前端/typecheck/lint/build/E2E/AI-Jev/Studio），更新 `test-results.md`。
+6. 每完成一轮：更新 `docs/agent-handoff.md` 与 `round-2/implementation-log.md` → 保存真实测试输出 → commit（不 push main）。
+
+可复用验收脚本（未入库，在 `/tmp`，必要时按 `round-2/studio-debug-acceptance.md` 重建）：
+`studio_debug_accept.py`、`studio_debug_failure_accept.py`、`probe_studio_file.py`。

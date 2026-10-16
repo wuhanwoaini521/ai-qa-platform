@@ -246,6 +246,37 @@ async def test_debug_session_record_keeps_run_execution_and_failure_lineage(clie
 
 
 @pytest.mark.asyncio
+async def test_debug_close_is_idempotent_for_already_closed_sessions(client, test_db_session):
+    """Adapter teardown closes the session before a client DELETE lands; that race must not 404."""
+    from app.repositories.debug_session_repo import DebugSessionRepository
+
+    project_response = await client.post(
+        "/api/projects", json={"name": "Debug idempotent close", "bootstrap_workspace": False}
+    )
+    assert project_response.status_code == 201, project_response.text
+    project_id = project_response.json()["id"]
+    owner_id = (await client.get("/api/auth/me")).json()["user"]["id"]
+    repository = DebugSessionRepository()
+    await repository.create(
+        session_id="debug-session-idempotent",
+        owner_id=owner_id,
+        workspace_id=project_id,
+        nodeid="tests/test_debug.py::test_case",
+        run_id=None,
+        execution_id=None,
+        failure_id=None,
+    )
+    await repository.close("debug-session-idempotent")
+
+    response = await client.delete("/api/debug/sessions/debug-session-idempotent")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"closed": False}
+
+    unknown = await client.delete("/api/debug/sessions/debug-session-not-owned")
+    assert unknown.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_debug_create_validates_and_returns_failure_execution_link(client, test_db_session, monkeypatch):
     from app.api import debugger
     from app.persistence.models import FailureRecordORM, TestExecutionORM, TestRunORM
