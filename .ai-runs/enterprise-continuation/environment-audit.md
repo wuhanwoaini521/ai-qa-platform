@@ -56,6 +56,15 @@ The first backend run failed
 `uv run playwright install chromium` installed build 1234 (the build pinned by Playwright 1.62.0) and the
 suite passes. This is expected on a fresh Linux checkout — Windows' browser cache does not transfer.
 
+### Environment finding E3 — CJK fonts absent in WSL browser (fixed user-locally)
+
+The first Playwright screenshots rendered Chinese UI labels as tofu because no installed font covered `:lang=zh`
+(`fc-list :lang=zh family` returned no results). Downloaded Ubuntu's `fonts-noto-cjk` package without root,
+extracted only `NotoSansCJK-Regular.ttc` into `~/.local/share/fonts/noto-cjk/`, then ran
+`fc-cache -f ~/.local/share/fonts/noto-cjk`; `fc-list :lang=zh family` now returns Noto Sans CJK SC/TC/JP/HK/KR.
+This changes only the user's local font directory, not system configuration or project dependencies. The real-browser
+screenshots in `round-2/screenshots/failure-ui/` were recaptured and Chinese is legible.
+
 ## 3. Configuration
 
 `.env` exists (not committed) and selects **real** providers:

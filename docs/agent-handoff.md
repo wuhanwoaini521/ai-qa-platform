@@ -14,14 +14,15 @@
 | --- | --- |
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
-| 本轮提交 | 分支 `agent/wsl-continuation` 顶端（`git log -1`）：`fix: make acceptance, web build and AI health consistent on Linux` ｜ 其后所有审计文档同属该分支 |
-| 当前工作分支 | `agent/wsl-continuation`（未推送） |
+| 最新功能提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
+| 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
+| 未提交修改 | 实时 AI/Jev acceptance harness、审计证据与 screenshots；提交前核对 `git status --short` |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2（AI/Jev 安全闭环）进行中，D8 Disabled 模式可靠性缺陷已修并验证。
+阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2 进行中，D8 Disabled 可靠性缺陷已修复；真实 AI/Jev 高置信度 API + 浏览器批准/执行/精确复验/回滚链路已通过，11 类决策矩阵仍有缺口。
 本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
@@ -32,13 +33,16 @@
 - Playwright **1.62.0**（`apps/api` 与 `apps/web` 均为该版本；1.63.0 被显式禁止）
 - 浏览器：`playwright install chromium` 已安装，bundled Chromium 可正常启动
 - 服务：API `http://127.0.0.1:8000`、Web `http://127.0.0.1:5173`，SQLite `runtime/ai_qa_platform.db`
-- 详见 `.ai-runs/enterprise-continuation/environment-audit.md`
+- 详见 `.ai-runs/enterprise-continuation/environment-audit.md`；无系统级改动，Playwright 截图所需 Noto Sans CJK 安装于 `~/.local/share/fonts/`
 
 ## 5. 已完成并验证
 
 | 项目 | 证据 |
 | --- | --- |
 | **Studio 真实调试全流程（第二轮）** | `round-2/studio-debug-acceptance.md`（两脚本 31 项全 PASS） |
+| **真实 AI + Jev 失败修复（API + UI）** | `round-2/ai-jev-live-acceptance.md`（真实 provider/Jev、信心 1.0、人工审批、精确 pytest 复验、回滚；screenshots 在 `round-2/screenshots/failure-ui/`） |
+| **D8 AI Disabled 可靠性** | `round-2/ai-disabled-provider.md`（43 GET 路由无 5xx；真实 AI 操作明确 502） |
+| **失败修复矩阵映射** | `round-2/failure-repair-matrix.md`（标出 duplicate apply、底层写失败、Jev 真实 outage、apply/verify interruption 缺口） |
 | 仓库/环境恢复，无 Windows 路径残留导致的功能缺失 | `environment-audit.md` |
 | 后端测试基线（真实运行，非沿用旧报告） | `test-results.md` / `.ai-runs/enterprise-continuation/logs/` |
 | 前端 typecheck / lint / build | `test-results.md` |
@@ -76,6 +80,13 @@
 - 验证：真实禁用配置扫查 43 个无参数 GET 路由，0 个 5xx；隔离测试覆盖 status/runs/failures + AI 分析失败语义；
   相关测试 20 passed。详情 `.ai-runs/enterprise-continuation/round-2/ai-disabled-provider.md`。
 
+### 第二轮真实修复闭环（已通过但矩阵未闭合）
+
+- 真实 AI：`openai-compatible` / `mimo-v2.6-flash`；真实 Jev：`jev` / `jev-1.13.0`，confidence 1.0；fallback 均为 false。
+- 真实浏览器 UI：人工审批 → 修复写入 → 精确测试节点通过 → 人工回滚恢复原始字节；1 passed，证据和 screenshots 见 `round-2/ai-jev-live-acceptance.md`。
+- 风险：同一 live workflow 后续因真实 AI 返回 `AI provider unavailable` 安全阻断；另一条带干扰控件的输入被 AI 分类为 `TEST_DATA_ERROR`。不可宣称 provider 稳定或模糊页面分类已验收。
+- 矩阵仍缺 duplicate apply、底层 patch 写失败/Jev outage 真实 runtime、apply/verification 中断，详见 `round-2/failure-repair-matrix.md`。
+
 ### P1 — 验收夹具把浏览器 channel 写死为系统 Chrome（跨平台缺陷）
 
 - 现象：链路 A 第一次真实运行失败，日志为
@@ -112,9 +123,8 @@
 
 （第二轮，按优先级）
 
-- [ ] AI + Jev 修复审批安全决策矩阵：D8 Disabled 模式可靠性子项已完成；以下场景仍需实际闭环验收：
-  高/低置信度、AI/Jev 不可用、人工拒绝/批准、补丁应用成功/失败、精确验证成功/失败、回滚、重复提交审批、会话中断；
-  拒绝/阻断场景必须验证正式文件逐字节不变
+- [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed 已验证；尚缺 duplicate apply、低层 patch write failure、Jev 实际 outage、apply/verification interruption。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
+- [ ] AI 诊断需加强对存在其他控件时的分类稳定性；一次真实页面干扰控件试验把 locator 错误分类成 `TEST_DATA_ERROR`，当前 clean fixture full chain 通过，见 `round-2/ai-jev-live-acceptance.md`。
 - [ ] Discovery → Coverage 完整闭环独立复验（探索 → 发现 → Quality Map → 缺口 → 场景 → 用例 →
   自动化绑定 → 执行 → 覆盖率更新；项目/网站隔离、真实持久化、Feature 去重、刷新后一致）
 - [ ] 逐页真实交互式 UI 验收（不只页面加载）+ P2 UI/UX 优化（关系图布局/Studio 上下文连续性/Result 分层）
@@ -130,13 +140,20 @@
 
 ## 8. 已知 Bug / 阻断
 
-- 无 P0 阻断。数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
+- 无已确认 P0 阻断。真实 provider 有间歇性 `AI provider unavailable`，latest browser acceptance 安全阻断并未写文件；之前有两条完整高置信度 live acceptance PASS。
+- 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
+- 数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
   在未选项目时会回到项目页，这是设计行为而非缺陷。
 
 ## 9. 最后执行的测试
 
-上一轮最终回归见 `.ai-runs/enterprise-continuation/test-results.md`；第二轮 D8 targeted 回归见
-`.ai-runs/enterprise-continuation/round-2/ai-disabled-provider.md`。第二轮最终全量回归尚未执行。
+第二轮当前代码完整结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`：
+
+- Full backend: 823 passed / 9 skipped / 55 warnings (574.83s).
+- Failure workflow focus: 102 passed / 3 skipped / 5 warnings.
+- D8 targeted: 20 passed; repository lint/contracts all PASS; Web 160 tests, typecheck PASS, production build PASS (Monaco chunk 4.03 MB warning).
+- Real API and real browser AI/Jev high-confidence chains each previously 1 passed; latest browser rerun safely blocked by upstream provider outage, no writes. PostgreSQL blocked; remote Worker/Jenkins not run.
+- These results precede any subsequent code changes; repeat affected/full regression before declaring final.
 
 ```bash
 # 全仓后端回归（本轮最终代码）
@@ -178,7 +195,7 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. **第二轮里程碑 2**：AI + Jev 修复安全决策矩阵（11 类场景），写入 `round-2/`。
+1. **第二轮里程碑 2**：补齐 duplicate apply、patch write failure、实际 Jev outage、apply/verify interruption；评估并修正 AI 对干扰控件场景误分类，继续用真实调用验收。
 2. **里程碑 3**：Discovery → Coverage 端到端独立复验。
 3. **里程碑 4**：评估 WSL 内轻量 PostgreSQL 可行性；本地 Worker 进程集成验收（不得冒充集群）。
 4. **里程碑 5**：逐页真实交互 UI 验收 + before/after 多分辨率截图。

@@ -82,9 +82,8 @@ async def test_live_ai_jev_repair_requires_approval_and_exact_rerun(
         await AISettingsService(repository_scope).load_runtime_config()
 
         html = (
-            "<main><h1>Checkout</h1><p>Review your order and complete checkout.</p>"
-            "<button>Cancel order</button>"
-            '<button aria-label="Complete order" '
+            "<main><h1>Checkout</h1><p>Click Complete order to finish checkout.</p>"
+            '<button id="complete-order" aria-label="Complete order" '
             "onclick=\"document.querySelector('#status').textContent='ORDER_COMPLETED'\">Complete order</button>"
             '<p id="status">Pending</p></main>'
         )
@@ -358,11 +357,10 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(
         await AISettingsService(repository_scope).load_runtime_config()
 
         html = (
-            "<main><h1>Checkout</h1><p>Review your order and complete checkout.</p>"
-            "<button>Cancel order</button><button>View order</button>"
-            '<button aria-label="Complete order" '
-            "onclick=\"document.querySelector('#status').textContent='ORDER_COMPLETED'\">Continue</button>"
-            '<button>Return</button><p id="status">Pending</p></main>'
+            "<main><h1>Checkout</h1><p>Click Complete order to finish checkout.</p>"
+            '<button id="complete-order" aria-label="Complete order" '
+            "onclick=\"document.querySelector('#status').textContent='ORDER_COMPLETED'\">Complete order</button>"
+            '<p id="status">Pending</p></main>'
         )
         page_url = local_http_url(html)
         source = f"""from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -530,7 +528,9 @@ def test_workflow():
             await page.set_viewport_size({"width": 1440, "height": 900})
             await diagnose_button.click()
             analysis_id = ""
+            candidate = {}
             state = {}
+            settled_states = {"PATCH_READY", "VERIFIED", "FAILED", "ROLLED_BACK", "BLOCKED", "NOT_APPLICABLE"}
             for _ in range(180):
                 await asyncio.sleep(1)
                 history_response = await client.get(f"/api/failures/{failure['id']}/analyses")
@@ -544,15 +544,16 @@ def test_workflow():
                     )
                     assert workflow_response.status_code == 200, workflow_response.text
                     state = workflow_response.json()
-                    if state["state"] in {
-                        "PATCH_READY",
-                        "VERIFYING_FIX",
-                        "VERIFIED",
-                        "FAILED",
-                        "ROLLED_BACK",
-                        "BLOCKED",
-                    }:
+                    if (
+                        candidate.get("status") in {"COMPLETED", "FAILED", "CANCELLED"}
+                        and state.get("state") in settled_states
+                    ):
                         break
+            else:
+                raise AssertionError(
+                    "The browser repair workflow did not settle: "
+                    f"analysis_status={candidate.get('status')}, state={state.get('state')}"
+                )
             assert analysis_id, "The browser flow did not create an analysis"
             proposal = state.get("repair_proposal") or {}
             decision_summary = proposal.get("decision_summary") or {}
@@ -718,12 +719,12 @@ def test_workflow():
                 return
             assert state["state"] == "VERIFIED" and state["verified"] is True, state
             assert state["verification_run_status"] == "PASSED", state
-            await page.screenshot(path=str(screenshot_dir / "verification-in-progress.png"), full_page=True)
             await (
                 page.locator(".failure-workflow-result-status")
                 .get_by_text(re.compile(r"Retest: Actual verification passed|复测状态：实际复测已通过", re.I))
                 .wait_for(state="visible", timeout=30_000)
             )
+            await page.screenshot(path=str(screenshot_dir / "verified.png"), full_page=True)
             assert await page.get_by_role("button", name=re.compile(r"Apply repair|应用修复", re.I)).count() == 0
             history = await client.get(f"/api/failures/{failure['id']}/analyses")
             assert history.status_code == 200, history.text

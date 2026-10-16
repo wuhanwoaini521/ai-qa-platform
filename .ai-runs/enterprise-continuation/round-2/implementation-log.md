@@ -76,11 +76,19 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
   → 20 passed；ruff check + format 通过；独立 Reviewer 无发现。
 - 证据：`round-2/ai-disabled-provider.md`。
 
-### 仍待验收：修复审批安全矩阵
+### 已完成：真实 AI + Jev 失败修复闭环（API + 真实浏览器）
 
-覆盖高/低置信度、AI/Jev 不可用、人工拒绝/批准、补丁应用成功/失败、精确验证成功/失败、
-回滚、重复提交审批、会话中断共 11 类；拒绝与阻断场景必须验证正式文件逐字节不变；
-批准与回滚场景必须验证文件、审计状态与执行记录一致。
+- API live acceptance：1 passed；真实 AI `openai-compatible` / `mimo-v2.6-flash`，真实 Jev `jev` / `jev-1.13.0`；confidence 1.0，两个 fallback 均 false。
+- 真实浏览器流程：AI 诊断 → Jev 候选 → 人工 Apply → 写入 → 精确 Playwright node rerun `PASSED` → 人工 rollback → 原文件字节一致恢复；UI 状态 `VERIFIED` → `ROLLED_BACK`。
+- 真实截图 1440/768/360 + patch-ready / verification-in-progress / rollback；安装 user-local Noto CJK 后截图中文可读。
+- 测试竞态修复：只在 analysis status terminal 且 workflow state settled 后离开轮询，并在 180s 末明确失败；此前会在 `BLOCKED` + `RUNNING` 的暂态错误退出。
+- 另一次低 confidence `0.6` 被 fail-closed，原始文件未变。后续 real-provider rerun `AI provider unavailable` 也安全阻断，无写入。一次带干扰控件页面曾被真实 AI 分类成 `TEST_DATA_ERROR`，此项仍为模型稳定性风险。
+- 详情和每次结果（包括 provider unavailable rerun）见 `round-2/ai-jev-live-acceptance.md`；独立 coverage map `round-2/failure-repair-matrix.md`。
+
+### 尚待验收：修复审批安全矩阵
+
+现有 integration 覆盖 mocked human reject/approve、低置信度、rollback、exact-run record、analysis interrupt；真实高置信度 UI/API 链已通过。
+缺口：重复 apply/approval、低层 patch write/stale-source failure、真实 Jev transport outage、patch apply / verification 中断；另外加强含干扰控件场景的真实 AI 分类。逐项映射见 `round-2/failure-repair-matrix.md`。
 
 ## 里程碑 3 — Discovery → Coverage 闭环独立复验
 
@@ -98,8 +106,13 @@ Worker 用本地真实进程做集成验收（提交/状态/回传/超时/取消
 关系图真实数据量下的布局/重叠/搜索/聚焦/性能，Studio 工作上下文连续性，Result 页成功/失败信息分层，
 before/after 多分辨率截图。
 
-## 里程碑 6 — 最终全量回归
+## 里程碑 6 — 最终全量回归（阶段性基线已完成，最终门禁仍待）
 
-待办：在最终代码上执行后端全量、前端全量、typecheck、lint、build、真实 Playwright E2E、
+本次阶段性回归（截至 `round-2/test-results.md`）：后端 **823 passed / 9 skipped / 55 warnings**；
+失败工作流相关 **102 passed / 3 skipped**；前端 **160 passed**、typecheck PASS、全仓 lint/contracts PASS、Web build PASS。
+真实 API 和 UI AI/Jev 高置信度 acceptance 曾分别完整通过；latest UI rerun 因上游 `AI provider unavailable` 安全阻断且无写入。
+Monaco Editor 主 chunk 仍 4.03 MB。PostgreSQL BLOCKED；远程 Worker/Jenkins NOT RUN。
+
+待办：剩余功能/UI 改动完成后，在最终代码重新执行全量后端、前端、typecheck、lint、build、真实 Playwright E2E、
 AI/Jev 验收、Studio 调试验收、Discovery→Coverage 验收，并更新 `test-results.md` 与 `final-report.md`。
-**不得用早期结果代替最终回归。**
+**不得把本阶段性回归或早期结果冒充任务最终回归。**

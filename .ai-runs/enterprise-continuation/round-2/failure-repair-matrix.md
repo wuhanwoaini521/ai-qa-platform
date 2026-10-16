@@ -1,0 +1,25 @@
+# Failure-repair acceptance matrix (coverage review)
+
+Read-only mapping of existing tests plus round-2 real runs, 2026-10-16. Test names below live in `apps/api/tests/test_failure_workflow.py` unless otherwise noted.
+
+| Case | Existing/current evidence | Status / gap |
+|---|---|---|
+| High Jev confidence | Mocked integration: `test_automatic_failure_analysis_requires_human_approval_before_patch`, `test_manual_repair_persists_applied_and_rolled_back_state`; real: `test_live_ai_jev_repair_requires_approval_and_exact_rerun` (1 passed, actual confidence 1.0) | Covered; real provider path now has API and UI evidence in `ai-jev-live-acceptance.md` |
+| Low Jev confidence | `test_jev_low_confidence_is_blocked_after_playwright_and_never_applied`; `test_low_same_function_probability_blocks_locator_repair_apply`; real browser run returned confidence 0.6 below threshold and preserved source | Covered; real observation is a separate run, not the high-confidence acceptance |
+| AI unavailable | `test_failed_model_is_redacted_and_persisted_without_success` uses a failing fake; `test_automatic_runtime_block_prevents_diagnosis_decision_and_patch` covers budget block; D8 test verifies actual disabled mode keeps reads available and actual AI operation returns explicit 502 | Runtime disabled mode covered; actual external AI transport outage only observed as a fail-closed real run (`AI provider unavailable`), not as a deterministic transport integration test |
+| Jev unavailable | `test_automatic_runtime_block_prevents_diagnosis_decision_and_patch` stubs `JEV_DISABLED`/`JEV_TIMEOUT`; fallback tests use mocked decision paths | No actual Jev transport outage acceptance yet |
+| Human reject | `test_rejected_locator_proposal_persists_and_cannot_be_applied` checks `HUMAN_REJECTED`, persisted history, apply 422, unchanged source | Covered by API integration, mocked proposal |
+| Human approve | `test_automatic_failure_analysis_requires_human_approval_before_patch`; real API and real UI full chain require explicit Apply | Covered, live high-confidence path passed |
+| Patch apply success/failure | `test_manual_repair_persists_applied_and_rolled_back_state` success; rejection test exercises policy denial | Low-level write failure / stale-source conflict during actual application is not covered by these tests |
+| Exact verification success/failure | `test_only_an_actual_matching_rerun_updates_verification`, `test_repair_verification_command_creates_and_links_exact_idempotent_run`, automated failed verification/rollback; real API/UI exact node rerun passed | Covered; deterministic tests mostly record run outcomes; live route actually executed the exact pytest node |
+| Rollback | `test_manual_repair_persists_applied_and_rolled_back_state`, `test_failed_applied_patch_requires_rollback_before_reanalysis`, `test_rolled_back_patch_allows_fresh_analysis`, `test_rollback_history_is_idempotent_and_resists_stale_failure_updates`; real UI rollback restored original bytes | Covered |
+| Duplicate approval/apply | Duplicate verification idempotency and concurrent analysis dedupe exist | **Gap:** no test found for duplicate apply/approval submission |
+| Interrupted session | `test_cancel_and_restart_preserve_incomplete_analysis` covers cancellation/recovery to `INTERRUPTED` | Apply/verification interruption specifically not exercised |
+
+## Priority gaps
+
+1. Add duplicate apply/approval idempotency test; ensure at most one source write and consistent audit/repair state.
+2. Add low-level apply failure/stale-source test; prove source remains unchanged and repair state/audit is honest.
+3. Exercise Jev disabled/timeout via actual runtime configuration without external mutation; assert no patch proposal/write.
+4. Exercise interruption during verification/apply if the existing service lifecycle supports a deterministic test boundary.
+5. Continue observing real AI classification sensitivity: one real decoy-page attempt was classified `TEST_DATA_ERROR`/`NOT_APPLICABLE`; do not call ambiguity handling accepted based on the clean high-confidence fixture.
