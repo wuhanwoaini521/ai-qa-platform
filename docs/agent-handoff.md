@@ -15,13 +15,12 @@
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
 | D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
-| 最近独立安全测试提交 | `81550e6 test(repair): cover Jev upstream outage fail-closed` |
-| D5 implementation/evidence commit | `6b56261 feat(discovery): refresh coverage after test execution` |
+| 最新 handoff commit | `8c9c746 docs: refresh handoff after ACL assessment` |
 | Project-ACL architecture-audit commit | `7ca6e19 docs: record project ACL blocker and next stage` |
-| Handoff update base HEAD | `7ca6e19`；本次只更新交接状态，产品代码无未提交改动 |
+| 本轮 handoff / rating 更新基点 HEAD | `8c9c746`；仅文档变更，产品代码无未提交修改 |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前文档提交内容 | 记录 D5 verification commits 与跨项目 ACL blocker；生产代码未修改 |
+| 当前文档更新 | 记录最终评级、ACL blocker 与 D5 evidence；只含文档，未改产品代码 |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
