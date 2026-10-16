@@ -914,7 +914,7 @@ button, input, select, textarea {
   grid-template-rows: auto auto auto;
 }
 
-.content-viewport.is-workspace .workspace-grid {
+.content-viewport.is-workspace .workspace-grid:not(.is-debug-view) {
   min-height: 0;
   height: auto;
 }
@@ -2062,6 +2062,34 @@ button, input, select, textarea {
   min-height: 0;
   position: relative;
   background: var(--ui-surface-solid);
+}
+
+.studio-debug-panel {
+  flex: 0 0 220px;
+  min-height: 150px;
+  max-height: 260px;
+}
+
+.studio-debug-details {
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(200px, 1.4fr);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 600px) {
+  .studio-debug-details {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(80px, 120px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .studio-debug-details > div {
+    max-height: 120px;
+    overflow: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--ui-line);
+  }
 }
 
 /* Slim status bar: keeps the essentials, drops the IDE bulk */

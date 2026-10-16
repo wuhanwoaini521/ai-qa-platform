@@ -38,11 +38,9 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 
   return (
     <section
+      className="studio-debug-panel"
       aria-label={t('debug.title')}
       style={{
-        flex: '0 0 220px',
-        minHeight: 150,
-        maxHeight: 260,
         display: 'flex',
         flexDirection: 'column',
         borderTop: '1px solid var(--ui-line)',
@@ -79,7 +77,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           </div>
         ))}
       </div>
-      <div style={{ minHeight: 0, flex: 1, display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(180px, 1fr) minmax(200px, 1.4fr)' }}>
+      <div className="studio-debug-details" style={{ minHeight: 0, flex: 1, display: 'grid' }}>
         <div style={{ minWidth: 0, overflow: 'auto', borderRight: '1px solid var(--ui-line)', padding: '7px 10px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{t('debug.callStack')}</div>
           {frames.length ? frames.map((frame) => (

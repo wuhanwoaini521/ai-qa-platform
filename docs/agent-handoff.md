@@ -5,8 +5,7 @@
 
 ## 1. 当前任务目标
 
-在 WSL/Linux 环境接管 `ai-qa-platform`，恢复前任 Agent（commit `d8a2eef`）的成果，重建测试基线，
-修复环境与核心缺陷，并验证「需求 → AI/Jev → 场景 → 用例 → 自动化 → 执行 → 结果 → 失败修复 → 验证」全链路真实可用。
+当前优先完成 Automation Studio 真实浏览器验收（用户任务 m04803）：确认 Monaco 编辑/保存、真实 debugpy 断点与 DAP stepping、暂停/停止/重复运行、失败证据及多分辨率 UI。此后继续原接管任务（m00001、m00628）：验证并完善「需求 → AI/Jev → 场景 → 用例 → 自动化 → 执行 → 结果 → 失败修复 → 验证」真实全链路，不重写已有正确功能。
 
 ## 2. Git 状态
 
@@ -15,21 +14,29 @@
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
 | D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
-| 最新 handoff commit | `8c9c746 docs: refresh handoff after ACL assessment` |
+| 最近文档提交 | `7cac0be`（D5 final report / handoff；详见 `git log`） |
 | Project-ACL architecture-audit commit | `7ca6e19 docs: record project ACL blocker and next stage` |
-| 本轮 handoff / rating 更新基点 HEAD | `8c9c746`；仅文档变更，产品代码无未提交修改 |
+| 本轮开始基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699`；本轮 Studio UI/fixture 改动尚未提交 |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前文档更新 | 记录最终评级、ACL blocker 与 D5 evidence；只含文档，未改产品代码 |
+| 当前工作树 | 修改：`apps/api/tests/conftest.py`、`apps/web/src/features/automation-studio/components/DebugPanel.tsx`、`apps/web/src/features/workspace/workspace.css`、`apps/web/src/index.css`、`docs/agent-handoff.md`；新增 `apps/api/tests/test_studio_debug_ui_live.py`。`.ai-runs/night-continuation/` 为本地证据，不提交大型日志/截图。 |
+| 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮 D5：Discovery → Coverage refresh API/UI 已实现；真实 AI/Jev/API 链通过，真实 UI 按钮点击成功过一次。当前 strict opt-in harness 加强了 HTTP 200 / API error / per-run screenshot 断言，但后续两次重跑在 AI discovery 阶段遭遇 20s Provider timeout，按夜间规则暂停消耗额度；该 strict harness 状态 **NOT VERIFIED**。
-当前基线完整回归：全仓 backend 829 passed / 9 skipped / 55 warnings（431.17s），web 160 passed，typecheck/lint/build 均 PASS。已有 D8、repair CAS/recovery、Jev 503 fail-closed、Discovery finalization/terminal map、Studio/AI-Jev UI 工作。
-Final independent reviewer checked the committed D5 diff and found no blockers. D5 commit: `6b56261`; no push/main merge/deploy. 下一步：审计并规划跨 API 项目级 ACL 架构，再继续未完成 UI/数据库/Worker 验证。refresh lock 为进程内，PostgreSQL/多 worker 未验证。
-本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
+当前阶段：Round-1 Automation Studio 核心真实浏览器验收 attempt 19、全仓回归/lint、最终独立复审均通过；Round-1 报告已更新，准备本地提交。旧 Round-2 的 17 个主流程 + 14 个失败/幂等检查仍是历史证据，不能代替本轮。
+
+本轮修复/完善：
+- `apps/api/tests/conftest.py` 的 client fixture 使用 teardown 恢复 workspace path；opt-in UI test 的 AI/Jev health probes 在测试期显式 disabled，并在 `finally` 恢复全局 config/runtime，避免外部请求和测试污染。
+- `apps/web/src/index.css` 与 `apps/web/src/features/workspace/workspace.css` 修复 debug 页面 flex sizing；Monaco 编辑器从 5px 高恢复为桌面 161px、平板/手机至少 140px。
+- `DebugPanel` 在手机改为纵向可滚动详情；桌面/平板保留三栏。测试覆盖手机滚动到调试控制台且无 document 横向溢出。
+- 新增 `apps/api/tests/test_studio_debug_ui_live.py`：真实 Vite/Uvicorn/Chromium/Playwright 1.62.0 和 debugpy DAP，无 DAP mock。真实编辑/保存、断点、Step In/Over/Out、Continue、重复会话、Pause/Stop 和真实失败 Run 均验收通过。
+
+最新 opt-in acceptance attempt 19：**2 passed / 32.10s**；3 个 debug sessions 均 `CLOSED`，合成 Playwright 失败 Run 为 `FAILED` 且 trace 保留，API/console errors 为空。真实 Python 语义：Step Out 停在 `calculate:11` 时 assignment 尚未存入 `intermediate`；再 Step Over 后才断言 `intermediate == 41`。Before/after、断点、桌面/平板/手机、手机 console 截图位于 `.ai-runs/night-continuation/round-1/attempt-19/screenshots/`。
+
+Reviewer 发现的 config/workspace teardown、手机布局和 document-width assertion 均已修复；attempt 19 与最终全仓回归通过。最终复审确认无其他 finding；Round-1 reports 已更新，本地 commit 待完成。历史 D5/ACL/Docker/PostgreSQL/Worker 状态见 `.ai-runs/enterprise-continuation/round-2/`。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -44,7 +51,7 @@ Final independent reviewer checked the committed D5 diff and found no blockers. 
 
 | 项目 | 证据 |
 | --- | --- |
-| **Studio 真实调试全流程（第二轮）** | `round-2/studio-debug-acceptance.md`（两脚本 31 项全 PASS） |
+| **Studio 真实调试全流程（历史第二轮）** | `round-2/studio-debug-acceptance.md`（31 项声称 PASS；当前 Round-1 必须重新实测） |
 | **真实 AI + Jev 失败修复（API + UI）** | `round-2/ai-jev-live-acceptance.md`（真实 provider/Jev、信心 1.0、人工审批、精确 pytest 复验、回滚；screenshots 在 `round-2/screenshots/failure-ui/`） |
 | **D8 AI Disabled 可靠性** | `round-2/ai-disabled-provider.md`（43 GET 路由无 5xx；真实 AI 操作明确 502） |
 | **失败修复矩阵映射** | `round-2/failure-repair-matrix.md`（包含 duplicate apply SQLite 回归、Jev loopback 503 与剩余远端 outage/进程中断边界） |
@@ -141,7 +148,10 @@ Final independent reviewer checked the committed D5 diff and found no blockers. 
 - [x] Discovery → Coverage API/integration 闭环：真实探索 → AI requirement/case generation → 人工编写 active Playwright binding → browser execution → explicit refresh → VERIFIED；D5 evidence in `round-2/test-results.md`.
 - [x] Discover 的 Refresh Coverage 按钮已在真实浏览器点击并显示成功 / VERIFIED；历史 run-switch feedback reset 有实现和确定性覆盖。
 - [ ] 最新 strict D5 live UI harness 要求 HTTP 200 / 无 API errors / per-run screenshots，Provider 恢复后最多再跑一次；系统性 project/team ACL 仍缺失（本端点仅 requester/admin scoped）。
-- [ ] 逐页真实交互式 UI 验收（不只页面加载）+ P2 UI/UX 优化（关系图布局/Studio 上下文连续性/Result 分层）
+- [x] Studio 核心真实浏览器 acceptance：attempt 19 通过编辑/保存、真实 debugpy 断点与 stepping/continue、Pause/Stop、重复会话、失败证据及 desktop/tablet/mobile；证据 `.ai-runs/night-continuation/round-1/attempt-19/`。
+- [x] 最终全仓 regression、Python/Web lint、typecheck、build、document-width viewport assertion。
+- [x] Round-1 reports 更新、最终独立 reviewer 无 actionable finding。
+- [ ] 本地 semantic commit（no push）。
 - [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
 - [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
 - [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
@@ -154,10 +164,11 @@ Final independent reviewer checked the committed D5 diff and found no blockers. 
 
 ## 8. 已知 Bug / 阻断
 
-- 当前无已确认的执行/写入 P0 缺陷；已知 P0/P3 安全风险是全平台项目级授权模型缺失（Project 无 owner/team 关系）。真实 provider 间歇性 20s timeout；latest strict D5 acceptance 阻断在 UI 之前、无外部写入；之前 API C chain 与 UI 点击均成功。
+- 已确认的企业安全 blocker：全平台项目级授权模型缺失（Project 无 owner/team 关系；不能用单路由 ACL 代替系统级隔离）。
+- Studio locale-tolerant selectors、debug-view flex sizing、phone DebugPanel layout 已修复并在 attempt 19 实测；编辑器 161px desktop / ≥140px tablet-mobile，mobile details 纵向滚动可读，documentWidth 在 1440/768/390px 均不超过 viewport。
 - Discovery 最终化修复已提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。D5 refresh endpoint uses terminal guard and per-run lock; double-refresh regression observes serialization in one process. No multi-process/PostgreSQL evidence.
 - 项目权限仍是 P0/P3 架构风险：`ProjectORM` 没有 owner/team 关系，RBAC roles 全局；本次只限制非管理员刷新自己发起的 run，不能据此宣称系统级 project isolation 已完成。
-- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。当前全仓 D5 回归 829 passed / 9 skipped，详见 §9。
+- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。Round-2 历史后端回归为 829 passed / 9 skipped，已由 Round-1 最终全仓 830 passed / 10 skipped / 55 warnings supersede，详见 §9。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
 - 数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
   在未选项目时会回到项目页，这是设计行为而非缺陷。
@@ -166,15 +177,17 @@ Final independent reviewer checked the committed D5 diff and found no blockers. 
 
 第二轮结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`。
 
-- D5 当前确定性回归：全仓 backend **829 passed / 9 skipped / 55 warnings**；前端 **160 passed**；typecheck/ESLint/build/lint/OpenAPI/i18n 全 PASS。Backend log: `round-2/logs/backend-d5-final.log`。
-- D5 real API C chain 成功：真实 AI/Jev/本地浏览器、AI 需求/用例、人工 ACTIVE Playwright binding、Run PASSED、刷新后 coverage `VERIFIED`；一次真实 Web UI 点击也显示成功。最新 strict UI harness增加了 POST 200/API error/per-run screenshot assertions，但最后两次 live retries 在 UI 前被 `AIProviderError: AI Provider 在 20 秒内未返回结果（已重试 0 次）。` 阻断；遵守夜间规则，今夜不再调用 AI。
+- 最新 Studio opt-in acceptance attempt 19：**2 passed / 32.10s**，真实 Chromium + debugpy；3 sessions CLOSED、synthetic failure Run 为 FAILED 且保留 trace，API/console errors 为空。1440/768/390px `documentWidth <= viewport`。全套截图、metrics、log：`.ai-runs/night-continuation/round-1/attempt-19/`。
+- Studio attempts 1–18 为排障历史；attempt 19 为当前事实。早期 locale selector、Monaco 5px flex collapse、breakpoint verification locator、Step Out 停点等问题已通过修正 harness/布局后解决；最终结果不得引用这些旧失败代替 attempt 19。
+- D5 real API C chain 成功：真实 AI/Jev/本地浏览器、AI 需求/用例、人工 ACTIVE Playwright binding、Run PASSED、刷新后 coverage `VERIFIED`；一次真实 Web UI 点击也显示成功。D5 strict live retries 曾被 provider timeout 阻断；本轮 Studio acceptance 不调用真实 AI/Jev，测试 fixture 明确禁用 health probes 并在 teardown 恢复，不能把这项结果说成 AI/Jev 验收。
 - D5 OpenAPI 403/404/409、requester/Admin endpoint boundary、run-switch UI stale-feedback 和 timestamp latest-execution均修复；`TestRunRepository.list_runs` newest-first。一次独立 review 发现 strict harness路径/status断言问题，已改；最终 reviewer 复查当前 diff：无剩余 blocker。
+- 本轮最终全仓回归（attempt 19 后）：**830 passed / 10 skipped / 55 warnings / 453.15s**；PostgreSQL lane skipped（`AI_QA_TEST_DATABASE_URL` 未设置）。Frontend **160 passed**，typecheck/ESLint/build 通过；`python scripts/task.py lint` 通过 Ruff、427-file format、i18n（25 namespaces/3025 keys）、OpenAPI 与 ESLint。日志 `.ai-runs/night-continuation/round-1/logs/full-regression-final.log`、`lint-final.log`。Vite 6.4.3 警告大型 chunk（Monaco JS 4,031.76KB）。
 - Failure workflow CAS/recovery + Jev 503 suite：**47 passed / 1 warning**；duplicate Apply 20/20 重复、exactly one workspace write。Monaco chunk 4.03 MB；PostgreSQL blocked；remote Worker/Jenkins not run。
 - 系统级项目隔离仍未解决：Project 无 owner/team ACL，RBAC 角色为全局；D5 仅 requester/Admin 可刷新其 run，不代表其他 API 已隔离。
 
 ```bash
 # 全仓后端回归（本轮最终代码）
-uv run --no-sync pytest -q --no-header          # → logs/backend-final-regression.log
+python scripts/task.py test                    # → .ai-runs/night-continuation/round-1/logs/full-regression-final.log
 # 仓库 lint（ruff + format + i18n 一致性 + OpenAPI 契约 + eslint）
 python scripts/task.py lint                     # → All linters passed!
 # 前端
@@ -185,13 +198,17 @@ pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test 
 
 ```bash
 # 核对现场
-cd ~/self-github/ai-qa-platform
+cd /home/hans/self-github/ai-qa-platform
 git status --short && git log -1 --oneline
-# D5 checks before commit
-uv run --no-sync ruff check apps/api/app/api/quality_discovery.py apps/api/app/services/quality_discovery_service.py apps/api/app/services/quality_discovery_projection.py apps/api/tests/test_quality_discovery.py apps/api/tests/test_live_enterprise_journey.py
+# 当前 Studio acceptance（使用新的 attempt 目录，避免覆盖既有证据）
+# 若后续代码修改需要重验，先创建全新 attempt-20 目录；当前通过证据为 attempt-19。
+mkdir -p .ai-runs/night-continuation/round-1/attempt-20/logs
+AI_QA_STUDIO_EVIDENCE_DIR=.ai-runs/night-continuation/round-1/attempt-20/screenshots \\
+AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1 uv run --no-sync pytest apps/api/tests/test_studio_debug_ui_live.py -q -s 2>&1 | tee .ai-runs/night-continuation/round-1/attempt-20/logs/studio-ui-acceptance.log
+# 修复确认的 UI bug 后运行 Studio 相关回归，再运行全仓回归
+uv run --no-sync pytest apps/api/tests/test_studio_debug_ui_live.py apps/api/tests/test_debug_session_service.py -q --no-header
 python scripts/task.py lint
 git diff --check
-uv run --no-sync pytest -q --no-header
 # latest failure repair security regression
 uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider
 # D8 disabled-provider targeted regression
@@ -217,13 +234,8 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. **提交 D5**：最终 reviewer 已复查当前 diff 且未发现 blocker；核对测试/handoff 与 git 后本地 commit D5（不 push）。Strict live harness 状态 NOT VERIFIED，真实 UI click 曾成功；遵守夜间规则，无真实 provider 可用时不重试。
-2. **项目级隔离设计（P0/P3 架构缺口）**：调查 Project owner/team ACL 与现有 API 授权边界；先设计跨 API 的完整方案，避免只在单一端点拼局部权限。
-3. **第二轮 repair matrix 收尾**：远端 Jev outage、持久化前 apply interruption、verification worker restart；评估干扰控件 AI 误分类。
-4. **PostgreSQL / Worker**：评估 WSL 内轻量 PostgreSQL；本地 Worker 进程集成验收，但不得冒充真实 Jenkins/集群测试。
-5. **全站 UI/UX**：逐页真实交互、图谱密度、Studio 深度调试与 before/after 截图。
-6. D5 确定性回归已通过（829 backend / 160 frontend；lint/typecheck/build PASS）；后续任何代码修改后需对受影响范围回归，整项任务完成时重新跑最终全量。
-7. 每完成一轮：更新 handoff/evidence → 保存实际测试结果 → 本地 commit（不 push main）；AI/Jev 真实验收只在有效 provider 条件下限量执行。
+1. 核对本 handoff、`git status` 与 `git diff --check`；当前 attempt 19、全回归、lint 和 reviewer 均有证据，除非代码发生变化不要重复运行。
+2. 复核并仅暂存 Studio 源码/测试及 `docs/agent-handoff.md`；`.ai-runs/` 是本地证据不提交。创建本地语义化 commit（不 push）。
+3. Studio Round-1 后继续 m00001/m00628 企业接管：完整 Project owner/team ACL 模型与迁移、repair matrix 剩余边界、PostgreSQL/Worker-Jenkins 环境、未验收业务链路/UI。
 
-可复用验收脚本（未入库，在 `/tmp`，必要时按 `round-2/studio-debug-acceptance.md` 重建）：
-`studio_debug_accept.py`、`studio_debug_failure_accept.py`、`probe_studio_file.py`。
+旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。

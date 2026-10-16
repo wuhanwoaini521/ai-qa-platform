@@ -167,11 +167,11 @@ def bearer_client(token: str | None) -> AsyncClient:
 
 
 @pytest_asyncio.fixture
-async def client(test_db_session, tmp_path: Path):
-    # Set workspace storage to temporary test directory
+async def client(test_db_session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # Keep workspace data isolated and restore the process-wide setting after each test.
     test_ws_dir = tmp_path / "workspaces"
     test_ws_dir.mkdir(parents=True, exist_ok=True)
-    settings.workspace_storage_dir = test_ws_dir
+    monkeypatch.setattr(settings, "workspace_storage_dir", test_ws_dir)
 
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -217,11 +217,11 @@ async def credentials_client(client):
 
 
 @pytest_asyncio.fixture
-async def anonymous_client(test_db_session, tmp_path: Path):
+async def anonymous_client(test_db_session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A client that never sends credentials."""
     test_ws_dir = tmp_path / "workspaces"
     test_ws_dir.mkdir(parents=True, exist_ok=True)
-    settings.workspace_storage_dir = test_ws_dir
+    monkeypatch.setattr(settings, "workspace_storage_dir", test_ws_dir)
 
     async with bearer_client(None) as ac:
         yield ac
