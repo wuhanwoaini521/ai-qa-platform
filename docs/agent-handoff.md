@@ -14,19 +14,20 @@
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
 | D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
-| 最近文档提交 | `7cac0be`（D5 final report / handoff；详见 `git log`） |
+| Round-2 D5 final-report/handoff commit | `7cac0be`（历史基线；详见 `git log`） |
 | Project-ACL architecture-audit commit | `7ca6e19 docs: record project ACL blocker and next stage` |
-| 本轮开始基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699`；本轮 Studio UI/fixture 改动尚未提交 |
+| Studio 本轮基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699` |
+| Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | 修改：`apps/api/tests/conftest.py`、`apps/web/src/features/automation-studio/components/DebugPanel.tsx`、`apps/web/src/features/workspace/workspace.css`、`apps/web/src/index.css`、`docs/agent-handoff.md`；新增 `apps/api/tests/test_studio_debug_ui_live.py`。`.ai-runs/night-continuation/` 为本地证据，不提交大型日志/截图。 |
+| 当前工作树 | Studio 源码/测试提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`；本文件是其后的 handoff-only 文档更新。`.ai-runs/night-continuation/` 是本地证据，不提交大型日志/截图。 |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-当前阶段：Round-1 Automation Studio 核心真实浏览器验收 attempt 19、全仓回归/lint、最终独立复审均通过；Round-1 报告已更新，准备本地提交。旧 Round-2 的 17 个主流程 + 14 个失败/幂等检查仍是历史证据，不能代替本轮。
+当前阶段：Round-1 Automation Studio 核心真实浏览器验收 attempt 19、全仓回归/lint、最终独立复审均通过；Round-1 报告已更新，源码/测试已本地提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`，未推送。旧 Round-2 的 17 个主流程 + 14 个失败/幂等检查仍是历史证据，不能代替本轮。
 
 本轮修复/完善：
 - `apps/api/tests/conftest.py` 的 client fixture 使用 teardown 恢复 workspace path；opt-in UI test 的 AI/Jev health probes 在测试期显式 disabled，并在 `finally` 恢复全局 config/runtime，避免外部请求和测试污染。
@@ -151,7 +152,7 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 - [x] Studio 核心真实浏览器 acceptance：attempt 19 通过编辑/保存、真实 debugpy 断点与 stepping/continue、Pause/Stop、重复会话、失败证据及 desktop/tablet/mobile；证据 `.ai-runs/night-continuation/round-1/attempt-19/`。
 - [x] 最终全仓 regression、Python/Web lint、typecheck、build、document-width viewport assertion。
 - [x] Round-1 reports 更新、最终独立 reviewer 无 actionable finding。
-- [ ] 本地 semantic commit（no push）。
+- [x] 本地 semantic commit `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`（no push）。
 - [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
 - [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
 - [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
@@ -235,7 +236,7 @@ pnpm -r typecheck && pnpm -r lint
 ## 11. 下一个 Agent 应当继续的工作
 
 1. 核对本 handoff、`git status` 与 `git diff --check`；当前 attempt 19、全回归、lint 和 reviewer 均有证据，除非代码发生变化不要重复运行。
-2. 复核并仅暂存 Studio 源码/测试及 `docs/agent-handoff.md`；`.ai-runs/` 是本地证据不提交。创建本地语义化 commit（不 push）。
+2. 核对本地提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` 与随后的 handoff-only commit；不得 push。
 3. Studio Round-1 后继续 m00001/m00628 企业接管：完整 Project owner/team ACL 模型与迁移、repair matrix 剩余边界、PostgreSQL/Worker-Jenkins 环境、未验收业务链路/UI。
 
 旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。
