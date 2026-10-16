@@ -4,7 +4,7 @@ Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-githu
 
 ## Round 2 regression checkpoint
 
-Current safety fix commit: `919cfcd fix(repair): make concurrent apply and recovery idempotent` on `agent/wsl-continuation` (not pushed). The full-suite results below predate the later duplicate-Apply CAS code change; the affected workflow suite was rerun after that change (see “Latest focused regression”). A final full regression remains required after the round's remaining work.
+Current base commit: `3b34aae docs: record repair recovery milestone and remaining checks` on `agent/wsl-continuation` (not pushed). Working tree now includes uncommitted Discovery terminal-projection/finalization fixes. The 823-pass full-suite result below predates both duplicate-Apply CAS and Discovery finalization changes; a final full regression remains required after remaining work.
 
 | Scope | Command | Result |
 |---|---|---|
@@ -18,12 +18,21 @@ Current safety fix commit: `919cfcd fix(repair): make concurrent apply and recov
 
 ## Latest focused regression after duplicate-Apply CAS and recovery fixes
 
-- Latest `uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider` → **46 passed, 1 warning in 64.41s**. Log: `logs/duplicate-apply-workflow-final.log`.
+- Latest `uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider` → **47 passed, 1 warning in 59.51s**. Earlier equivalent run log: `logs/failure-workflow-jev-outage.log` (68.28s).
 - Parameterized crash-state/recovery/stale-history/late-completion test → **2 passed** (`APPLYING`, `PATCH_READY`). It verifies stale `ROLLED_BACK` analysis state records no recovery event, then successful explicit recovery records one event, and late original completion cannot duplicate it; rollback restores original bytes.
 - Concurrent duplicate-Apply case: exactly one guarded workspace write succeeds. The duplicate response may be a state conflict or idempotent `applied` response. `PATCH_READY` case passed **20/20** fresh pytest-process repetitions; subsequent stale-history guard change passed the 2-case parameterized test and full workflow suite.
 - Injected `OSError("synthetic workspace write failure")` leaves source bytes and proposal `applied=false`, records `PATCH_APPLY_FAILED`, and keeps repair state `PATCH_READY`.
+- `test_jev_upstream_outage_blocks_auto_repair_before_diagnosis_or_write` → **1 passed**: real `JevDecisionProvider`/`DecisionService` HTTP request to loopback 503 produces `upstream_error`; automatic failure repair is blocked before diagnosis/write. AI readiness is stubbed solely to isolate Jev; no real credentials/external network.
 - `python scripts/task.py lint` → **PASS**: Ruff check/format (426 files), i18n parity (25 namespaces, 2 locales, 3022 keys), OpenAPI contract, ESLint. `git diff --check` passes.
 - Independent review found a potential false-history race; code now refuses expected-state transitions if analysis source is missing/unknown/stale and does not append an event after a lost CAS. Final reviewer found no remaining issue and confirmed state CAS + event append share one repository transaction. PostgreSQL runtime unavailable; no real PG concurrency evidence.
+
+## Latest Discovery finalization regression
+
+- Latest `uv run --no-sync pytest apps/api/tests/test_quality_discovery.py -q --no-header -p no:cacheprovider` → **62 passed in 32.04s** after finalization ordering, stop/cancellation shielding, projection-error handling, no-worker stop/resume reservation, and deterministic test-only `DecisionService.ask_score` stubbing.
+- Latest targeted repeat-cancellation/no-worker-stop/projection-failure tests → **2 passed**; fixture Jev fallback pair → **2 passed in 3.94s**. An earlier whole-file attempt failed two fixture tests because `ask_score` still contacted real Jev; inspection confirmed the fixture patched `choose` only. Added deterministic `ask_score` fixture so unit/integration tests do not depend on network; assertions unchanged; rerun passed 62/62.
+- Latest `python scripts/task.py lint` and `git diff --check` both PASS on the current diff: Ruff check, 426 files format, i18n parity (25 namespaces/2 locales/3022 keys), OpenAPI sync, ESLint.
+- Real local-browser Discovery with real providers: `AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 uv run --no-sync pytest apps/api/tests/test_live_enterprise_journey.py::test_real_local_discovery_preserves_target_and_project_scope -v --no-header -s -p no:cacheprovider -o addopts=` → **1 passed in 11.09s**. Browser target was `127.0.0.1`; run `qd_977825b54a5b44a9` / project `proj_983fdbbf552c`; status `COMPLETED`, 2 states / 1 action / 3 features. Real AI `openai-compatible` / `mimo-v2.6-flash` (1,017 input / 279 output tokens); Jev `jev-1.13.0` (1 decision, 0 fallback). Test asserts terminal response includes persisted quality map, coverage, and explicit workspace scan status. Log: `logs/live-discovery-finalization.log`.
+- Independent re-review: no correctness finding in repeated-cancellation close handling, finalizer reservation cleanup, no-worker stop/resume race, or deterministic Jev fixture isolation. Reviewer notes close-session exceptions propagate promptly (do not hang); retained existing error propagation. Limit: locks/coordination are process-local; PostgreSQL/multi-process concurrency untested. This validates exploration → Quality Map, not gap → generated cases → binding → execution → coverage refresh.
 
 ## Real AI/Jev
 
@@ -40,4 +49,4 @@ Current safety fix commit: `919cfcd fix(repair): make concurrent apply and recov
 
 ## Not yet verified
 
-- Full chain A and Discovery→Coverage on this round's final code; all-page interactive UI acceptance; end-to-end E2E suite beyond scoped real browser repair and Studio tests; actual Jev outage; interruption before source/proposal commit and verification-worker restart; PostgreSQL integration; remote Worker/Jenkins; Windows lane; final post-milestone full regression after any further modifications.
+- Full chain A and full Discovery→Coverage through gap→case→automation binding→execution→coverage refresh on this round's final code; current real Discovery acceptance reaches persisted Quality Map only. All-page interactive UI acceptance; end-to-end E2E suite beyond scoped browser repair, Studio, and real Discovery tests; a remote Jev outage (the local transport 503 case is deterministic client-path evidence); interruption before source/proposal commit and verification-worker restart; PostgreSQL integration; remote Worker/Jenkins; Windows lane; final post-milestone full regression after any further modifications.

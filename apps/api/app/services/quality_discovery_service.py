@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import weakref
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
@@ -43,6 +45,8 @@ from app.settings import get_config
 
 if TYPE_CHECKING:
     from app.services.task_command_service import TaskCommandService
+
+logger = logging.getLogger("app.quality_discovery")
 
 __all__ = [
     "DiscoveryBlocked",
@@ -114,6 +118,9 @@ class QualityDiscoveryService(
         self._tasks: dict[str, asyncio.Task] = {}
         self._resume_events: dict[str, asyncio.Event] = {}
         self._stop_events: dict[str, asyncio.Event] = {}
+        self._finalization_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+        self._finalization_tasks: set[asyncio.Task] = set()
+        self._finalizing: set[str] = set()
         self._gap_action_locks: dict[tuple[str, str, str], _GapActionLockEntry] = {}
 
     def _assert_runtime_ready(self, config) -> None:
@@ -612,37 +619,52 @@ class QualityDiscoveryService(
         result["requirement_model"] = StructuredRequirementModel.model_validate(model_data).model_dump(mode="json")
 
     async def pause(self, run_id: str) -> QualityDiscoveryRunORM | None:
-        row = await self.get(run_id)
-        if row is None or row.status not in {DiscoveryStatus.QUEUED.value, DiscoveryStatus.RUNNING.value}:
+        if run_id in self._finalizing:
             return None
-        self._resume_events.setdefault(run_id, asyncio.Event()).clear()
-        return await self._update(run_id, status=DiscoveryStatus.PAUSED.value)
+        lock = self._finalization_locks.setdefault(run_id, asyncio.Lock())
+        async with lock:
+            row = await self.get(run_id)
+            if row is None or row.status not in {DiscoveryStatus.QUEUED.value, DiscoveryStatus.RUNNING.value}:
+                return None
+            self._resume_events.setdefault(run_id, asyncio.Event()).clear()
+            return await self._update(run_id, status=DiscoveryStatus.PAUSED.value)
 
     async def resume(self, run_id: str) -> QualityDiscoveryRunORM | None:
-        row = await self.get(run_id)
-        if row is None or row.status not in {DiscoveryStatus.PAUSED.value, DiscoveryStatus.RUNNING.value}:
+        if run_id in self._finalizing:
             return None
-        resume_event = self._resume_events.setdefault(run_id, asyncio.Event())
-        resume_event.set()
-        self._stop_events.setdefault(run_id, asyncio.Event()).clear()
-        if row.status == DiscoveryStatus.PAUSED.value:
-            await self._update(run_id, status=DiscoveryStatus.RUNNING.value)
-        active = self._tasks.get(run_id)
-        if active is None or active.done():
-            self._schedule(run_id)
-        return await self.get(run_id)
+        lock = self._finalization_locks.setdefault(run_id, asyncio.Lock())
+        async with lock:
+            row = await self.get(run_id)
+            if row is None or row.status not in {DiscoveryStatus.PAUSED.value, DiscoveryStatus.RUNNING.value}:
+                return None
+            resume_event = self._resume_events.setdefault(run_id, asyncio.Event())
+            resume_event.set()
+            self._stop_events.setdefault(run_id, asyncio.Event()).clear()
+            if row.status == DiscoveryStatus.PAUSED.value:
+                await self._update(run_id, status=DiscoveryStatus.RUNNING.value)
+            active = self._tasks.get(run_id)
+            if active is None or active.done():
+                self._schedule(run_id)
+            return await self.get(run_id)
 
     async def stop(self, run_id: str) -> QualityDiscoveryRunORM | None:
-        row = await self.get(run_id)
-        if row is None or row.status in self.TERMINAL:
+        if run_id in self._finalizing:
             return None
-        self._stop_events.setdefault(run_id, asyncio.Event()).set()
-        resume_event = self._resume_events.setdefault(run_id, asyncio.Event())
-        resume_event.set()
-        if run_id not in self._tasks or self._tasks[run_id].done():
-            row = await self._update(run_id, status=DiscoveryStatus.STOPPED.value, finished_at=utc_now())
-            await self._event(run_id, "run.stopped", "用户停止了探索。")
-            return row
+        lock = self._finalization_locks.setdefault(run_id, asyncio.Lock())
+        async with lock:
+            if run_id in self._finalizing:
+                return None
+            row = await self.get(run_id)
+            if row is None or row.status in self.TERMINAL:
+                return None
+            self._stop_events.setdefault(run_id, asyncio.Event()).set()
+            self._resume_events.setdefault(run_id, asyncio.Event()).set()
+            active = self._tasks.get(run_id)
+            should_finish = active is None or active.done()
+            if not should_finish:
+                return row
+            self._finalizing.add(run_id)
+        await self._finish(run_id, DiscoveryStatus.STOPPED.value, "用户停止了探索。")
         return await self.get(run_id)
 
     def _schedule(self, run_id: str) -> None:
@@ -678,10 +700,45 @@ class QualityDiscoveryService(
         await self._change_result(run_id, change)
 
     async def _finish(self, run_id: str, status: str, error: str | None) -> None:
-        await self._update(
-            run_id, status=status, error=error, finished_at=utc_now() if status in self.TERMINAL else None
+        task = asyncio.create_task(
+            self._finish_locked(run_id, status, error), name=f"quality-discovery-finish:{run_id}"
         )
-        await self._event(run_id, f"run.{status.lower()}", error or f"探索状态：{status}")
+        self._finalization_tasks.add(task)
+        task.add_done_callback(self._finalization_task_done)
+        await asyncio.shield(task)
+
+    def _finalization_task_done(self, task: asyncio.Task) -> None:
+        self._finalization_tasks.discard(task)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            logger.error("Discovery finalization failed error_type=%s", type(error).__name__)
+
+    async def _finish_locked(self, run_id: str, status: str, error: str | None) -> None:
+        lock = self._finalization_locks.setdefault(run_id, asyncio.Lock())
+        try:
+            async with lock:
+                row = await self.get(run_id)
+                if row is None or row.status in self.TERMINAL:
+                    return
+                self._finalizing.add(run_id)
+                stop_event = self._stop_events.get(run_id)
+                if status in {DiscoveryStatus.COMPLETED.value, DiscoveryStatus.BUDGET_EXHAUSTED.value} and stop_event:
+                    if stop_event.is_set():
+                        status = DiscoveryStatus.STOPPED.value
+                        error = error or "用户停止了探索。"
+                if status in self.TERMINAL:
+                    try:
+                        await self._build_quality_map(run_id, final_status=status)
+                    except Exception as projection_error:
+                        status = DiscoveryStatus.FAILED.value
+                        detail = self._safe_error(projection_error)
+                        message = f"quality map finalization failed: {detail}"
+                        error = f"{error}; {message}" if error else message
+                await self._update(
+                    run_id, status=status, error=error, finished_at=utc_now() if status in self.TERMINAL else None
+                )
+                await self._event(run_id, f"run.{status.lower()}", error or f"探索状态：{status}")
+        finally:
+            self._finalizing.discard(run_id)
 
     async def _change_result(self, run_id: str, change: Callable[[dict[str, Any]], None]) -> None:
         for attempt in range(5):

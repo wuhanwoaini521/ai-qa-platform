@@ -55,6 +55,10 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "quality-discovery"
 SITE = json.loads((FIXTURE_DIR / "site.json").read_text(encoding="utf-8"))["pages"]
 
 
+async def fixture_candidate_score(_service, _request, **_kwargs):
+    return DecisionResult(provider="jev", model="jev-test", score=0.8, confidence=0.99)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("linked_requirement", "workspace_matches", "observed_url", "expected"),
@@ -435,12 +439,24 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         )
 
     monkeypatch.setattr(DecisionService, "choose", fixture_jev)
+    monkeypatch.setattr(DecisionService, "ask_score", fixture_candidate_score)
     discovery = QualityDiscoveryService(
         test_db_session,
         browser_runtime=runtime,
         decisions=DecisionService(),
         provider_factory=lambda: ai,
     )
+    projection_started = asyncio.Event()
+    projection_release = asyncio.Event()
+    build_quality_map = discovery._build_quality_map
+
+    async def hold_terminal_projection(current_run_id, *, final_status=None):
+        if final_status is not None:
+            projection_started.set()
+            await projection_release.wait()
+        await build_quality_map(current_run_id, final_status=final_status)
+
+    monkeypatch.setattr(discovery, "_build_quality_map", hold_terminal_projection)
     fastapi_app.dependency_overrides[get_quality_discovery_service] = lambda: discovery
     try:
         project_response = await client.post(
@@ -454,6 +470,14 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         )
         assert created.status_code == 202, created.text
         run_id = created.json()["id"]
+        await asyncio.wait_for(projection_started.wait(), timeout=20)
+        try:
+            while_projection_is_running = await client.get(f"/api/discovery/runs/{run_id}")
+            assert while_projection_is_running.json()["status"] == DiscoveryStatus.RUNNING.value
+            stop_response = await client.post(f"/api/discovery/runs/{run_id}/stop")
+            assert stop_response.status_code == 409, stop_response.text
+        finally:
+            projection_release.set()
 
         for _ in range(400):
             response = await client.get(f"/api/discovery/runs/{run_id}")
@@ -467,8 +491,13 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         task = discovery._tasks.get(run_id)
         if task is not None:
             await task
+        run_response = await client.get(f"/api/discovery/runs/{run_id}")
+        assert run_response.status_code == 200, run_response.text
+        run = run_response.json()
 
         assert run["status"] == DiscoveryStatus.COMPLETED.value, run.get("error")
+        assert run["result"]["workspace_test_scan"]["status"] == "NOT_CONFIGURED"
+        assert isinstance(run["result"].get("quality_map"), dict)
         assert run["result"]["ai"]["provider"] == ai.provider_name
         assert run["result"]["jev"]["provider"] == "jev-golden-fixture"
         assert run["result"]["ai"]["calls"] == ai.calls == 3
@@ -521,7 +550,190 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         assert coverage.status_code == 200
         assert coverage.json()
     finally:
+        projection_release.set()
         fastapi_app.dependency_overrides.pop(get_quality_discovery_service, None)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_discovery_finalizes_as_stopped_and_closes_browser(test_db_session, monkeypatch):
+    project_id = f"project-{uuid4().hex[:12]}"
+    run_id = f"qd-{uuid4().hex[:12]}"
+    idle_run_id = f"qd-{uuid4().hex[:12]}"
+    now = utc_now()
+    async with test_db_session() as session:
+        session.add(ProjectORM(id=project_id, name="Cancelled Discovery"))
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="http://127.0.0.1/",
+                status=DiscoveryStatus.RUNNING.value,
+                result={},
+                progress={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            QualityDiscoveryRunORM(
+                id=idle_run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="http://127.0.0.1/",
+                status=DiscoveryStatus.RUNNING.value,
+                result={},
+                progress={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    runtime = DiscoveryFixtureBrowserRuntime()
+    snapshot_started = asyncio.Event()
+    projection_started = asyncio.Event()
+    projection_release = asyncio.Event()
+    close_started = asyncio.Event()
+    close_release = asyncio.Event()
+
+    async def wait_for_cancel(_session_id, **_kwargs):
+        snapshot_started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(runtime, "snapshot", wait_for_cancel)
+    close_session = runtime.close_session
+
+    async def hold_close(session_id):
+        close_started.set()
+        await close_release.wait()
+        await close_session(session_id)
+
+    monkeypatch.setattr(runtime, "close_session", hold_close)
+    service = QualityDiscoveryService(
+        test_db_session, browser_runtime=runtime, provider_factory=lambda: DiscoveryFixtureAI()
+    )
+    build_quality_map = service._build_quality_map
+
+    async def hold_final_projection(current_run_id, *, final_status=None):
+        if current_run_id == run_id:
+            projection_started.set()
+            await projection_release.wait()
+        await build_quality_map(current_run_id, final_status=final_status)
+
+    monkeypatch.setattr(service, "_build_quality_map", hold_final_projection)
+    service._schedule(run_id)
+    task = service._tasks[run_id]
+    try:
+        await asyncio.wait_for(snapshot_started.wait(), timeout=5)
+        task.cancel()
+        await asyncio.wait_for(projection_started.wait(), timeout=5)
+        assert (await service.get(run_id)).status == DiscoveryStatus.RUNNING.value
+        task.cancel()
+        await asyncio.wait_for(close_started.wait(), timeout=5)
+        task.cancel()
+        close_release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        projection_release.set()
+        close_release.set()
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        finalizers = tuple(service._finalization_tasks)
+        if finalizers:
+            await asyncio.gather(*finalizers, return_exceptions=True)
+
+    run = await service.get(run_id)
+    assert run is not None
+    assert run.status == DiscoveryStatus.STOPPED.value
+    assert run.finished_at is not None
+    assert "探索任务被中断" in run.error
+    assert run.result["events"][-1]["type"] == "run.stopped"
+    assert isinstance(run.result.get("quality_map"), dict)
+    assert runtime.closed is True
+
+    finish_called = asyncio.Event()
+    finish_release = asyncio.Event()
+    original_finish = service._finish
+    scheduled = []
+
+    async def delay_idle_finish(current_run_id, status, error):
+        if current_run_id == idle_run_id:
+            finish_called.set()
+            await finish_release.wait()
+        await original_finish(current_run_id, status, error)
+
+    monkeypatch.setattr(service, "_finish", delay_idle_finish)
+    monkeypatch.setattr(service, "_schedule", lambda current_run_id: scheduled.append(current_run_id))
+    stop_task = asyncio.create_task(service.stop(idle_run_id))
+    try:
+        await asyncio.wait_for(finish_called.wait(), timeout=5)
+        assert await service.resume(idle_run_id) is None
+        assert scheduled == []
+    finally:
+        finish_release.set()
+    stopped = await stop_task
+    assert stopped is not None and stopped.status == DiscoveryStatus.STOPPED.value
+    assert isinstance(stopped.result.get("quality_map"), dict)
+    assert stopped.result["events"][-1]["type"] == "run.stopped"
+
+
+@pytest.mark.asyncio
+async def test_discovery_projection_failure_marks_finalization_failed(test_db_session, monkeypatch):
+    project_id = f"project-{uuid4().hex[:12]}"
+    run_id = f"qd-{uuid4().hex[:12]}"
+    now = utc_now()
+    async with test_db_session() as session:
+        session.add(ProjectORM(id=project_id, name="Projection failure"))
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="http://127.0.0.1/",
+                status=DiscoveryStatus.RUNNING.value,
+                result={},
+                progress={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+
+    async def fail_projection(_run_id, *, final_status=None):
+        assert final_status == DiscoveryStatus.COMPLETED.value
+        raise RuntimeError("synthetic projection failure")
+
+    monkeypatch.setattr(service, "_build_quality_map", fail_projection)
+    await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+
+    async with test_db_session() as session:
+        run = await session.get(QualityDiscoveryRunORM, run_id)
+        assert run is not None
+        assert run.status == DiscoveryStatus.FAILED.value
+        assert run.finished_at is not None
+        assert "quality map finalization failed" in run.error
+        assert run.result["events"][-1]["type"] == "run.failed"
+
+    service._finalizing.add(run_id)
+
+    async def fail_run_lookup(_run_id):
+        raise RuntimeError("synthetic run lookup failure")
+
+    monkeypatch.setattr(service, "get", fail_run_lookup)
+    with pytest.raises(RuntimeError, match="synthetic run lookup failure"):
+        await service._finish_locked(run_id, DiscoveryStatus.COMPLETED.value, None)
+    assert run_id not in service._finalizing
 
 
 @pytest.mark.asyncio
@@ -624,6 +836,7 @@ async def test_jev_fallback_after_real_choice_preserves_provider_and_blocks_next
         )
 
     monkeypatch.setattr(DecisionService, "choose", decision_then_fallback)
+    monkeypatch.setattr(DecisionService, "ask_score", fixture_candidate_score)
     discovery = QualityDiscoveryService(
         test_db_session,
         browser_runtime=runtime,
@@ -756,6 +969,7 @@ async def test_low_confidence_jev_candidate_is_skipped_and_discovery_continues(c
         )
 
     monkeypatch.setattr(DecisionService, "choose", low_confidence_then_select)
+    monkeypatch.setattr(DecisionService, "ask_score", fixture_candidate_score)
     discovery = QualityDiscoveryService(
         test_db_session,
         browser_runtime=runtime,

@@ -98,13 +98,25 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
 
 ### 尚待验收：修复审批安全矩阵
 
-现有 integration 覆盖 mocked human reject/approve、低置信度、rollback、exact-run record、analysis interrupt；真实高置信度 UI/API 链已通过。低层 patch 写入异常/stale-source 现有 SQLite 回归覆盖。
-缺口：真实 Jev transport outage、源码/提案持久化前 interruption、verification worker restart；另外加强含干扰控件场景的真实 AI 分类稳定性。逐项映射见 `round-2/failure-repair-matrix.md`。
+现有 integration 覆盖 mocked human reject/approve、低置信度、rollback、exact-run record、analysis interrupt；真实高置信度 UI/API 链已通过。低层 patch 写入异常/stale-source 现有 SQLite 回归覆盖。新增 `test_jev_upstream_outage_blocks_auto_repair_before_diagnosis_or_write` 用真实 `JevDecisionProvider`/`DecisionService` 对 loopback 503 发送 HTTP 请求，收到 `upstream_error` 后在 AI diagnosis/patch 前阻断；AI readiness 被 stub，仅隔离 Jev provider path，不接真实 Jev 远端。
+缺口：远程 Jev outage 未诱发、源码/提案持久化前 interruption、verification worker restart；另外加强含干扰控件场景的真实 AI 分类稳定性。逐项映射见 `round-2/failure-repair-matrix.md`。
 
-## 里程碑 3 — Discovery → Coverage 闭环独立复验
+## 里程碑 3 — Discovery → Coverage 闭环独立复验（部分完成）
 
-待办：探索 → 功能发现 → Quality Map → 质量缺口 → 场景建议 → 用例 → 自动化绑定 → 执行 → 覆盖率更新；
-检查项目/网站隔离、真实持久化、Feature 去重、刷新后一致性、Run 之间不混数据。
+### 修复：终态早于 Quality Map 持久化
+
+- 复现：`QualityDiscoveryService._finish()` 先写入 `COMPLETED`/`run.completed`，后生成 Quality Map；真实 API poller 可读到终态后停止轮询，而 map 仍未写入。早期 live test teardown 也会在此窗口取消后台 map 任务。
+- 修复：终态由 `_finish()` 统一完成：先投影并提交 Quality Map，再写 terminal status/event；投影异常将该 run 明确置为 `FAILED`。投影器接收预期终态，使 `REQUIRED_NOT_FOUND` 等派生判断仍基于最终状态。
+- Stop/pause/resume 与每 run 终结化使用 weak per-run lock 串行化；finalization 期间 stop API 返回 HTTP 409，不会假装接受后又完成。无活跃 task 的 stop 会在释放锁前登记 finalization reservation，防止 resume 先启动新 task；`_finish_locked` 的外层 `finally` 总会清除 reservation，即使 run lookup 抛错。
+- 任务取消会进入 STOPPED 收尾，`_finish()` 通过受跟踪的 shielded task 完成持久化。BrowserRuntime session cleanup 也使用保留引用的 shielded task 循环抵御重复 cancellation；测试在 projection 和 close 两段分别重复 cancel，并确认 session 关闭。
+- Workspace 扫描本身失败仍允许 Discovery 生命周期正常结束，但 map 明确记 `workspace_test_scan=UNAVAILABLE`、automation coverage `NOT_VERIFIED`，不推断 AUTOMATION_MISSING 或 PASS；对应既有测试保持通过。
+- 真实 live Discovery：浏览器只访问本地 loopback 页面；AI `openai-compatible` / `mimo-v2.6-flash` 1 call（1017 input / 279 output tokens），Jev `jev-1.13.0` 1 decision、0 fallback；终态 GET 含已持久化 `quality_map` / `coverage` / `workspace_test_scan`，测试 **1 passed in 11.09s**。完整详情及日志路径见 `functional-audit.md` 与 `logs/live-discovery-finalization.log`。
+- 回归：最新 `apps/api/tests/test_quality_discovery.py` **62 passed in 32.04s**；重复 cancellation/no-worker stop/projection failure 定向测试通过。第一次重跑发现两个 fixture tests 只 stub `DecisionService.choose` 却漏了 `ask_score`，意外触发真实 Jev 网络等待；现已加入确定性测试 stub（断言未放宽），相关两测 **2 passed in 3.94s**。最新 `python scripts/task.py lint` / `git diff --check` 均通过：Ruff、426 文件格式、i18n 25 namespaces/2 locales/3022 keys、OpenAPI、ESLint。
+- 独立 Reviewer 复查无正确性发现；指出 close-session 自身异常会直接传播（不会挂死），保留现有异常语义。限制：最终化锁与运行 task 是进程内状态；无多进程/PostgreSQL 证据。
+
+### 仍待完整链路
+
+从真实探索与 Quality Map 继续到 gap → 场景/用例 → automation binding → execution → coverage 更新，并验证刷新/持久化/跨项目数据作用域。真实 live test 当前只完成真实探索和 Quality Map；不可宣称 Discovery→Coverage 全链路通过。
 
 ## 里程碑 4 — PostgreSQL / Worker
 

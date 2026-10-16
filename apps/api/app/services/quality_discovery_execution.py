@@ -110,11 +110,9 @@ class QualityDiscoveryExecutionMixin:
                     or max(persisted_elapsed, time.monotonic() - started) >= max_runtime
                 ):
                     await self._finish(run_id, DiscoveryStatus.BUDGET_EXHAUSTED.value, "探索预算已达到配置上限。")
-                    await self._build_quality_map(run_id)
                     return
                 if failures >= config.max_failures:
                     await self._finish(run_id, DiscoveryStatus.BUDGET_EXHAUSTED.value, "已达到最大失败动作数量上限。")
-                    await self._build_quality_map(run_id)
                     return
 
                 snapshot = await self.browser_runtime.snapshot(
@@ -145,7 +143,6 @@ class QualityDiscoveryExecutionMixin:
                     and len(current_result.get("states") or []) >= config.max_states
                 ):
                     await self._finish(run_id, DiscoveryStatus.BUDGET_EXHAUSTED.value, "已达到最大产品状态数量上限。")
-                    await self._build_quality_map(run_id)
                     return
                 screenshot_count = sum(
                     bool(item.get("screenshot_evidence_id")) for item in current_result.get("states", [])
@@ -167,7 +164,6 @@ class QualityDiscoveryExecutionMixin:
                     result.get("actions") or [],
                 ):
                     await self._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
-                    await self._build_quality_map(run_id)
                     return
                 safe_title = self._safe_title(snapshot.title)
                 await self._event(
@@ -219,7 +215,6 @@ class QualityDiscoveryExecutionMixin:
                         DiscoveryStatus.BUDGET_EXHAUSTED.value,
                         "已达到最大探索深度，当前状态仍有未检查的安全控件。",
                     )
-                    await self._build_quality_map(run_id)
                     return
                 if not pending and state.get("depth", 0) > 0:
                     back = self._back_candidate(current_result, state, allowed_hosts)
@@ -227,7 +222,6 @@ class QualityDiscoveryExecutionMixin:
                         pending = [back]
                 if not pending:
                     await self._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
-                    await self._build_quality_map(run_id)
                     return
 
                 if state.get("similar_to_state_id"):
@@ -269,7 +263,6 @@ class QualityDiscoveryExecutionMixin:
                     if len(all_pending) > len(pending):
                         continue
                     await self._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
-                    await self._build_quality_map(run_id)
                     return
                 ordered_pending = sorted(
                     pending,
@@ -316,7 +309,6 @@ class QualityDiscoveryExecutionMixin:
                     if len(all_pending) > len(pending):
                         continue
                     await self._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
-                    await self._build_quality_map(run_id)
                     return
                 choices = {item["candidate_id"]: item for item in decision_pending}
                 suggested = [candidate_id for candidate_id in suggested if candidate_id in choices]
@@ -450,16 +442,23 @@ class QualityDiscoveryExecutionMixin:
                 await self._execute_candidate(run_id, session_id, state, selected, decision_id=decision_id)
                 await self._wait_if_paused(run_id)
         except asyncio.CancelledError:
+            await self._finish(run_id, DiscoveryStatus.STOPPED.value, "探索任务被中断。")
             raise
         except DiscoveryBlocked as error:
             await self._finish(run_id, DiscoveryStatus.BLOCKED.value, self._safe_error(error))
-            await self._build_quality_map(run_id)
         except Exception as error:
             await self._finish(run_id, DiscoveryStatus.FAILED.value, self._safe_error(error))
-            await self._build_quality_map(run_id)
         finally:
             if session_id:
-                await self.browser_runtime.close_session(session_id)
+                close_task = asyncio.create_task(
+                    self.browser_runtime.close_session(session_id), name=f"quality-discovery-close:{run_id}"
+                )
+                while not close_task.done():
+                    try:
+                        await asyncio.shield(close_task)
+                    except asyncio.CancelledError:
+                        continue
+                close_task.result()
 
     async def _requirement_input(self, row: QualityDiscoveryRunORM) -> dict[str, str] | None:
         text = row.requirement_text

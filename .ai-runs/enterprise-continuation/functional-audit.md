@@ -20,6 +20,7 @@
 | 功能发现与 AI 归纳 | ✅ | `features: 3`，AI 调用 1 次（1017 in / 208 out tokens） |
 | Jev 参与 | ✅ | 1 次决策，`fallbacks: 0` |
 | 站点 / 项目作用域隔离 | ✅ | `test_real_local_discovery_preserves_target_and_project_scope` 通过 |
+| 终态前 Quality Map 投影已持久化 | ✅ | `test_quality_discovery.py` 62 passed；真实浏览器终态读取含 `quality_map` / `coverage` / `workspace_test_scan`，修复了终态早于 projection 的 race |
 
 ## 测试用例
 
@@ -89,3 +90,11 @@
 | Requirement → Coverage 链路独立复验 | 未完成 | 需求 → 用例 → 执行 → 结果 → 知识图已复验 ✅；覆盖率的独立外层复验仍为 🔶 |
 | Site Discovery 链路独立复验 | 未完成 | **已完成** ✅（链路 C） |
 | Graph / Studio / Result / Discovery UI 最终复验 | 未完成 | Graph / Result / Discovery 已真实加载 ✅；Studio 深度交互为 🔶 |
+
+## Round 2 supplement — Discovery terminal result readiness
+
+- Confirmed a lifecycle race: Discovery exposed `COMPLETED` and `run.completed` before persisting the derived Quality Map; the real acceptance test could observe terminal state and cancel map work. Since the frontend stops polling on terminal state, users could see incomplete coverage.
+- Fix in current uncommitted working tree: `QualityDiscoveryService._finish()` now persists map before terminal status/event, marks unexpected projection failure `FAILED`, and maps with the intended terminal status. Per-run finalization lock serializes stop/pause/resume; a stop accepted before finalization yields `STOPPED`, while stop during finalization is rejected with HTTP 409. Execution cancellation marks STOPPED and a shielded finalizer survives repeated cancellation.
+- Validation: `apps/api/tests/test_quality_discovery.py` → 62 passed; real local Playwright Discovery with AI `openai-compatible` / `mimo-v2.6-flash` (1 call, 1,017 input / 279 output tokens) and Jev `jev-1.13.0` (1 decision, no fallback) → 1 passed; terminal response includes persisted `quality_map`, coverage, and workspace-scan status. Log: `.ai-runs/enterprise-continuation/round-2/logs/live-discovery-finalization.log`.
+- Workspace scan errors intentionally preserve the run with explicit `UNAVAILABLE` and automation coverage `NOT_VERIFIED`; they do not claim missing automation or PASS. Existing regression: `test_workspace_test_scan_failure_marks_automation_coverage_unverified`.
+- Independent reviewer found no remaining issue. Limitation: finalization locks are process-local; no multi-process/PostgreSQL concurrency evidence. This validates Discovery→Quality Map, not the downstream gap→case→binding→run→coverage chain, which remains open.

@@ -20,17 +20,17 @@ from app.services.quality_discovery_models import DiscoveryStatus
 
 
 class QualityDiscoveryProjectionMixin:
-    async def _build_quality_map(self, run_id: str) -> None:
+    async def _build_quality_map(self, run_id: str, *, final_status: str | None = None) -> None:
         for attempt in range(5):
             try:
-                await self._build_quality_map_once(run_id)
+                await self._build_quality_map_once(run_id, final_status=final_status)
                 return
             except (StaleDataError, OperationalError) as exc:
                 if not self._is_retryable_write_conflict(exc) or attempt == 4:
                     raise
                 await asyncio.sleep(0.01 * (attempt + 1))
 
-    async def _build_quality_map_once(self, run_id: str) -> None:
+    async def _build_quality_map_once(self, run_id: str, *, final_status: str | None = None) -> None:
         async with self.session_factory() as session:
             row = await QualityDiscoveryRepository(session).get(run_id)
             if row is None:
@@ -45,6 +45,7 @@ class QualityDiscoveryProjectionMixin:
                 try:
                     collected_tests = (await self.workspace_service.collect_tests(row.project_id)).tests
                 except Exception:
+                    # Keep a degraded but explicit map; missing workspace evidence is unverified, not a failed run.
                     collected_tests = []
                     workspace_test_scan_status = "UNAVAILABLE"
             collected_by_nodeid = {item.nodeid: item for item in collected_tests}
@@ -125,7 +126,11 @@ class QualityDiscoveryProjectionMixin:
                 elif requirement.get("draft"):
                     status = "NOT_VERIFIED"
                 elif not matches:
-                    status = "REQUIRED_NOT_FOUND" if row.status == DiscoveryStatus.COMPLETED.value else "NOT_VERIFIED"
+                    status = (
+                        "REQUIRED_NOT_FOUND"
+                        if (final_status or row.status) == DiscoveryStatus.COMPLETED.value
+                        else "NOT_VERIFIED"
+                    )
                 elif top_score < mapping_threshold:
                     status = "NOT_VERIFIED"
                 elif matches:

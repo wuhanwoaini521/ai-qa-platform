@@ -195,6 +195,10 @@ async def test_real_local_discovery_preserves_target_and_project_scope(
             for item in run["result"].get("decisions", [])
         )
         assert run["result"]["features"]
+        assert isinstance(run["result"].get("quality_map"), dict)
+        assert run["result"]["quality_map"]["coverage"] == run["result"]["coverage"]
+        assert run["result"]["quality_map"]["workspace_test_scan"] == run["result"]["workspace_test_scan"]
+        assert run["result"]["workspace_test_scan"]["status"] in {"AVAILABLE", "UNAVAILABLE", "NOT_CONFIGURED"}
         assert not any(feature.get("test_case_ids") for feature in run["result"]["features"])
         print(
             "REAL_BROWSER_DISCOVERY="
