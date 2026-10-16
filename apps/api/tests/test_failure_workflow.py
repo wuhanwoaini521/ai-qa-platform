@@ -4,6 +4,7 @@ import asyncio
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
+from types import SimpleNamespace
 
 import pytest
 from app.api.failures import get_failure_service
@@ -1514,6 +1515,120 @@ async def test_automatic_runtime_block_prevents_diagnosis_decision_and_patch(
     assert not diagnosis_calls
     assert not decision.calls
     assert not any(event.type in {"patch.generated", "patch.applied"} for event in events)
+
+
+@pytest.mark.asyncio
+async def test_jev_upstream_outage_blocks_auto_repair_before_diagnosis_or_write(client, test_db_session, monkeypatch):
+    from app.services import failure_workflow_service as workflow_module
+    from app.services.ai_settings_service import AISettingsService
+    from app.services.decision_service import DecisionService
+    from app.services.decision_settings_service import DecisionRuntimeConfig
+    from app.settings import get_config
+
+    source = 'def test_workflow(page):\n    page.locator("#old-submit").click()\n'
+    project_id, failure_id, _ = await seed(
+        client,
+        test_db_session,
+        error='Timeout waiting for locator("#old-submit")',
+        kind="UI",
+        source=source,
+    )
+
+    requests = []
+
+    class UnavailableJevHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            requests.append(self.path)
+            self.send_response(503)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), UnavailableJevHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    class LocalJevSettings:
+        async def get_runtime_config(self):
+            return DecisionRuntimeConfig(
+                provider="jev",
+                enabled=True,
+                api_key="local-test-key",
+                model="jev-test",
+                base_url=f"http://127.0.0.1:{server.server_port}/v1",
+                timeout=1,
+                minimum_confidence=0.7,
+                retries=0,
+            )
+
+    base = get_config()
+    runtime_config = base.model_copy(
+        update={
+            "repair": base.repair.model_copy(update={"enabled": True, "require_jev": True}),
+            "features": base.features.model_copy(update={"ai_repair": True, "jev_decision": True}),
+        }
+    )
+    monkeypatch.setattr(workflow_module, "get_config", lambda: runtime_config)
+    ai_policy = SimpleNamespace(
+        enabled=True,
+        provider="openai-compatible",
+        api_key="local-test-ai-key",
+        model="test-model",
+        budget_enabled=False,
+        max_request_tokens=10_000,
+        max_daily_requests=100,
+    )
+    ai_status = SimpleNamespace(
+        real_model_available=True,
+        provider="openai-compatible",
+        model="test-model",
+        failure_reason=None,
+    )
+
+    async def ready_ai_policy(_self):
+        return ai_policy
+
+    async def ready_ai_status(_self, refresh=False):
+        return ai_status
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", ready_ai_policy)
+    monkeypatch.setattr(AISettingsService, "get_status", ready_ai_status)
+
+    try:
+        async with test_db_session() as session:
+            service = get_failure_service(session)
+            diagnoses = []
+
+            async def unexpected_diagnosis(*_args, **_kwargs):
+                diagnoses.append(True)
+                raise AssertionError("Jev outage must block before AI diagnosis")
+
+            service.diagnose_failure_ai = unexpected_diagnosis
+            scope = TaskRepositoryScopeFactory()
+            decision = DecisionService(settings_service=LocalJevSettings(), repository_scope=scope)
+            workflow = FailureWorkflowService(
+                service,
+                LocatorDecisionService(decision_service=decision),
+                auto_repair_mode="AUTO",
+            )
+            events = [event async for event in workflow.stream(failure_id, auto_triggered=True)]
+
+        completed = next(event for event in events if event.type == "run.completed")
+        assert completed.metadata["block_reason"] == "JEV_RUNTIME_NOT_READY"
+        assert completed.metadata["jev_reasons"] == ["upstream_error"]
+        assert completed.metadata["jev_provider"] == "jev"
+        assert completed.metadata["automatic_triggered"] is True
+        assert requests == ["/v1/systemone"]
+        assert not diagnoses
+        assert not any(event.type in {"patch.generated", "patch.applied"} for event in events)
+        current = await client.get(f"/api/workspaces/{project_id}/file", params={"path": "tests/test_workflow.py"})
+        assert current.json()["content"] == source
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 @pytest.mark.asyncio
