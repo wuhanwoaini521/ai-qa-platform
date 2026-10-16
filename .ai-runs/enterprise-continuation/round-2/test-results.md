@@ -4,7 +4,7 @@ Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-githu
 
 ## Round 2 regression checkpoint
 
-Current base commit: `3b34aae docs: record repair recovery milestone and remaining checks` on `agent/wsl-continuation` (not pushed). Working tree now includes uncommitted Discovery terminal-projection/finalization fixes. The 823-pass full-suite result below predates both duplicate-Apply CAS and Discovery finalization changes; a final full regression remains required after remaining work.
+Current code commit: `02210de fix(discovery): persist quality map before terminal status` on `agent/wsl-continuation` (not pushed); Jev outage regression was committed separately at `81550e6`. The 823-pass full-suite result below predates both duplicate-Apply CAS and Discovery finalization changes; a final full regression remains required after remaining work.
 
 | Scope | Command | Result |
 |---|---|---|
