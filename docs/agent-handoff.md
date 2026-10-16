@@ -165,14 +165,13 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 
 ## 8. 已知 Bug / 阻断
 
-- 已确认的企业安全 blocker：全平台项目级授权模型缺失（Project 无 owner/team 关系；不能用单路由 ACL 代替系统级隔离）。
+- 已确认的企业安全 blocker：191 条 API route 尚无系统级 project-resource scoping；`ProjectORM` 无 owner/team，`authorize_request` 仅检查全局角色。必须覆盖所有资源 ID / query / body / list / WebSocket，不能用单路由 ACL 代替。Legacy ownerless projects 的迁移规则未获决策；安全建议为 admin-only 直到显式 claim，禁止静默分配 owner。
 - Studio locale-tolerant selectors、debug-view flex sizing、phone DebugPanel layout 已修复并在 attempt 19 实测；编辑器 161px desktop / ≥140px tablet-mobile，mobile details 纵向滚动可读，documentWidth 在 1440/768/390px 均不超过 viewport。
 - Discovery 最终化修复已提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。D5 refresh endpoint uses terminal guard and per-run lock; double-refresh regression observes serialization in one process. No multi-process/PostgreSQL evidence.
 - 项目权限仍是 P0/P3 架构风险：`ProjectORM` 没有 owner/team 关系，RBAC roles 全局；本次只限制非管理员刷新自己发起的 run，不能据此宣称系统级 project isolation 已完成。
 - 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。Round-2 历史后端回归为 829 passed / 9 skipped，已由 Round-1 最终全仓 830 passed / 10 skipped / 55 warnings supersede，详见 §9。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
-- 数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
-  在未选项目时会回到项目页，这是设计行为而非缺陷。
+- `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
 
@@ -192,7 +191,7 @@ python scripts/task.py test                    # → .ai-runs/night-continuation
 # 仓库 lint（ruff + format + i18n 一致性 + OpenAPI 契约 + eslint）
 python scripts/task.py lint                     # → All linters passed!
 # 前端
-pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test && pnpm --filter web build
+pnpm --filter @ai-qa/web typecheck && pnpm --filter @ai-qa/web lint && pnpm --filter @ai-qa/web test && pnpm --filter @ai-qa/web build
 ```
 
 ## 10. 下一步具体命令
@@ -218,8 +217,8 @@ uv run --no-sync pytest packages/qa-core/tests/test_migrated_core.py apps/api/te
 # uv sync --locked && pnpm install --frozen-lockfile
 
 # 启动服务
-uv run --no-sync python -m app.main --reload        # apps/api, :8000
-pnpm --filter web dev                               # :5173
+(cd apps/api && uv run --no-sync uvicorn app.main:app --reload --host 127.0.0.1 --port 8000)
+pnpm --filter @ai-qa/web dev                       # :5173
 
 # Strict D5 live UI (仅 Provider 恢复后执行一次；60s/1 retry；若仍超时则 BLOCKED，不循环重试)
 AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 QA_AI_TIMEOUT_SECONDS=60 QA_AI_MAX_RETRIES=1 \
@@ -236,7 +235,7 @@ pnpm -r typecheck && pnpm -r lint
 ## 11. 下一个 Agent 应当继续的工作
 
 1. 核对本 handoff、`git status` 与 `git diff --check`；当前 attempt 19、全回归、lint 和 reviewer 均有证据，除非代码发生变化不要重复运行。
-2. 核对本地提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` 与随后的 handoff-only commit；不得 push。
-3. Studio Round-1 后继续 m00001/m00628 企业接管：完整 Project owner/team ACL 模型与迁移、repair matrix 剩余边界、PostgreSQL/Worker-Jenkins 环境、未验收业务链路/UI。
+2. 核对 `git log -2 --oneline` 与 `git status --short`；Studio source commit 为 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`，其后只有 handoff 文档更新；`.ai-runs/` 不暂存；不得 push。
+3. Studio Round-1 后继续 m00001/m00628 企业接管。优先完成 project ACL：owner + project-team 关联、admin-only legacy claim 机制、集中 resource-to-project resolver、覆盖 191 个 route families 的拒绝/列表过滤/WS 测试；再处理 repair matrix 剩余边界、PostgreSQL/Worker-Jenkins 和未验收业务链路/UI。该 ACL 尚未实现。
 
 旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。
