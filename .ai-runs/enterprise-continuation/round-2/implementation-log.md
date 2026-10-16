@@ -85,10 +85,20 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
 - 另一次低 confidence `0.6` 被 fail-closed，原始文件未变。后续 real-provider rerun `AI provider unavailable` 也安全阻断，无写入。一次带干扰控件页面曾被真实 AI 分类成 `TEST_DATA_ERROR`，此项仍为模型稳定性风险。
 - 详情和每次结果（包括 provider unavailable rerun）见 `round-2/ai-jev-live-acceptance.md`；独立 coverage map `round-2/failure-repair-matrix.md`。
 
+### 已修复：并发重复 Apply 可导致状态/审计回写竞态
+
+- 新增 `LocatorRepairRepository.transition_if_current`，用 `UPDATE ... WHERE state = expected_state` 原子占用 `PATCH_READY → APPLYING`；成功/失败回写也检查预期状态。只有一个并发请求能成功执行受源码哈希保护的写操作。
+- 兼容历史数据缺少 `LocatorRepairORM` 的 `PATCH_READY` analysis，在 Apply 前幂等创建状态行；unique `analysis_id` 防止重复创建。
+- 两个独立 service/session 并发 Apply，断言且验证只有一个 guarded source write 成功；重复请求根据时序可返回状态冲突或同一已应用结果，持久 `PATCH_APPLIED` / history / proposal 一致；顺序重复 Apply 仍拒绝且文件与事件不变。`PATCH_READY` 参数化场景做了 20 个独立 pytest 进程重复运行，无失败。
+- 同一验收覆盖提案审批后的外部文件编辑（`Source changed after repair candidates were generated`、编辑 bytes 不覆盖、状态恢复 `PATCH_READY` 并记录 `PATCH_APPLY_FAILED`），以及注入 `OSError("synthetic workspace write failure")`：源文件保持原字节、proposal `applied=false`、审计记录失败；修复状态不保留非终态 block reason。
+- 模拟进程中断后持久化窗口：源码与 failure proposal 已持久化，但 LocatorRepair 仍为 `APPLYING` 或 `PATCH_READY`、analysis/history 未记 `PATCH_APPLIED`。显式 Verify/Rollback 会验证 candidate 与 proposal 后用 CAS 补齐状态；恢复结果经持久状态重读确认。陈旧/已回滚 analysis 状态不会追加虚假的 recovery 事件，迟到的原 Apply completion 不会重复追加事件；无后台无人值守恢复循环。该场景是数据库状态模拟，不是 kill/restart 进程验收。
+- 源文件在审批后被外部编辑时，测试要求错误 `Source changed after repair candidates were generated`、编辑 bytes 保留、状态恢复 PATCH_READY 且只在 analysis history 记 `PATCH_APPLY_FAILED`。
+- 最新验证：完整 `test_failure_workflow.py` **46 passed / 1 warning**；参数化 recovery `2 passed`；`PATCH_READY` concurrency test 独立进程 **20/20 passed**；`python scripts/task.py lint` 全过。独立 reviewer 复查 CAS/history guard 无发现，确认 CAS 与事件写入在同一 repository transaction；尚无 PostgreSQL 实际并发证据。全后端 823-pass checkpoint 仍早于 CAS 代码，必须在最后代码上重跑。
+
 ### 尚待验收：修复审批安全矩阵
 
-现有 integration 覆盖 mocked human reject/approve、低置信度、rollback、exact-run record、analysis interrupt；真实高置信度 UI/API 链已通过。
-缺口：重复 apply/approval、低层 patch write/stale-source failure、真实 Jev transport outage、patch apply / verification 中断；另外加强含干扰控件场景的真实 AI 分类。逐项映射见 `round-2/failure-repair-matrix.md`。
+现有 integration 覆盖 mocked human reject/approve、低置信度、rollback、exact-run record、analysis interrupt；真实高置信度 UI/API 链已通过。低层 patch 写入异常/stale-source 现有 SQLite 回归覆盖。
+缺口：真实 Jev transport outage、源码/提案持久化前 interruption、verification worker restart；另外加强含干扰控件场景的真实 AI 分类稳定性。逐项映射见 `round-2/failure-repair-matrix.md`。
 
 ## 里程碑 3 — Discovery → Coverage 闭环独立复验
 

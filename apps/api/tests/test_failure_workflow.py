@@ -15,7 +15,7 @@ from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.locator_decision_service import LocatorDecisionService
 from app.services.locator_history_service import LocatorHistoryService
 from app.services.test_run_service import TestRunService as RunApplicationService
-from project_model.models import ApplyRepairRequest, DecisionResult, RunStatus, TestRunCreate
+from project_model.models import ApplyRepairRequest, DecisionResult, FailureRepairState, RunStatus, TestRunCreate
 from qa_core.ai.models import FailureAnalysisResponse
 from qa_core.ai.provider import FakeAIProvider
 from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
@@ -954,7 +954,10 @@ async def test_repair_releases_snapshot_write_transaction_before_jev_budget_rese
 
 
 @pytest.mark.asyncio
-async def test_manual_repair_persists_applied_and_rolled_back_state(client, test_db_session, local_html_url):
+@pytest.mark.parametrize("interrupted_state", [FailureRepairState.APPLYING, FailureRepairState.PATCH_READY])
+async def test_manual_repair_persists_applied_and_rolled_back_state(
+    client, test_db_session, local_html_url, monkeypatch, interrupted_state
+):
     url = local_html_url('<button type="submit">Continue</button>')
     source = 'def test_workflow(page):\n    page.locator("#old-submit").click()\n'
     project_id, failure_id, _ = await seed(
@@ -1003,21 +1006,179 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(client, test
         )
         await session.commit()
         workflow = FailureWorkflowService(service)
-        applied = await workflow.apply_repair(
-            failure_id,
-            analysis_id,
-            ApplyRepairRequest(
-                file_path=proposal.file_path,
-                old_code=proposal.source_locator,
-                new_code=proposal.proposed_locator,
-            ),
+        from app.services.workspace_service import WorkspaceService
+
+        write_count = 0
+        successful_write_count = 0
+        write_file_if_unchanged = WorkspaceService.write_file_if_unchanged
+
+        async def count_source_writes(*args, **kwargs):
+            nonlocal write_count, successful_write_count
+            write_count += 1
+            result = await write_file_if_unchanged(*args, **kwargs)
+            successful_write_count += 1
+            return result
+
+        monkeypatch.setattr(WorkspaceService, "write_file_if_unchanged", count_source_writes)
+
+        stale_source = source + "# changed after review\n"
+        await service.workspace_service.write_file(project_id, proposal.file_path, stale_source)
+        with pytest.raises(ValueError, match="Source changed after repair candidates were generated"):
+            await workflow.apply_repair(
+                failure_id,
+                analysis_id,
+                ApplyRepairRequest(
+                    file_path=proposal.file_path,
+                    old_code=proposal.source_locator,
+                    new_code=proposal.proposed_locator,
+                ),
+            )
+        assert await service.workspace_service.read_file(project_id, proposal.file_path) == stale_source
+        blocked_workflow = await workflow.get_repair_workflow(failure_id, analysis_id)
+        assert blocked_workflow.state == "PATCH_READY"
+        repair_record = await workflow._locator_repair_for_analysis(analysis_id)
+        assert repair_record.candidate_id == proposal.candidate_id
+        assert repair_record.block_reason is None
+        blocked_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert blocked_analysis["result"]["block_reason"] == "PATCH_APPLY_FAILED"
+        assert blocked_analysis["result"].get("changes_applied") is not True
+        await service.workspace_service.write_file(project_id, proposal.file_path, source)
+
+        async def fail_source_write(*args, **kwargs):
+            raise OSError("synthetic workspace write failure")
+
+        monkeypatch.setattr(WorkspaceService, "write_file_if_unchanged", fail_source_write)
+        with pytest.raises(OSError, match="synthetic workspace write failure"):
+            await workflow.apply_repair(
+                failure_id,
+                analysis_id,
+                ApplyRepairRequest(
+                    file_path=proposal.file_path,
+                    old_code=proposal.source_locator,
+                    new_code=proposal.proposed_locator,
+                ),
+            )
+        assert await service.workspace_service.read_file(project_id, proposal.file_path) == source
+        failed_write_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert failed_write_history["result"]["block_reason"] == "PATCH_APPLY_FAILED"
+        assert failed_write_history["result"]["error_type"] == "OSError"
+        failed_repair = await workflow._locator_repair_for_analysis(analysis_id)
+        assert failed_repair.state == FailureRepairState.PATCH_READY
+        assert failed_repair.block_reason is None
+        assert (await service.get_failure_state(failure_id)).repair_proposal["applied"] is False
+        monkeypatch.setattr(WorkspaceService, "write_file_if_unchanged", count_source_writes)
+
+        async def apply_from_fresh_session():
+            async with test_db_session() as apply_session:
+                apply_service = get_failure_service(apply_session)
+                apply_workflow = FailureWorkflowService(apply_service)
+                return await apply_workflow.apply_repair(
+                    failure_id,
+                    analysis_id,
+                    ApplyRepairRequest(
+                        file_path=proposal.file_path,
+                        old_code=proposal.source_locator,
+                        new_code=proposal.proposed_locator,
+                    ),
+                )
+
+        concurrent_results = await asyncio.gather(
+            apply_from_fresh_session(), apply_from_fresh_session(), return_exceptions=True
         )
+        successful_applies = [result for result in concurrent_results if isinstance(result, dict)]
+        rejected_applies = [result for result in concurrent_results if isinstance(result, Exception)]
+        assert 1 <= len(successful_applies) <= 2, concurrent_results
+        assert len(rejected_applies) + len(successful_applies) == 2, concurrent_results
+        assert len(rejected_applies) <= 1, concurrent_results
+        assert successful_write_count == 1
+        assert all(result["status"] == "applied" for result in successful_applies)
+        if rejected_applies:
+            assert isinstance(rejected_applies[0], ValueError), concurrent_results
+            assert "does not allow applying a patch" in str(
+                rejected_applies[0]
+            ) or "state changed before patch application" in str(rejected_applies[0]), concurrent_results
+        applied = successful_applies[0]
         assert applied["repair"]["state"] == "PATCH_APPLIED"
         applied_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
         assert applied_analysis["result"]["changes_applied"] is True
         assert applied_analysis["result"]["repair_proposal"]["applied"] is True
         patched = await service.workspace_service.read_file(project_id, "tests/test_workflow.py")
         assert proposal.proposed_locator in patched
+        applied_event_count = len(applied_analysis["events"])
+
+        with pytest.raises(ValueError, match="does not allow applying a patch"):
+            await workflow.apply_repair(
+                failure_id,
+                analysis_id,
+                ApplyRepairRequest(
+                    file_path=proposal.file_path,
+                    old_code=proposal.source_locator,
+                    new_code=proposal.proposed_locator,
+                ),
+            )
+        assert await service.workspace_service.read_file(project_id, "tests/test_workflow.py") == patched
+        current_workflow = await workflow.get_repair_workflow(failure_id, analysis_id)
+        assert current_workflow.state == "PATCH_APPLIED"
+        assert "APPLY" not in current_workflow.allowed_actions
+        current_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert len(current_analysis["events"]) == applied_event_count
+        assert current_analysis["result"]["repair_proposal"]["applied"] is True
+
+        async with workflow.repository_scope() as repositories:
+            interrupted_repair = await repositories.locator_repairs.get_by_analysis(analysis_id)
+            interrupted_repair.state = interrupted_state
+            await repositories.commit()
+        async with test_db_session() as session:
+            interrupted_analysis = await session.get(FailureAnalysisORM, analysis_id)
+            interrupted_analysis.result = {
+                key: value
+                for key, value in interrupted_analysis.result.items()
+                if key not in {"changes_applied", "file_path"}
+            }
+            interrupted_analysis.result["repair_state"] = interrupted_state.value
+            interrupted_proposal = dict(interrupted_analysis.result["repair_proposal"])
+            interrupted_proposal["applied"] = False
+            interrupted_analysis.result["repair_proposal"] = interrupted_proposal
+            interrupted_analysis.events = [
+                event for event in interrupted_analysis.events if event.get("type") != "patch.applied"
+            ]
+            await session.commit()
+
+        interrupted_failure = await service.get_failure_state(failure_id)
+        interrupted_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        event_count_before_stale_recovery = len(interrupted_history["events"])
+        async with test_db_session() as session:
+            analysis_row = await session.get(FailureAnalysisORM, analysis_id)
+            analysis_row.result = {**analysis_row.result, "repair_state": "ROLLED_BACK"}
+            await session.commit()
+        with pytest.raises(ValueError, match="Repair state changed before patch application"):
+            await workflow._recover_interrupted_apply(interrupted_failure, interrupted_history)
+        unchanged_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert len(unchanged_history["events"]) == event_count_before_stale_recovery
+        async with test_db_session() as session:
+            analysis_row = await session.get(FailureAnalysisORM, analysis_id)
+            analysis_row.result = {**analysis_row.result, "repair_state": interrupted_state.value}
+            await session.commit()
+        interrupted_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        await workflow._recover_interrupted_apply(interrupted_failure, interrupted_history)
+        recovered_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        assert any(event["type"] == "patch.recovered" for event in recovered_history["events"])
+        recovered_event_count = len(recovered_history["events"])
+        await workflow._record_transition(
+            interrupted_failure,
+            interrupted_history,
+            "PATCH_APPLIED",
+            "patch.applied",
+            "Late completion from the interrupted apply request",
+            expected_current_state=FailureRepairState.APPLYING,
+            candidate_id=proposal.candidate_id,
+            changes_applied=True,
+            repair_proposal=interrupted_failure.repair_proposal,
+        )
+        after_late_completion = next(
+            row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id
+        )
+        assert len(after_late_completion["events"]) == recovered_event_count
 
         rolled_back = await workflow.rollback_repair(failure_id, analysis_id)
         assert rolled_back["repair"]["state"] == "ROLLED_BACK"

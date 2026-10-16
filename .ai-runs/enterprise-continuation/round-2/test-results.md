@@ -2,7 +2,9 @@
 
 Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-github/ai-qa-platform`
 
-## Current-code regression
+## Round 2 regression checkpoint
+
+The full-suite results below predate the later duplicate-Apply CAS code change; the affected workflow suite was rerun after that change (see “Latest focused regression”). A final full regression remains required after the round's remaining work.
 
 | Scope | Command | Result |
 |---|---|---|
@@ -13,6 +15,15 @@ Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-githu
 | Web unit tests | `pnpm --filter @ai-qa/web test` | **160 passed, 0 failed**. |
 | Web typecheck | `pnpm --filter @ai-qa/web typecheck` | **PASS**, no errors. |
 | Web production build | `pnpm --filter @ai-qa/web build` | **PASS**, Vite built in 38.35s. Existing warning: `MonacoEditorPane` JS chunk 4,031.76 kB (1,043.98 kB gzip); do not claim bundle optimization complete. |
+
+## Latest focused regression after duplicate-Apply CAS and recovery fixes
+
+- Latest `uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider` → **46 passed, 1 warning in 64.41s**. Log: `logs/duplicate-apply-workflow-final.log`.
+- Parameterized crash-state/recovery/stale-history/late-completion test → **2 passed** (`APPLYING`, `PATCH_READY`). It verifies stale `ROLLED_BACK` analysis state records no recovery event, then successful explicit recovery records one event, and late original completion cannot duplicate it; rollback restores original bytes.
+- Concurrent duplicate-Apply case: exactly one guarded workspace write succeeds. The duplicate response may be a state conflict or idempotent `applied` response. `PATCH_READY` case passed **20/20** fresh pytest-process repetitions; subsequent stale-history guard change passed the 2-case parameterized test and full workflow suite.
+- Injected `OSError("synthetic workspace write failure")` leaves source bytes and proposal `applied=false`, records `PATCH_APPLY_FAILED`, and keeps repair state `PATCH_READY`.
+- `python scripts/task.py lint` → **PASS**: Ruff check/format (426 files), i18n parity (25 namespaces, 2 locales, 3022 keys), OpenAPI contract, ESLint. `git diff --check` passes.
+- Independent review found a potential false-history race; code now refuses expected-state transitions if analysis source is missing/unknown/stale and does not append an event after a lost CAS. Final reviewer found no remaining issue and confirmed state CAS + event append share one repository transaction. PostgreSQL runtime unavailable; no real PG concurrency evidence.
 
 ## Real AI/Jev
 
@@ -29,4 +40,4 @@ Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-githu
 
 ## Not yet verified
 
-- Full chain A and Discovery→Coverage on this round's final code; all-page interactive UI acceptance; end-to-end E2E suite beyond the scoped real browser repair and Studio tests; actual Jev outage; duplicate apply/approval; low-level patch write failure; interruption during apply/verification; PostgreSQL integration; remote Worker/Jenkins; Windows lane; final post-milestone full regression after any further modifications.
+- Full chain A and Discovery→Coverage on this round's final code; all-page interactive UI acceptance; end-to-end E2E suite beyond scoped real browser repair and Studio tests; actual Jev outage; interruption before source/proposal commit and verification-worker restart; PostgreSQL integration; remote Worker/Jenkins; Windows lane; final post-milestone full regression after any further modifications.

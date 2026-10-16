@@ -14,15 +14,16 @@
 | --- | --- |
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
-| 最新功能提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
+| 最新提交 | `8508210 test(repair): harden real AI/Jev acceptance evidence`，父提交 `1720bf3` |
+| 最近功能提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 未提交修改 | 实时 AI/Jev acceptance harness、审计证据与 screenshots；提交前核对 `git status --short` |
+| 未提交修改 | 并发重复 Apply CAS、进程中断恢复、stale-history 防护 + 回归、矩阵/测试文档更新；failure workflow 46 passed、完整 lint PASS、独立 reviewer 无发现；待提交 |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2 进行中，D8 Disabled 可靠性缺陷已修复；真实 AI/Jev 高置信度 API + 浏览器批准/执行/精确复验/回滚链路已通过，11 类决策矩阵仍有缺口。
+阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2 进行中。D8 Disabled 可靠性缺陷已修复；真实 AI/Jev 高置信度 API + 浏览器批准/执行/精确复验/回滚链路已通过；并发重复 Apply CAS、stale-source 防覆盖、持久化后中断恢复、低层写入异常及 stale-history 防护已有 SQLite 回归，当前修改尚未提交。剩余缺口：真实 Jev outage、源码/提案持久化前中断、verification worker restart、PostgreSQL 并发验证。
 本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
@@ -42,7 +43,7 @@
 | **Studio 真实调试全流程（第二轮）** | `round-2/studio-debug-acceptance.md`（两脚本 31 项全 PASS） |
 | **真实 AI + Jev 失败修复（API + UI）** | `round-2/ai-jev-live-acceptance.md`（真实 provider/Jev、信心 1.0、人工审批、精确 pytest 复验、回滚；screenshots 在 `round-2/screenshots/failure-ui/`） |
 | **D8 AI Disabled 可靠性** | `round-2/ai-disabled-provider.md`（43 GET 路由无 5xx；真实 AI 操作明确 502） |
-| **失败修复矩阵映射** | `round-2/failure-repair-matrix.md`（标出 duplicate apply、底层写失败、Jev 真实 outage、apply/verify interruption 缺口） |
+| **失败修复矩阵映射** | `round-2/failure-repair-matrix.md`（包含 duplicate apply SQLite 回归及剩余 Jev outage、底层写失败和进程中断边界） |
 | 仓库/环境恢复，无 Windows 路径残留导致的功能缺失 | `environment-audit.md` |
 | 后端测试基线（真实运行，非沿用旧报告） | `test-results.md` / `.ai-runs/enterprise-continuation/logs/` |
 | 前端 typecheck / lint / build | `test-results.md` |
@@ -85,7 +86,7 @@
 - 真实 AI：`openai-compatible` / `mimo-v2.6-flash`；真实 Jev：`jev` / `jev-1.13.0`，confidence 1.0；fallback 均为 false。
 - 真实浏览器 UI：人工审批 → 修复写入 → 精确测试节点通过 → 人工回滚恢复原始字节；1 passed，证据和 screenshots 见 `round-2/ai-jev-live-acceptance.md`。
 - 风险：同一 live workflow 后续因真实 AI 返回 `AI provider unavailable` 安全阻断；另一条带干扰控件的输入被 AI 分类为 `TEST_DATA_ERROR`。不可宣称 provider 稳定或模糊页面分类已验收。
-- 矩阵仍缺 duplicate apply、底层 patch 写失败/Jev outage 真实 runtime、apply/verification 中断，详见 `round-2/failure-repair-matrix.md`。
+- 矩阵仍缺真实 Jev outage、源码/提案持久化前中断、verification worker restart，详见 `round-2/failure-repair-matrix.md`；duplicate Apply 和 stale-source 已有 SQLite 回归。
 
 ### P1 — 验收夹具把浏览器 channel 写死为系统 Chrome（跨平台缺陷）
 
@@ -123,7 +124,7 @@
 
 （第二轮，按优先级）
 
-- [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed 已验证；尚缺 duplicate apply、低层 patch write failure、Jev 实际 outage、apply/verification interruption。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
+- [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed、SQLite duplicate Apply/stale-source/持久化后恢复已验证；尚缺真实 Jev outage、源码/提案持久化前 interruption、verification worker restart 和 PostgreSQL 并发证据。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
 - [ ] AI 诊断需加强对存在其他控件时的分类稳定性；一次真实页面干扰控件试验把 locator 错误分类成 `TEST_DATA_ERROR`，当前 clean fixture full chain 通过，见 `round-2/ai-jev-live-acceptance.md`。
 - [ ] Discovery → Coverage 完整闭环独立复验（探索 → 发现 → Quality Map → 缺口 → 场景 → 用例 →
   自动化绑定 → 执行 → 覆盖率更新；项目/网站隔离、真实持久化、Feature 去重、刷新后一致）
@@ -141,6 +142,7 @@
 ## 8. 已知 Bug / 阻断
 
 - 无已确认 P0 阻断。真实 provider 有间歇性 `AI provider unavailable`，latest browser acceptance 安全阻断并未写文件；之前有两条完整高置信度 live acceptance PASS。
+- 最新并发重复 Apply CAS + stale-source 防覆盖 + 中断恢复 + stale-history 防护尚未提交；`test_failure_workflow.py` **46 passed / 1 warning**，参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。完整后端 823-pass checkpoint 早于 CAS 代码，最终仍须重跑。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
 - 数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
   在未选项目时会回到项目页，这是设计行为而非缺陷。
@@ -150,10 +152,10 @@
 第二轮当前代码完整结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`：
 
 - Full backend: 823 passed / 9 skipped / 55 warnings (574.83s).
-- Failure workflow focus: 102 passed / 3 skipped / 5 warnings.
-- D8 targeted: 20 passed; repository lint/contracts all PASS; Web 160 tests, typecheck PASS, production build PASS (Monaco chunk 4.03 MB warning).
+- 最新 failure workflow suite（CAS + recovery + stale-history guard）：**46 passed / 1 warning**；`PATCH_READY` duplicate Apply 20/20 fresh-process repetitions passed；guarded source write exactly one successful write; post-review file edit is never overwritten.
+- D8 targeted: 20 passed; repository lint/contracts current PASS; Web 160 tests, typecheck PASS, production build PASS (Monaco chunk 4.03 MB warning). Full-suite 823-pass checkpoint predates CAS; run full regression at round completion.
 - Real API and real browser AI/Jev high-confidence chains each previously 1 passed; latest browser rerun safely blocked by upstream provider outage, no writes. PostgreSQL blocked; remote Worker/Jenkins not run.
-- These results precede any subsequent code changes; repeat affected/full regression before declaring final.
+- Independent final review of CAS/history guard: no findings; reviewer confirmed conditional transition and event append share a repository transaction. PostgreSQL concurrency remains untested.
 
 ```bash
 # 全仓后端回归（本轮最终代码）
@@ -170,7 +172,9 @@ pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test 
 # 核对现场
 cd ~/self-github/ai-qa-platform
 git status --short && git log -1 --oneline
-# 第二轮 D8 targeted 回归
+# 最新失败修复安全回归
+uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider
+# D8 disabled-provider targeted regression
 uv run --no-sync pytest packages/qa-core/tests/test_migrated_core.py apps/api/tests/test_ai_provider_settings.py -q --no-header -p no:cacheprovider
 # 环境（仅缺失时恢复）
 uv sync && pnpm install
@@ -195,7 +199,7 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. **第二轮里程碑 2**：补齐 duplicate apply、patch write failure、实际 Jev outage、apply/verify interruption；评估并修正 AI 对干扰控件场景误分类，继续用真实调用验收。
+1. **第二轮里程碑 2**：重复 Apply CAS / stale-source / 持久化后中断恢复 + stale-history guard 实现并通过定向回归，尚未提交；继续补实际 Jev outage、持久化前 apply interruption、verification worker restart；评估 AI 干扰控件误分类。
 2. **里程碑 3**：Discovery → Coverage 端到端独立复验。
 3. **里程碑 4**：评估 WSL 内轻量 PostgreSQL 可行性；本地 Worker 进程集成验收（不得冒充集群）。
 4. **里程碑 5**：逐页真实交互 UI 验收 + before/after 多分辨率截图。

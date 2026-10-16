@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from project_model.models import FailureRepairState
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,11 @@ class LocatorRepairRepository:
         return result.scalar_one_or_none()
 
     async def get_by_analysis(self, analysis_id: str) -> LocatorRepairORM | None:
-        result = await self.session.execute(select(LocatorRepairORM).where(LocatorRepairORM.analysis_id == analysis_id))
+        result = await self.session.execute(
+            select(LocatorRepairORM)
+            .where(LocatorRepairORM.analysis_id == analysis_id)
+            .execution_options(populate_existing=True)
+        )
         return result.scalar_one_or_none()
 
     async def create(
@@ -67,6 +71,45 @@ class LocatorRepairRepository:
                 raise
             return existing
         return row
+
+    async def transition_if_current(
+        self,
+        repair_id: str,
+        expected_state: FailureRepairState,
+        target_state: FailureRepairState,
+        *,
+        block_reason: str | None = None,
+        candidate_id: str | None = None,
+        verification_run_id: str | None = None,
+    ) -> bool:
+        now = utc_now()
+        terminal = {
+            FailureRepairState.BLOCKED,
+            FailureRepairState.FAILED,
+            FailureRepairState.NOT_APPLICABLE,
+            FailureRepairState.VERIFIED,
+            FailureRepairState.ROLLED_BACK,
+        }
+        values = {
+            "state": target_state,
+            "updated_at": now,
+            "finished_at": now if target_state in terminal else None,
+        }
+        if target_state in {FailureRepairState.BLOCKED, FailureRepairState.FAILED}:
+            values["block_reason"] = block_reason
+        elif not (target_state == FailureRepairState.ROLLED_BACK and expected_state == FailureRepairState.FAILED):
+            values["block_reason"] = None
+        if candidate_id is not None:
+            values["candidate_id"] = candidate_id
+        if verification_run_id is not None:
+            values["verification_run_id"] = verification_run_id
+        result = await self.session.execute(
+            update(LocatorRepairORM)
+            .where(LocatorRepairORM.id == repair_id, LocatorRepairORM.state == expected_state)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        return result.rowcount == 1
 
     async def flush(self) -> None:
         await self.session.flush()

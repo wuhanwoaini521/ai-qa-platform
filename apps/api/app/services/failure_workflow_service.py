@@ -149,6 +149,7 @@ class FailureWorkflowService:
         analysis_id: str,
         *,
         initial_state: FailureRepairState = FailureRepairState.CREATED,
+        candidate_id: str | None = None,
     ):
         async with self.repository_scope() as repositories:
             repair = await self.repair_state_machine.create(
@@ -156,12 +157,66 @@ class FailureWorkflowService:
                 failure_id=failure_id,
                 analysis_id=analysis_id,
                 initial_state=initial_state,
+                candidate_id=candidate_id,
             )
             await repositories.commit()
             return repair
 
+    async def _recover_interrupted_apply(self, failure, analysis: dict[str, Any]) -> bool:
+        proposal = failure.repair_proposal or {}
+        selected = (analysis.get("result") or {}).get("repair_proposal") or {}
+        if (
+            proposal.get("applied") is not True
+            or proposal.get("candidate_id") != selected.get("candidate_id")
+            or proposal.get("proposed_locator") != selected.get("proposed_locator")
+        ):
+            return False
+        repair = await self._locator_repair_for_analysis(analysis["id"])
+        expected_state = FailureRepairState.PATCH_READY
+        if repair is None:
+            await self._ensure_locator_repair(
+                failure.id,
+                analysis["id"],
+                initial_state=FailureRepairState.PATCH_READY,
+                candidate_id=proposal.get("candidate_id"),
+            )
+        elif repair.state in {FailureRepairState.APPLYING, FailureRepairState.PATCH_READY}:
+            expected_state = repair.state
+        elif repair.state in {
+            FailureRepairState.PATCH_APPLIED,
+            FailureRepairState.VERIFYING_FIX,
+            FailureRepairState.VERIFIED,
+            FailureRepairState.FAILED,
+        }:
+            return True
+        else:
+            return False
+        await self._record_transition(
+            failure,
+            analysis,
+            "PATCH_APPLIED",
+            "patch.recovered",
+            "Recovered an applied patch after workflow state recording was interrupted",
+            expected_current_state=expected_state,
+            candidate_id=proposal.get("candidate_id"),
+            changes_applied=True,
+            repair_proposal=proposal,
+        )
+        repair = await self._locator_repair_for_analysis(analysis["id"])
+        return repair is not None and repair.state in {
+            FailureRepairState.PATCH_APPLIED,
+            FailureRepairState.VERIFYING_FIX,
+            FailureRepairState.VERIFIED,
+            FailureRepairState.FAILED,
+        }
+
     async def _history_append(
-        self, analysis_id: str, event: AITraceEvent, *, result: dict[str, Any] | None = None
+        self,
+        analysis_id: str,
+        event: AITraceEvent,
+        *,
+        result: dict[str, Any] | None = None,
+        expected_current_state: FailureRepairState | None = None,
     ) -> None:
         async with self.repository_scope() as repositories:
             source = await repositories.failure_analyses.get_state_source(analysis_id)
@@ -169,6 +224,8 @@ class FailureWorkflowService:
             stale_failure = (source or {}).get("result", {}).get(
                 "repair_state"
             ) == "ROLLED_BACK" and target_state != FailureRepairState.ROLLED_BACK
+            if expected_current_state is not None and (source is None or target_state is None or stale_failure):
+                raise ValueError("Repair state changed before patch application; reload before retrying.")
             if source is not None and target_state is not None and not stale_failure:
                 repair = await repositories.locator_repairs.get_by_analysis(analysis_id)
                 block_reason = (
@@ -189,6 +246,8 @@ class FailureWorkflowService:
                 if verification_run_id and await repositories.test_runs.get_by_id(verification_run_id) is None:
                     verification_run_id = None
                 if repair is None:
+                    if expected_current_state is not None:
+                        raise ValueError("Repair state record is unavailable; reload before applying the patch.")
                     repair = await self.repair_state_machine.create(
                         repositories.locator_repairs,
                         failure_id=source["failure_id"],
@@ -198,6 +257,21 @@ class FailureWorkflowService:
                         candidate_id=candidate_id,
                         verification_run_id=verification_run_id,
                     )
+                elif expected_current_state is not None:
+                    claimed = await self.repair_state_machine.move_if_current(
+                        repositories.locator_repairs,
+                        repair.id,
+                        expected_current_state,
+                        target_state,
+                        block_reason=block_reason,
+                        candidate_id=candidate_id,
+                        verification_run_id=verification_run_id,
+                    )
+                    if not claimed:
+                        current = await repositories.locator_repairs.get_by_analysis(analysis_id)
+                        if current is not None and current.state == target_state:
+                            return
+                        raise ValueError("Repair state changed before patch application; reload before retrying.")
                 else:
                     await self.repair_state_machine.move(
                         repositories.locator_repairs,
@@ -297,6 +371,7 @@ class FailureWorkflowService:
         proposal = failure.repair_proposal or {}
         if not proposal.get("applied"):
             raise ValueError("Apply the verified repair before starting verification")
+        await self._recover_interrupted_apply(failure, analysis)
         existing_run_id = analysis["result"].get("verification_run_id")
         existing_run = await self.failures.run_repo.get_by_id(existing_run_id) if existing_run_id else None
         if existing_run and existing_run.status in {"QUEUED", "RUNNING"}:
@@ -641,23 +716,36 @@ class FailureWorkflowService:
             raise ValueError("Failure workspace is unavailable")
         if expected_workspace_id is not None and expected_workspace_id != original.workspace_id:
             raise ValueError("Repair workspace does not match the original failure run")
+        await self._ensure_locator_repair(
+            failure_id,
+            analysis_id,
+            initial_state=FailureRepairState.PATCH_READY,
+            candidate_id=proposal.get("candidate_id"),
+        )
         await self._record_transition(
             failure,
             analysis,
             "APPLYING",
             "patch.applying",
             "Repair patch application started",
+            expected_current_state=FailureRepairState.PATCH_READY,
             candidate_id=proposal.get("candidate_id"),
         )
         try:
             result = await self.failures.apply_repair(original.workspace_id, payload, failure_id=failure_id)
         except Exception as error:
+            async with self.repository_scope() as repositories:
+                current_failure = await repositories.failures.get_by_id(failure_id)
+            if current_failure and await self._recover_interrupted_apply(current_failure, analysis):
+                workflow = await self.get_repair_workflow(failure_id, analysis_id)
+                return {"status": "applied", "file_path": payload.file_path, "repair": workflow.model_dump(mode="json")}
             await self._record_transition(
                 failure,
                 analysis,
                 "PATCH_READY",
                 "patch.apply_failed",
                 "Repair patch application was rejected",
+                expected_current_state=FailureRepairState.APPLYING,
                 block_reason="PATCH_APPLY_FAILED",
                 error_type=type(error).__name__,
             )
@@ -669,16 +757,23 @@ class FailureWorkflowService:
             if updated_failure and updated_failure.repair_proposal
             else {**proposal, "applied": True}
         )
-        await self._record_transition(
-            failure,
-            analysis,
-            "PATCH_APPLIED",
-            "patch.applied",
-            "Repair patch applied to the workspace",
-            file_path=result["file_path"],
-            changes_applied=True,
-            repair_proposal=applied_proposal,
-        )
+        try:
+            await self._record_transition(
+                failure,
+                analysis,
+                "PATCH_APPLIED",
+                "patch.applied",
+                "Repair patch applied to the workspace",
+                expected_current_state=FailureRepairState.APPLYING,
+                file_path=result["file_path"],
+                changes_applied=True,
+                repair_proposal=applied_proposal,
+            )
+        except ValueError:
+            async with self.repository_scope() as repositories:
+                current_failure = await repositories.failures.get_by_id(failure_id)
+            if not current_failure or not await self._recover_interrupted_apply(current_failure, analysis):
+                raise
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
 
@@ -726,6 +821,7 @@ class FailureWorkflowService:
             raise ValueError("Failure workspace is unavailable")
         if expected_workspace_id is not None and expected_workspace_id != original.workspace_id:
             raise ValueError("Rollback workspace does not match the original failure run")
+        await self._recover_interrupted_apply(failure, analysis)
         result = await self.failures.rollback_repair(failure_id, original.workspace_id)
         await self.failures.transaction.commit()
         updated_failure = await self.failures.get_failure_state(failure_id)
@@ -759,6 +855,8 @@ class FailureWorkflowService:
         state: str,
         event_type: str,
         message: str,
+        *,
+        expected_current_state: FailureRepairState | None = None,
         **metadata: Any,
     ) -> None:
         result = {**(analysis.get("result") or {}), **metadata, "repair_state": state}
@@ -772,7 +870,7 @@ class FailureWorkflowService:
             status="COMPLETED",
             metadata={"analysis_id": analysis["id"], "failure_id": failure.id, "state": state, **metadata},
         )
-        await self._history_append(analysis["id"], event, result=result)
+        await self._history_append(analysis["id"], event, result=result, expected_current_state=expected_current_state)
 
     async def attach_verification(self, failure_id: str, analysis_id: str, run_id: str) -> None:
         failure = await self.failures.get_failure_state(failure_id)

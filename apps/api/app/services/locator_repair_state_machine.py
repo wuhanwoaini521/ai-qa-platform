@@ -172,6 +172,28 @@ class LocatorRepairStateMachine:
         await repository.flush()
         return repair
 
+    async def move_if_current(
+        self,
+        repository,
+        repair_id: str,
+        expected: FailureRepairState | str,
+        target: FailureRepairState | str,
+        *,
+        block_reason: str | None = None,
+        candidate_id: str | None = None,
+        verification_run_id: str | None = None,
+    ) -> bool:
+        expected_state = self._state(expected)
+        target_state = self.transition(expected_state, target)
+        return await repository.transition_if_current(
+            repair_id,
+            expected_state,
+            target_state,
+            block_reason=self._reason_code(block_reason, target_state),
+            candidate_id=self._candidate_id(candidate_id),
+            verification_run_id=verification_run_id,
+        )
+
     def transition(
         self,
         current: FailureRepairState | str,
