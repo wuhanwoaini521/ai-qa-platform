@@ -49,9 +49,9 @@ class PlatformHealthService:
             if not refresh and self._cached and time.monotonic() < self._expires:
                 return self._cached
 
-            async def probe(name, callback):
+            async def probe(name, callback, timeout=None):
                 started = time.perf_counter()
-                timeout = self._probe_timeouts.get(name, 6)
+                timeout = timeout or self._probe_timeouts.get(name, 6)
                 try:
                     value = await asyncio.wait_for(callback(), timeout=timeout)
                 except TimeoutError:
@@ -64,10 +64,11 @@ class PlatformHealthService:
                     value = {"status": "error", "message": type(error).__name__}
                 return {"component": name, **value, "duration_ms": round((time.perf_counter() - started) * 1000, 1)}
 
+            ai_timeout = await self._ai_probe_timeout()
             components = await asyncio.gather(
                 *[
                     probe("database", self._database),
-                    probe("ai", lambda: self._ai(refresh=refresh)),
+                    probe("ai", lambda: self._ai(refresh=refresh), timeout=ai_timeout),
                     probe("jev", self._jev),
                     probe("browser", self._browser),
                     probe("worker", self._worker),
@@ -88,6 +89,17 @@ class PlatformHealthService:
         if self.database_health_probe is None:
             raise RuntimeError("Platform health requires a database health probe")
         return await self.database_health_probe.check()
+
+    async def _ai_probe_timeout(self) -> float:
+        """The probe runs a health check plus a synthetic completion, i.e. two provider calls, so its
+        budget is twice the configured request timeout; anything stricter reports a working but slow
+        provider as degraded."""
+        if self.repository_scope is None:
+            return self._probe_timeouts["ai"]
+        from app.services.ai_settings_service import AISettingsService
+
+        config = await AISettingsService(self.repository_scope)._effective_config()
+        return max(self._probe_timeouts["ai"], 2 * float(config.timeout))
 
     async def _ai(self, refresh=False):
         from app.services.ai_settings_service import AISettingsService

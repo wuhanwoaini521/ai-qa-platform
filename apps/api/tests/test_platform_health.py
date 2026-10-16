@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 from app.adapters.persistence.sqlalchemy_health_probe import SqlAlchemyDatabaseHealthProbe
@@ -97,3 +98,19 @@ async def test_health_coroutines_run_independently(monkeypatch):
     for name in ("_database", "_ai", "_jev", "_browser", "_worker", "_test_runtime", "_filesystem", "_lsp"):
         monkeypatch.setattr(service, name, lambda name=name, **_kwargs: probe(name))
     assert (await service.check())["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_ai_probe_budget_is_never_stricter_than_the_configured_ai_timeout(monkeypatch):
+    from app.services.ai_settings_service import AISettingsService
+
+    service = _health_service()
+    assert service._probe_timeouts["ai"] == 15
+
+    for configured, expected in ((30.0, 60.0), (5.0, 15)):
+
+        async def effective(_self, _timeout=configured):
+            return SimpleNamespace(timeout=_timeout)
+
+        monkeypatch.setattr(AISettingsService, "_effective_config", effective)
+        assert await service._ai_probe_timeout() == expected, configured

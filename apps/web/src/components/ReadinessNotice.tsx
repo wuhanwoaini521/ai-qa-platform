@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { api } from '../api/client';
+import { limitedCapabilityComponents } from './readinessNoticeModel';
 
 /** One-line system notice. It reports degraded components without taking over the page. */
 export function ReadinessNotice() {
@@ -15,17 +16,7 @@ export function ReadinessNotice() {
     api
       .getSystemHealth()
       .then((health) => {
-        if (active) {
-          setLimited(
-            health.components
-              .filter(
-                (item) =>
-                  item.status === 'error' ||
-                  (item.component === 'ai' && item.status !== 'ok'),
-              )
-              .map((item) => item.component),
-          );
-        }
+        if (active) setLimited(limitedCapabilityComponents(health.components));
       })
       .catch(() => {
         if (active) setLimited(['database']);

@@ -31,3 +31,11 @@
 ## Playwright Version
 
 - Playwright-based tests must use Playwright 1.62.0. Do not install or run Playwright 1.63.0 or newer.
+
+## **长期 Agent 开发交接规则**
+
+- 任何超过单次简单修改的开发任务，必须在仓库中维护 `docs/agent-handoff.md`，并在每个可验证里程碑完成后更新。
+- 必须记录当前 Git Commit、实际完成内容、测试证据、未解决问题、阻断因素和下一步执行命令。
+- 任务中断或模型上下文即将耗尽时，优先保存交接状态。
+- 后续 Agent 必须先阅读该文件并核对 Git 与真实测试结果，再继续开发。
+- 禁止把聊天记录或未跟踪的临时日志作为唯一的进度来源。

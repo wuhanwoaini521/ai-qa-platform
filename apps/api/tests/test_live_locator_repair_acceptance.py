@@ -20,6 +20,10 @@ from app.services.workspace_service import WorkspaceService
 from app.settings import settings
 from qa_core.ai.registry import AIProviderRegistry
 
+#: Bundled Playwright Chromium by default; hosts where it cannot execute (e.g. some macOS builds)
+#: set AI_QA_ACCEPTANCE_BROWSER_CHANNEL=chrome to use an installed system browser.
+BROWSER_CHANNEL = os.environ.get("AI_QA_ACCEPTANCE_BROWSER_CHANNEL") or None
+
 
 @pytest.fixture
 def local_http_url():
@@ -92,7 +96,7 @@ PAGE_URL = {page_url!r}
 
 def test_workflow():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, channel="chrome")
+        browser = playwright.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         page = browser.new_page()
         try:
             page.goto(PAGE_URL, wait_until="domcontentloaded")
@@ -368,7 +372,7 @@ PAGE_URL = {page_url!r}
 
 def test_workflow():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, channel="chrome")
+        browser = playwright.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         page = browser.new_page()
         try:
             page.goto(PAGE_URL, wait_until="domcontentloaded")
@@ -493,7 +497,7 @@ def test_workflow():
 
         token = client.headers["Authorization"].removeprefix("Bearer ")
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True, channel="chrome")
+            browser = await playwright.chromium.launch(headless=True, channel=BROWSER_CHANNEL)
             page = await browser.new_page()
             page.set_default_timeout(180_000)
             await page.add_init_script(

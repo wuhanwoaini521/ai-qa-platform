@@ -14,6 +14,10 @@ from test_live_locator_repair_acceptance import local_http_url as local_http_url
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
+#: Bundled Playwright Chromium by default; hosts where it cannot execute (e.g. some macOS builds)
+#: set AI_QA_ACCEPTANCE_BROWSER_CHANNEL=chrome to use an installed system browser.
+BROWSER_CHANNEL = os.environ.get("AI_QA_ACCEPTANCE_BROWSER_CHANNEL") or None
+
 
 @pytest.fixture(autouse=True)
 def live_acceptance_only():
@@ -68,7 +72,7 @@ async def test_real_requirement_to_execution_and_evidence(client, local_http_url
 
 def test_verification_panel():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, channel="chrome")
+        browser = pw.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         try:
             page = browser.new_page()
             page.goto({target!r})
