@@ -60,9 +60,25 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
 - PostgreSQL 集成测试：BLOCKED（WSL 无 PostgreSQL / Docker）。
 - Worker / Jenkins 真实集群：NOT RUN（无集群）。
 
-## 里程碑 2 — AI + Jev 修复安全闭环（决策矩阵）
+## 里程碑 2 — AI + Jev 修复安全闭环（进行中）
 
-待办：覆盖高/低置信度、AI/Jev 不可用、人工拒绝/批准、补丁应用成功/失败、精确验证成功/失败、
+### 已验证并修复：AI/Jev Disabled 模式导致只读端点 500（D8，P1）
+
+- 复现：`QA_AI_ENABLED=false JEV_ENABLED=false` 下 `/api/ai/status`、`/api/runs`、`/api/failures`
+  均因依赖构造期间立即实例化 Provider 返回 500。
+- 根因：`ProductionQAOrchestrator.__init__` 在构造时 eager 调用 `AIProviderRegistry.get_provider()`；
+  Provider disabled 时 raise `RuntimeError: AI provider is disabled by the effective AppConfig`。
+- 修复：在 `packages/qa-core/qa_core/orchestrator/orchestrator.py` 将 provider 改为首次访问再解析并缓存；
+  非 AI 的诊断/服务组合可正常构造，实际 AI 调用仍显式失败，不会回退或伪报成功。
+- 测试：真实禁用配置 OpenAPI 无参数 GET 路由扫查 43 条，无 5xx；`POST /api/decision/runtime-check`
+  返回 `runtime=DISABLED`；隔离测试验证 status/runs/failures 为 200，实际 AI 分析诚实返回 502。
+- 单测：`uv run --no-sync pytest packages/qa-core/tests/test_migrated_core.py apps/api/tests/test_ai_provider_settings.py -q --no-header -p no:cacheprovider`
+  → 20 passed；ruff check + format 通过；独立 Reviewer 无发现。
+- 证据：`round-2/ai-disabled-provider.md`。
+
+### 仍待验收：修复审批安全矩阵
+
+覆盖高/低置信度、AI/Jev 不可用、人工拒绝/批准、补丁应用成功/失败、精确验证成功/失败、
 回滚、重复提交审批、会话中断共 11 类；拒绝与阻断场景必须验证正式文件逐字节不变；
 批准与回滚场景必须验证文件、审计状态与执行记录一致。
 

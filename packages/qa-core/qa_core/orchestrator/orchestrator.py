@@ -20,6 +20,7 @@ from qa_core.ai.models import (
     TestDesignGenerationResponse,
 )
 from qa_core.ai.provider import (
+    AIProvider,
     AIProviderError,
     clean_json_text,
     empty_response_error,
@@ -61,11 +62,23 @@ class ProductionQAOrchestrator:
     """Production orchestrator coordinating authoring, failure analysis, healing, and AI assistant routines."""
 
     def __init__(self, ai_provider=None, budget_guard: AIBudgetGuard | None = None) -> None:
-        self.ai_provider = ai_provider or AIProviderRegistry.get_provider()
+        #: Resolved on first use: composing an orchestrator must never build a provider, otherwise
+        #: every service that takes one as a dependency (runs, failures) fails when AI is disabled.
+        self._ai_provider = ai_provider
         #: Metadata of the most recent provider call, so callers can record which provider actually
         #: answered (the fallback wrapper serves a different provider than the configured one).
         self.last_completion: AICompletionResponse | None = None
         self.budget_guard = budget_guard or AIBudgetGuard()
+
+    @property
+    def ai_provider(self) -> AIProvider:
+        if self._ai_provider is None:
+            self._ai_provider = AIProviderRegistry.get_provider()
+        return self._ai_provider
+
+    @ai_provider.setter
+    def ai_provider(self, provider: AIProvider) -> None:
+        self._ai_provider = provider
 
     async def complete(self, request: AICompletionRequest) -> AICompletionResponse:
         """One bounded, redacted, schema-validated path for orchestration calls."""

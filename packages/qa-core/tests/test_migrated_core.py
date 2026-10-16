@@ -148,6 +148,18 @@ def test_knowledge_loader_and_authoring(tmp_path: Path):
     assert "def test_user_password_reset" in code
 
 
+def test_production_orchestrator_defers_provider_creation_until_use():
+    original_runtime = AIProviderRegistry._runtime_config
+    AIProviderRegistry.configure_runtime({"enabled": "false"})
+    try:
+        orchestrator = ProductionQAOrchestrator()
+        assert orchestrator.budget_guard is not None
+        with pytest.raises(RuntimeError, match="AI provider is disabled by the effective AppConfig"):
+            _ = orchestrator.ai_provider
+    finally:
+        AIProviderRegistry.configure_runtime(original_runtime)
+
+
 @pytest.mark.asyncio
 async def test_production_orchestrator():
     orchestrator = ProductionQAOrchestrator()

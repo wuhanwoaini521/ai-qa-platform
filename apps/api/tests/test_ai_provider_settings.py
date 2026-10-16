@@ -86,6 +86,40 @@ async def test_ai_status_api_reports_unconfigured_without_network_probe(client, 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_ai_disabled_keeps_status_and_read_endpoints_available(client, monkeypatch):
+    import app.services.ai_settings_service as settings_module
+
+    disabled = replace(AISettingsService()._environment_config(), enabled=False)
+
+    async def effective_config(_self):
+        return disabled
+
+    monkeypatch.setattr(AISettingsService, "_effective_config", effective_config)
+    monkeypatch.setattr(AIProviderRegistry, "_runtime_config", {"enabled": "false"})
+    monkeypatch.setattr(settings_module, "_health_cache", None)
+
+    status = await client.get("/api/ai/status")
+    assert status.status_code == 200, status.text
+    assert status.json()["operational_state"] == "DISABLED"
+    assert status.json()["failure_reason"] == "ai_disabled"
+
+    for path in ("/api/runs", "/api/failures"):
+        response = await client.get(path)
+        assert response.status_code == 200, response.text
+        assert response.json() == []
+
+    project = await client.post("/api/projects", json={"name": "AI disabled read-path test"})
+    requirement = await client.post(
+        "/api/requirements",
+        json={"project_id": project.json()["id"], "title": "Test", "description": "Must fail honestly"},
+    )
+    analysis = await client.post(f"/api/ai/requirements/{requirement.json()['id']}/analyze")
+    assert analysis.status_code == 502, analysis.text
+    assert "AI Requirement Analysis failed (RuntimeError)" in analysis.json()["detail"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_ai_provider_settings_are_runtime_managed_and_not_persisted(client, test_db_session, monkeypatch):
     configured = AIRuntimeConfig(
         enabled=True,

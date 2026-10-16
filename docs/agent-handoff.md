@@ -21,7 +21,7 @@
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮：Studio 真实调试能力验收与修复（里程碑 1 已完成）。
+阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2（AI/Jev 安全闭环）进行中，D8 Disabled 模式可靠性缺陷已修并验证。
 本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
@@ -66,6 +66,16 @@
 - 修复：DELETE 改为幂等（已关闭 → 200 `{"closed": false}`），未知/他人会话仍 404；
   新增 `test_debug_close_is_idempotent_for_already_closed_sessions`。
 
+### P1（第二轮 D8）— AI/Jev Disabled 时只读 API 500
+
+- 现象：在 `QA_AI_ENABLED=false JEV_ENABLED=false` 下，`GET /api/ai/status`、`/api/runs`、`/api/failures`
+  因 Provider 初始化异常返回 500；健康探针本身则能报告 disabled。
+- 根因：`ProductionQAOrchestrator.__init__` eager 构造 Provider，导致任何依赖该服务的读取端点在 handler 执行前失败。
+- 修复：`packages/qa-core/qa_core/orchestrator/orchestrator.py` 延迟到首次真实 Provider 使用时解析 Provider；
+  只读 API 正常可用，AI 写操作仍失败为明确 502，不会静默回退。
+- 验证：真实禁用配置扫查 43 个无参数 GET 路由，0 个 5xx；隔离测试覆盖 status/runs/failures + AI 分析失败语义；
+  相关测试 20 passed。详情 `.ai-runs/enterprise-continuation/round-2/ai-disabled-provider.md`。
+
 ### P1 — 验收夹具把浏览器 channel 写死为系统 Chrome（跨平台缺陷）
 
 - 现象：链路 A 第一次真实运行失败，日志为
@@ -102,8 +112,9 @@
 
 （第二轮，按优先级）
 
-- [ ] AI + Jev 修复安全决策矩阵（11 类场景：高/低置信度、不可用、人工拒绝/批准、应用成功/失败、
-  精确验证成功/失败、回滚、重复提交审批、会话中断）；拒绝/阻断场景必须验证正式文件逐字节不变
+- [ ] AI + Jev 修复审批安全决策矩阵：D8 Disabled 模式可靠性子项已完成；以下场景仍需实际闭环验收：
+  高/低置信度、AI/Jev 不可用、人工拒绝/批准、补丁应用成功/失败、精确验证成功/失败、回滚、重复提交审批、会话中断；
+  拒绝/阻断场景必须验证正式文件逐字节不变
 - [ ] Discovery → Coverage 完整闭环独立复验（探索 → 发现 → Quality Map → 缺口 → 场景 → 用例 →
   自动化绑定 → 执行 → 覆盖率更新；项目/网站隔离、真实持久化、Feature 去重、刷新后一致）
 - [ ] 逐页真实交互式 UI 验收（不只页面加载）+ P2 UI/UX 优化（关系图布局/Studio 上下文连续性/Result 分层）
@@ -124,7 +135,8 @@
 
 ## 9. 最后执行的测试
 
-见 `.ai-runs/enterprise-continuation/test-results.md`（含命令、真实输出摘要与日志路径）。
+上一轮最终回归见 `.ai-runs/enterprise-continuation/test-results.md`；第二轮 D8 targeted 回归见
+`.ai-runs/enterprise-continuation/round-2/ai-disabled-provider.md`。第二轮最终全量回归尚未执行。
 
 ```bash
 # 全仓后端回归（本轮最终代码）
@@ -138,8 +150,12 @@ pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test 
 ## 10. 下一步具体命令
 
 ```bash
-# 环境
+# 核对现场
 cd ~/self-github/ai-qa-platform
+git status --short && git log -1 --oneline
+# 第二轮 D8 targeted 回归
+uv run --no-sync pytest packages/qa-core/tests/test_migrated_core.py apps/api/tests/test_ai_provider_settings.py -q --no-header -p no:cacheprovider
+# 环境（仅缺失时恢复）
 uv sync && pnpm install
 
 # 启动服务
