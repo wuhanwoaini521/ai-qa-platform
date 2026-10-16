@@ -53,6 +53,10 @@ export function QualityDiscoveryPanel({
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [coverageRefreshing, setCoverageRefreshing] = useState(false);
+  const [coverageRefreshed, setCoverageRefreshed] = useState(false);
+  const [coverageRefreshError, setCoverageRefreshError] = useState('');
+  const coverageRequestId = useRef(0);
   const [draftBusyJourney, setDraftBusyJourney] = useState<string | null>(null);
   const [draftError, setDraftError] = useState('');
 
@@ -67,6 +71,8 @@ export function QualityDiscoveryPanel({
 
   useEffect(() => {
     let current = true;
+    coverageRequestId.current += 1;
+    setCoverageRefreshing(false);
     setHistoryStatus('loading');
     setRequirementsError(false);
     setRequirements([]);
@@ -74,6 +80,8 @@ export function QualityDiscoveryPanel({
     setRun(null);
     setError('');
     setPollError('');
+    setCoverageRefreshed(false);
+    setCoverageRefreshError('');
     void Promise.allSettled([
       api.getRequirements(projectId),
       api.getQualityDiscoveryRuns(projectId),
@@ -119,6 +127,13 @@ export function QualityDiscoveryPanel({
     if (!run) return;
     setReportTab(terminalStatuses.has(run.status) ? 'map' : 'activity');
   }, [run?.id, run?.status]);
+
+  useEffect(() => {
+    coverageRequestId.current += 1;
+    setCoverageRefreshing(false);
+    setCoverageRefreshed(false);
+    setCoverageRefreshError('');
+  }, [run?.id]);
 
   useEffect(() => () => {
     if (evidenceUrl) URL.revokeObjectURL(evidenceUrl);
@@ -305,6 +320,27 @@ export function QualityDiscoveryPanel({
     }
   };
 
+  const refreshCoverage = async () => {
+    if (!run) return;
+    const requestId = ++coverageRequestId.current;
+    setCoverageRefreshing(true);
+    setCoverageRefreshed(false);
+    setCoverageRefreshError('');
+    try {
+      const refreshed = await api.refreshQualityDiscoveryCoverage(run.id);
+      if (requestId !== coverageRequestId.current) return;
+      setRun(refreshed);
+      setRuns((items) => items.map((item) => item.id === refreshed.id ? refreshed : item));
+      setCoverageRefreshed(true);
+    } catch (reason) {
+      if (requestId === coverageRequestId.current) {
+        setCoverageRefreshError(reason instanceof Error ? reason.message : String(reason));
+      }
+    } finally {
+      if (requestId === coverageRequestId.current) setCoverageRefreshing(false);
+    }
+  };
+
   const runGapAction = async (gap: QualityDiscoveryGap, action: 'create_requirement_draft' | 'generate_tests' | 'generate_automation' | 'open_failure') => {
     if (!run) return;
     setActionBusy(`${gap.id}:${action}`);
@@ -428,7 +464,9 @@ export function QualityDiscoveryPanel({
         </nav>
 
         {reportTab === 'map' && <section className="qd-section qd-quality-map">
-          <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('qualityMap')}</span><h3>{t('coverageMap')}</h3></div><div className="qd-map-tools"><label className="qd-map-search"><span className="sr-only">{t('mapSearch')}</span><input type="search" value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} placeholder={t('mapSearch')} /></label><label className="qd-filter"><span>{t('mapFilter')}</span><select value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}><option value="ALL">{t('allFeatures')}</option><option value="GAPS">{t('featuresWithGaps')}</option><option value="UNCOVERED">{t('uncoveredFeatures')}</option><option value="FAILED">{t('failedFeatures')}</option></select></label><label className="qd-filter"><span>{t('mapSort')}</span><select value={mapSort} onChange={(event) => setMapSort(event.target.value)}><option value="FEATURE">{t('sortFeature')}</option><option value="RISK">{t('sortRisk')}</option><option value="COVERAGE">{t('sortCoverage')}</option></select></label></div></div>
+          <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('qualityMap')}</span><h3>{t('coverageMap')}</h3></div><div className="qd-map-tools"><label className="qd-map-search"><span className="sr-only">{t('mapSearch')}</span><input type="search" value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} placeholder={t('mapSearch')} /></label><label className="qd-filter"><span>{t('mapFilter')}</span><select value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}><option value="ALL">{t('allFeatures')}</option><option value="GAPS">{t('featuresWithGaps')}</option><option value="UNCOVERED">{t('uncoveredFeatures')}</option><option value="FAILED">{t('failedFeatures')}</option></select></label><label className="qd-filter"><span>{t('mapSort')}</span><select value={mapSort} onChange={(event) => setMapSort(event.target.value)}><option value="FEATURE">{t('sortFeature')}</option><option value="RISK">{t('sortRisk')}</option><option value="COVERAGE">{t('sortCoverage')}</option></select></label>{terminalStatuses.has(run.status) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshCoverage()} disabled={coverageRefreshing} aria-busy={coverageRefreshing}><RotateCcw size={13} aria-hidden="true" />{coverageRefreshing ? t('refreshingCoverage') : t('refreshCoverage')}</button>}</div></div>
+          {coverageRefreshError && <p className="qd-error" role="alert">{coverageRefreshError}</p>}
+          {coverageRefreshed && <p className="qd-field-hint" role="status">{t('coverageRefreshed')}</p>}
           {!coverage.length ? <p className="qd-empty">{t('coveragePending')}</p> : !filteredCoverage.length ? <p className="qd-empty">{t('noMapMatches')}</p> : <div className="qd-table-scroll"><table className="qd-coverage-table">
             <thead><tr><th>{t('mapFeature')}</th><th>{t('mapProduct')}</th><th>{t('mapCoverage')}</th><th>{t('mapTests')}</th><th>{t('mapAutomation')}</th><th>{t('mapLastRun')}</th><th>{t('mapRisk')}</th></tr></thead>
             <tbody>{filteredCoverage.map((row, index) => {

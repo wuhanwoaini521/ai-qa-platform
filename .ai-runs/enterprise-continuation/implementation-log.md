@@ -143,3 +143,19 @@ GET /api/ai/status         → REAL_CONNECTED, real_model_available: true, laten
 | Studio 的 Monaco 全量导入（4 MB chunk） | 需要配套浏览器回归，风险大于收益，列为后续项 |
 | `platform_health_service._probe_timeouts` 的 `jev` / `browser` 仍为常量 | 本轮未观测到误报，避免无谓改动 |
 | 33 个 service 直接使用 `session.execute` | 架构债务，非缺陷 |
+
+---
+
+## D5 — Discovery → Coverage 下游刷新与过期执行选择
+
+**现象**：真实 Quality Discovery 终态已持久化 Quality Map，但之后的 TestRun 不会更新 Discovery 结果中的覆盖率快照；UI 停止轮询后会一直展示旧覆盖率。
+
+**修复**：新增终态限定的 `POST /api/discovery/runs/{run_id}/coverage/refresh`，校验 `RUN_EXECUTE`，非管理员只能刷新自己发起的 run；active run 返回 409、未知/非所有者 run 返回 404。UI 的 Discover Map 增加刷新按钮、busy/error/success 状态，并在切换 run 时清除旧反馈。OpenAPI 声明 403/404/409。
+
+**准确性与并发**：`_latest_execution()` 现在从匹配到真实 browser session 的 executions 中选择 `started_at` 最新的一条（回退 `finished_at`，再回退 run 创建时间）；新增并发 refresh 及多 execution 回归。WeakValueDictionary lock 在 async waiter 的局部变量中保持强引用，双 refresh 测试观测到 projection 最大并发为 1；多进程/多 worker 仍未验证。
+
+**真实验收**：`test_real_local_discovery_preserves_target_and_project_scope` 使用真实 `openai-compatible` AI、真实 Jev、真实本地浏览器，生成 requirement/case、写入人工编写 Playwright 测试、激活 binding、实际执行并 `POST refresh`：Discovery `qd_d8decd8513c540af` → case `tc_f52bf659a447` → TestRun `run_f588b51d68fb` PASSED → coverage `VERIFIED`，AI generation `fallback_used=false`，Jev `fallbacks=0`。`1 passed in 63.29s`，仅在本轮 acceptance 命令中放宽 AI timeout 至 60s/retries 1；默认 20s 曾真实超时，须保留为 provider 稳定性风险。
+
+**验证**：`test_quality_discovery.py` 64 passed；Web tests 160 passed、typecheck、lint、production build 通过。新按钮尚未由真实 Web UI 浏览器点击验收；历史失败修复 UI 链路已通过真实浏览器。全仓最终回归仍待执行。
+
+**遗留边界**：项目模型无 project owner/team ACL，中央 RBAC 当前是全局角色；本 endpoint 的 requester/admin 限制不等于完整 project-level isolation，其他既有 API 仍需系统级授权设计。

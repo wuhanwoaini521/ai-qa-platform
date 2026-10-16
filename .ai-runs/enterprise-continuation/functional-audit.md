@@ -67,7 +67,7 @@
 
 | 能力 | 状态 | 证据 |
 | --- | --- | --- |
-| 覆盖率口径（仅统计生效绑定 + 终态执行） | 🔶 | `quality_intelligence_service.py` + `test_quality_and_releases.py` 通过；未做真实链路端到端复验 |
+| 覆盖率口径（仅统计生效绑定 + 终态执行） | ✅ | D5 真实 C 链：发现 → AI/Jev → 人工 Playwright 用例 → ACTIVE binding → 浏览器 TestRun PASSED → 显式 refresh → 同一 feature/case/binding/run `VERIFIED`；API + Playwright UI 点击均实测，见 D5 补充 |
 | 风险评分项目隔离 | 🔶 | `test_quality_risk_scoring.py` 通过 |
 | 质量页面真实渲染 | ✅ | `/quality` 在真实项目上下文加载成功，0 控制台错误 |
 
@@ -87,7 +87,7 @@
 | 最终提交上的完整回归确认 | 未完成 | 已在本轮最终代码上执行（见 `test-results.md`） |
 | PostgreSQL 集成测试 | BLOCKED | 仍 **BLOCKED**（无 Docker / PostgreSQL） |
 | Worker / Jenkins 真实集群 | NOT RUN | 仍 **NOT RUN** |
-| Requirement → Coverage 链路独立复验 | 未完成 | 需求 → 用例 → 执行 → 结果 → 知识图已复验 ✅；覆盖率的独立外层复验仍为 🔶 |
+| Requirement → Coverage 链路独立复验 | 未完成 | 真实需求 → 用例 → Playwright 执行 → POST refresh → `VERIFIED` 已通过；后续跨租户/DB 多进程安全仍未验证 |
 | Site Discovery 链路独立复验 | 未完成 | **已完成** ✅（链路 C） |
 | Graph / Studio / Result / Discovery UI 最终复验 | 未完成 | Graph / Result / Discovery 已真实加载 ✅；Studio 深度交互为 🔶 |
 
@@ -97,4 +97,5 @@
 - Fix in current uncommitted working tree: `QualityDiscoveryService._finish()` now persists map before terminal status/event, marks unexpected projection failure `FAILED`, and maps with the intended terminal status. Per-run finalization lock serializes stop/pause/resume; a stop accepted before finalization yields `STOPPED`, while stop during finalization is rejected with HTTP 409. Execution cancellation marks STOPPED and a shielded finalizer survives repeated cancellation.
 - Validation: `apps/api/tests/test_quality_discovery.py` → 62 passed; real local Playwright Discovery with AI `openai-compatible` / `mimo-v2.6-flash` (1 call, 1,017 input / 279 output tokens) and Jev `jev-1.13.0` (1 decision, no fallback) → 1 passed; terminal response includes persisted `quality_map`, coverage, and workspace-scan status. Log: `.ai-runs/enterprise-continuation/round-2/logs/live-discovery-finalization.log`.
 - Workspace scan errors intentionally preserve the run with explicit `UNAVAILABLE` and automation coverage `NOT_VERIFIED`; they do not claim missing automation or PASS. Existing regression: `test_workspace_test_scan_failure_marks_automation_coverage_unverified`.
-- Independent reviewer found no remaining issue. Limitation: finalization locks are process-local; no multi-process/PostgreSQL concurrency evidence. This validates Discovery→Quality Map, not the downstream gap→case→binding→run→coverage chain, which remains open.
+- Follow-up D5: downstream real chain passes: actual site discovery → real AI requirement/test generation → human-authored active Playwright binding → real browser TestRun PASSED → explicit coverage refresh → feature/case/binding/run all linked, `VERIFIED`. The real web UI button was clicked once and showed success; see test-results addendum for one green historical run plus the later stricter harness/provider block.
+- Refresh uses a per-run same-process lock and requester/admin ownership boundary; latest execution is chosen by timestamp within the newest-first repository run list. Platform lacks project/team authorization: projects have no owner/team relation and RBAC roles are global; this endpoint boundary is not a substitute for system-wide project isolation. Multi-process/PostgreSQL locking/access behavior remains unverified.

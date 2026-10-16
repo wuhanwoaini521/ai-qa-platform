@@ -5925,6 +5925,55 @@
         }
       }
     },
+    "/api/discovery/runs/{run_id}/coverage/refresh": {
+      "post": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Refresh Discovery Coverage",
+        "operationId": "refresh_discovery_coverage_api_discovery_runs__run_id__coverage_refresh_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permissions"
+          },
+          "404": {
+            "description": "Quality Discovery run not found"
+          },
+          "409": {
+            "description": "Discovery run is not terminal"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/discovery/runs/{run_id}/coverage": {
       "get": {
         "tags": [

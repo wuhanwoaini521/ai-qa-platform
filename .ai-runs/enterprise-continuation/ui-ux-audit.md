@@ -53,4 +53,11 @@
 ## 5. 结论
 
 13 个目标页在真实数据下全部可用、无控制台错误、三档宽度无溢出，工作流上下文连续。
-判定：**PASS（本轮约定范围）**，Studio 深度交互与图谱视觉密度列为后续项。
+判定：**PASS（13 页渲染/响应式范围）**，Studio 深度交互与图谱视觉密度列为后续项。
+
+## 6. D5 — Discovery Coverage Refresh
+
+- 在真实项目路由 `/workspace/{projectId}?stage=discover&view=discover` 下，使用 Playwright 实际点击「刷新覆盖率」，成功反馈和 `VERIFIED` feature 行可见；真实 C 链之前已完成发现、真实 AI/Jev 生成、ACTIVE Playwright binding、browser TestRun PASSED。
+- 1440 / 768 / 360 截图：`round-2/screenshots/discovery-coverage-before-refresh.png`、`discovery-coverage-after-refresh.png`、`discovery-coverage-tablet.png`、`discovery-coverage-mobile.png`。移动端表格在容器内横向滚动，页面整体无水平溢出。
+- 一次历史 Playwright C-chain UI run 通过；后续加强直接断言 POST 200 / 无 API 错误 / per-run 截图路径后，尚未重新跑绿。另一次重跑在访问 UI 前被真实 AI 20s 超时阻断。不要将最新严格 harness 记为 PASS。
+- 页面切换时清除旧 success/error feedback；按钮仅在终态 run 显示。多语言验收允许英文/简中标签。

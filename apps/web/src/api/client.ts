@@ -498,6 +498,8 @@ export const api = {
     request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}`),
   getQualityDiscoveryQualityMap: (id: string) =>
     request<Record<string, unknown>>(`/discovery/runs/${encodeURIComponent(id)}/quality-map`),
+  refreshQualityDiscoveryCoverage: (id: string) =>
+    request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/coverage/refresh`, { method: 'POST' }),
   getQualityDiscoveryEvents: (id: string, limit = 100) =>
     request<NonNullable<QualityDiscoveryRun['result']['events']>>(`/discovery/runs/${encodeURIComponent(id)}/events?limit=${limit}`),
   getQualityDiscoveryJourneys: (id: string) =>

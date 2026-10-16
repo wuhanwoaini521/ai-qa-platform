@@ -14,20 +14,20 @@
 | --- | --- |
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
-| 最新功能代码提交 | `02210de fix(discovery): persist quality map before terminal status`，父提交 `81550e6` |
+| 最新已提交代码 | `6b139b5`；当前 D5 refresh 改动尚未提交 |
 | 最近独立安全测试提交 | `81550e6 test(repair): cover Jev upstream outage fail-closed` |
-| 当前 HEAD | 本交接更新时 `02210de`；若有仅文档后续提交，执行 `git rev-parse HEAD` 确认 |
+| 当前 HEAD | `6b139b5`（更新本文件前由 `git rev-parse --short HEAD` 核实） |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 未提交修改 | 仅本交接文档更新（提交前确认 `git status --short`）；Discovery 代码/测试/evidence 已随 `02210de` 提交 |
+| 未提交修改 | D5 API/service/projection、测试、OpenAPI、web client/Discover panel/i18n 与本轮 evidence/handoff；提交前确认 `git status --short` |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮：里程碑 1（Studio Debug）与里程碑 2（AI/Jev 安全矩阵）大部分已完成；里程碑 3 正在进行。D8 Disabled 可靠性修复已提交；真实 AI/Jev 高置信度 API + UI 审批/精确复验/回滚已通过；duplicate Apply CAS、中断恢复、stale-source / stale-history 与 Jev loopback 503 fail-closed 已提交于 `919cfcd` 后的提交并通过 SQLite 回归。Discovery terminal status 早于 Quality Map 持久化的竞态已在 `02210de` 修复并提交，通过 62 个模块测试、真实 local-browser + AI/Jev 运行、全仓 lint 与独立复审；完整 Discovery→Coverage 下游链路仍未完成。
-本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
-最新 Discovery 代码已通过 62 个该模块测试、全仓 `python scripts/task.py lint`、`git diff --check` 与独立复审；只剩进程内锁未覆盖多进程/PostgreSQL，完整最终回归仍未做。
+阶段 8 / 第二轮 D5：Discovery → Coverage refresh API/UI 已实现；真实 AI/Jev/API 链通过，真实 UI 按钮点击成功过一次。当前 strict opt-in harness 加强了 HTTP 200 / API error / per-run screenshot 断言，但后续两次重跑在 AI discovery 阶段遭遇 20s Provider timeout，按夜间规则暂停消耗额度；该 strict harness 状态 **NOT VERIFIED**。
+当前基线完整回归：全仓 backend 829 passed / 9 skipped / 55 warnings（431.17s），web 160 passed，typecheck/lint/build 均 PASS。已有 D8、repair CAS/recovery、Jev 503 fail-closed、Discovery finalization/terminal map、Studio/AI-Jev UI 工作。
+下一步：独立 reviewer 对最终 diff 复查 → 更新 Git SHA 并本地提交 D5 → 继续项目级 ACL 架构和未完成 UI/数据库/Worker 验证。No push/main merge/deploy。refresh lock 为进程内，PostgreSQL/多 worker 未验证。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 
 ## 4. 环境基线（WSL / Linux）
@@ -36,7 +36,7 @@
 - Python 3.13 + `uv`；Node 24 + `pnpm`；`.venv` 与 `node_modules` 已按锁文件在 Linux 下重建
 - Playwright **1.62.0**（`apps/api` 与 `apps/web` 均为该版本；1.63.0 被显式禁止）
 - 浏览器：`playwright install chromium` 已安装，bundled Chromium 可正常启动
-- 服务：API `http://127.0.0.1:8000`、Web `http://127.0.0.1:5173`，SQLite `runtime/ai_qa_platform.db`
+- 服务状态：最近检查 `127.0.0.1:8000` API 与 `:5173` Web 均不可达；本次测试由隔离 TestClient/临时 Uvicorn/Vite 按需启动并清理。项目 SQLite 路径为 `runtime/ai_qa_platform.db`；PostgreSQL/Docker 不可用。
 - 详见 `.ai-runs/enterprise-continuation/environment-audit.md`；无系统级改动，Playwright 截图所需 Noto Sans CJK 安装于 `~/.local/share/fonts/`
 
 ## 5. 已完成并验证
@@ -47,7 +47,7 @@
 | **真实 AI + Jev 失败修复（API + UI）** | `round-2/ai-jev-live-acceptance.md`（真实 provider/Jev、信心 1.0、人工审批、精确 pytest 复验、回滚；screenshots 在 `round-2/screenshots/failure-ui/`） |
 | **D8 AI Disabled 可靠性** | `round-2/ai-disabled-provider.md`（43 GET 路由无 5xx；真实 AI 操作明确 502） |
 | **失败修复矩阵映射** | `round-2/failure-repair-matrix.md`（包含 duplicate apply SQLite 回归、Jev loopback 503 与剩余远端 outage/进程中断边界） |
-| **Discovery terminal → Quality Map readiness** | `round-2/test-results.md` + `functional-audit.md`：62 Discovery tests passed；真实 local browser + AI/Jev 1 passed，terminal 响应含持久化 map/coverage |
+| **Discovery → Coverage 下游闭环** | `round-2/test-results.md` D5：真实 local browser + real AI/Jev requirement/case，人工 Playwright ACTIVE binding，browser TestRun PASSED，显式 refresh 后 coverage VERIFIED；真实 UI 按钮点击成功过一次，strict harness 待 provider 恢复后复跑 |
 | 仓库/环境恢复，无 Windows 路径残留导致的功能缺失 | `environment-audit.md` |
 | 后端测试基线（真实运行，非沿用旧报告） | `test-results.md` / `.ai-runs/enterprise-continuation/logs/` |
 | 前端 typecheck / lint / build | `test-results.md` |
@@ -55,7 +55,7 @@
 | 链路 B：失败 → 证据 → AI 诊断 → Jev 决策 → 修复提案 → 人工审批 → 写回 → 精确复跑 | `logs/live-chain-ab.log` |
 | 真实 AI provider 健康检查（`REAL_CONNECTED`，`fallback_active=false`） | `/api/ai/status` |
 | 真实 Jev 运行时健康检查（`CONNECTED` / `READY`） | `/api/decision/runtime-check` |
-| UI 12 个主页面渲染 + 无控制台错误 + 截图 | `screenshots/*.png`、`ui-ux-audit.md` |
+| UI 13 个主页面渲染 + 无控制台错误 + 截图 | `screenshots/*.png`、`ui-ux-audit.md` |
 
 ## 6. 本次修复的缺陷
 
@@ -90,7 +90,7 @@
 - 现象：`_finish()` 先写 `COMPLETED`，再写 Quality Map；API poller / UI 可能读到终态后停止轮询，覆盖率仍空；原 live test teardown 也可在该窗口取消 map task。
 - 修复：先构建/持久化 map，再写 terminal status/event；投影异常转为明确 `FAILED`。stop/pause/resume 与 finalization 以 per-run lock 线性化；finalization 已开始时 stop 返回 HTTP 409，不会假装接收。运行 task cancel 会请求 STOPPED；shielded finalizer 支持重复 cancellation 后继续完成持久化。
 - 验证：`apps/api/tests/test_quality_discovery.py` 62 passed in 32.04s；真实 local-browser Discovery 用 `openai-compatible` / `mimo-v2.6-flash` 与 Jev `jev-1.13.0` 执行，1 passed，terminal response 已包含 quality map/coverage/workspace scan。全仓 lint/OpenAPI/i18n 与 `git diff --check` PASS；独立 review 无 correctness finding。日志 `.ai-runs/enterprise-continuation/round-2/logs/live-discovery-finalization.log`；详情见 round-2 `test-results.md`。
-- 限制：finalization lock 为单进程状态，未验证多 API worker/PostgreSQL 并发；Discovery → gap → generated case → binding → execution → coverage refresh 仍未闭环。
+- 限制：finalization/refresh lock 为单进程状态，未验证多 API worker/PostgreSQL 并发；D5 的 Discovery→gap→case→binding→execution→coverage refresh 已有真实 API 链，真实 UI 按钮曾点击成功，但最新 strict harness尚未因 Provider timeout完成最终绿跑。
 
 ### 第二轮真实修复闭环（已通过但矩阵未闭合）
 
@@ -137,7 +137,9 @@
 
 - [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed、SQLite duplicate Apply/stale-source/持久化后恢复和真实 Jev 客户端 loopback 503 fail-closed 已验证；尚缺远程 Jev outage、源码/提案持久化前 interruption、verification worker restart 和 PostgreSQL 并发证据。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
 - [ ] AI 诊断需加强对存在其他控件时的分类稳定性；一次真实页面干扰控件试验把 locator 错误分类成 `TEST_DATA_ERROR`，当前 clean fixture full chain 通过，见 `round-2/ai-jev-live-acceptance.md`。
-- [ ] Discovery → Coverage 完整闭环：真实浏览器探索 → Quality Map 终态持久化已验证；仍需 gap → 场景/用例 → 自动化 binding → execution → coverage refresh，并验收刷新/项目作用域/持久化。
+- [x] Discovery → Coverage API/integration 闭环：真实探索 → AI requirement/case generation → 人工编写 active Playwright binding → browser execution → explicit refresh → VERIFIED；D5 evidence in `round-2/test-results.md`.
+- [x] Discover 的 Refresh Coverage 按钮已在真实浏览器点击并显示成功 / VERIFIED；历史 run-switch feedback reset 有实现和确定性覆盖。
+- [ ] 最新 strict D5 live UI harness 要求 HTTP 200 / 无 API errors / per-run screenshots，Provider 恢复后最多再跑一次；系统性 project/team ACL 仍缺失（本端点仅 requester/admin scoped）。
 - [ ] 逐页真实交互式 UI 验收（不只页面加载）+ P2 UI/UX 优化（关系图布局/Studio 上下文连续性/Result 分层）
 - [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
 - [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
@@ -151,22 +153,23 @@
 
 ## 8. 已知 Bug / 阻断
 
-- 无已确认 P0 阻断。真实 provider 有间歇性 `AI provider unavailable`，latest browser acceptance 安全阻断并未写文件；之前有完整高置信度 live acceptance PASS。
-- Discovery 最终化修复已在 `02210de` 提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。锁为进程内状态；无多进程/PostgreSQL 证据。
-- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；最新增加 Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**，完整 lint/contracts PASS。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。完整后端 823-pass checkpoint 早于 CAS 代码，最终仍须重跑。
+- 当前无已确认的执行/写入 P0 缺陷；已知 P0/P3 安全风险是全平台项目级授权模型缺失（Project 无 owner/team 关系）。真实 provider 间歇性 20s timeout；latest strict D5 acceptance 阻断在 UI 之前、无外部写入；之前 API C chain 与 UI 点击均成功。
+- Discovery 最终化修复已提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。D5 refresh endpoint uses terminal guard and per-run lock; double-refresh regression observes serialization in one process. No multi-process/PostgreSQL evidence.
+- 项目权限仍是 P0/P3 架构风险：`ProjectORM` 没有 owner/team 关系，RBAC roles 全局；本次只限制非管理员刷新自己发起的 run，不能据此宣称系统级 project isolation 已完成。
+- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。当前全仓 D5 回归 829 passed / 9 skipped，详见 §9。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
 - 数据库此时为空库（0 projects），UI 里 `/requirements`、`/test-cases`、`/recorder`
   在未选项目时会回到项目页，这是设计行为而非缺陷。
 
 ## 9. 最后执行的测试
 
-第二轮结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`。注意 full-backend 823-pass 基线早于 CAS 与当前 Discovery 修改，不是最终回归。
+第二轮结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`。
 
-- Latest Discovery suite: 62 passed in 32.04s; real local-browser Discovery + real AI/Jev: 1 passed in 11.09s; full lint/OpenAPI/i18n and diff check PASS; independent reviewer found no correctness issue (process-local coordination remains untested across processes).
-- 最新 failure workflow suite（CAS + recovery + stale-history guard + Jev 503 fail-closed）：**47 passed / 1 warning**；`PATCH_READY` duplicate Apply 20/20 fresh-process repetitions passed；guarded source write exactly one successful write; post-review file edit is never overwritten.
-- D8 targeted: 20 passed; repository lint/contracts current PASS; Web 160 tests, typecheck PASS, production build PASS (Monaco chunk 4.03 MB warning). Full-suite 823-pass checkpoint predates CAS; run full regression at round completion.
-- Real API and real browser AI/Jev high-confidence chains each previously 1 passed; latest browser rerun safely blocked by upstream provider outage, no writes. PostgreSQL blocked; remote Worker/Jenkins not run.
-- Independent final review of CAS/history guard: no findings; reviewer confirmed conditional transition and event append share a repository transaction. PostgreSQL concurrency remains untested.
+- D5 当前确定性回归：全仓 backend **829 passed / 9 skipped / 55 warnings**；前端 **160 passed**；typecheck/ESLint/build/lint/OpenAPI/i18n 全 PASS。Backend log: `round-2/logs/backend-d5-final.log`。
+- D5 real API C chain 成功：真实 AI/Jev/本地浏览器、AI 需求/用例、人工 ACTIVE Playwright binding、Run PASSED、刷新后 coverage `VERIFIED`；一次真实 Web UI 点击也显示成功。最新 strict UI harness增加了 POST 200/API error/per-run screenshot assertions，但最后两次 live retries 在 UI 前被 `AIProviderError: AI Provider 在 20 秒内未返回结果（已重试 0 次）。` 阻断；遵守夜间规则，今夜不再调用 AI。
+- D5 OpenAPI 403/404/409、requester/Admin endpoint boundary、run-switch UI stale-feedback 和 timestamp latest-execution均修复；`TestRunRepository.list_runs` newest-first。一次独立 review 发现 strict harness路径/status断言问题，已改；最终 reviewer 复查当前 diff：无剩余 blocker。
+- Failure workflow CAS/recovery + Jev 503 suite：**47 passed / 1 warning**；duplicate Apply 20/20 重复、exactly one workspace write。Monaco chunk 4.03 MB；PostgreSQL blocked；remote Worker/Jenkins not run。
+- 系统级项目隔离仍未解决：Project 无 owner/team ACL，RBAC 角色为全局；D5 仅 requester/Admin 可刷新其 run，不代表其他 API 已隔离。
 
 ```bash
 # 全仓后端回归（本轮最终代码）
@@ -183,22 +186,25 @@ pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test 
 # 核对现场
 cd ~/self-github/ai-qa-platform
 git status --short && git log -1 --oneline
-# 最新失败修复安全回归
+# D5 checks before commit
+uv run --no-sync ruff check apps/api/app/api/quality_discovery.py apps/api/app/services/quality_discovery_service.py apps/api/app/services/quality_discovery_projection.py apps/api/tests/test_quality_discovery.py apps/api/tests/test_live_enterprise_journey.py
+python scripts/task.py lint
+git diff --check
+uv run --no-sync pytest -q --no-header
+# latest failure repair security regression
 uv run --no-sync pytest apps/api/tests/test_failure_workflow.py -q --no-header -p no:cacheprovider
 # D8 disabled-provider targeted regression
 uv run --no-sync pytest packages/qa-core/tests/test_migrated_core.py apps/api/tests/test_ai_provider_settings.py -q --no-header -p no:cacheprovider
-# 环境（仅缺失时恢复）
-uv sync && pnpm install
+# 环境（仅依赖确实缺失且 lockfile 无变更时恢复；不要为验证无条件重装）
+# uv sync --locked && pnpm install --frozen-lockfile
 
 # 启动服务
 uv run --no-sync python -m app.main --reload        # apps/api, :8000
 pnpm --filter web dev                               # :5173
 
-# 真实 AI + Jev 链路 A + B（需要真实 provider 与 Jev key）
-AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 \
-AI_QA_RUN_LIVE_JEV_ACCEPTANCE=1 \
-uv run --no-sync pytest apps/api/tests/test_live_enterprise_journey.py \
-  apps/api/tests/test_live_locator_repair_acceptance.py -v -s
+# Strict D5 live UI (仅 Provider 恢复后执行一次；60s/1 retry；若仍超时则 BLOCKED，不循环重试)
+AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 QA_AI_TIMEOUT_SECONDS=60 QA_AI_MAX_RETRIES=1 \
+uv run --no-sync pytest apps/api/tests/test_live_enterprise_journey.py::test_real_local_discovery_preserves_target_and_project_scope -v -s
 
 # 真实浏览器验收
 AI_QA_LIVE_BROWSER_E2E=1 uv run --no-sync pytest apps/api/tests/test_browser_agent_live_e2e.py -v -s
@@ -210,13 +216,13 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. **继续 Discovery → Coverage**：终态/Quality Map readiness 已在 `02210de` 修复；下一步完成 gap → scenario/case → binding → execution → coverage refresh，检查项目作用域与持久化。CAS/recovery 修复已在 `919cfcd`。
-2. **第二轮里程碑 2 收尾**：继续补远端 Jev outage、持久化前 apply interruption、verification worker restart；评估 AI 干扰控件误分类。
-3. **里程碑 3**：Discovery → Coverage 端到端独立复验（Quality Map 之前已有真实验收；继续 gap→case→binding→execution→coverage refresh）。
-4. **里程碑 4**：评估 WSL 内轻量 PostgreSQL 可行性；本地 Worker 进程集成验收（不得冒充集群）。
-5. **里程碑 5**：逐页真实交互 UI 验收 + before/after 多分辨率截图。
-6. **里程碑 6**：最终全量回归（后端/前端/typecheck/lint/build/E2E/AI-Jev/Studio），更新 `test-results.md`。
-7. 每完成一轮：更新 `docs/agent-handoff.md` 与 `round-2/implementation-log.md` → 保存真实测试输出 → commit（不 push main）。
+1. **提交 D5**：最终 reviewer 已复查当前 diff 且未发现 blocker；核对测试/handoff 与 git 后本地 commit D5（不 push）。Strict live harness 状态 NOT VERIFIED，真实 UI click 曾成功；遵守夜间规则，无真实 provider 可用时不重试。
+2. **项目级隔离设计（P0/P3 架构缺口）**：调查 Project owner/team ACL 与现有 API 授权边界；先设计跨 API 的完整方案，避免只在单一端点拼局部权限。
+3. **第二轮 repair matrix 收尾**：远端 Jev outage、持久化前 apply interruption、verification worker restart；评估干扰控件 AI 误分类。
+4. **PostgreSQL / Worker**：评估 WSL 内轻量 PostgreSQL；本地 Worker 进程集成验收，但不得冒充真实 Jenkins/集群测试。
+5. **全站 UI/UX**：逐页真实交互、图谱密度、Studio 深度调试与 before/after 截图。
+6. D5 确定性回归已通过（829 backend / 160 frontend；lint/typecheck/build PASS）；后续任何代码修改后需对受影响范围回归，整项任务完成时重新跑最终全量。
+7. 每完成一轮：更新 handoff/evidence → 保存实际测试结果 → 本地 commit（不 push main）；AI/Jev 真实验收只在有效 provider 条件下限量执行。
 
 可复用验收脚本（未入库，在 `/tmp`，必要时按 `round-2/studio-debug-acceptance.md` 重建）：
 `studio_debug_accept.py`、`studio_debug_failure_accept.py`、`probe_studio_file.py`。

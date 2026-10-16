@@ -44,7 +44,7 @@
   因此本轮**没有**新建第二套，符合 ROADMAP 不变量。
 
 **主要技术债**（非阻断）：Studio 的 Monaco 全量导入（4.03 MB chunk）、
-33 个 service 直接使用 `session.execute`。
+33 个 service 直接使用 `session.execute`。跨项目隔离风险：当前 RBAC 为全局角色，Project 无 owner/team 资源 ACL；D5 refresh 仅限请求者/Admin，但不能替代全平台 project authorization。
 
 ## 4. 功能
 
@@ -58,7 +58,7 @@
 | 自动化 Studio | 🔶 页面与保存/执行链路可用；逐步调试交互未做深度验收 |
 | 执行系统（pytest / Playwright / Run / Step / Evidence / 隔离） | ✅ |
 | 失败修复（诊断 → Jev → 审批 → 写回 → 精确复跑） | ✅ |
-| 覆盖率口径 | 🔶 实现与单测通过，未做独立外层链路复验 |
+| 覆盖率口径 | ✅ D5 真实 C 链：AI/Jev → 人工 ACTIVE binding → Browser TestRun PASSED → 显式 refresh → 同一 feature/case/binding/run VERIFIED；真实 UI 点击曾显示成功 |
 | Worker 分布式执行 | ⛔ NOT RUN（无集群） |
 
 ## 5. AI + Jev
@@ -73,6 +73,7 @@
 | 链路 B（失败 → 修复，API 级） | PASSED，`LOCATOR_CHANGED` → `candidate_2` → `playwright_verified: true` |
 | 链路 B（真实浏览器 UI） | PASSED，含**低置信度诚实阻断**实证 |
 | 链路 C（真实浏览器探索） | PASSED，`states 2 / actions 1 / features 3`，`fallbacks 0` |
+| 链路 C（Discovery→Coverage） | PASSED：真实 AI/Jev 需求/用例、人工 ACTIVE binding、Browser TestRun PASSED、refresh 后 feature/case/binding/run `VERIFIED`；真实 UI 点击曾成功，strict harness latest response assertion待重跑 |
 
 **特别价值证据 —— AI/Jev 不越权的实证**：
 UI 链路实测到 `confidence 0.52 < minimum_confidence 0.7`，平台拒绝自动应用，
@@ -87,7 +88,7 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 
 ## 6. UI / UX
 
-**结论：PASS（本轮约定范围）。** 详见 `ui-ux-audit.md`。
+**结论：PASS（已实测的 13 页/交互范围），整项 UI 目标仍 PARTIAL。** D5 refresh 的真实 UI 点击有截图证据；最后增强的 strict harness 因上游 AI timeout 未完整复跑。详见 `ui-ux-audit.md`。
 
 - 13 个目标页在**真实项目上下文**（Golden Demo `proj_golden_shop_v1`）下全部加载成功。
 - 控制台错误 **0**、`pageerror` **0**；1440 / 768 / 360 px 三档**无横向溢出**。
@@ -101,11 +102,11 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 
 | 套件 | 结果 |
 | --- | --- |
-| 全仓后端 `pytest` | **820 passed / 0 failed / 9 skipped**（653.58 s） |
+| 全仓后端 `pytest` | **829 passed / 0 failed / 9 skipped / 55 warnings**（431.17 s，`logs/backend-d5-final.log`） |
 | 前端 typecheck | 0 errors |
 | 前端 lint (eslint) | 0 problems |
-| 前端单元测试 | **157 passed / 0 failed** |
-| 前端生产构建 | **成功**（43.4 s；修复前 OOM 崩溃） |
+| 前端单元测试 | **160 passed / 0 failed** |
+| 前端生产构建 | **成功**（29.87 s；3,405 modules；现存 Monaco chunk 4,031.76 kB / 1,043.99 kB gzip） |
 | 仓库 lint（ruff + format + i18n + OpenAPI 契约 + eslint） | **All linters passed!** |
 | 真实 AI + Jev 验收 | 4 通过 / 0 失败 |
 | Playwright E2E / 浏览器验收 | 13 页全部通过 |
@@ -128,12 +129,12 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 | 维度 | 评级 | 依据 |
 | --- | --- | --- |
 | 架构 | **B+** | 分层清晰、依赖方向正确、不变量保持；债务在打包体积与少量越层查询 |
-| 可靠性 | **B** | 全仓 820 测试通过、执行隔离与失败隔离有测试；Worker 集群与 PostgreSQL 未验证 |
+| 可靠性 | **B** | 全仓 829 passed / 9 skipped；执行隔离与失败隔离有测试；Worker 集群、PostgreSQL、多进程 refresh 未验证 |
 | 安全 | **B** | 两级授权 + 中央策略表 + 安全审计表 + 凭据擦洗 + 工作区边界；未做渗透式验证 |
-| 业务功能 | **B+** | 三条核心链路真实跑通；覆盖率独立复验缺失 |
-| 自动化 | **A-** | 后端 829 用例、前端 157 用例、真实浏览器 E2E、OpenAPI 契约由 lint 强制 |
+| 业务功能 | **B+** | 三条核心链路真实跑通，含真实 Discovery→Coverage；全平台项目级 ACL 仍缺失 |
+| 自动化 | **A-** | 后端 829 用例、前端 160 用例、真实浏览器 acceptance、OpenAPI 契约由 lint 强制；strict D5 harness仍待provider可用后重跑 |
 | AI / Jev | **A-** | 真实 provider 全链路、零 fallback、低置信度诚实阻断实证 |
-| UI / UX | **B** | 13 页真实数据可用、三档无溢出、工作流连续；Studio 深度交互未验收 |
+| UI / UX | **B** | 13 页真实数据可用、三档无溢出、D5 refresh UI 点击成功；strict live harness 最新代码未重新跑绿，Studio 深度交互未验收 |
 | 可维护性 | **B+** | 单一客户端、契约同步强制、i18n 一致性强校验、交接机制已建立 |
 | 企业部署准备度 | **C+** | 缺 PostgreSQL 验证、集群 Worker、环境管理、CI/CD 端到端；RBAC/审计已有基础 |
 
@@ -153,7 +154,7 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 | 浏览器真实执行 | ✅ | 链路 C 真实 Chromium 探索 |
 | 失败证据完整 | ✅ | `evidence_count` 与 artifact 断言 |
 | 修复经审批 | ✅ | 低置信度实测拒绝写回，文件逐字节未变 |
-| UI 操作顺畅 | ✅（本轮范围） | 13 页真实数据无错误无溢出 |
+| UI 操作顺畅 | ✅（已验收的范围） | 13 页真实数据无错误无溢出；D5 refresh button 实际点击曾成功，截图在 `round-2/screenshots/`。strict harness 新增直接 HTTP 断言后未重新绿跑 |
 
 ## 11. 最终状态
 
@@ -162,10 +163,10 @@ UI 显示「Jev 本次置信度为 0.52」，不提供 APPLY 动作，且 `Works
 | WSL 环境 | **PASS** |
 | 开发恢复 | **PASS**（证据缺口已补齐） |
 | 架构审查 | **PASS** |
-| 核心功能 | **PARTIAL**（Studio 深度交互、覆盖率独立复验、分布式 Worker 未完成） |
+| 核心功能 | **PARTIAL**（Studio 深度交互、项目级 ACL、分布式 Worker 未完成） |
 | UI/UX | **PARTIAL**（页面级 PASS；Studio 深度交互与图谱视觉未验收） |
 | AI + Jev 真实链路 | **PASS** |
-| 自动化测试 | **PASS**（820 + 157 + 浏览器验收全绿；PostgreSQL BLOCKED / 集群 NOT RUN） |
+| 自动化测试 | **PASS（确定性套件）**：829 backend / 160 frontend；strict D5 live harness 最新代码未绿跑，PostgreSQL BLOCKED / 集群 NOT RUN |
 | 企业成熟度 | **PARTIAL** |
 
 > **PASS 仅表示本轮约定范围通过验收，不代表全部企业级能力已完成。**

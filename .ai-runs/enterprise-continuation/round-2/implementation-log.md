@@ -114,9 +114,18 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
 - 回归：最新 `apps/api/tests/test_quality_discovery.py` **62 passed in 32.04s**；重复 cancellation/no-worker stop/projection failure 定向测试通过。第一次重跑发现两个 fixture tests 只 stub `DecisionService.choose` 却漏了 `ask_score`，意外触发真实 Jev 网络等待；现已加入确定性测试 stub（断言未放宽），相关两测 **2 passed in 3.94s**。最新 `python scripts/task.py lint` / `git diff --check` 均通过：Ruff、426 文件格式、i18n 25 namespaces/2 locales/3022 keys、OpenAPI、ESLint。
 - 独立 Reviewer 复查无正确性发现；指出 close-session 自身异常会直接传播（不会挂死），保留现有异常语义。限制：最终化锁与运行 task 是进程内状态；无多进程/PostgreSQL 证据。
 
-### 仍待完整链路
+### D5 — Discovery → Coverage refresh（已实现；严格实时 UI harness 待一次绿跑）
 
-从真实探索与 Quality Map 继续到 gap → 场景/用例 → automation binding → execution → coverage 更新，并验证刷新/持久化/跨项目数据作用域。真实 live test 当前只完成真实探索和 Quality Map；不可宣称 Discovery→Coverage 全链路通过。
+- 加入 terminal-only `POST /api/discovery/runs/{run_id}/coverage/refresh`，要求 `RUN_EXECUTE`，非 requester/Admin 隐藏为 404；活动 run 返回 409；OpenAPI 描述 403/404/409。service 重新投影 feature/case/binding/TestRun 链，终态 UI 按钮刷新结果并在 run 切换后清除旧反馈。
+- `_latest_execution` 按 execution 时间戳选取 newest-first run 中最新匹配尝试；`TestRunRepository.list_runs` 按 `created_at DESC` 返回。refresh 并发在同进程由 per-run lock 串行化；未验证多 worker/PostgreSQL 锁。
+- 真实 C 链曾完整通过：本地浏览器探索 → real AI/Jev → AI 需求/用例 → 人工编写 Playwright 脚本 → ACTIVE binding → TestRun PASSED → refresh → feature/case/binding/run `VERIFIED`。真实 web UI 按钮也曾实际点击并显示 success / VERIFIED；截图见 `round-2/screenshots/discovery-coverage-{before-refresh,after-refresh,tablet,mobile}.png`。
+- Reviewer 建议已加强：repo-root、per-run screenshots；捕获 refresh POST 并要求 200、无 API errors。严格 harness 尚未最终跑绿：后续两次真实 AI provider 尝试在 UI 前遇到 20s timeout；遵照夜间额度规则暂停重试。标记 **NOT VERIFIED（strict harness）**，不冒充 PASS。
+- 架构限制：全平台项目 ACL 尚不存在（Project 无 owner/team，RBAC 为全局角色）。本 endpoint 只加 requester/Admin 边界；这不解决跨项目隔离，需系统级权限设计。
+
+### D5 仍需处理
+
+- Provider 可用后最多执行一次 strict opt-in UI acceptance（`AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 QA_AI_TIMEOUT_SECONDS=60 QA_AI_MAX_RETRIES=1`），核验 direct POST/status、responsive screenshots、无 console/API errors；若再次 20s timeout，记录 BLOCKED，不循环重试。
+- PostgreSQL/多进程并发和远程 Worker/Jenkins 仍未验证。
 
 ## 里程碑 4 — PostgreSQL / Worker
 
@@ -129,13 +138,10 @@ Worker 用本地真实进程做集成验收（提交/状态/回传/超时/取消
 关系图真实数据量下的布局/重叠/搜索/聚焦/性能，Studio 工作上下文连续性，Result 页成功/失败信息分层，
 before/after 多分辨率截图。
 
-## 里程碑 6 — 最终全量回归（阶段性基线已完成，最终门禁仍待）
+## 里程碑 6 — D5 全量回归（当前功能单元门禁完成）
 
-本次阶段性回归（截至 `round-2/test-results.md`）：后端 **823 passed / 9 skipped / 55 warnings**；
-失败工作流相关 **102 passed / 3 skipped**；前端 **160 passed**、typecheck PASS、全仓 lint/contracts PASS、Web build PASS。
-真实 API 和 UI AI/Jev 高置信度 acceptance 曾分别完整通过；latest UI rerun 因上游 `AI provider unavailable` 安全阻断且无写入。
-Monaco Editor 主 chunk 仍 4.03 MB。PostgreSQL BLOCKED；远程 Worker/Jenkins NOT RUN。
+本 D5 代码单元回归：后端 **829 passed / 9 skipped / 55 warnings**，前端 **160 passed**、typecheck / ESLint / production build PASS，`scripts/task.py lint` PASS；完整结果及日志见 `test-results.md` 与 `logs/backend-d5-final.log`。后续代码单元仍需重新回归。
+真实 API C 链及一次真实 UI 点击曾通过；加强后的 strict UI harness 尚未最终通过，最近因真实 AI Provider 20s timeout 在 UI 前退出；不再盲目消耗额度。
+Monaco 主 chunk 仍 4.03 MB。PostgreSQL BLOCKED；远程 Worker/Jenkins NOT RUN；项目级 ACL 架构缺口未解决。
 
-待办：剩余功能/UI 改动完成后，在最终代码重新执行全量后端、前端、typecheck、lint、build、真实 Playwright E2E、
-AI/Jev 验收、Studio 调试验收、Discovery→Coverage 验收，并更新 `test-results.md` 与 `final-report.md`。
-**不得把本阶段性回归或早期结果冒充任务最终回归。**
+下一步：最终独立 reviewer 已复查当前 diff 且未发现 blocker；本地提交 D5 后继续项目级授权方案与其他未完成的 QA/UX/企业验证。每个后续功能单元都要重跑受影响测试；**不得把本阶段回归冒充整项接管任务的最终回归。**

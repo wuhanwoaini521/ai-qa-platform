@@ -1502,15 +1502,25 @@ class QualityDiscoveryProjectionMixin:
         for run in runs:
             if run.workspace_id != workspace_id:
                 continue
-            matching = [execution for execution in run.executions if execution.nodeid == nodeid]
-            for execution in matching:
-                if any(
-                    browser.case_execution_id == execution.id
-                    and browser.nodeid == nodeid
-                    and cls._url_origin(browser.current_url) == origin
-                    for browser in run.browser_sessions
-                ):
-                    return run, execution
+            matching_execution_ids = {
+                browser.case_execution_id
+                for browser in run.browser_sessions
+                if browser.nodeid == nodeid and cls._url_origin(browser.current_url) == origin
+            }
+            matching = [
+                execution
+                for execution in run.executions
+                if execution.nodeid == nodeid and execution.id in matching_execution_ids
+            ]
+            if matching:
+
+                def execution_started_at(execution: Any) -> datetime:
+                    timestamp = execution.started_at or execution.finished_at or run.created_at
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    return timestamp.astimezone(timezone.utc)
+
+                return run, max(matching, key=execution_started_at)
         return None
 
     @classmethod

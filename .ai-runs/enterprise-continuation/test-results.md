@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | 基线复验（前任提交 `d8a2eef`） | `uv run --no-sync pytest apps/api/tests -q` | **819 passed / 0 failed / 9 skipped**（588.76 s） | 见 `recovery-audit.md` |
 | apps/api 单目录（本轮修复后） | `uv run --no-sync pytest apps/api/tests -q --no-header` | **668 passed / 0 failed / 9 skipped**（718.37 s） | `logs/backend-regression.log` |
-| 全仓最终回归（本轮全部修改后） | `uv run --no-sync pytest -q --no-header` | **820 passed / 0 failed / 9 skipped**（653.58 s，0:10:53） | `logs/backend-final-regression.log` |
+| 全仓最终回归（旧提交 `02210de`，早于 D5） | `uv run --no-sync pytest -q --no-header` | **820 passed / 0 failed / 9 skipped**（653.58 s，0:10:53） | `logs/backend-final-regression.log` |
 
 > 说明：`apps/api/tests` 单目录收集 678 个用例；全仓 `testpaths` 还包含
 > `packages/qa-core/tests`、`packages/integrations/tests`、`apps/worker/tests`，因此全量基线为 828 个用例。
@@ -100,3 +100,22 @@ Knowledge Graph 含 run / case 节点 → 重新打开需求后历史未被覆�
 | PostgreSQL 集成测试 | **BLOCKED** | 本机无 Docker 与 PostgreSQL（见 `environment-audit.md`） |
 | Worker / Jenkins 真实集群测试 | **NOT RUN** | 无可用集群；`worker` 组件当前为 `LOCAL_EXECUTION_AVAILABLE`，远程 worker 数 0 |
 | 多分辨率/移动端截图 | **已完成**（1440/768/360） | — |
+
+## 8. D5 continuation — Discovery → Coverage refresh (2026-10-16)
+
+> 以下是当前 D5 未提交代码的真实验证；上方全仓 `820 passed` 早于 D5，不能替代本次最终回归。
+
+| 检查 | 命令 | 结果 |
+| --- | --- | --- |
+| Discovery API/service regression | `uv run --no-sync pytest apps/api/tests/test_quality_discovery.py -q` | **64 passed / 0 failed** (32.19 s) |
+| Frontend unit tests | `pnpm --filter @ai-qa/web test` | **160 passed / 0 failed** |
+| Frontend typecheck | `pnpm --filter @ai-qa/web typecheck` | **PASS** |
+| Frontend lint | `pnpm --filter @ai-qa/web lint` | **PASS** |
+| Production build | `pnpm --filter @ai-qa/web build` | **PASS**, 3,405 modules; Monaco chunk 4,031.76 kB (1,043.99 kB gzip) warning remains |
+| Real AI/Jev + browser Discovery→Coverage | `AI_QA_RUN_LIVE_ENTERPRISE_ACCEPTANCE=1 QA_AI_TIMEOUT_SECONDS=60 QA_AI_MAX_RETRIES=1 uv run --no-sync pytest apps/api/tests/test_live_enterprise_journey.py::test_real_local_discovery_preserves_target_and_project_scope -q -s` | **1 passed / 63.29 s** |
+
+Live chain evidence: run `qd_d8decd8513c540af`, local target `127.0.0.1:44269`, real AI `openai-compatible` / `mimo-v2.6-flash`, requirement `req_58d66c817ba4`, generated case `tc_f52bf659a447`, active binding `bind_cb07903a81e8`, actual pytest `run_f588b51d68fb` PASSED, refresh returned feature coverage `VERIFIED`; AI case generation `fallback_used=false`; Jev `jev-1.13.0`, one decision, zero fallback. No secrets or external sites were used.
+
+The default 20-second AI timeout failed once with a real provider timeout; the successful retry used test-command-only `QA_AI_TIMEOUT_SECONDS=60 QA_AI_MAX_RETRIES=1`. Preserve as provider latency/stability risk, not a mocked pass.
+
+Reviewer fixes: latest matching execution chosen by execution timestamp; concurrent refresh regression observes max projection concurrency 1; refresh endpoint tests requester/admin boundary and OpenAPI 403/404/409; UI clears refresh feedback when switching runs. The refresh button has not yet been clicked in a real app UI browser. Project-level ACL remains incomplete: RBAC is global and projects have no owner/team mapping. PostgreSQL, multi-process locking, worker/Jenkins and full final backend regression remain BLOCKED/NOT RUN.

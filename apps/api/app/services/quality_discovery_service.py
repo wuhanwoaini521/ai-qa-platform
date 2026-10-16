@@ -183,6 +183,22 @@ class QualityDiscoveryService(
                 row.result = self._enrich_gap_context(json.loads(json.dumps(row.result or {})))
             return rows
 
+    async def refresh_quality_map(self, run_id: str) -> QualityDiscoveryRunORM | None:
+        run = await self.get(run_id)
+        if run is None:
+            return None
+        if run.status not in self.TERMINAL:
+            raise ValueError("Coverage can only be refreshed after Discovery reaches a terminal state.")
+        lock = self._finalization_locks.setdefault(run_id, asyncio.Lock())
+        async with lock:
+            run = await self.get(run_id)
+            if run is None:
+                return None
+            if run.status not in self.TERMINAL:
+                raise ValueError("Coverage can only be refreshed after Discovery reaches a terminal state.")
+            await self._build_quality_map(run_id, final_status=run.status)
+        return await self.get(run_id)
+
     async def act_on_gap(self, run_id: str, gap_id: str, action: str) -> dict[str, Any]:
         key = (run_id, gap_id, action)
         async with self._gap_action_lock(key):

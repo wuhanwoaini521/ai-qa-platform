@@ -408,7 +408,7 @@ class DiscoveryFixtureBrowserRuntime:
 
 @pytest.mark.asyncio
 async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects_executed_candidate(
-    client, test_db_session, tmp_path, monkeypatch
+    client, role_client, test_db_session, tmp_path, monkeypatch
 ):
     monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path / "artifacts")
     ai = DiscoveryFixtureAI()
@@ -474,6 +474,8 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         try:
             while_projection_is_running = await client.get(f"/api/discovery/runs/{run_id}")
             assert while_projection_is_running.json()["status"] == DiscoveryStatus.RUNNING.value
+            refresh_response = await client.post(f"/api/discovery/runs/{run_id}/coverage/refresh")
+            assert refresh_response.status_code == 409, refresh_response.text
             stop_response = await client.post(f"/api/discovery/runs/{run_id}/stop")
             assert stop_response.status_code == 409, stop_response.text
         finally:
@@ -545,13 +547,79 @@ async def test_discovery_api_runs_browserruntime_contract_and_jev_choice_selects
         features_response = await client.get(f"/api/discovery/runs/{run_id}/features")
         gaps_response = await client.get(f"/api/discovery/runs/{run_id}/gaps")
         coverage = await client.get(f"/api/discovery/runs/{run_id}/coverage")
+        refreshed = await client.post(f"/api/discovery/runs/{run_id}/coverage/refresh")
         assert features_response.status_code == 200 and features_response.json()
         assert gaps_response.status_code == 200
         assert coverage.status_code == 200
         assert coverage.json()
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["result"]["quality_map"]["coverage"] == coverage.json()
+        responses = fastapi_app.openapi()["paths"]["/api/discovery/runs/{run_id}/coverage/refresh"]["post"]["responses"]
+        assert {"403", "404", "409"} <= responses.keys()
+        async with role_client("QA_ENGINEER") as engineer:
+            forbidden_project_refresh = await engineer.post(f"/api/discovery/runs/{run_id}/coverage/refresh")
+        assert forbidden_project_refresh.status_code == 404
     finally:
         projection_release.set()
         fastapi_app.dependency_overrides.pop(get_quality_discovery_service, None)
+
+
+@pytest.mark.asyncio
+async def test_discovery_coverage_refresh_serializes_concurrent_projections(test_db_session, monkeypatch):
+    project_id = f"project-{uuid4().hex[:12]}"
+    run_id = f"qd-{uuid4().hex[:12]}"
+    async with test_db_session() as session:
+        session.add(ProjectORM(id=project_id, name="Concurrent Coverage Refresh"))
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test-user",
+                mode="EXPLORE",
+                start_url="http://127.0.0.1/",
+                status=DiscoveryStatus.COMPLETED.value,
+                result={},
+            )
+        )
+        await session.commit()
+
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    active = 0
+    maximum_active = 0
+
+    async def count_projection(_run_id, *, final_status=None):
+        nonlocal active, maximum_active
+        active += 1
+        maximum_active = max(maximum_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+
+    monkeypatch.setattr(service, "_build_quality_map", count_projection)
+    results = await asyncio.gather(service.refresh_quality_map(run_id), service.refresh_quality_map(run_id))
+    assert all(result is not None for result in results)
+    assert maximum_active == 1
+
+
+def test_latest_execution_uses_newest_matching_attempt_within_run():
+    now = utc_now()
+    nodeid = "tests/test_search.py::test_search"
+    target_url = "http://127.0.0.1:8080/catalog"
+    older = SimpleNamespace(id="older", nodeid=nodeid, started_at=now, finished_at=now + timedelta(seconds=1))
+    newer = SimpleNamespace(
+        id="newer", nodeid=nodeid, started_at=now + timedelta(seconds=2), finished_at=now + timedelta(seconds=3)
+    )
+    run = SimpleNamespace(
+        workspace_id="workspace",
+        created_at=now,
+        executions=[older, newer],
+        browser_sessions=[
+            SimpleNamespace(case_execution_id=item.id, nodeid=nodeid, current_url=target_url) for item in (older, newer)
+        ],
+    )
+
+    latest = QualityDiscoveryService._latest_execution(nodeid, [run], "workspace", target_url)
+
+    assert latest == (run, newer)
 
 
 @pytest.mark.asyncio
