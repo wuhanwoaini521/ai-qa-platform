@@ -14,16 +14,16 @@
 | --- | --- |
 | 基线提交（前任） | `d8a2eef` |
 | 更早基准 | `02c5f3c` |
-| 最新提交 | `8508210 test(repair): harden real AI/Jev acceptance evidence`，父提交 `1720bf3` |
+| 最新已验证代码提交 | `919cfcd fix(repair): make concurrent apply and recovery idempotent`，父提交 `8508210`（本文件后续仅文档更新） |
 | 最近功能提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 未提交修改 | 并发重复 Apply CAS、进程中断恢复、stale-history 防护 + 回归、矩阵/测试文档更新；failure workflow 46 passed、完整 lint PASS、独立 reviewer 无发现；待提交 |
+| 未提交修改 | 无；上述修复、证据及 handoff 均已提交。后端全量 823-pass 基线早于该修复，最终 full regression 仍待执行 |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2 进行中。D8 Disabled 可靠性缺陷已修复；真实 AI/Jev 高置信度 API + 浏览器批准/执行/精确复验/回滚链路已通过；并发重复 Apply CAS、stale-source 防覆盖、持久化后中断恢复、低层写入异常及 stale-history 防护已有 SQLite 回归，当前修改尚未提交。剩余缺口：真实 Jev outage、源码/提案持久化前中断、verification worker restart、PostgreSQL 并发验证。
+阶段 8 / 第二轮：里程碑 1（Studio Debug）已完成；里程碑 2 进行中。D8 Disabled 可靠性缺陷已修复；真实 AI/Jev 高置信度 API + 浏览器批准/执行/精确复验/回滚链路已通过；并发重复 Apply CAS、stale-source 防覆盖、持久化后中断恢复、低层写入异常及 stale-history 防护已提交于 `919cfcd` 并通过 SQLite 回归。剩余缺口：真实 Jev outage、源码/提案持久化前中断、verification worker restart、PostgreSQL 并发验证。
 本轮顺序：Studio Debug → AI/Jev 安全修复 → Discovery/Coverage → PostgreSQL/Worker → UI/UX → 最终全量回归。
 本轮证据目录：`.ai-runs/enterprise-continuation/round-2/`。
 

@@ -85,8 +85,9 @@ uv run --no-sync python /tmp/studio_debug_failure_accept.py
 - 另一次低 confidence `0.6` 被 fail-closed，原始文件未变。后续 real-provider rerun `AI provider unavailable` 也安全阻断，无写入。一次带干扰控件页面曾被真实 AI 分类成 `TEST_DATA_ERROR`，此项仍为模型稳定性风险。
 - 详情和每次结果（包括 provider unavailable rerun）见 `round-2/ai-jev-live-acceptance.md`；独立 coverage map `round-2/failure-repair-matrix.md`。
 
-### 已修复：并发重复 Apply 可导致状态/审计回写竞态
+### 已修复并提交：并发重复 Apply / 中断恢复竞态
 
+- 提交：`919cfcd fix(repair): make concurrent apply and recovery idempotent`（父 `8508210`）；当前工作分支 `agent/wsl-continuation`，无推送。
 - 新增 `LocatorRepairRepository.transition_if_current`，用 `UPDATE ... WHERE state = expected_state` 原子占用 `PATCH_READY → APPLYING`；成功/失败回写也检查预期状态。只有一个并发请求能成功执行受源码哈希保护的写操作。
 - 兼容历史数据缺少 `LocatorRepairORM` 的 `PATCH_READY` analysis，在 Apply 前幂等创建状态行；unique `analysis_id` 防止重复创建。
 - 两个独立 service/session 并发 Apply，断言且验证只有一个 guarded source write 成功；重复请求根据时序可返回状态冲突或同一已应用结果，持久 `PATCH_APPLIED` / history / proposal 一致；顺序重复 Apply 仍拒绝且文件与事件不变。`PATCH_READY` 参数化场景做了 20 个独立 pytest 进程重复运行，无失败。

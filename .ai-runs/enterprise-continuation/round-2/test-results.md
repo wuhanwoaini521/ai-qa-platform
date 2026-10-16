@@ -4,7 +4,7 @@ Run date: 2026-10-16 · WSL2 Ubuntu 22.04 · project root `/home/hans/self-githu
 
 ## Round 2 regression checkpoint
 
-The full-suite results below predate the later duplicate-Apply CAS code change; the affected workflow suite was rerun after that change (see “Latest focused regression”). A final full regression remains required after the round's remaining work.
+Current safety fix commit: `919cfcd fix(repair): make concurrent apply and recovery idempotent` on `agent/wsl-continuation` (not pushed). The full-suite results below predate the later duplicate-Apply CAS code change; the affected workflow suite was rerun after that change (see “Latest focused regression”). A final full regression remains required after the round's remaining work.
 
 | Scope | Command | Result |
 |---|---|---|
