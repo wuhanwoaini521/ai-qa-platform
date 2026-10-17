@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 7 —— Quality Discovery 实时可视化探索引擎（用户任务 m00227，分支 `agent/discovery-live-engine`）。** 目标：把「输入 URL → 点击开始 → 等结果」改造成可实时观看、可视化标注、可追踪、可回放的探索工作台：真实浏览器实时画面、DOM 元素几何与页内高亮、统一事件契约、证据回放、AI 失败降级、并复用既有 Requirement/TestCase/Automation/Runner/Decision(Jev) 链路。详细进度见 §3.4。
+**当前活动轮次：Round 8 —— 全平台 UI/UX 工作台改造（用户任务 m01373，分支 `agent/ui-workspace-redesign`）。** 目标：把平台从「后台管理页面集合」改造成一个连续的专业 QA 工作台，核心链路 需求 → 用例 → 自动化 → 执行 → 结果 → 失败调试 → AI/Jev 修复 → 验证 在同一工作台上下文内完成。进度见 §3.5。
+
+Round 7（用户任务 m00227，Quality Discovery 实时可视化探索引擎）已提交至 `d8b332d`（分支 `agent/discovery-live-engine`，未合并），仅剩最终 A–F 报告与三项未验证验收项；详细进度见 §3.4。
 
 Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支的起点基线（§3.3）。用户任务 m00001/m00002「Release Candidate 与真实 QA 产品验收」六阶段验收**已暂停**（未被取消，被 m00227 取代为当前活动目标）；未经用户重新确认不要当作活动任务继续执行。
 
@@ -25,7 +27,9 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Studio 本轮基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699` |
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
-| 当前工作分支 | `agent/discovery-live-engine`（未推送；`main` 与远程 main 未修改、未合并） |
+| 当前工作分支 | `agent/ui-workspace-redesign`（Round 8，从 `d8b332d` 起；未推送；`main` 与远程 main 未修改、未合并） |
+| Round 8 提交 | 见 `git log` 顶部（UI 设计系统强制测试、工作台上下文筛选、Studio dock、迁移加固、真实不稳定修复） |
+| Round 7 分支 | `agent/discovery-live-engine` 停在 `d8b332d`，未合并 |
 | Round 7 起点 | `b6bb5fc feat(security): scope API access to a caller's own or shared projects`（P1 project ACL 第一版，含迁移 `0013_project_ownership.py`） |
 | Round 7 后端提交 | `534c252 feat(discovery): live observation stream, viewport frames and element geometry` |
 | Round 7 前端提交 | `6567f43 feat(web): live Quality Discovery workbench` |
@@ -251,6 +255,57 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - **OSS 调研 BLOCKED**：Skyvern/Stagehand/browser-use/agent-browser/playwright-mcp/crawl4ai/firecrawl 的调研委派因网络超时（30 分钟上限）无产出；未引入任何 OSS 代码或依赖，报告中不得声称研究/采用过这些项目。
 - 安全缺口（`docs/QUALITY_DISCOVERY.md` §7 已写明）：允许域名只匹配 host，无私有 IP/link-local/CIDR 与端口限制；探索循环仍是进程内 `asyncio` 任务，未纳入 `TaskRuntimeService`，重启不存活。
 - 发现→Requirement/TestCase/Automation 的关联目前是 id 级与测试断言，未做 schema 级 provenance。
+
+## 3.5 Round 8（全平台 UI/UX 工作台改造，m01373，分支 `agent/ui-workspace-redesign`）
+
+目标：不是换皮，而是让核心链路（需求 → 用例 → 自动化 → 执行 → 结果 → 失败调试 → AI/Jev 修复 → 验证）
+在一个连续工作台上下文内完成；布局/交互参考 VS Code、Playwright Trace Viewer、DevTools、Linear、n8n 等
+产品，但未引入任何外部依赖与外部代码。
+
+### 已交付（未合并 main）
+
+1. **环境缺陷 P1（已修）**：`apps/web/index.html` 原先引用 Google Fonts；该域名在本环境不可达，被拦截的
+   webfont 使 `document.fonts.ready` 永不 resolve，Playwright 截图永久挂起
+   （`Page.screenshot: Timeout 90000ms exceeded`）。已移除全部外部字体请求，`src/index.css` 改用
+   本地/系统字体栈 `--font-sans` / `--font-mono`，离线与内网部署、自动截图因此可用。
+2. **设计系统单一来源 + 机器强制**：`apps/web/tests/design-system.test.mjs`（4 条）强制
+   ① `index.html` 无任何外部 URL ② 核心 token 已声明 ③ 所有 `var(--token)` 均可解析
+   ④ 字体只能来自 `var(--font-sans/mono)`。首次运行即抓出 6 个未声明 token 与 7 处硬编码字体栈
+   （含 `ProblemsPanel.tsx` 中 `fontFamily: inherit` 的非法 JSX）。`docs/UI_DESIGN_SYSTEM.md`
+   合并为单一规范（token / 语义色 / 字体策略 / 布局原语 / 组件规则 / IA 规则 / 强制手段 / 已知缺口）。
+3. **工作台上下文列表可用**：`WorkspacePage.tsx` 新增 `WorkspaceContextList`（筛选框 + 「+N 更多 / 收起」
+   + 空结果提示），替换左栏三处静默截断（12/10/5 条）。
+4. **Studio 底部执行/调试 dock**：复用既有 `.studio-bottom-panels`，接上统一面板缩放原语
+   `apps/web/src/features/workspace/usePaneResize.ts`（指针拖拽 + 方向键 + Home/End + localStorage 记忆
+   + `role="separator"`）；折叠时面板保持挂载，不丢运行输出/调试会话。
+5. **迁移漂移加固**：`0013_project_ownership` 在「列已存在但 `alembic_version` 未推进」的库上会让 API 无法启动
+   （本机 dev DB 真实发生：`duplicate column name: owner_id`）。迁移改为先 inspect 再按需创建，并新增回归测试
+   `test_project_ownership_migration_survives_a_previously_unaltered_column`。
+6. **真实不稳定修复（重要）**：`apps/api/tests/test_quality_discovery_live.py` 在整套回归中偶发失败/挂起
+   （5 次隔离运行 1 次 120s 挂起）。根因是真实竞态：`event_generator` 先读 run 状态、后订阅；若 run 在两者之间
+   结束，终态事件在没有订阅者时被发布且抓帧任务已被 finalize 取消，观看者永久等待。已加入有界空闲兜底
+   `LIVE_STREAM_IDLE_TIMEOUT_S = 3.0`（超时重读 run 行并补发 `run.finished`）+ 回归测试
+   `test_viewer_attaching_after_finalization_is_not_left_waiting`；修复后 9 次运行 0 挂起。
+7. **Before/After 真实截图**：`.ai-runs/ui-redesign/before/`（22 张，改造前）与 `.ai-runs/ui-redesign/after/`。
+   工作台 5 个阶段跳转实测保留全部上下文参数（projectId / requirementId / testDesignId / caseId /
+   bindingId / nodeid / file 全部保留），Studio dock 折叠/展开/键盘缩放/刷新记忆全部实测通过。
+
+### 本轮验证（真实输出）
+
+- 前端：`pnpm --filter @ai-qa/web test` → 179 passed（新增 design-system 4 + pane-resize 3）；`typecheck`、
+  `eslint`、`build`（29.9s）全部通过；`scripts/i18n_check.py` → 25 namespaces / 2 languages / 3067 keys。
+- 后端：`uv run --no-sync ruff check apps/api packages` 通过；`ruff format --check .` 通过；
+  `pytest apps/api/tests packages -q -p no:randomly` → 见 §9 本轮最终数字。
+- 浏览器（真实 Chromium，阻断 fonts.googleapis.com/fonts.gstatic.com 以免截图挂起）：
+  `/tmp/ui-baseline/before-workflow.py`、`/tmp/ui-baseline/after-workflow.py`、`/tmp/ui-baseline/after-verify.py`。
+
+### 未完成（诚实记录，下一轮优先级）
+
+- 全站 IA 只收敛了第一刀：侧边栏「运行」→ `/runs`、「质量洞察」→ `/quality` 仍会离开工作台并丢失项目上下文，
+  这是当前对「连续性」影响最大的缺陷；Studio 工具栏仍无「录制」入口（录制只能从 `/recorder` 进入）。
+- Studio 首屏可用时间实测 12–17s（Monaco 懒加载），期间无进度反馈。
+- Recorder / Debugger / AI 修复面板尚未逐一改造；`.ai-runs` 之外的截图只覆盖主要页面。
+- 组件级 UI 回归测试仍缺失（最大结构性风险，详见 `docs/UI_DESIGN_SYSTEM.md` §已知缺口）。
 
 ## 4. 环境基线（WSL / Linux）
 
