@@ -6146,6 +6146,47 @@
         }
       }
     },
+    "/api/discovery/runs/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Stream Discovery Run",
+        "description": "Live view of one run: persisted history first, then live events interleaved with browser frames.",
+        "operationId": "stream_discovery_run_api_discovery_runs__run_id__stream_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/discovery/runs/{run_id}/journeys": {
       "get": {
         "tags": [
@@ -19830,7 +19871,8 @@
               "task",
               "recorder",
               "debug",
-              "lsp"
+              "lsp",
+              "discovery"
             ],
             "title": "Kind"
           },

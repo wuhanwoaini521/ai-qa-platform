@@ -49,3 +49,19 @@ The platform maintains two tamper-evident audit logs:
 - **Security Endpoint**: `GET /api/audit/security` (supports filtering by `actor_id`, `action`, `limit`).
 - **Integration Endpoint**: `GET /api/audit/integrations` (supports filtering by `system`, `limit`).
 - **Database Indexing**: Indexed on `created_at`, `actor_id`, `action`, and `status` for rapid compliance investigations (SOC2 / ISO 27001).
+
+---
+
+## 5. Quality Discovery Boundary
+
+Quality Discovery points a real Chromium browser at a user-supplied URL, so the exploration is itself a security boundary. See [QUALITY_DISCOVERY.md](QUALITY_DISCOVERY.md) §7 for the full model.
+
+**Enforced:**
+- **Host allowlist on two layers** — route guards inside the browser context (`restrict_navigation`: HTTP/HTTPS only, allowlisted host, credentials in URL rejected, WebSockets likewise) plus a pre-navigation check in the executor. The allowlist is the start-URL host ∪ run-level `allowed_domains` ∪ `discovery.allowed_domains`; entries with a scheme, path or single-label host are rejected at validation time.
+- **No destructive actions by default** — `discovery.safe_mode: true`; cart/checkout/payment-style mutations are refused unless the run's requirement explicitly allows them.
+- **Bounded execution** — `max_actions`, `max_failures`, `max_depth`, `max_states`, `max_runtime_minutes`, `max_candidates`, `max_screenshots`, `max_events`. No unattended outer loop.
+- **Redaction** — sensitive values are masked before they reach an event, evidence bundle or the UI.
+- **Artifact confinement** — evidence files must resolve inside the configured artifact root.
+- **Project ACL** — every discovery route, including the live SSE stream, passes the same project access guard as the run (non-members get 404, not 403, so project existence is not probeable).
+
+**Known gaps (open):** the allowlist matches host names only (no private-IP/link-local/CIDR blocking, no port restriction); the exploration loop runs as an in-process task rather than through `TaskRuntimeService`, so it is not visible in Task Runtime and does not survive a restart.

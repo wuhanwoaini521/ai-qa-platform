@@ -66,9 +66,7 @@ class ApiKeyService:
 
 
 class StreamResourceService:
-    def __init__(
-        self, run_repo, task_repo, project_repo, recorder_service, debug_session_service, discovery_repo=None
-    ):
+    def __init__(self, run_repo, task_repo, project_repo, recorder_service, debug_session_service, discovery_repo=None):
         self.run_repo = run_repo
         self.task_repo = task_repo
         self.project_repo = project_repo

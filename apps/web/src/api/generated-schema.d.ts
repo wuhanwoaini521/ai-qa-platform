@@ -1894,6 +1894,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/discovery/runs/{run_id}/coverage/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Discovery Coverage */
+        post: operations["refresh_discovery_coverage_api_discovery_runs__run_id__coverage_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/discovery/runs/{run_id}/coverage": {
         parameters: {
             query?: never;
@@ -1954,6 +1971,26 @@ export interface paths {
         };
         /** Get Discovery Events */
         get: operations["get_discovery_events_api_discovery_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Discovery Run
+         * @description Live view of one run: persisted history first, then live events interleaved with browser frames.
+         */
+        get: operations["stream_discovery_run_api_discovery_runs__run_id__stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5717,6 +5754,10 @@ export interface components {
             id: string;
             /** Demo Kind */
             demo_kind?: string | null;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Team Id */
+            team_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -5764,6 +5805,10 @@ export interface components {
             /** Default Branch */
             default_branch?: string | null;
             framework_type?: components["schemas"]["FrameworkType"] | null;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Team Id */
+            team_id?: string | null;
         };
         /**
          * ProvisioningStatus
@@ -7228,7 +7273,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "run" | "task" | "recorder" | "debug" | "lsp";
+            kind: "run" | "task" | "recorder" | "debug" | "lsp" | "discovery";
             /** Resource Id */
             resource_id: string;
         };
@@ -12975,6 +13020,58 @@ export interface operations {
             };
         };
     };
+    refresh_discovery_coverage_api_discovery_runs__run_id__coverage_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Insufficient permissions */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Quality Discovery run not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discovery run is not terminal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_discovery_coverage_api_discovery_runs__run_id__coverage_get: {
         parameters: {
             query?: never;
@@ -13073,6 +13170,37 @@ export interface operations {
             query?: {
                 limit?: number;
             };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_discovery_run_api_discovery_runs__run_id__stream_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 run_id: string;

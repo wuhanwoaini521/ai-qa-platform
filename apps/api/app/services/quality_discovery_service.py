@@ -846,6 +846,18 @@ class QualityDiscoveryService(
         finally:
             pump.cancel()
 
+    async def _live_viewport(self, session_id: str) -> dict[str, int]:
+        """Viewport size of the run's browser, so a viewer can place element boxes over the frame."""
+        try:
+            session = await self.browser_runtime.get_session(session_id)
+        except Exception:
+            session = None
+        viewport = getattr(session, "viewport", None) or {}
+        try:
+            return {"width": int(viewport.get("width") or 1280), "height": int(viewport.get("height") or 720)}
+        except (TypeError, ValueError, AttributeError):
+            return {"width": 1280, "height": 720}
+
     async def _pump_frames(self, run_id: str) -> None:
         """Capture viewport frames only while a viewer is attached; frames are never persisted.
 
@@ -870,8 +882,10 @@ class QualityDiscoveryService(
                     return
                 session_id = self._live_sessions.get(run_id)
                 capture = getattr(self.browser_runtime, "capture_frame", None)
+                painted = False
                 if session_id and callable(capture):
                     data = await capture(session_id)
+                    painted = bool(data)
                     if data:
                         self.live.publish_frame(
                             run_id,
@@ -881,11 +895,15 @@ class QualityDiscoveryService(
                                 metadata={
                                     "mime_type": "image/jpeg",
                                     "url": self._live_urls.get(run_id, ""),
+                                    # The viewer overlays element geometry in percent of this viewport.
+                                    "viewport": await self._live_viewport(session_id),
                                     "frame": base64.b64encode(data).decode("ascii"),
                                 },
                             ),
                         )
-                await asyncio.sleep(interval)
+                # A page mid-navigation cannot be painted yet: poll faster so the first frame a viewer
+                # sees arrives as soon as there is something to see, without turning into a busy loop.
+                await asyncio.sleep(interval if painted else min(interval, 0.25))
         except asyncio.CancelledError:
             raise
         except Exception as error:  # a viewer must never be able to break the run

@@ -24,7 +24,9 @@ def upgrade():
             # SQLite can add a nullable REFERENCES column directly. Rebuilding `projects` instead
             # would cascade-delete every child row while FK enforcement is on (same reason as 0003).
             op.execute(
-                sa.text(f"ALTER TABLE projects ADD COLUMN {name} VARCHAR(36) REFERENCES {target}(id) ON DELETE SET NULL")
+                sa.text(
+                    f"ALTER TABLE projects ADD COLUMN {name} VARCHAR(36) REFERENCES {target}(id) ON DELETE SET NULL"
+                )
             )
         else:
             op.add_column("projects", sa.Column(name, sa.String(36), nullable=True))

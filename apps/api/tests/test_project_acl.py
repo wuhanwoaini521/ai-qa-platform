@@ -75,9 +75,7 @@ async def test_foreign_project_resources_are_invisible(client: AsyncClient, test
     email = "acl.outsider@example.com"
     await _create_user(client, email)
 
-    requirement = await client.post(
-        "/api/requirements", json={"project_id": foreign, "title": "secret requirement"}
-    )
+    requirement = await client.post("/api/requirements", json={"project_id": foreign, "title": "secret requirement"})
     assert requirement.status_code == 201, requirement.text
     req_id = requirement.json()["id"]
 

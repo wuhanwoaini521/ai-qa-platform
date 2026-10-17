@@ -121,7 +121,9 @@ async def _await_terminal(client, run_id: str, iterations: int = 1200) -> dict:
     raise AssertionError(f"run {run_id} never reached a terminal status; last={body}")
 
 
-async def _read_frames(client, run_id: str, *, until, limit: int = STREAM_LIMIT, headers: dict | None = None) -> list[dict]:
+async def _read_frames(
+    client, run_id: str, *, until, limit: int = STREAM_LIMIT, headers: dict | None = None
+) -> list[dict]:
     """Read SSE frames until ``until(frames)`` holds, then detach."""
     frames: list[dict] = []
     async with client.stream("GET", f"/api/discovery/runs/{run_id}/stream", headers=headers) as response:
@@ -242,9 +244,7 @@ def test_frame_pump_publishes_jpeg_frames_only_while_a_viewer_is_attached(monkey
 
 def _config_with_fast_frames():
     base = discovery_module.get_config()
-    return base.model_copy(
-        update={"discovery": base.discovery.model_copy(update={"live_frame_interval_ms": 100})}
-    )
+    return base.model_copy(update={"discovery": base.discovery.model_copy(update={"live_frame_interval_ms": 100})})
 
 
 async def test_live_stream_carries_frames_and_element_inventory_for_a_running_run(client, test_db_session):
@@ -257,8 +257,10 @@ async def test_live_stream_carries_frames_and_element_inventory_for_a_running_ru
             frames = await _read_frames(
                 client,
                 run_id,
-                until=lambda read: any(f["event"] == "browser.frame" for f in read)
-                and any(f["event"] == "element.inventory" for f in read),
+                until=lambda read: (
+                    any(f["event"] == "browser.frame" for f in read)
+                    and any(f["event"] == "element.inventory" for f in read)
+                ),
             )
         assert frames[0]["event"] == "snapshot"
         kinds = [frame["event"] for frame in frames]

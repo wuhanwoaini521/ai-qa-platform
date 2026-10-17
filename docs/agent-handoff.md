@@ -5,9 +5,13 @@
 
 ## 1. 当前任务目标
 
-Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/需求/场景/用例/自动化/执行/覆盖关联，修复已证实的状态与项目绑定缺陷；用受控 loopback 网站、真实 Chromium/BrowserRuntime、真实 Playwright worker、临时 API/Vite 与实际 UI 点击验收 Discovery → Quality Map → 风险/场景 → 用例 → binding → Run → coverage。新证据位于 `.ai-runs/night-continuation/round-3/evidence/`。旧 Studio/Round-2 成果为历史，不重复实施。
+**当前活动轮次：Round 7 —— Quality Discovery 实时可视化探索引擎（用户任务 m00227，分支 `agent/discovery-live-engine`）。** 目标：把「输入 URL → 点击开始 → 等结果」改造成可实时观看、可视化标注、可追踪、可回放的探索工作台：真实浏览器实时画面、DOM 元素几何与页内高亮、统一事件契约、证据回放、AI 失败降级、并复用既有 Requirement/TestCase/Automation/Runner/Decision(Jev) 链路。详细进度见 §3.4。
 
-仍需独立排期的 P0：平台全局 project-resource ACL 缺失；本轮只证明业务数据按 project 分区、跨项目 workspace binding 拒绝，不代表 API 访问授权完成。legacy ownerless project 如何认领需产品/安全决策。
+Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支的起点基线（§3.3）。用户任务 m00001/m00002「Release Candidate 与真实 QA 产品验收」六阶段验收**已暂停**（未被取消，被 m00227 取代为当前活动目标）；未经用户重新确认不要当作活动任务继续执行。
+
+历史（Round 3，用户任务 m00157）：已完成本轮可交付范围：审计发现/需求/场景/用例/自动化/执行/覆盖关联，修复已证实的状态与项目绑定缺陷；用受控 loopback 网站、真实 Chromium/BrowserRuntime、真实 Playwright worker、临时 API/Vite 与实际 UI 点击验收 Discovery → Quality Map → 风险/场景 → 用例 → binding → Run → coverage。新证据位于 `.ai-runs/night-continuation/round-3/evidence/`。旧 Studio/Round-2 成果为历史，不重复实施。
+
+仍需独立排期的 P0：平台全局 project-resource ACL 缺失（已在 Round 7 分支实现第一版，见 §3.4；legacy ownerless project 认领策略仍需产品/安全决策）。
 
 ## 2. Git 状态
 
@@ -21,7 +25,13 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | Studio 本轮基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699` |
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
-| 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
+| 当前工作分支 | `agent/discovery-live-engine`（未推送；`main` 与远程 main 未修改、未合并） |
+| Round 7 起点 | `b6bb5fc feat(security): scope API access to a caller's own or shared projects`（P1 project ACL 第一版，含迁移 `0013_project_ownership.py`） |
+| Round 7 后端提交 | `534c252 feat(discovery): live observation stream, viewport frames and element geometry` |
+| Round 7 前端提交 | `6567f43 feat(web): live Quality Discovery workbench` |
+| Round 7 本轮收尾 | E2E 验收测试 + 文档 + 格式化/OpenAPI 修正（提交见 `git log` 顶部；仍未 push） |
+| Round 7 文档 | `docs/QUALITY_DISCOVERY.md`（新增，`[CURRENT]`）、`docs/SECURITY.md` §5、`docs/README.md` 索引 |
+| 另一本地分支 | `agent/wsl-continuation` 仍在 `b6bb5fc`，未合并 |
 | 当前工作树 | Round 6 代码已本地提交（`f2dd186`）；`docs/agent-handoff.md` 在本次提交后更新；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
 | Round6 本轮提交 | `f2dd186 fix(ui,integrations,audit): surface async failures and stop simulated publish successes` + 本轮 handoff 提交（仍未 push） |
 | Round5 本轮提交 | `71f6f14 fix(db,worker,security): make PostgreSQL migrations and worker recovery reliable` + `a8c21a1`/`e1496c3` |
@@ -194,6 +204,39 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 
 本轮未修（记录，见 §8 与 `final-report.md` §13）：P0 project ACL；覆盖率两套口径；浏览器内失败修复链路待 provider 恢复后单次复验；审计字段不完整；job 结果竞态仍以成功响应返回。
 
+## 3.4 Round 7（Quality Discovery 实时可视化探索引擎，m00227）
+
+分支 `agent/discovery-live-engine`（从 `b6bb5fc` 起）。设计原则：不新建第二套浏览器/Agent/Provider，复用 `BrowserRuntime`、`DecisionService`(Jev)、`EventBus`/SSE、stream ticket、`ArtifactStorageService`。新文档：`docs/QUALITY_DISCOVERY.md`。
+
+已实现并已本地提交：
+
+- **P1 project ACL 第一版**（`b6bb5fc`，迁移 `0013_project_ownership`）：`ProjectORM.owner_id/team_id` + 路由资源解析守卫，非成员一律 404（不暴露项目存在性），admin 全通过。新增 `test_project_acl.py`（6 条），并按新语义修正 `test_authorization_rbac.py`（VIEWER 读项目改判 404，新增 `_assign_owner` 预置）。已知迁移影响：QA_LEAD/QA_ENGINEER 不再能访问既非自己拥有也无 team 的项目。
+- **实时观测流 + 帧 + 元素几何**（`534c252`）：`app/services/quality_discovery_live.py`（`DiscoveryLiveHub` 只做 fan-out，`result["events"]` 仍是唯一事实来源）；`GET /api/discovery/runs/{run_id}/stream`（SSE，复用 `event_frame` 与 stream ticket，新增 `discovery` kind + `is_stream_route`/`stream_ticket_scope` 分支）；`BrowserRuntime.capture_frame`（仅视口 JPEG q55/1s 超时，只在有订阅者时抓帧，绝不阻塞动作）与 `paint_highlights`（页内 `HIGHLIGHT_SCRIPT` 叠加层）；`collect_controls` 现返回 `bounding_box`/`in_viewport`/`visible_ratio`；`element.inventory`/`action.planned` 等事件；`live_frame_interval_ms` 配置（默认 1000）。
+- **AI 降级**（同一提交，关闭 Round 6 遗留 P2）：`AIProviderError` 不再把整轮探索判为 FAILED——记录 `ai.unavailable`、规划降级为中性计划、Jev 仍从真实观测到的候选里决策，页面/几何/证据全部保留；绝不静默切 Fake、不编造 AI 结论。
+- **前端实时工作台**（`6567f43`）：`apps/web/src/features/workspace/DiscoveryLiveView.tsx` + `discoveryLive.ts`（`foldLiveEvent`/`initialLiveState`）+ `quality-discovery.css`，左实时浏览器（帧 + 元素框 + 分类开关）／右实时智能（当前动作、Jev 决策与置信度、元素清单、证据链接）／底部 DevTools 式事件时间线；i18n 双语文案。
+
+本轮收尾新增：
+
+- `apps/api/tests/test_quality_discovery_live_e2e.py`：**真实 Chromium** 验收。本地站点把控件放在已知绝对坐标，断言实时元素清单的 `bounding_box` 与页面相差 ≤8px、流里的帧就是真实 adapter 产出的 JPEG 字节、页内高亮确实被绘制、运行在测试结束前必须收敛到终态。
+- 文档：`docs/QUALITY_DISCOVERY.md`（架构/事件契约/几何与高亮/AI 降级/安全边界/UI 指南/配置/验证/未完成项）、`docs/SECURITY.md` §5（探索边界与已知缺口）、`docs/README.md` 索引。
+- 门禁修正：`ruff format`（5 个文件此前未格式化）、`scripts/export_openapi.py`（`/stream` 路由使 OpenAPI/生成类型自 `534c252` 起过期），两者都是真实门禁失败，不是外观问题。
+
+测试证据（本轮实跑）：
+
+- `pytest test_quality_discovery.py test_quality_discovery_live.py test_quality_discovery_live_e2e.py test_discovery_coverage_e2e.py -q` → **78 passed / 179.79s**。
+- 真实浏览器验收单跑 `test_quality_discovery_live_e2e.py` → **1 passed / 2.37s**。
+- `ruff check apps/api packages` → All checks passed；`ruff format --check .` → 441 files already formatted。
+- 前端 `pnpm --filter @ai-qa/web test|typecheck|lint|build` → **172 passed**、typecheck/lint 无错、build 30.05s。
+- `scripts/i18n_check.py` → 25 namespaces / 2 languages / 3062 keys passed；`export_openapi.py --check` → current。
+- 全量后端回归与 Before/After UI 截图在本轮收尾时执行：全量 **867 passed / 11 skipped / 654.84s**；截图证据路径与结论见 §11 与 `.ai-runs/discovery-live/screenshots/NOTES.md`（若 Before 缺失按 BLOCKED 记录）。
+
+阻断与未完成（诚实记录）：
+
+- **真实 AI/Jev 在线验收 BLOCKED**：外部 provider 不可达（opencode.ai 400 `MissingSessionID`、api.typesafe.ai ConnectTimeout）；因此 R6「真实 AI/Jev 链路验证」只能用受控 fixture 决策 + 真实浏览器完成，报告中不得称为真实 AI 验收。
+- **OSS 调研 BLOCKED**：Skyvern/Stagehand/browser-use/agent-browser/playwright-mcp/crawl4ai/firecrawl 的调研委派因网络超时（30 分钟上限）无产出；未引入任何 OSS 代码或依赖，报告中不得声称研究/采用过这些项目。
+- 安全缺口（`docs/QUALITY_DISCOVERY.md` §7 已写明）：允许域名只匹配 host，无私有 IP/link-local/CIDR 与端口限制；探索循环仍是进程内 `asyncio` 任务，未纳入 `TaskRuntimeService`，重启不存活。
+- 发现→Requirement/TestCase/Automation 的关联目前是 id 级与测试断言，未做 schema 级 provenance。
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -352,6 +395,15 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
+Round7（分支 `agent/discovery-live-engine`，本轮收尾提交；环境 WSL2，SQLite；本轮同时间有一个截图委派在跑本地 API/Vite/Chromium，已按串行原则排定）：
+
+- 发现域套件：`uv run --no-sync pytest apps/api/tests/test_quality_discovery.py apps/api/tests/test_quality_discovery_live.py apps/api/tests/test_quality_discovery_live_e2e.py apps/api/tests/test_discovery_coverage_e2e.py -q` → **78 passed / 179.79s**。
+- 真实浏览器验收单跑：`test_quality_discovery_live_e2e.py` → **1 passed / 2.37s**（真实 Chromium；坐标断言 ≤8px；流里的帧与 adapter 抓帧字节一致；页内高亮确实绘制）。
+- **后端全量（SQLite）：`uv run --no-sync pytest apps/api/tests packages -q` → 867 passed / 11 skipped / 60 warnings / 654.84s**。
+- 前端：`pnpm --filter @ai-qa/web test` → **172 passed**；`typecheck`、`lint` 无错；`build` 30.05s。
+- 门禁：`ruff check .` All checks passed；`ruff format --check .` 441 files already formatted；`scripts/i18n_check.py` 25 namespaces / 2 languages / 3062 keys；`scripts/export_openapi.py --check` current（本轮修正了自 `534c252` 起过期的 OpenAPI 契约）。
+- 未执行（诚实记录）：PostgreSQL lane（未启动 PostgreSQL）、真实 AI/Jev 在线验收（外部 provider 不可达，BLOCKED）。
+
 Round6（提交 `f2dd186`，代码冻结后执行；冻结后仅对 `apps/api/tests/test_discovery_coverage_e2e.py` 做过 `ruff format` 空白格式化，其余无源码改动）：
 
 - 后端全量（SQLite）：`uv run pytest apps/api/tests packages -q` → **850 passed / 11 skipped / 60 warnings / 573.82s / exit 0**（`/tmp/r6-sqlite-final.log`）。
@@ -457,6 +509,14 @@ pnpm -r typecheck && pnpm -r lint
 ```
 
 ## 11. 下一个 Agent 应当继续的工作
+
+**Round 7 先行事项（分支 `agent/discovery-live-engine`，先读 §3.4 与 `docs/QUALITY_DISCOVERY.md`）：**
+
+1. 先核对 `git log`（本轮收尾提交）、`git status --short`、§2/§3.4；不要丢掉未提交改动。
+2. 未完成的 Round 7 队列：R6 真实 AI/Jev 链路（provider 恢复后再做，失败即记 BLOCKED，不循环重试）；私有 IP/CIDR + 端口限制的探索安全策略；把探索循环迁到 `TaskRuntimeService`（同时消除 ROADMAP §0 的偏差）；发现→需求→用例→自动化的 schema 级 provenance；长历史分页（事件上限 500）。
+3. Before/After 截图证据在 `.ai-runs/discovery-live/screenshots/`（本地未跟踪）。若仅有 After 而 Before 缺失，报告中必须写明缺失原因，不得拿渲染占位图充当 Before。
+
+旧 Round 6 待办（仍然有效）：
 
 1. 先核对最新 HEAD（Round6 代码提交 `f2dd186`）、`git status --short`、本文件 §3.3、`.ai-runs/night-continuation/final-report.md` 与 `round-6/` 证据；不要丢弃未提交/新用户改动。
 2. Round6 已在冻结代码上完成 SQLite 850 / PostgreSQL 699 / 前端 161 / 真实浏览器 E2E 1 passed / Studio 2 passed；没有新的源码变更时不要重跑整套，避免重复消耗。
