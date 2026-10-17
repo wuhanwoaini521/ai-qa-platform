@@ -141,7 +141,7 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
-type StreamKind = 'run' | 'task' | 'recorder' | 'debug' | 'lsp';
+type StreamKind = 'run' | 'task' | 'recorder' | 'debug' | 'lsp' | 'discovery';
 
 export class EventStreamError extends Error {
   constructor(
@@ -520,6 +520,31 @@ export const api = {
   stopQualityDiscoveryRun: (id: string) =>
     request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/stop`, { method: 'POST' }),
   getArtifactBlob: (id: string) => requestBlob(`/artifacts/${encodeURIComponent(id)}/download`),
+
+  // Live Quality Discovery observation stream (run events + viewport frames).
+  streamQualityDiscoveryEvents: (
+    runId: string,
+    onEvent: (event: any) => void,
+    onError?: (err: any) => void,
+  ): (() => void) => {
+    let closeStream: () => void = () => {};
+    closeStream = openEventStream(
+      `/discovery/runs/${encodeURIComponent(runId)}/stream`,
+      'discovery',
+      runId,
+      (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          onEvent(parsed);
+          if (parsed.type === 'run.finished') closeStream();
+        } catch (error) {
+          console.error('Failed to parse SSE event data', error);
+        }
+      },
+      onError,
+    );
+    return () => closeStream();
+  },
 
   streamRequirementAnalysis: (
     id: string,

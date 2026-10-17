@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type { QualityDiscoveryGap, QualityDiscoveryMode, QualityDiscoveryRun, Requirement } from '../../types';
 import { gapsForCoverageRow, sourceRequirementId } from './qualityDiscoveryMap';
+import { DiscoveryLiveView } from './DiscoveryLiveView';
 import './quality-discovery.css';
 
 const terminalStatuses = new Set(['COMPLETED', 'BLOCKED', 'FAILED', 'STOPPED', 'BUDGET_EXHAUSTED']);
@@ -53,7 +54,8 @@ export function QualityDiscoveryPanel({
   const [mapFilter, setMapFilter] = useState('ALL');
   const [mapQuery, setMapQuery] = useState('');
   const [mapSort, setMapSort] = useState('FEATURE');
-  const [reportTab, setReportTab] = useState<'map' | 'gaps' | 'features' | 'activity'>('map');
+  const [reportTab, setReportTab] = useState<'live' | 'map' | 'gaps' | 'features' | 'activity'>('map');
+  const [launchOpen, setLaunchOpen] = useState(false);
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [evidenceText, setEvidenceText] = useState('');
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -131,7 +133,8 @@ export function QualityDiscoveryPanel({
 
   useEffect(() => {
     if (!run) return;
-    setReportTab(terminalStatuses.has(run.status) ? 'map' : 'activity');
+    // A running exploration opens on the live workbench; a finished one opens on its report.
+    setReportTab(terminalStatuses.has(run.status) ? 'map' : 'live');
   }, [run?.id, run?.status]);
 
   useEffect(() => {
@@ -384,14 +387,19 @@ export function QualityDiscoveryPanel({
   };
   const hasRealRequirement = (feature: NonNullable<ReturnType<typeof featureForGap>>) =>
     feature.requirement_ids?.some((id) => run?.result.requirements?.some((item) => item.id === id && item.source_id !== 'PASTED')) ?? false;
+  // While a run is live the launch form is redundant (Start is disabled) and only pushes the
+  // live view down, so it collapses to a toolbar the user can reopen.
+  const launchCollapsed = active && !launchOpen;
 
   return (
     <div className={`quality-discovery${!run ? ' is-empty' : ''}`}>
-      <section className="qd-launch-card">
+      <section className={`qd-launch-card${launchCollapsed ? ' is-collapsed' : ''}`}>
         <div className="qd-heading">
           <div className="qd-heading-icon"><Waypoints size={18} aria-hidden="true" /></div>
           <div><span className="qd-eyebrow">{t('eyebrow')}</span><h3>{t('title')}</h3><p>{t('description')}</p></div>
+          {active && <button type="button" className="btn btn-ghost btn-sm qd-launch-toggle" onClick={() => setLaunchOpen((open) => !open)} aria-expanded={launchOpen}>{launchOpen ? t('hideLaunchForm') : t('showLaunchForm')}</button>}
         </div>
+        {!launchCollapsed && <>
         <div className="qd-form-grid">
           <label className="qd-field qd-url-field"><span>{t('startUrl')} <span className="qd-required-mark" aria-hidden="true">*</span></span><input type="url" value={url} onChange={(event) => { setUrlTouched(true); setUrl(event.target.value); }} onBlur={() => setUrlTouched(true)} placeholder={t('startUrlPlaceholder')} aria-label={t('startUrl')} aria-required="true" aria-invalid={startUrlInvalid} aria-describedby="qd-start-url-help" required /><small id="qd-start-url-help" className={`qd-field-hint${startUrlInvalid ? ' is-error' : ''}`}>{t(startUrlHelp)}</small></label>
           <label className="qd-field"><span>{t('mode')}</span><select value={mode} onChange={(event) => setMode(event.target.value as QualityDiscoveryMode)} aria-label={t('mode')}>
@@ -417,6 +425,7 @@ export function QualityDiscoveryPanel({
           {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
         </div>
         {error && <p className="qd-error" role="alert">{error}</p>}
+        </>}
       </section>
 
       {historyStatus === 'ready' && !run && <section className="qd-start-empty" aria-label={t('emptyStartTitle')}>
@@ -465,11 +474,14 @@ export function QualityDiscoveryPanel({
         </section>
 
         <nav className="qd-report-tabs" aria-label={t('reportSections')}>
+          <button type="button" aria-current={reportTab === 'live' ? 'page' : undefined} onClick={() => setReportTab('live')}>{t('liveView')}{active && <i className="qd-live-dot" aria-hidden="true" />}<span>{run.status}</span></button>
           <button type="button" aria-current={reportTab === 'map' ? 'page' : undefined} onClick={() => setReportTab('map')}>{t('qualityMap')}<span>{coverage.length}</span></button>
           <button type="button" aria-current={reportTab === 'gaps' ? 'page' : undefined} onClick={() => setReportTab('gaps')}>{t('qualityGaps')}<span>{gaps.length}</span></button>
           <button type="button" aria-current={reportTab === 'features' ? 'page' : undefined} onClick={() => setReportTab('features')}>{t('features')}<span>{functionalFeatures.length}</span></button>
           <button type="button" aria-current={reportTab === 'activity' ? 'page' : undefined} onClick={() => setReportTab('activity')}>{t('recentActivity')}<span>{run.result.events?.length ?? 0}</span></button>
         </nav>
+
+        {reportTab === 'live' && <DiscoveryLiveView runId={run.id} status={run.status} onOpenEvidence={(artifactId) => void openEvidence(artifactId)} />}
 
         {reportTab === 'map' && <section className="qd-section qd-quality-map">
           <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('qualityMap')}</span><h3>{t('coverageMap')}</h3></div><div className="qd-map-tools"><label className="qd-map-search"><span className="sr-only">{t('mapSearch')}</span><input type="search" value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} placeholder={t('mapSearch')} /></label><label className="qd-filter"><span>{t('mapFilter')}</span><select value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}><option value="ALL">{t('allFeatures')}</option><option value="GAPS">{t('featuresWithGaps')}</option><option value="UNCOVERED">{t('uncoveredFeatures')}</option><option value="FAILED">{t('failedFeatures')}</option></select></label><label className="qd-filter"><span>{t('mapSort')}</span><select value={mapSort} onChange={(event) => setMapSort(event.target.value)}><option value="FEATURE">{t('sortFeature')}</option><option value="RISK">{t('sortRisk')}</option><option value="COVERAGE">{t('sortCoverage')}</option></select></label>{terminalStatuses.has(run.status) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshCoverage()} disabled={coverageRefreshing} aria-busy={coverageRefreshing}><RotateCcw size={13} aria-hidden="true" />{coverageRefreshing ? t('refreshingCoverage') : t('refreshCoverage')}</button>}</div></div>
