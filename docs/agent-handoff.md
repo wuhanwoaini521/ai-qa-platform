@@ -22,8 +22,10 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | Round 5 改动已本地提交（`71f6f14`）；`docs/agent-handoff.md` 在本次提交后更新；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
-| Round5 本轮提交 | `71f6f14 fix(db,worker,security): make PostgreSQL migrations and worker recovery reliable` + 本轮 handoff 提交（仍未 push） |
+| 当前工作树 | Round 6 代码已本地提交（`f2dd186`）；`docs/agent-handoff.md` 在本次提交后更新；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
+| Round6 本轮提交 | `f2dd186 fix(ui,integrations,audit): surface async failures and stop simulated publish successes` + 本轮 handoff 提交（仍未 push） |
+| Round5 本轮提交 | `71f6f14 fix(db,worker,security): make PostgreSQL migrations and worker recovery reliable` + `a8c21a1`/`e1496c3` |
+| Round6 验收报告 | `.ai-runs/night-continuation/final-report.md`（15 节；判定 PARTIAL）、`round-6/`（审计原文、错误面截图、页面矩阵） |
 | Round4 本轮提交 | `38a89cb fix(failures): surface the assertion detail in the failure summary`、`01518a2 test(e2e): capture round 4 route, viewport and interaction evidence` |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | Round4 evidence | `.ai-runs/night-continuation/round-4/evidence/{before,after}/`（本地未跟踪） |
@@ -31,6 +33,8 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
+
+Round 6（2026-10-17，用户任务 m06679）：全系统独立验收、最后整改与最终交接，详见 §3.3；结论 **PARTIAL**（确定性回归全绿；真实 AI/Jev 链路单次跑通，其余 AI 依赖项因 provider 侧超时被按设计阻断；P0 project ACL 仍未实现）。
 
 Round 5（2026-10-17，用户任务 m05655）：企业级可靠性、PostgreSQL、Worker 与安全整改，详见 §3.2。
 
@@ -170,6 +174,26 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 
 有意未修（记录为剩余风险，不声称完成）：job 状态抢输一方仍拿到赢家行（无法区分“我赢了”与“我输了”，外部 HTTP 契约不变）；`stale_after_seconds` 的 600s floor 使 `DEFAULT_WORKER_OFFLINE_SECONDS` 默认下不生效（保守，人工可调）；修改 `app.artifact_storage_dir` 与 `AI_QA_WORKER_ARTIFACT_DIR` 可以使 worker 产出被 API 静默丢弃（配置脚枪，日志会告警但不会失败）；artifact 路径为相对路径时依赖进程 CWD（历史行为）；启动时的建表/拓宽列在双实例并发启动下可能报重复对象；审计目标未记录文件路径，`ip_address` 仍是硬编码。
 
+## 3.3 Round 6（全系统独立验收、最后整改与最终交接，m06679）
+
+角色：独立验收方（不采信前五轮自述结论）。两份只读审计原文：`round-6/audit-integrity-backend.txt`（跨阶段完整性）、`round-6/audit-integrity-frontend.txt`（前端完整性）。
+
+修复的真实缺陷（提交 `f2dd186`）：
+
+- 四个前端 P1「异步失败被静默」：运行列表加载失败与「没有运行记录」无法区分（`RunsPage.tsx`）；失败队列加载失败显示为空队列（`FailuresPage.tsx`）；发布创建/门禁评估失败无任何提示（`QualityPage.tsx`）；安全页 9 处静默 catch 使 403 表现为空表（`SecurityPage.tsx`）。全部改为 `role="alert"` 可见错误 + 重试。
+- 两个后端 P2：`integrations.testrail.enabled: false` 时 Fake 适配器把发布记为审计 `SUCCESS`（现为 `DRY_RUN` + `details.simulated` + `[simulated]` 消息前缀）；登录审计 IP 硬编码 `127.0.0.1`（现在取 `Request.client.host`）。新增 2 条测试，`test_jira_testrail_endpoints.py` 6 passed。
+
+证据：4 个强制失败的真实浏览器错误面（截图 + `round6_error_surfaces`）见 `round-6/evidence/`；全页面矩阵 `page-matrix.json`（61 条：14 路由 × 视口 + 7 需求页签）。
+
+关键验收结果（冻结代码，详见 §9 与 `final-report.md`）：
+
+- 真实浏览器 E2E：**1 passed / 105.49s**，`round6_error_surfaces=["runs","failures","security","release-create"]`，Discovery→Coverage `VERIFIED`，隔离项目未被污染，4 视口无横向溢出。
+- Studio Debug 真实验收：**2 passed / 32.65s**（编辑/断点/暂停/继续/停止 + 真实失败证据 + 四视口布局）。
+- 真实 AI/Jev：需求→执行→证据链路 **PASSED**（`mimo-v2.6-flash` + `jev-1.13.0`，含低置信度 0.54 的 fallback 阻断）；同时间窗 provider 健康检查超时（`TIMEOUT`，5034ms），因此自动修复被 `_runtime_readiness` 按设计阻断、浏览器内修复未 settle、Live Browser Agent 因 Jev 置信度 0.06 被 `TaskBlocked` → 全部记 **BLOCKED**，未使用 Fake 顶替、未重复烧配额。
+- 确定性回归：SQLite **850 passed / 11 skipped / 573.82s**；PostgreSQL **699 passed / 7 skipped / 424.33s**；前端 161 passed + typecheck + build 31.34s；lint 全通过；OpenAPI 契约 current。
+
+本轮未修（记录，见 §8 与 `final-report.md` §13）：P0 project ACL；覆盖率两套口径；浏览器内失败修复链路待 provider 恢复后单次复验；审计字段不完整；job 结果竞态仍以成功响应返回。
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -275,6 +299,8 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 ## 7. 未完成 / 待办
 
 - [x] Round4 全页真实浏览器巡检（14 路由 × 4 视口 + 7 需求标签页 + 交互点击）与失败概览断言详情修复，结论见 §3.1。
+- [x] Round6 独立验收：两份跨阶段/前端完整性审计、四个前端 P1 与两个后端 P2 修复、真实浏览器错误面验收、Studio 真实验收、SQLite/PostgreSQL 全量、前端测试/类型/构建/lint/OpenAPI 契约，结论见 §3.3 与 `.ai-runs/night-continuation/final-report.md`。
+- [ ] Round6 未完成项（不声称完成）：浏览器内失败修复链路（`test_live_locator_repair_acceptance.py -k through_browser_ui`）未 settle，需 provider 恢复后单次复验；Live Browser Agent 本轮按策略阻断（Jev 置信度 0.06 < 0.70），无通过证据；覆盖率两套口径未统一。
 - [ ] Round4 未做且证据不支持改动：IA/布局重排（reviewer 认为现有结构连贯）；字体自托管（离线环境）；这两项不得当作已完成。
 
 Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全平台项目权限。
@@ -306,6 +332,11 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 8. 已知 Bug / 阻断
 
+- Round6 新增结论：
+  - **已修**：四个前端「异步失败被静默」（RunsPage/FailuresPage/QualityPage/SecurityPage）；禁用 TestRail 时伪造 `SUCCESS` 审计；登录审计 IP 硬编码。
+  - **仍未修**：P0 project ACL（下方企业 blocker）；覆盖率存在需求加权与按特性两套计算可能不一致；`AIProviderRegistry` 未 `configure_runtime` 时会回落 fake provider；审计行字段仍不完整（`target_resource` 无文件路径、部分 actor 为 `system`）；`POST /api/jobs/{id}/result` 抢输一方仍返回成功；API 与 Worker 制品根目录不一致会静默丢弃制品。
+  - 真实 AI/Jev 只在单次时间窗内跑通完整链路；provider 超时期间平台按设计阻断自动修复（未替换 Fake），但 UI 未展示阻断原因（`_runtime_readiness` 的 `reason` / `ai_failure_reason`）→ 建议后续把该原因显示到失败修复界面。
+  - 浏览器内失败修复验收日志出现 `sqlite3.OperationalError: database is locked`（本地 SQLite 并发写入），需在复验时一并排查是否为 harness 并发导致。
 - Round5 新增结论：
   - **已修**：artifact 下载可被篡改为任意文件读取（storage root containment 校验 + 负向测试）；AI 修复 apply/rollback 无审计（现在写 `REPAIR_APPLY`/`REPAIR_ROLLBACK`）；job 取消不取消 run；worker 崩溃后 run 永久 RUNNING；job 终态可被覆盖；PostgreSQL 无法执行 Alembic 迁移（`alembic_version VARCHAR(32)`）。
   - **仍未修（不声称完成）**：没有系统级 project-resource ACL（同下行）；pytest 子进程不是 OS 沙箱（以宿主用户运行）；worker 无 lease/续租机制（只靠心跳超时回收）；`ArtifactORM` 没有 project_id 列，artifact 的可见性只能靠上传者约束；CI 的 `postgres:16` job 未在本地验证（本地为 18.6）。
@@ -320,6 +351,15 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+Round6（提交 `f2dd186`，代码冻结后执行；冻结后仅对 `apps/api/tests/test_discovery_coverage_e2e.py` 做过 `ruff format` 空白格式化，其余无源码改动）：
+
+- 后端全量（SQLite）：`uv run pytest apps/api/tests packages -q` → **850 passed / 11 skipped / 60 warnings / 573.82s / exit 0**（`/tmp/r6-sqlite-final.log`）。
+- PostgreSQL lane：`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test uv run pytest apps/api -q` → **699 passed / 7 skipped / 76 warnings / 424.33s / exit 0**（`/tmp/r6-pg-final.log`）。
+- 前端：`pnpm --filter @ai-qa/web test` → **161 passed**；`tsc --noEmit` 通过；`build` → 31.34s；`python scripts/task.py lint` → All linters passed（`/tmp/r6-lint2.log`）；`uv run python scripts/export_openapi.py --check` → OpenAPI contract is current。
+- 真实浏览器 E2E + 错误面：`ROUND4_SCREENSHOT_PHASE=after uv run pytest apps/api/tests/test_discovery_coverage_e2e.py -q -s` → **1 passed / 105.49s**，`round6_error_surfaces = ["runs","failures","security","release-create"]`（`/tmp/r6-harness-final.log`；证据 `round-4/evidence/after/` 79 文件）。
+- Studio Debug 真实验收：`AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1 uv run pytest apps/api/tests/test_studio_debug_ui_live.py -q -s` → **2 passed / 32.65s**（`/tmp/r6-live-studio-debug.log`）。
+- 真实 AI/Jev（provider 降级窗口）：`test_live_enterprise_journey.py` → 1 passed / 1 failed（183.37s，后者死于质量缺口动作 `HTTP 502 AIProviderError`）；`test_live_locator_repair_acceptance.py -k requires_approval_and_exact_rerun` → 失败，事件仅到 `repair.blocked`（`_runtime_readiness` 判定真实 AI 不可用）；`-k through_browser_ui` → 未 settle；`test_browser_agent_live_e2e.py` → Jev 置信度 0.06 触发 `TaskBlocked`。探针：AI `TIMEOUT`（5034ms）、Jev `connected`。按用户约束记 **BLOCKED**，不做重复重试。
 
 Round5（提交 `71f6f14` + `a8c21a1` 的最终代码，2026-10-18；含 reviewer 修复与全部 Round 5 改动）：
 
@@ -378,7 +418,7 @@ uv run pytest apps/api/tests/test_security_hardening.py apps/api/tests/test_job_
 
 ## 10. 下一步具体命令
 
-Round3 实现 `f64f711` 与 handoff 已本地提交；下一组首要任务为 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。旧 Studio/Strict D5 命令如下仅供历史重跑参考，不是当前 Round3 的待执行项。
+Round6 已完成全系统独立验收（见 §3.3、§9 与 `.ai-runs/night-continuation/final-report.md`）；下一组首要任务仍是 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。provider 恢复后请单次复验浏览器内失败修复链路（60s/1 retry，失败即记 BLOCKED）。旧 Studio/Strict D5 命令如下仅供历史重跑参考。
 
 ```bash
 # 核对现场
@@ -418,9 +458,10 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. 先核对最新 HEAD、`git status --short`、commit 内容和本 Round3 `.ai-runs` evidence；不要丢弃未提交/新用户改动。
-2. Round3 已有全仓测试、lint、独立 reviewer 与真实 Chromium证据；没有新的源码变更时不要重跑整个套件。
-3. 下一组任务是项目资源 ACL：先获取 owner/team 和 legacy ownerless project claim 策略，再复用 `apps/api/app/api/authz.py` 中央策略表及审计表实施，覆盖 191 API route families 的 resource resolver/list/query/body/WS隔离。不能把本轮按 project ID分组的 Quality Map 或 Workspace binding验证说成安全 ACL。
-4. Round2 AI/Jev repair matrix 尚缺远程 outage、持久化前 interruption、verification worker restart、PostgreSQL并发；仅在具备环境时继续，保留明确 blocked 状态。
+1. 先核对最新 HEAD（Round6 代码提交 `f2dd186`）、`git status --short`、本文件 §3.3、`.ai-runs/night-continuation/final-report.md` 与 `round-6/` 证据；不要丢弃未提交/新用户改动。
+2. Round6 已在冻结代码上完成 SQLite 850 / PostgreSQL 699 / 前端 161 / 真实浏览器 E2E 1 passed / Studio 2 passed；没有新的源码变更时不要重跑整套，避免重复消耗。
+3. 下一组任务是项目资源 ACL：先获取 owner/team 和 legacy ownerless project claim 策略，再复用 `apps/api/app/api/authz.py` 中央策略表及审计表实施，覆盖 191 API route families 的 resource resolver/list/query/body/WS隔离（运行/失败/制品/工作区/恢复接口，且 `ArtifactORM` 需补 `project_id`）。不能把按 project ID 分组的 Quality Map 或 Workspace binding 验证说成安全 ACL。
+4. provider 恢复后单次复验浏览器内失败修复链路（`AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE=1 … -k through_browser_ui`），并排查日志中的 SQLite `database is locked`；失败即记 BLOCKED。
+5. Round2 AI/Jev repair matrix 尚缺远程 outage、持久化前 interruption、verification worker restart、PostgreSQL并发；仅在具备环境时继续，保留明确 blocked 状态。
 
 旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。
