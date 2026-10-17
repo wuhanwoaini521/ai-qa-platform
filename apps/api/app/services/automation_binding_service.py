@@ -144,8 +144,19 @@ class AutomationBindingService:
                 metadata={"provider": result.provider, "model": result.model, "fallback_used": result.fallback_used},
             )
             if result.provider == "fake" or result.fallback_used or not result.suggested_code:
+                # The model frequently answers with an explanation (result.reply) instead of code when the
+                # project context holds no page object for the explored page. Surfacing that reason is the
+                # difference between a usable next step and an opaque failure.
+                reason = str(getattr(result, "reply", "") or "").strip()
+                if result.provider == "fake" or result.fallback_used:
+                    raise ValueError("AI Provider 未返回真实模型草稿（不可用或已降级）。请检查 AI 设置后重试。")
                 raise ValueError(
-                    "No grounded real-AI draft is available. Inspect evidence and provider status in Studio."
+                    "AI 未返回可用的自动化脚本草稿。"
+                    + (
+                        f"模型说明：{reason[:400]}"
+                        if reason
+                        else "模型未给出说明，请检查项目上下文（页面对象、工作区文件）后重试。"
+                    )
                 )
             code_content = result.suggested_code
             if action_marker:

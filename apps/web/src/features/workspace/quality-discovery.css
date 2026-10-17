@@ -34,6 +34,7 @@
 .qd-run-picker { display: flex; align-items: center; gap: 7px; margin-left: auto; color: var(--ink-muted); font-size: 10px; }
 .qd-run-picker select { width: min(360px, 45vw); }
 .qd-error, .qd-run-error { margin: 0; color: var(--accent-red); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.qd-note { margin: 0; color: var(--accent-green); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .qd-load-status { color: var(--ink-muted); font-size: 10px; }
 .qd-load-error { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--accent-red); font-size: 10px; }
 .qd-run-card { display: grid; gap: 13px; }
@@ -128,6 +129,7 @@
 .qd-journey-draft .btn { display: inline-flex; align-items: center; gap: 5px; }
 .qd-journey-draft small { color: var(--ink-muted); font-size: 9px; line-height: 1.4; }
 .qd-gap-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.qd-gap-hint { align-self: center; color: var(--ink-muted); font-size: 11px; }
 .qd-frontier-summary { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .qd-frontier-summary span { padding: 4px 6px; color: var(--ink-muted); background: var(--surface-inset); border-radius: 5px; font-size: 8px; }
 .qd-frontier-list { display: grid; gap: 6px; margin-top: 8px; }

@@ -4279,3 +4279,86 @@ async def test_discovery_draft_api_waits_for_approval_before_workspace_write(cli
         await task_scheduler_service.stop()
         server.close()
         await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_blocked_policy_gaps_collapse_per_page(test_db_session):
+    """A crawled page can block dozens of targets; they must collapse into one policy gap per page."""
+    from datetime import datetime, timezone
+
+    from app.persistence.models import ProjectORM, QualityDiscoveryRunORM
+
+    project_id = f"proj-blocked-{uuid4().hex[:8]}"
+    run_id = f"qd-{uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    states = [
+        {"state_id": "state-home", "evidence_id": "evidence-home", "main_content": "", "controls": []},
+        {"state_id": "state-products", "evidence_id": "evidence-products", "main_content": "", "controls": []},
+    ]
+    frontier = [
+        {
+            "candidate_id": f"cand-home-{index}",
+            "state_id": "state-home",
+            "status": "BLOCKED_BY_POLICY",
+            "target": f"https://external.example/{index}",
+        }
+        for index in range(3)
+    ] + [
+        {
+            "candidate_id": "cand-products-1",
+            "state_id": "state-products",
+            "status": "BLOCKED_BY_POLICY",
+            "target": "https://other.example/",
+        },
+        {"candidate_id": "cand-home-ok", "state_id": "state-home", "status": "PENDING", "target": "Home"},
+    ]
+    async with test_db_session() as session:
+        session.add(
+            ProjectORM(
+                id=project_id,
+                name="Blocked Policy Gaps",
+                description="",
+                default_branch="main",
+                framework_type="playwright_python",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="blocked-fixture",
+                mode="AUDIT",
+                start_url="http://127.0.0.1:1/",
+                requirement_id=None,
+                requirement_text="",
+                allowed_domains=["127.0.0.1"],
+                status="COMPLETED",
+                progress={},
+                result={
+                    "requirements": [],
+                    "features": [],
+                    "states": states,
+                    "edges": [],
+                    "actions": [],
+                    "frontier": frontier,
+                    "gaps": [],
+                    "coverage": [],
+                },
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    service = QualityDiscoveryService(test_db_session, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    await service._build_quality_map(run_id)
+    run = await service.get(run_id)
+    blocked = [gap for gap in run.result["gaps"] if gap["category"] == "BLOCKED_BY_POLICY"]
+    assert len(blocked) == 2, blocked
+    by_state = {gap["item_id"]: gap for gap in blocked}
+    assert by_state["state-home"]["blocked_count"] == 3
+    assert by_state["state-home"]["title"] == "安全策略阻止了 3 个探索目标"
+    assert by_state["state-home"]["targets"][0] == "https://external.example/0"
+    assert by_state["state-products"]["blocked_count"] == 1

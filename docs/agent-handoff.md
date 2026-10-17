@@ -330,6 +330,29 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - **偶发失败（中）**：`apps/api/tests/test_browser_agent_e2e.py::test_browser_agent_checks_and_switches_to_popup_landing[selenium.dev-False-False]` 在高负载全量套件中偶发 `TargetClosedError: Locator.count: Target page, context or browser has been closed`；单独运行 3/3 passed。根因方向见 `apps/api/app/adapters/playwright/locator.py:30` 与 `apps/api/app/services/task_browser_executor.py:245` 的已关闭弹窗枚举；本轮**未做盲目修补**。
 - **企业部署缺口**：备份/恢复演练、CI/CD 证据、发布/回滚演练、密钥托管轮换、审计字段完整性、产物级项目隔离（`ArtifactORM` 无 `project_id`）、探索循环纳入 TaskRuntimeService。
 
+## 3.7 Round 10（质量发现「生成用例/需求/脚本」可用性修复，m01913）
+
+用户在真实使用中报告：Discovery「需求与覆盖差距」里生成测试用例不好用，且发现结果整体难以继续生成需求 / 用例 / 自动化脚本。本轮按代码级根因定位并修复，全部有现场证据。
+
+### 根因与修复
+
+1. **策略阻止的缺口淹没可用信息**（`apps/api/app/services/quality_discovery_projection.py`）：每个被安全策略阻止的探索目标都生成一条 `BLOCKED_BY_POLICY` gap，该 run 因此有 **154 条** gap，用户看到的是卡片墙。改为**按页面聚合**：一条 gap 携带 `blocked_count` 与 `targets`（最多 25 个），标题为「安全策略阻止了 N 个探索目标」。现场复算后 gap 从 **154 → 33**（其中策略阻止 2 条）。新增回归测试 `apps/api/tests/test_quality_discovery.py::test_blocked_policy_gaps_collapse_per_page`。
+2. **「生成自动化草稿」按钮被完全隐藏**（`apps/web/src/features/workspace/QualityDiscoveryPanel.tsx`）：条件含 `test_case_ids.length`，没有用例时按钮不存在，用户无法得知原因。改为始终渲染按钮，仅在缺前置条件时禁用，并**显示一行可见原因**（新增 `.qd-gap-hint`）：需先生成/关联需求草稿、或需先生成测试用例。
+3. **失败原因不可读**（`apps/api/app/services/automation_binding_service.py`）：AI 返回说明性文本而非代码时统一抛 `No grounded real-AI draft is available...`。现在区分「Provider 不可用/降级」与「模型给出了说明」，后者把模型原话（截断 400 字）带回 UI。现场验证：点击生成后用户看到的是模型解释为何无法生成（项目证据中没有百度页面对象与选择器）。
+4. **缺成功反馈**：动作成功后新增 `role=status` 提示（已创建需求草稿 / 已生成 N 条测试用例 / 已创建自动化草稿），默认筛选改为「需处理缺口（不含策略阻止）」。
+
+### 证据
+
+- `uv run --no-sync pytest apps/api/tests/test_quality_discovery.py -q -p no:randomly` → **67 passed in 26.26s**（含新增 1 条）。
+- `pytest apps/api/tests/test_automation_binding.py apps/api/tests/test_quality_discovery_live.py apps/api/tests/test_discovery_coverage_e2e.py -q -p no:randomly` → **13 passed in 155.71s**。
+- 前端：`pnpm --filter @ai-qa/web test` → **179 passed**；typecheck / eslint / build 均通过；`scripts/i18n_check.py` → 25 namespaces / 3073 keys。
+- 真实 UI 走查（Chromium，run `qd_c92fb0a21d2644c7`）：gap 卡片 **31**、`BLOCKED_BY_POLICY` 卡片 **0**、自动化按钮 **8**（7 个禁用且各带原因）、可见提示 12 条、页内错误 0。截图：`.ai-runs/gap-ux/after-gaps-default.png`、`after-gap-card-with-hint.png`、`after-automation-action.png`、`after-requirement-draft-note.png`（未跟踪）。
+- 走查副作用（记在明处）：验证过程中在该演示项目里真实创建了 2 个需求草稿、1 个测试设计（8 条用例），未删除。
+
+### 尚未处理
+
+- 生成自动化仍依赖工作区里存在对应页面对象/页面证据；模型无依据时不编造（这是 `ROADMAP` §0 的既定边界，不是缺陷），但工作区「无页面对象」的场景仍缺引导（例如从发现页面直接生成页面对象骨架）。
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）

@@ -434,20 +434,28 @@ class QualityDiscoveryProjectionMixin:
                 )
             states = result.get("states", [])
             edges = result.get("edges", [])
+            # One policy gap per page, not one per blocked link: a crawled page can block
+            # dozens of targets, and a wall of identical gaps hides the actionable findings.
+            blocked_targets: dict[str, list[str]] = {}
             for frontier_item in result.get("frontier", []):
                 if frontier_item.get("status") == "BLOCKED_BY_POLICY":
-                    state = next(
-                        (item for item in states if item.get("state_id") == frontier_item.get("state_id")), None
+                    state_id = str(frontier_item.get("state_id") or "")
+                    blocked_targets.setdefault(state_id, []).append(
+                        str(frontier_item.get("target") or "受安全策略阻止的动作")
                     )
-                    gaps.append(
-                        self._gap(
-                            "BLOCKED_BY_POLICY",
-                            frontier_item.get("candidate_id", "blocked"),
-                            str(frontier_item.get("target") or "受安全策略阻止的动作"),
-                            [state["evidence_id"]] if state and state.get("evidence_id") else [],
-                            1.0,
-                        )
-                    )
+            for state_id, targets in blocked_targets.items():
+                state = next((item for item in states if item.get("state_id") == state_id), None)
+                title = targets[0] if len(targets) == 1 else f"安全策略阻止了 {len(targets)} 个探索目标"
+                gap = self._gap(
+                    "BLOCKED_BY_POLICY",
+                    state_id or "blocked",
+                    title,
+                    [state["evidence_id"]] if state and state.get("evidence_id") else [],
+                    1.0,
+                )
+                gap["blocked_count"] = len(targets)
+                gap["targets"] = targets[:25]
+                gaps.append(gap)
             gaps = list({item["id"]: item for item in gaps}.values())
             result["requirements"] = requirements
             result["features"] = features

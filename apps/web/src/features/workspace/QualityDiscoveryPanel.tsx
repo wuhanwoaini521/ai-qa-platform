@@ -50,7 +50,9 @@ export function QualityDiscoveryPanel({
   const [historyStatus, setHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [requirementsError, setRequirementsError] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
-  const [gapFilter, setGapFilter] = useState('ALL');
+  // Default to the actionable set: a crawled page can block dozens of targets, and those
+  // BLOCKED_BY_POLICY gaps describe the safety policy, not work the user has to do.
+  const [gapFilter, setGapFilter] = useState('ACTIONABLE');
   const [mapFilter, setMapFilter] = useState('ALL');
   const [mapQuery, setMapQuery] = useState('');
   const [mapSort, setMapSort] = useState('FEATURE');
@@ -61,6 +63,7 @@ export function QualityDiscoveryPanel({
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [actionNote, setActionNote] = useState('');
   const [coverageRefreshing, setCoverageRefreshing] = useState(false);
   const [coverageRefreshed, setCoverageRefreshed] = useState(false);
   const [coverageRefreshError, setCoverageRefreshError] = useState('');
@@ -177,7 +180,11 @@ export function QualityDiscoveryPanel({
   const blockedFrontierCount = (frontierCounts.BLOCKED ?? 0) + (frontierCounts.BLOCKED_BY_POLICY ?? 0);
   const failedFrontierCount = frontierCounts.FAILED ?? 0;
   const filteredGaps = useMemo(
-    () => gapFilter === 'ALL' ? gaps : gaps.filter((gap) => gap.category === gapFilter),
+    () => gapFilter === 'ALL'
+      ? gaps
+      : gapFilter === 'ACTIONABLE'
+        ? gaps.filter((gap) => gap.category !== 'BLOCKED_BY_POLICY')
+        : gaps.filter((gap) => gap.category === gapFilter),
     [gapFilter, gaps],
   );
   const filteredCoverage = useMemo(() => {
@@ -354,20 +361,25 @@ export function QualityDiscoveryPanel({
     if (!run) return;
     setActionBusy(`${gap.id}:${action}`);
     setActionError('');
+    setActionNote('');
     try {
       const result = await api.actOnQualityDiscoveryGap(run.id, gap.id, action);
       const refreshed = await api.getQualityDiscoveryRun(run.id);
       setRun(refreshed);
       setRuns((items) => items.map((item) => item.id === refreshed.id ? refreshed : item));
       const feature = refreshed.result.features?.find((item) => item.feature_id === gap.item_id);
-      if (action === 'generate_tests') {
+      if (action === 'create_requirement_draft') {
+        setActionNote(t('actionRequirementCreated'));
+      } else if (action === 'generate_tests') {
         const ids = Array.isArray(result.test_case_ids) ? result.test_case_ids : [];
+        setActionNote(t('actionTestsCreated', { count: ids.length }));
         if (typeof ids[0] === 'string') await onOpenCase?.(ids[0], sourceRequirementId(
           feature?.requirement_ids ?? [], refreshed.result.requirements ?? [],
           feature ? refreshed.result.requirement_drafts?.[feature.feature_id] : undefined,
         ));
       } else if (action === 'generate_automation') {
         const binding = result.binding as { test_case_id?: string; file_path?: string } | undefined;
+        setActionNote(t('actionAutomationCreated'));
         if (binding?.test_case_id && binding.file_path) onOpenAutomation?.(binding.test_case_id, binding.file_path);
       } else if (action === 'open_failure') {
         const failedAutomation = result.automation as { test_case_id?: string } | undefined;
@@ -387,6 +399,16 @@ export function QualityDiscoveryPanel({
   };
   const hasRealRequirement = (feature: NonNullable<ReturnType<typeof featureForGap>>) =>
     feature.requirement_ids?.some((id) => run?.result.requirements?.some((item) => item.id === id && item.source_id !== 'PASTED')) ?? false;
+  // A disabled "generate" button with no visible reason is what makes the gap report feel broken;
+  // state the missing precondition instead of only disabling the action.
+  const gapActionHint = (gap: QualityDiscoveryGap): string => {
+    const feature = featureForGap(gap);
+    if (gap.category === 'TEST_MISSING' && (!feature || (!hasRealRequirement(feature) && !run?.result.requirement_drafts?.[feature.feature_id]))) {
+      return t('needRequirementDraft');
+    }
+    if (gap.category === 'AUTOMATION_MISSING' && !feature?.test_case_ids?.length) return t('needTestCases');
+    return '';
+  };
   // While a run is live the launch form is redundant (Start is disabled) and only pushes the
   // live view down, so it collapses to a toolbar the user can reopen.
   const launchCollapsed = active && !launchOpen;
@@ -545,9 +567,10 @@ export function QualityDiscoveryPanel({
 
         {reportTab === 'gaps' && <section className="qd-section">
           <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('coverage')}</span><h3>{t('qualityGaps')}</h3></div>
-            <label className="qd-filter"><span>{t('filter')}</span><select value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}><option value="ALL">{t('allGaps')}</option>{[...new Set(gaps.map((gap) => gap.category))].map((category) => <option key={category} value={category}>{t(`gapTypes.${category}`, { defaultValue: category })}</option>)}</select></label>
+            <label className="qd-filter"><span>{t('filter')}</span><select value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}><option value="ACTIONABLE">{t('actionableGaps')}</option><option value="ALL">{t('allGaps')}</option>{[...new Set(gaps.map((gap) => gap.category))].map((category) => <option key={category} value={category}>{t(`gapTypes.${category}`, { defaultValue: category })}</option>)}</select></label>
           </div>
           {actionError && <p className="qd-error" role="alert">{actionError}</p>}
+          {actionNote && <p className="qd-note" role="status">{actionNote}</p>}
           {!filteredGaps.length ? <p className="qd-empty">{t('noGaps')}</p> : <div className="qd-gap-list">
             {filteredGaps.map((gap: QualityDiscoveryGap) => <article className="qd-gap" key={gap.id}>
               <div><span className={`qd-gap-risk is-${gap.risk.toLowerCase()}`}>{gap.risk}</span><span className="qd-gap-type">{t(`gapTypes.${gap.category}`, { defaultValue: gap.category })}</span><strong>{gap.title}</strong></div>
@@ -560,9 +583,10 @@ export function QualityDiscoveryPanel({
               {!!gap.evidence_ids.length && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" /><span>{t('evidence')}:</span>{gap.evidence_ids.map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading}>{id.slice(0, 10)}</button>)}</div>}
               <div className="qd-gap-actions">
                 {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING' && featureForGap(gap) && !hasRealRequirement(featureForGap(gap)!)) && <button type="button" className="btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'create_requirement_draft')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('createRequirementDraft')}</button>}
-                {gap.category === 'TEST_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id])} onClick={() => void runGapAction(gap, 'generate_tests')}>{t('generateTests')}</button>}
-                {gap.category === 'AUTOMATION_MISSING' && !!featureForGap(gap)?.test_case_ids?.length && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'generate_automation')}>{t('generateAutomation')}</button>}
+                {gap.category === 'TEST_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id])} title={!featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id]) ? t('needRequirementDraft') : undefined} onClick={() => void runGapAction(gap, 'generate_tests')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateTests')}</button>}
+                {gap.category === 'AUTOMATION_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap)?.test_case_ids?.length} title={!featureForGap(gap)?.test_case_ids?.length ? t('needTestCases') : undefined} onClick={() => void runGapAction(gap, 'generate_automation')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateAutomation')}</button>}
                 {gap.category === 'AUTOMATION_FAILING' && <button type="button" className="btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'open_failure')}>{t('openFailure')}</button>}
+                {!!gapActionHint(gap) && <span className="qd-gap-hint">{gapActionHint(gap)}</span>}
                 {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING') && requirementDraftActionId(run.result.gap_actions?.[gap.id]?.create_requirement_draft) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRequirementDraft(gap)}>{t('openRequirement')}</button>}
               </div>
             </article>)}
