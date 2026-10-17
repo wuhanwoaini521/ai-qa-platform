@@ -87,7 +87,7 @@ async def test_foreign_project_resources_are_invisible(client: AsyncClient, test
 
     async with await _as(client, email) as outsider:
         assert (await outsider.get(f"/api/requirements/{req_id}")).status_code == 404
-        assert (await outsider.get(f"/api/runs/run_acl")).status_code == 404
+        assert (await outsider.get("/api/runs/run_acl")).status_code == 404
         assert (await outsider.post("/api/runs/run_acl/cancel")).status_code == 404
         assert (await outsider.get("/api/workspaces", params={"project_id": foreign})).status_code == 404
         assert (await outsider.get("/api/runs", params={"project_id": foreign})).status_code == 404

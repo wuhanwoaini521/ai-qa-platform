@@ -133,6 +133,8 @@ discovery:
   max_events: 500
   max_evidence_chars: 9000
   max_screenshots: 20
+  # Frame cadence (ms) of the live discovery stream. Frames are viewport-only and never persisted.
+  live_frame_interval_ms: 1000
 
 # Failure creation and captured context. Character limits bound stored evidence size.
 failure:

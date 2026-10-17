@@ -31,6 +31,25 @@ def _headless_chrome_user_agent(browser_version: str) -> str:
     )
 
 
+#: Overlay used by the live discovery view: draws focus boxes on the page so plain screenshots show them.
+HIGHLIGHT_SCRIPT = r"""boxes => {
+  const layerId='__qaDiscoveryHighlights';
+  let layer=document.getElementById(layerId);
+  if(!layer){layer=document.createElement('div');layer.id=layerId;
+    layer.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    document.documentElement.appendChild(layer);}
+  layer.textContent='';
+  for(const box of (boxes||[]).slice(0,50)){
+    const mark=document.createElement('div');
+    const color=box.color||'#22d3ee';
+    mark.style.cssText='position:fixed;left:'+box.x+'px;top:'+box.y+'px;width:'+box.width+'px;height:'+box.height+
+      'px;border:2px solid '+color+';background:'+color+'22;border-radius:4px';
+    layer.appendChild(mark);
+  }
+  return (boxes||[]).length;
+}"""
+
+
 @dataclass
 class _PlaywrightResources:
     browser: Any
@@ -412,6 +431,13 @@ class PlaywrightBrowserRuntime:
           const testId=el.getAttribute('data-testid');
           const id=el.getAttribute('id');
           const visible=!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);
+          const rect=el.getBoundingClientRect();
+          const boundingBox={x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)};
+          const visibleWidth=Math.max(0,Math.min(rect.right,window.innerWidth||0)-Math.max(rect.left,0));
+          const visibleHeight=Math.max(0,Math.min(rect.bottom,window.innerHeight||0)-Math.max(rect.top,0));
+          const area=rect.width*rect.height;
+          const inViewport=visibleWidth>0&&visibleHeight>0;
+          const visibleRatio=area>0?Math.round((visibleWidth*visibleHeight/area)*100)/100:0;
           const enabled=!(el.disabled || el.getAttribute('aria-disabled')==='true');
           const selectedText=tag==='select' ? (el.selectedOptions[0]?.textContent || '').trim() : '';
           const hasSelectValue=tag==='select' && !!el.value && !/^(choose|select|pick|please select|--|none|尺码|请选择)/i.test(selectedText);
@@ -419,8 +445,31 @@ class PlaywrightBrowserRuntime:
           const checked=!!(el.checked || el.getAttribute('aria-checked')==='true');
           const value=tag==='select' ? el.value : '';
           const options=tag==='select' ? Array.from(el.options).slice(0,30).map(option => ({value:option.value,enabled:!option.disabled})) : [];
-          return {index,tag,type,role,name,href,test_id:testId,id,visible,enabled,selected,checked,value,options};
+          return {index,tag,type,role,name,href,test_id:testId,id,visible,enabled,selected,checked,value,options,bounding_box:boundingBox,in_viewport:inViewport,visible_ratio:visibleRatio};
         })""")
+
+    async def capture_frame(
+        self,
+        session_id: str,
+        *,
+        image_type: str = "jpeg",
+        quality: int = 55,
+        timeout_ms: int = 1000,
+    ) -> bytes | None:
+        """Viewport-only frame for a live viewer. Never raises: a slow or busy page must not break the stream."""
+        try:
+            page = await self.get_page(session_id)
+            return await page.screenshot(type=image_type, quality=quality, timeout=timeout_ms, full_page=False)
+        except Exception:
+            return None
+
+    async def paint_highlights(self, session_id: str, boxes: list[dict[str, Any]]) -> int:
+        """Draw a pointer-events-free overlay on the live page so screenshots carry the focus area."""
+        try:
+            page = await self.get_page(session_id)
+            return int(await page.evaluate(HIGHLIGHT_SCRIPT, boxes or []))
+        except Exception:
+            return 0
 
     async def collect_evidence(self, session_id: str) -> BrowserSnapshot:
         return await self.snapshot(session_id)

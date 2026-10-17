@@ -66,10 +66,13 @@ class ApiKeyService:
 
 
 class StreamResourceService:
-    def __init__(self, run_repo, task_repo, project_repo, recorder_service, debug_session_service):
+    def __init__(
+        self, run_repo, task_repo, project_repo, recorder_service, debug_session_service, discovery_repo=None
+    ):
         self.run_repo = run_repo
         self.task_repo = task_repo
         self.project_repo = project_repo
+        self.discovery_repo = discovery_repo
         self.recorder_service = recorder_service
         self.debug_session_service = debug_session_service
 
@@ -84,6 +87,9 @@ class StreamResourceService:
             return await self.recorder_service.get(resource_id, owner_id) is not None
         if kind == "debug":
             return await self.debug_session_service.get(resource_id, owner_id) is not None
+        if kind == "discovery":
+            # Existence only: the discovery stream endpoint still enforces project access itself.
+            return self.discovery_repo is not None and await self.discovery_repo.get(resource_id) is not None
         return False
 
 

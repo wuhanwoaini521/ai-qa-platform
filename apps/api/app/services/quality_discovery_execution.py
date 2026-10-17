@@ -14,12 +14,14 @@ from project_model.lifecycle import StructuredRequirementModel
 from project_model.models import DecisionOption, DecisionRequest
 from qa_core.ai.browser_safety import classify_browser_action
 from qa_core.ai.models import AICompletionRequest
+from qa_core.ai.provider import AIProviderError
 from qa_core.failure.redactor import SensitiveRedactor
 
 from app.persistence.models import QualityDiscoveryRunORM, utc_now
 from app.repositories.artifact_repo import ArtifactRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.services.artifact_storage_service import ArtifactStorageService
+from app.services.quality_discovery_live import event_payload
 from app.services.quality_discovery_models import (
     DiscoveryBlocked,
     DiscoveryMode,
@@ -66,7 +68,10 @@ class QualityDiscoveryExecutionMixin:
             await self._event(run_id, "run.started", "正在初始化产品探索。")
             requirement_input = await self._requirement_input(row)
             if requirement_input and not result.get("requirements"):
-                analysis = await self._analyze_requirements(run_id, requirement_input)
+                try:
+                    analysis = await self._analyze_requirements(run_id, requirement_input)
+                except AIProviderError as error:
+                    analysis = await self._degraded_analysis(run_id, requirement_input, error)
                 result = await self._append_requirements(run_id, analysis)
             allow_cart_mutation = row.mode in {DiscoveryMode.VALIDATE.value, DiscoveryMode.AUDIT.value} and bool(
                 requirement_input and self._requirement_allows_cart_mutation(requirement_input["text"])
@@ -87,6 +92,7 @@ class QualityDiscoveryExecutionMixin:
                 raise DiscoveryBlocked("Navigation redirected outside the start domain and allowed domain list.")
             if response_status is not None and response_status >= 500:
                 raise DiscoveryBlocked(f"Start URL returned HTTP {response_status}; exploration stopped.")
+            self.track_live_browser(run_id, session_id=session_id, url=self._safe_url(page.url))
 
             started = time.monotonic()
             persisted_elapsed = max(0.0, (utc_now() - row.created_at).total_seconds())
@@ -172,6 +178,8 @@ class QualityDiscoveryExecutionMixin:
                     f"已观察：{safe_title or self._safe_url(snapshot.url)}",
                     {"state_id": state_id},
                 )
+                self.track_live_browser(run_id, url=self._safe_url(snapshot.url))
+                await self._publish_element_inventory(run_id, state_id, state)
 
                 depth_limited = int(state.get("depth", 0)) >= config.max_depth
                 blocked_candidates = self._blocked_candidates(
@@ -235,8 +243,14 @@ class QualityDiscoveryExecutionMixin:
 
                 all_pending = pending
                 pending = all_pending[: config.max_candidates]
+                await self._highlight_candidates(session_id, pending)
                 await self._record_frontier(run_id, state_id, all_pending, "PENDING", "安全候选动作等待 Jev 分批选择。")
-                plan = await self._plan_next(run_id, row, snapshot, state, pending, result.get("requirements") or [])
+                try:
+                    plan = await self._plan_next(
+                        run_id, row, snapshot, state, pending, result.get("requirements") or []
+                    )
+                except AIProviderError as error:
+                    plan = await self._degraded_plan(run_id, error)
                 await self._record_ai(run_id, plan.pop("_usage"))
                 result = await self._record_features(run_id, plan, state)
                 for candidate in pending:
@@ -426,6 +440,22 @@ class QualityDiscoveryExecutionMixin:
                     )
                     raise DiscoveryBlocked("决策服务未返回可执行的候选动作。")
                 selected = choices[decision.choice]
+                await self._highlight_candidates(session_id, [selected], color="#f59e0b")
+                self.live.publish(
+                    run_id,
+                    event_payload(
+                        "action.planned",
+                        seq=self._event_seq.get(run_id, 0),
+                        message=f"准备执行：{selected['target']}",
+                        metadata={
+                            "candidate_id": selected["candidate_id"],
+                            "action_type": selected.get("action_type"),
+                            "target": selected.get("target"),
+                            "target_box": selected.get("bounding_box"),
+                            "decision_id": decision_id,
+                        },
+                    ),
+                )
                 await self._record_frontier(run_id, state_id, [selected], "SELECTED", "Jev 选择了此候选动作。")
                 await self._event(
                     run_id,
@@ -459,6 +489,70 @@ class QualityDiscoveryExecutionMixin:
                     except asyncio.CancelledError:
                         continue
                 close_task.result()
+
+    async def _publish_element_inventory(self, run_id: str, state_id: str, state: dict[str, Any]) -> None:
+        """Stream the observed interactive elements, with geometry, so the live UI can render them."""
+        elements = [
+            {
+                "index": control.get("index"),
+                "tag": control.get("tag"),
+                "role": control.get("role"),
+                "name": control.get("name"),
+                "actionable": bool(control.get("enabled", True)),
+                "in_viewport": bool(control.get("in_viewport", False)),
+                "visible_ratio": control.get("visible_ratio", 0),
+                "bounding_box": control.get("bounding_box"),
+                "locator": self._locator_for_control(control),
+            }
+            for control in (state.get("controls") or [])[:60]
+        ]
+        await self._event(
+            run_id,
+            "element.inventory",
+            f"已识别 {len(elements)} 个可交互元素。",
+            {"state_id": state_id, "elements": elements},
+        )
+
+    async def _highlight_candidates(
+        self, session_id: str, candidates: list[dict[str, Any]], color: str = "#22d3ee"
+    ) -> None:
+        """Draw the focus area on the page itself so plain screenshots show what is being considered."""
+        boxes = [
+            {**box, "color": color}
+            for candidate in candidates
+            if isinstance(box := candidate.get("bounding_box"), dict) and box.get("width") and box.get("height")
+        ]
+        if boxes:
+            paint = getattr(self.browser_runtime, "paint_highlights", None)
+            if callable(paint):
+                await paint(session_id, boxes)
+
+    async def _ai_unavailable(self, run_id: str, stage: str, error: Exception) -> None:
+        safe_message = getattr(error, "safe_message", "") or "AI Provider 不可用。"
+        await self._event(
+            run_id,
+            "ai.unavailable",
+            f"AI {stage} 不可用，本次探索降级为确定性策略：{safe_message}",
+            {"stage": stage, "code": getattr(error, "code", None)},
+        )
+
+    async def _degraded_analysis(self, run_id: str, requirement: dict[str, str], error: Exception) -> dict[str, Any]:
+        await self._ai_unavailable(run_id, "需求分析", error)
+        structured = StructuredRequirementModel(source_id=requirement["source_id"], features=[], ambiguities=[])
+        return {"requirements": [], "requirement_model": structured.model_dump(mode="json"), "ambiguities": []}
+
+    async def _degraded_plan(self, run_id: str, error: Exception) -> dict[str, Any]:
+        """AI planning is guidance, not the decision: Jev still picks from service-generated candidates."""
+        await self._ai_unavailable(run_id, "探索规划", error)
+        return {
+            "page_type": "unknown",
+            "features": [],
+            "goals": [],
+            "candidate_ids": [],
+            "done": False,
+            "reason_summary": "AI unavailable; deterministic candidate order applies.",
+            "_usage": {"provider": "unavailable", "model": None, "input_tokens": 0, "output_tokens": 0},
+        }
 
     async def _requirement_input(self, row: QualityDiscoveryRunORM) -> dict[str, str] | None:
         text = row.requirement_text
@@ -833,6 +927,15 @@ class QualityDiscoveryExecutionMixin:
             await self._record_frontier(run_id, state["state_id"], [candidate], "FAILED", action_record["error"])
             await self._event(run_id, "action.failed", f"动作失败：{candidate['target']}")
 
+    @staticmethod
+    def _safe_box(box: Any) -> dict[str, int] | None:
+        if not isinstance(box, dict):
+            return None
+        try:
+            return {key: int(box.get(key, 0)) for key in ("x", "y", "width", "height")}
+        except (TypeError, ValueError):
+            return None
+
     def _candidate_actions(
         self,
         state: dict[str, Any],
@@ -959,6 +1062,7 @@ class QualityDiscoveryExecutionMixin:
                     "href": href,
                     "risk": safe_kind,
                     "cart_variant_key": self._cart_variant_key(state) if cart_mutation else None,
+                    "bounding_box": control.get("bounding_box"),
                 }
             )
         if (
@@ -1126,6 +1230,9 @@ class QualityDiscoveryExecutionMixin:
                     "id": SensitiveRedactor.redact_text(str(control.get("id") or ""))[:120],
                     "visible": True,
                     "enabled": bool(control.get("enabled", True)),
+                    # Layout only: the live view draws its focus box from these coordinates.
+                    "bounding_box": cls._safe_box(control.get("bounding_box")),
+                    "in_viewport": bool(control.get("in_viewport", False)),
                     "selected": bool(control.get("selected", False)),
                     "checked": bool(control.get("checked", False)),
                     "selection_fingerprint": (

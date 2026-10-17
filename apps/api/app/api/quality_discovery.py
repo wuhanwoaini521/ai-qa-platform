@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from project_model.models import Permission, User, UserRole
 from project_model.task_models import Task
 
@@ -157,6 +158,23 @@ async def get_discovery_events(
     if run is None:
         raise HTTPException(status_code=404, detail="Quality Discovery run not found")
     return (run.result.get("events", []) or [])[-limit:]
+
+
+@router.get("/runs/{run_id}/stream")
+async def stream_discovery_run(
+    run_id: str,
+    _user: User = Depends(get_current_user),
+    service: QualityDiscoveryService = Depends(get_quality_discovery_service),
+):
+    """Live view of one run: persisted history first, then live events interleaved with browser frames."""
+    run = await service.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Quality Discovery run not found")
+    return StreamingResponse(
+        service.event_generator(run_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/runs/{run_id}/journeys")

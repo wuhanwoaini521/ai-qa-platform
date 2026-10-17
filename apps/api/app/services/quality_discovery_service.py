@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import weakref
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 from uuid import uuid4
 
 from project_model.lifecycle import StructuredRequirementModel
@@ -15,6 +16,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.event_stream import event_frame
 from app.persistence.models import QualityDiscoveryRunORM, utc_now
 from app.ports.browser_runtime import BrowserRuntime
 from app.repositories.project_repo import ProjectRepository
@@ -26,6 +28,7 @@ from app.services.decision_service import DecisionService
 from app.services.quality_discovery_draft import QualityDiscoveryDraftMixin
 from app.services.quality_discovery_execution import QualityDiscoveryExecutionMixin, tag_is_text
 from app.services.quality_discovery_graph import QualityDiscoveryGraphMixin
+from app.services.quality_discovery_live import DiscoveryLiveHub, event_payload
 from app.services.quality_discovery_models import (
     DiscoveryBlocked,
     DiscoveryGoal,
@@ -123,6 +126,10 @@ class QualityDiscoveryService(
         self._finalization_tasks: set[asyncio.Task] = set()
         self._finalizing: set[str] = set()
         self._gap_action_locks: dict[tuple[str, str, str], _GapActionLockEntry] = {}
+        self.live = DiscoveryLiveHub()
+        self._live_sessions: dict[str, str] = {}
+        self._live_urls: dict[str, str] = {}
+        self._event_seq: dict[str, int] = {}
 
     def _assert_runtime_ready(self, config) -> None:
         if not self._uses_runtime_provider:
@@ -719,6 +726,7 @@ class QualityDiscoveryService(
             if row is None or row.status not in {DiscoveryStatus.QUEUED.value, DiscoveryStatus.RUNNING.value}:
                 return None
             self._resume_events.setdefault(run_id, asyncio.Event()).clear()
+            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停。")
             return await self._update(run_id, status=DiscoveryStatus.PAUSED.value)
 
     async def resume(self, run_id: str) -> QualityDiscoveryRunORM | None:
@@ -734,6 +742,7 @@ class QualityDiscoveryService(
             self._stop_events.setdefault(run_id, asyncio.Event()).clear()
             if row.status == DiscoveryStatus.PAUSED.value:
                 await self._update(run_id, status=DiscoveryStatus.RUNNING.value)
+                self._live_status(run_id, DiscoveryStatus.RUNNING.value, "探索已继续。")
             active = self._tasks.get(run_id)
             if active is None or active.done():
                 self._schedule(run_id)
@@ -790,6 +799,97 @@ class QualityDiscoveryService(
             del events[: -get_config().discovery.max_events]
 
         await self._change_result(run_id, change)
+        seq = self._event_seq.get(run_id, 0) + 1
+        self._event_seq[run_id] = seq
+        self.live.publish(run_id, event_payload(event_type, seq=seq, message=message, metadata=metadata))
+
+    # --- live stream ---------------------------------------------------------------------------
+
+    def track_live_browser(self, run_id: str, *, session_id: str | None = None, url: str | None = None) -> None:
+        """Remember where the run's browser is, so a viewer can attach without touching the run itself."""
+        if session_id:
+            self._live_sessions[run_id] = session_id
+        if url:
+            self._live_urls[run_id] = url
+
+    def _live_status(self, run_id: str, status: str, message: str) -> None:
+        self.live.publish(
+            run_id,
+            event_payload(
+                "run.status", seq=self._event_seq.get(run_id, 0), message=message, metadata={"status": status}
+            ),
+        )
+
+    async def event_generator(self, run_id: str) -> AsyncGenerator[str, None]:
+        """SSE frames for one run: persisted history first, then live events interleaved with frames."""
+        row = await self.get(run_id)
+        if row is None:
+            return
+        yield event_frame(
+            "snapshot",
+            {
+                "type": "snapshot",
+                "seq": 0,
+                "status": row.status,
+                "progress": row.progress or {},
+                "events": ((row.result or {}).get("events") or [])[-100:],
+                "at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        if row.status in self.TERMINAL:
+            yield event_frame("run.finished", event_payload("run.finished", seq=0, metadata={"status": row.status}))
+            return
+        pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
+        try:
+            async for payload in self.live.subscribe(run_id):
+                yield event_frame(str(payload.get("type") or "message"), payload)
+        finally:
+            pump.cancel()
+
+    async def _pump_frames(self, run_id: str) -> None:
+        """Capture viewport frames only while a viewer is attached; frames are never persisted.
+
+        Runs off the executor's critical path: a slow paint costs a frame, never an action.
+        """
+        interval = get_config().discovery.live_frame_interval_ms / 1000
+        try:
+            while self.live.has_subscribers(run_id):
+                row = await self.get(run_id)
+                if row is None:
+                    return
+                if row.status in self.TERMINAL:
+                    self.live.publish(
+                        run_id,
+                        event_payload(
+                            "run.finished",
+                            seq=self._event_seq.get(run_id, 0),
+                            message="探索已结束。",
+                            metadata={"status": row.status},
+                        ),
+                    )
+                    return
+                session_id = self._live_sessions.get(run_id)
+                capture = getattr(self.browser_runtime, "capture_frame", None)
+                if session_id and callable(capture):
+                    data = await capture(session_id)
+                    if data:
+                        self.live.publish_frame(
+                            run_id,
+                            event_payload(
+                                "browser.frame",
+                                seq=self._event_seq.get(run_id, 0),
+                                metadata={
+                                    "mime_type": "image/jpeg",
+                                    "url": self._live_urls.get(run_id, ""),
+                                    "frame": base64.b64encode(data).decode("ascii"),
+                                },
+                            ),
+                        )
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:  # a viewer must never be able to break the run
+            logger.warning("Discovery live frame pump stopped error_type=%s", type(error).__name__)
 
     async def _finish(self, run_id: str, status: str, error: str | None) -> None:
         task = asyncio.create_task(
@@ -829,8 +929,21 @@ class QualityDiscoveryService(
                     run_id, status=status, error=error, finished_at=utc_now() if status in self.TERMINAL else None
                 )
                 await self._event(run_id, f"run.{status.lower()}", error or f"探索状态：{status}")
+                self.live.publish(
+                    run_id,
+                    event_payload(
+                        "run.finished",
+                        seq=self._event_seq.get(run_id, 0),
+                        message=f"探索状态：{status}",
+                        metadata={"status": status},
+                    ),
+                )
         finally:
             self._finalizing.discard(run_id)
+            # The live view is ephemeral: a finished run keeps its persisted evidence, not its frames.
+            self._live_sessions.pop(run_id, None)
+            self._live_urls.pop(run_id, None)
+            self._event_seq.pop(run_id, None)
 
     async def _change_result(self, run_id: str, change: Callable[[dict[str, Any]], None]) -> None:
         for attempt in range(5):

@@ -159,6 +159,8 @@ class DiscoverySettings(ConfigSection):
     max_events: int = Field(default=500, ge=20, le=5000)
     max_evidence_chars: int = Field(default=9000, ge=1000, le=100_000)
     max_screenshots: int = Field(default=20, ge=0, le=200)
+    #: Frame cadence of the live discovery stream; frames are viewport-only and never persisted.
+    live_frame_interval_ms: int = Field(default=1000, ge=100, le=10_000)
 
 
 class FailureSettings(ConfigSection):

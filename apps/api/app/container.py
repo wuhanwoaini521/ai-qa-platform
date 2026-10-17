@@ -18,6 +18,7 @@ from app.repositories.failure_repo import FailureRepository
 from app.repositories.integration_audit_repo import IntegrationAuditRepository
 from app.repositories.project_access_repo import ProjectAccessRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.repositories.release_repo import ReleaseRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.run_history_repo import RunHistoryRepository
@@ -343,6 +344,7 @@ def get_stream_resource_service(session: AsyncSession = Depends(get_db)) -> Stre
         ProjectRepository(session),
         recorder_service,
         debug_session_service,
+        QualityDiscoveryRepository(session),
     )
 
 

@@ -24,7 +24,7 @@ auth_service = AuthService()
 
 
 class StreamTicketRequest(BaseModel):
-    kind: Literal["run", "task", "recorder", "debug", "lsp"]
+    kind: Literal["run", "task", "recorder", "debug", "lsp", "discovery"]
     resource_id: str = Field(min_length=1, max_length=128)
 
 
@@ -40,6 +40,7 @@ async def create_stream_ticket(
         "recorder": Permission.AUTOMATION_EDIT,
         "debug": Permission.RUN_EXECUTE,
         "lsp": Permission.PROJECT_READ,
+        "discovery": Permission.PROJECT_READ,
     }[payload.kind]
     if not has_permission(user, permission):
         raise HTTPException(status_code=403, detail="Insufficient permission for this stream")
