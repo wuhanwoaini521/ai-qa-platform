@@ -278,3 +278,28 @@ def test_locator_repair_migration_backfills_legacy_state_and_downgrades_cleanly(
         assert connection.scalar(text("SELECT COUNT(*) FROM locator_repairs")) == 3
         assert connection.scalar(text("SELECT COUNT(*) FROM locator_repairs WHERE analysis_id='analysis'")) == 1
     engine.dispose()
+
+
+def test_project_ownership_migration_survives_a_previously_unaltered_column(tmp_path):
+    """A database altered outside alembic must still start.
+
+    Real incident: runtime/ai_qa_platform.db already had projects.owner_id (added by hand) while
+    alembic_version still said 0012, so `ALTER TABLE projects ADD COLUMN owner_id` failed with
+    "duplicate column name" and the whole API refused to boot.
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'drift.db'}")
+    with engine.begin() as connection:
+        upgrade_database(connection, "0012_debug_session_lineage")
+        connection.execute(
+            text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL")
+        )
+        upgrade_database(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
+        columns = {column["name"] for column in inspect(connection).get_columns("projects")}
+        indexes = {index["name"] for index in inspect(connection).get_indexes("projects")}
+        assert {"owner_id", "team_id"} <= columns
+        assert {"ix_projects_owner_id", "ix_projects_team_id"} <= indexes
+        # Re-running the head revision must stay a no-op rather than raising again.
+        upgrade_database(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
+    engine.dispose()

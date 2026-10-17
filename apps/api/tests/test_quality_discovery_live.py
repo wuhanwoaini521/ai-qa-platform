@@ -318,3 +318,58 @@ async def test_ai_provider_failure_degrades_to_deterministic_exploration(client,
     assert events.index("state.observed") > events.index("ai.unavailable"), events
     assert body["result"]["states"], "collected page evidence must not be lost when the AI is down"
     assert body["result"]["decisions"], "Jev must still choose from service-generated candidates"
+
+
+async def _drain_generator(service, run_id: str, *, budget: float) -> list[str]:
+    """Collect the raw SSE frames of one stream, failing loudly instead of hanging."""
+    frames: list[str] = []
+
+    async def consume() -> None:
+        async for frame in service.event_generator(run_id):
+            frames.append(frame)
+
+    await asyncio.wait_for(consume(), timeout=budget)
+    return frames
+
+
+async def test_viewer_attaching_after_finalization_is_not_left_waiting(test_db_session, monkeypatch):
+    """A run can finalize between the stream's status read and its subscription.
+
+    In that window the terminal event is published while no subscriber is attached AND the frame pump
+    has already been cancelled by finalization, so nothing can wake the viewer up. Before the safety
+    net in ``event_generator`` this blocked the read (and the test process) forever.
+    """
+    service = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=DiscoveryFixtureBrowserRuntime(),
+        provider_factory=lambda: DiscoveryFixtureAI(),
+        decisions=_OfflineDecisions(),
+    )
+    run_id = "qd_late_viewer_unit"
+    # The terminal event was published with nobody attached, so it went nowhere.
+    service.live.publish(run_id, event_payload("run.finished", seq=9, metadata={"status": "COMPLETED"}))
+    assert not service.live.has_subscribers(run_id)
+
+    monkeypatch.setattr(discovery_module, "LIVE_STREAM_IDLE_TIMEOUT_S", 0.2)
+    calls = {"count": 0}
+
+    async def get(_run_id: str):
+        calls["count"] += 1
+        status = "RUNNING" if calls["count"] == 1 else "COMPLETED"
+        return SimpleNamespace(status=status, progress={}, result={})
+
+    monkeypatch.setattr(service, "get", get)
+    # Model the pump that finalization already cancelled: present, but it never publishes again.
+    stale_pump = asyncio.create_task(asyncio.sleep(30))
+    service._pumps[run_id] = stale_pump
+    try:
+        frames = await _drain_generator(service, run_id, budget=10)
+    finally:
+        stale_pump.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await stale_pump
+
+    assert frames[0].startswith("event: snapshot"), frames[:1]
+    assert frames[-1].startswith("event: run.finished"), frames[-1]
+    assert '"COMPLETED"' in frames[-1]
+    assert calls["count"] >= 2, "the stream must re-read the run row instead of waiting forever"

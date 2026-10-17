@@ -52,6 +52,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("app.quality_discovery")
 
+#: A viewer must never wait forever. If no event arrives for this long the stream re-reads the run
+#: row, because a run can finalize between the status check in ``event_generator`` and its
+#: subscription: the terminal event is then published while no subscriber is attached and the frame
+#: pump is already cancelled, so nothing would ever wake the viewer up.
+LIVE_STREAM_IDLE_TIMEOUT_S = 3.0
+
 __all__ = [
     "DiscoveryBlocked",
     "DiscoveryGoal",
@@ -849,10 +855,29 @@ class QualityDiscoveryService(
             # One pump per run, shared by every viewer: two viewers must not double the screenshot cost.
             pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
             self._pumps[run_id] = pump
-        async for payload in self.live.subscribe(run_id):
-            yield event_frame(str(payload.get("type") or "message"), payload)
-        # The pump stops on its own once the last viewer leaves (it loops on ``has_subscribers``)
-        # and finalization cancels it; a single viewer leaving must not disturb the others.
+        subscription = self.live.subscribe(run_id)
+        try:
+            while True:
+                try:
+                    payload = await asyncio.wait_for(subscription.__anext__(), timeout=LIVE_STREAM_IDLE_TIMEOUT_S)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    # The run may have ended in the window above; re-read the row instead of waiting on
+                    # an event that will never arrive. The pump also stops on its own once the last
+                    # viewer leaves and finalization cancels it, so this is the safety net, not the
+                    # normal path.
+                    latest = await self.get(run_id)
+                    if latest is None or latest.status in self.TERMINAL:
+                        status = getattr(latest, "status", "COMPLETED")
+                        yield event_frame(
+                            "run.finished", event_payload("run.finished", seq=0, metadata={"status": status})
+                        )
+                        break
+                    continue
+                yield event_frame(str(payload.get("type") or "message"), payload)
+        finally:
+            await subscription.aclose()
 
     async def _live_viewport(self, session_id: str) -> dict[str, int]:
         """Viewport size of the run's browser, so a viewer can place element boxes over the frame."""

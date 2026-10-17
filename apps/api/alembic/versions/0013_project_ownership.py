@@ -19,7 +19,17 @@ def upgrade():
     # Nullable on purpose: pre-existing projects stay admin-only until a security admin claims them,
     # so this migration never grants access that was not explicitly recorded.
     connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    existing = {column["name"] for column in inspector.get_columns("projects")}
+    indexes = {index["name"] for index in inspector.get_indexes("projects")}
     for name, target in _COLUMNS:
+        # Tolerant of drift: a database that was altered outside alembic (or where a previous run
+        # failed between the two statements) must still start instead of failing on
+        # "duplicate column name" / "index already exists".
+        if name in existing:
+            if f"ix_projects_{name}" not in indexes:
+                op.create_index(f"ix_projects_{name}", "projects", [name])
+            continue
         if connection.dialect.name == "sqlite":
             # SQLite can add a nullable REFERENCES column directly. Rebuilding `projects` instead
             # would cascade-delete every child row while FK enforcement is on (same reason as 0003).
