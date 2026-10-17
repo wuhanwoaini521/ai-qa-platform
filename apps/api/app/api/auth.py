@@ -56,9 +56,15 @@ async def create_stream_ticket(
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest) -> LoginResponse:
+async def login(request: LoginRequest, http_request: Request) -> LoginResponse:
     await auth_service.ensure_default_users()
-    res = await auth_service.login(email=request.email, password=request.password)
+    res = await auth_service.login(
+        email=request.email,
+        password=request.password,
+        # Audit rows are only useful when they carry the real client; "127.0.0.1" was a lie for
+        # every remote caller.
+        ip_address=http_request.client.host if http_request.client else "unknown",
+    )
     if not res:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -367,5 +367,6 @@
     "ERROR": "Error",
     "CANCELLED": "Cancelled"
   },
-  "unknownValue": "Unknown"
+  "unknownValue": "Unknown",
+  "loadFailed": "Failed to load test failures: {{message}}"
 }

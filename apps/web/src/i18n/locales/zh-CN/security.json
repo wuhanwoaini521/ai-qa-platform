@@ -84,5 +84,6 @@
     "statusLabel": "状态：",
     "ipLabel": "IP：",
     "payloadLabel": "载荷详情："
-  }
+  },
+  "actionFailed": "操作失败：{{message}}"
 }

@@ -42,6 +42,10 @@ class TestRailService:
         else:
             self.adapter = FakeTestRailAdapter()
 
+        # The fake adapter reports published runs with a synthetic run id; callers and the audit
+        # trail must not mistake that for a real TestRail write (integration disabled).
+        self.simulated = isinstance(self.adapter, FakeTestRailAdapter)
+
     def list_cases(self, suite_id: str = "S101", limit: int = 50) -> list[TestRailCase]:
         return self.adapter.list_cases(suite_id=suite_id, limit=limit)
 
@@ -93,7 +97,11 @@ class TestRailService:
             case_mappings=mappings,
         )
 
-        status_str = "SUCCESS" if resp.published else ("DRY_RUN" if resp.success else "FAILED")
+        status_str = "SUCCESS" if resp.published and not self.simulated else ("DRY_RUN" if resp.success else "FAILED")
+        if self.simulated and resp.published:
+            resp = resp.model_copy(
+                update={"message": f"[simulated] TestRail integration is disabled; nothing was sent. {resp.message}"}
+            )
         await self.audit_repo.record(
             system="TESTRAIL",
             action="PUBLISH_RESULT",
@@ -105,6 +113,7 @@ class TestRailService:
                 "suite_id": request.suite_id,
                 "confirm_publish": request.confirm_publish,
                 "total_published": resp.total_published,
+                "simulated": self.simulated,
                 "message": resp.message,
             },
         )

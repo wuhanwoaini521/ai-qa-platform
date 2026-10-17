@@ -68,6 +68,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   const [newReleaseTargetDate, setNewReleaseTargetDate] = useState<string>('');
   const [newReleaseThreshold, setNewReleaseThreshold] = useState<number>(95.0);
   const [creatingRelease, setCreatingRelease] = useState<boolean>(false);
+  const [releaseActionError, setReleaseActionError] = useState<string | null>(
+    null,
+  );
 
   // Gate Report state
   const [selectedGateReport, setSelectedGateReport] = useState<ReleaseGateReport | null>(null);
@@ -221,6 +224,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
     if (!selectedProjectId || !newReleaseVersion || !newReleaseName) return;
     try {
       setCreatingRelease(true);
+      setReleaseActionError(null);
       const created = await api.createRelease({
         project_id: selectedProjectId,
         version: newReleaseVersion,
@@ -235,6 +239,8 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       setNewReleaseTargetDate('');
     } catch (err) {
       console.error('Failed to create release', err);
+      // Keep the modal open, but tell the user why nothing happened.
+      setReleaseActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreatingRelease(false);
     }
@@ -243,6 +249,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   const handleEvaluateGate = async (releaseId: string) => {
     try {
       setEvaluatingGateId(releaseId);
+      setReleaseActionError(null);
       const report = await api.evaluateReleaseGate(releaseId);
       setSelectedGateReport(report);
       // Refresh releases
@@ -252,6 +259,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       }
     } catch (err) {
       console.error('Failed to evaluate release gate', err);
+      setReleaseActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setEvaluatingGateId(null);
     }
@@ -738,6 +746,16 @@ export const QualityPage: React.FC<QualityPageProps> = ({
 
       {/* Tab 4: Releases & Gate Dashboard */}
       {activeTab === 'releases' && (
+        <>
+          {releaseActionError && (
+            <div
+              className="async-state async-state-error"
+              role="alert"
+              style={{ marginBottom: '1rem' }}
+            >
+              {t('releaseActionFailed', { message: releaseActionError })}
+            </div>
+          )}
         <div className="card">
           <div className="card-header">
             <h3>{t('releasesTitle')}</h3>
@@ -811,6 +829,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* Modal: Create Release */}
@@ -825,6 +844,11 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             </div>
             <form onSubmit={handleCreateRelease}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {releaseActionError && (
+                  <div className="async-state async-state-error" role="alert">
+                    {t('releaseActionFailed', { message: releaseActionError })}
+                  </div>
+                )}
                 <div className="form-group">
                   <label>{t('createReleaseVersionLabel')}</label>
                   <input

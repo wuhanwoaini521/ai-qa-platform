@@ -55,5 +55,6 @@
   "systemStatus": "系统",
   "aiProvider": "AI 提供方",
   "runners": "执行节点",
-  "local": "本地"
+  "local": "本地",
+  "dismiss": "关闭"
 }

@@ -101,5 +101,6 @@
   "gateCheckPassed": "通过",
   "gateCheckFailed": "未通过",
   "gateBlockingIssues": "阻塞问题（{{value}}）：",
-  "gateCloseReport": "关闭报告"
+  "gateCloseReport": "关闭报告",
+  "releaseActionFailed": "操作失败：{{message}}"
 }

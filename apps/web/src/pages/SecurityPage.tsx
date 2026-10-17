@@ -56,6 +56,10 @@ export const SecurityPage: React.FC = () => {
   const [loadingAudit, setLoadingAudit] = useState<boolean>(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<SecurityAuditLogEntry | null>(null);
 
+  // Every load and mutation on this admin-only page used to fail silently; a 403 looked
+  // exactly like an empty table.
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true);
@@ -63,6 +67,7 @@ export const SecurityPage: React.FC = () => {
       setUsers(data);
     } catch (err) {
       console.error('Failed to load users', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingUsers(false);
     }
@@ -75,6 +80,7 @@ export const SecurityPage: React.FC = () => {
       setTeams(data);
     } catch (err) {
       console.error('Failed to load teams', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingTeams(false);
     }
@@ -87,6 +93,7 @@ export const SecurityPage: React.FC = () => {
       setApiKeys(data);
     } catch (err) {
       console.error('Failed to load API keys', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingKeys(false);
     }
@@ -99,6 +106,7 @@ export const SecurityPage: React.FC = () => {
       setAuditLogs(data);
     } catch (err) {
       console.error('Failed to load security audit logs', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingAudit(false);
     }
@@ -128,6 +136,7 @@ export const SecurityPage: React.FC = () => {
       setNewUserRole('QA_ENGINEER');
     } catch (err) {
       console.error('Failed to create user', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreatingUser(false);
     }
@@ -139,6 +148,7 @@ export const SecurityPage: React.FC = () => {
       setUsers(users.map((u) => (u.id === userId ? updated : u)));
     } catch (err) {
       console.error('Failed to update role', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -157,6 +167,7 @@ export const SecurityPage: React.FC = () => {
       setNewTeamDescription('');
     } catch (err) {
       console.error('Failed to create team', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreatingTeam(false);
     }
@@ -174,6 +185,7 @@ export const SecurityPage: React.FC = () => {
       setShowCreateKeyModal(false);
     } catch (err) {
       console.error('Failed to generate API key', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreatingKey(false);
     }
@@ -185,6 +197,7 @@ export const SecurityPage: React.FC = () => {
       setApiKeys(apiKeys.filter((k) => k.id !== keyId));
     } catch (err) {
       console.error('Failed to revoke key', err);
+      setActionError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -212,6 +225,23 @@ export const SecurityPage: React.FC = () => {
 
   return (
     <div className="page-container">
+      {actionError && (
+        <div
+          className="async-state async-state-error"
+          role="alert"
+          style={{ marginBottom: '1rem' }}
+        >
+          {t('actionFailed', { message: actionError })}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ marginTop: '8px' }}
+            onClick={() => setActionError(null)}
+          >
+            {t('common:dismiss')}
+          </button>
+        </div>
+      )}
       {/* Page Header */}
       <div className="page-header">
         <div>

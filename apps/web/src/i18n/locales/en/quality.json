@@ -101,5 +101,6 @@
   "gateCheckPassed": "Passed",
   "gateCheckFailed": "Failed",
   "gateBlockingIssues": "Blocking Issues ({{value}}):",
-  "gateCloseReport": "Close Report"
+  "gateCloseReport": "Close Report",
+  "releaseActionFailed": "Action failed: {{message}}"
 }

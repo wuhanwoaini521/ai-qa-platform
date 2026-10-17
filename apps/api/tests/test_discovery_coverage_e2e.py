@@ -600,6 +600,7 @@ def test_discovered_search():
             await page.get_by_role("heading", name="QA 项目").first.wait_for(timeout=15000)
             await _shot(page, path=str(round4_evidence / "project-navigation-click.png"), full_page=True)
             route_metrics = []
+            error_surfaces_seen: list[str] = []
             for name, path in page_routes:
                 print(f"ROUND4_ROUTE={name}", flush=True)
                 await page.set_viewport_size({"width": 1440, "height": 900})
@@ -707,6 +708,73 @@ def test_discovered_search():
                         path=str(round4_evidence / "automation-studio-file-opened.png"),
                         full_page=True,
                     )
+
+            # Round 6: a failed request must not look like "no data". Each surface is forced
+            # through a 500 and must show its own alert banner.
+            error_surfaces = [
+                ("runs", "/runs", "**/api/runs**", "测试运行列表加载失败"),
+                ("failures", "/failures", "**/api/failures**", "测试失败记录加载失败"),
+                ("security", "/security", "**/api/users**", "操作失败"),
+            ]
+            for surface, path, pattern, expected in error_surfaces:
+                print(f"ROUND6_ERROR_SURFACE={surface}", flush=True)
+                await page.set_viewport_size({"width": 1440, "height": 900})
+
+                async def _fail(route, _pattern=pattern):
+                    await route.fulfill(
+                        status=500,
+                        content_type="application/json",
+                        body='{"detail":"forced failure for the round 6 error-surface check"}',
+                    )
+
+                await page.route(pattern, _fail)
+                try:
+                    await _goto_app(page, f"http://127.0.0.1:{vite_port}{path}")
+                    banner = page.locator('[role="alert"]').filter(has_text=expected).first
+                    await banner.wait_for(state="visible", timeout=25000)
+                    await _shot(
+                        page,
+                        path=str(round4_evidence / f"error-surface-{surface}-1440x900.png"),
+                        full_page=True,
+                    )
+                    error_surfaces_seen.append(surface)
+                finally:
+                    await page.unroute(pattern)
+
+            # Round 6: the release modal must explain a rejected write instead of closing silently.
+            print("ROUND6_ERROR_SURFACE=release-create", flush=True)
+            await page.set_viewport_size({"width": 1440, "height": 900})
+
+            async def _fail_release(route):
+                await route.fulfill(
+                    status=500,
+                    content_type="application/json",
+                    body='{"detail":"forced failure for the round 6 release check"}',
+                )
+
+            await page.route("**/api/releases", _fail_release)
+            try:
+                await _goto_app(page, f"http://127.0.0.1:{vite_port}/quality")
+                await page.wait_for_selector("body")
+                await page.locator(".tab-btn").filter(has_text="发布与门禁").first.click()
+                await page.get_by_role("button", name="新建发布").first.click()
+                modal = page.locator(".modal-overlay")
+                await modal.wait_for(state="visible", timeout=15000)
+                inputs = modal.locator("input")
+                await inputs.nth(0).fill("v0.0.1-round6")
+                await inputs.nth(1).fill("Round 6 forced failure")
+                await modal.locator('button[type="submit"]').click()
+                await (
+                    modal.locator('[role="alert"]').filter(has_text="操作失败").wait_for(state="visible", timeout=15000)
+                )
+                await _shot(
+                    page,
+                    path=str(round4_evidence / "error-surface-release-create-1440x900.png"),
+                    full_page=True,
+                )
+                error_surfaces_seen.append("release-create")
+            finally:
+                await page.unroute("**/api/releases")
 
             responsive_pages = [
                 "dashboard",
@@ -871,6 +939,7 @@ def test_discovered_search():
             "coverage_status": row["coverage_status"],
             "isolated_project_id": foreign_id,
             "isolated_project_discovery_runs": 0,
+            "round6_error_surfaces": error_surfaces_seen,
         }
         (evidence_dir / "discovery-to-coverage.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

@@ -227,3 +227,47 @@ async def test_testrail_publish_preview_with_real_executions(client: AsyncClient
     dry_run = await client.post("/api/testrail/publish", json={"run_id": run_id, "confirm_publish": False})
     assert dry_run.status_code == 200, dry_run.text
     assert dry_run.json()["published"] is False
+
+
+@pytest.mark.asyncio
+async def test_simulated_testrail_publish_is_not_audited_as_a_real_success(client: AsyncClient):
+    """The shipped default disables the TestRail integration, so the fake adapter's
+    "published" run must be recorded as DRY_RUN instead of a fabricated SUCCESS."""
+    proj_resp = await client.post("/api/projects", json={"name": "TestRail Simulated Audit"})
+    project_id = proj_resp.json()["id"]
+    run_resp = await client.post("/api/runs", json={"project_id": project_id, "workspace_id": project_id})
+    run_id = run_resp.json()["id"]
+
+    pub = await client.post(
+        "/api/testrail/publish",
+        json={"run_id": run_id, "suite_id": "S101", "confirm_publish": True},
+    )
+    assert pub.status_code == 200
+    assert pub.json()["message"].startswith("[simulated]")
+
+    audits = await client.get("/api/audit/integrations?system=TESTRAIL")
+    assert audits.status_code == 200
+    publish_audits = [a for a in audits.json() if a["action"] == "PUBLISH_RESULT"]
+    assert publish_audits, "no TestRail publish audit recorded"
+    latest = publish_audits[0]
+    assert latest["status"] == "DRY_RUN"
+    assert latest["details"]["simulated"] is True
+
+
+@pytest.mark.asyncio
+async def test_login_audit_records_the_real_client_address(client: AsyncClient):
+    """A remote caller must not be logged as 127.0.0.1."""
+    from types import SimpleNamespace
+
+    from app.api.auth import login as login_route
+    from conftest import ROLE_CREDENTIALS
+    from project_model.models import LoginRequest
+
+    email, password = ROLE_CREDENTIALS["ADMIN"]
+    fake_request = SimpleNamespace(client=SimpleNamespace(host="203.0.113.9"))
+    response = await login_route(LoginRequest(email=email, password=password), fake_request)  # type: ignore[arg-type]
+    assert response.access_token
+
+    audits = await client.get("/api/audit/security?action=LOGIN")
+    assert audits.status_code == 200
+    assert audits.json()[0]["ip_address"] == "203.0.113.9"

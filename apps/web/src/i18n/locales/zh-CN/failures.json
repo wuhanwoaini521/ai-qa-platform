@@ -367,5 +367,6 @@
     "ERROR": "错误",
     "CANCELLED": "已取消"
   }
-  ,"unknownValue": "未知"
+  ,"unknownValue": "未知",
+  "loadFailed": "测试失败记录加载失败：{{message}}"
 }

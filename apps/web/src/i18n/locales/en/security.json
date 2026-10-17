@@ -84,5 +84,6 @@
     "statusLabel": "Status:",
     "ipLabel": "IP:",
     "payloadLabel": "Payload Details:"
-  }
+  },
+  "actionFailed": "Action failed: {{message}}"
 }

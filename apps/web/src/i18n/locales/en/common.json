@@ -55,5 +55,6 @@
   "systemStatus": "System",
   "aiProvider": "AI provider",
   "runners": "Runners",
-  "local": "Local"
+  "local": "Local",
+  "dismiss": "Dismiss"
 }

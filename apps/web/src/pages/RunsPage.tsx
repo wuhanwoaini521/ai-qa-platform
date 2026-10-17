@@ -48,6 +48,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
     initialRunId ?? null,
   );
@@ -91,6 +92,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
     const requestId = ++listRequestRef.current;
     try {
       setLoading(true);
+      setLoadError(null);
       const [data, profiles] = await Promise.all([
         api.getTestRuns(currentProjectId || undefined),
         api.getRunnerProfiles(currentProjectId || undefined),
@@ -122,6 +124,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       }
     } catch (err) {
       console.error('Failed to load runs', err);
+      if (requestId === listRequestRef.current) {
+        setRuns([]);
+        setLoadError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       if (requestId === listRequestRef.current) setLoading(false);
     }
@@ -374,6 +380,30 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   }}
                 >
                   {t('listLoading')}
+                </div>
+              ) : loadError ? (
+                <div
+                  role="alert"
+                  style={{
+                    margin: '16px',
+                    padding: '16px',
+                    border: '1px solid var(--danger, #dc2626)',
+                    borderRadius: '8px',
+                    background: 'rgba(220, 38, 38, 0.06)',
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: 'var(--danger, #dc2626)' }}>
+                    {t('listLoadFailed', { message: loadError })}
+                  </p>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '8px' }}
+                    onClick={() => {
+                      void fetchRuns();
+                    }}
+                  >
+                    {t('listRetry')}
+                  </button>
                 </div>
               ) : runs.length === 0 ? (
                 <div

@@ -104,5 +104,7 @@
   "tabConsole": "浏览器 Console",
   "tabAi": "AI 分析",
   "noBrowserEvidence": "本次运行没有浏览器证据。Python 和 API 测试请查看结果与日志。",
-  "aiRunExplanation": "AI 不会随每次运行自动调用。已发起的分析可在失败工作台或关联 Task 中回顾。"
+  "aiRunExplanation": "AI 不会随每次运行自动调用。已发起的分析可在失败工作台或关联 Task 中回顾。",
+  "listLoadFailed": "测试运行列表加载失败：{{message}}",
+  "listRetry": "重试"
 }

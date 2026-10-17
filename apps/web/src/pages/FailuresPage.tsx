@@ -69,6 +69,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [failures, setFailures] = useState<FailureRecord[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedFailure, setSelectedFailure] = useState<FailureRecord | null>(
     null,
   );
@@ -355,6 +356,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     try {
       const data = await api.getFailures(currentProjectId || undefined);
       setFailures(data);
+      setLoadError(null);
       const deepLinked = initialFailureId
         ? data.find((f) => f.id === initialFailureId)
         : undefined;
@@ -367,6 +369,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       }
     } catch (err) {
       console.error('Failed to load failures', err);
+      // An empty queue and a broken request must not look the same.
+      setFailures([]);
+      setSelectedFailure(null);
+      setLoadError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -1356,7 +1362,16 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </div>
             </div>
           ) : (
-            <div className="card failure-select-prompt">{t('selectPrompt')}</div>
+            <div className="card failure-select-prompt">
+              {loadError ? (
+                <ErrorState
+                  message={t('loadFailed', { message: loadError })}
+                  onRetry={() => void fetchFailures()}
+                />
+              ) : (
+                t('selectPrompt')
+              )}
+            </div>
           )}
         </div>
       )}
