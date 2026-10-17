@@ -22,7 +22,7 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | Round3 实现 commit `f64f711`；handoff 文档正在同步本次状态，`.ai-runs/night-continuation/` 证据仍为本地未跟踪文件、保留且不暂存。 |
+| 当前工作树 | Round3 实现与 handoff 均已本地提交；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
@@ -212,7 +212,7 @@ pnpm --filter @ai-qa/web typecheck && pnpm --filter @ai-qa/web lint && pnpm --fi
 
 ## 10. 下一步具体命令
 
-Round3 已验收并将在本地提交；下一组首要任务为 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。旧 Studio/Strict D5 命令如下仅供历史重跑参考，不是当前 Round3 的待执行项。
+Round3 实现 `f64f711` 与 handoff 已本地提交；下一组首要任务为 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。旧 Studio/Strict D5 命令如下仅供历史重跑参考，不是当前 Round3 的待执行项。
 
 ```bash
 # 核对现场
