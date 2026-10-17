@@ -8,6 +8,12 @@ import './quality-discovery.css';
 
 const terminalStatuses = new Set(['COMPLETED', 'BLOCKED', 'FAILED', 'STOPPED', 'BUDGET_EXHAUSTED']);
 
+function requirementDraftActionId(action: unknown): string | undefined {
+  if (!action || typeof action !== 'object') return undefined;
+  const requirementId = (action as Record<string, unknown>).requirement_id;
+  return typeof requirementId === 'string' ? requirementId : undefined;
+}
+
 export function QualityDiscoveryPanel({
   projectId,
   initialRequirementId,
@@ -351,11 +357,9 @@ export function QualityDiscoveryPanel({
       setRun(refreshed);
       setRuns((items) => items.map((item) => item.id === refreshed.id ? refreshed : item));
       const feature = refreshed.result.features?.find((item) => item.feature_id === gap.item_id);
-      if (action === 'create_requirement_draft' && typeof result.requirement_id === 'string') {
-        onOpenRequirement?.(result.requirement_id);
-      } else if (action === 'generate_tests') {
+      if (action === 'generate_tests') {
         const ids = Array.isArray(result.test_case_ids) ? result.test_case_ids : [];
-        if (typeof ids[0] === 'string') onOpenCase?.(ids[0], sourceRequirementId(
+        if (typeof ids[0] === 'string') await onOpenCase?.(ids[0], sourceRequirementId(
           feature?.requirement_ids ?? [], refreshed.result.requirements ?? [],
           feature ? refreshed.result.requirement_drafts?.[feature.feature_id] : undefined,
         ));
@@ -374,6 +378,10 @@ export function QualityDiscoveryPanel({
   };
 
   const featureForGap = (gap: QualityDiscoveryGap) => run?.result.features?.find((item) => item.feature_id === gap.item_id);
+  const openRequirementDraft = (gap: QualityDiscoveryGap) => {
+    const requirementId = requirementDraftActionId(run?.result.gap_actions?.[gap.id]?.create_requirement_draft);
+    if (requirementId) onOpenRequirement?.(requirementId);
+  };
   const hasRealRequirement = (feature: NonNullable<ReturnType<typeof featureForGap>>) =>
     feature.requirement_ids?.some((id) => run?.result.requirements?.some((item) => item.id === id && item.source_id !== 'PASTED')) ?? false;
 
@@ -543,7 +551,7 @@ export function QualityDiscoveryPanel({
                 {gap.category === 'TEST_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id])} onClick={() => void runGapAction(gap, 'generate_tests')}>{t('generateTests')}</button>}
                 {gap.category === 'AUTOMATION_MISSING' && !!featureForGap(gap)?.test_case_ids?.length && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'generate_automation')}>{t('generateAutomation')}</button>}
                 {gap.category === 'AUTOMATION_FAILING' && <button type="button" className="btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'open_failure')}>{t('openFailure')}</button>}
-                {gap.category === 'UNDOCUMENTED_FEATURE' && !!run.result.gap_actions?.[gap.id]?.create_requirement_draft && typeof run.result.requirement_drafts?.[featureForGap(gap)?.feature_id ?? ''] === 'string' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenRequirement?.(String(run.result.requirement_drafts?.[featureForGap(gap)?.feature_id ?? '']))}>{t('openRequirement')}</button>}
+                {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING') && requirementDraftActionId(run.result.gap_actions?.[gap.id]?.create_requirement_draft) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRequirementDraft(gap)}>{t('openRequirement')}</button>}
               </div>
             </article>)}
           </div>}

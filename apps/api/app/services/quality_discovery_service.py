@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import weakref
@@ -275,7 +276,8 @@ class QualityDiscoveryService(
             requirement_id = requirement_id or (result.get("requirement_drafts") or {}).get(feature["feature_id"])
             if not requirement_id:
                 raise ValueError("Create a Requirement Draft from this gap before generating cases.")
-            from project_model.models import TestCaseCreate, TestDesignCategory, TestDesignCreate
+            from project_model.lifecycle import TestScenario
+            from project_model.models import TestCaseCreate, TestDesignCategory, TestDesignCreate, TestDesignUpdate
 
             from app.repositories.test_design_repo import TestDesignRepository
             from app.services.ai_service import AIService
@@ -287,6 +289,14 @@ class QualityDiscoveryService(
                 design_service = TestDesignService(TestDesignRepository(session), RequirementRepository(session))
                 existing_designs = await design_service.list_by_requirement(requirement_id)
                 design = next((item for item in existing_designs if item.title == design_title), None)
+                requirement = await design_service.requirement_repo.get_by_id(requirement_id)
+                scenario_data = (
+                    ((requirement.qa_model or {}).get("analysis") or {}).get("scenarios", []) if requirement else []
+                )
+                scenario = next(
+                    (TestScenario.model_validate(item) for item in scenario_data if item.get("title") == design_title),
+                    None,
+                )
                 if design is None:
                     journey = next(
                         (
@@ -317,9 +327,12 @@ class QualityDiscoveryService(
                             category=TestDesignCategory.FUNCTIONAL,
                             description=json.dumps(context, ensure_ascii=False)[:3000],
                             risk=str(gap.get("risk") or "Medium"),
+                            scenario_model=scenario,
                         )
                     )
-                    await session.commit()
+                if design.scenario_model is None and scenario is not None:
+                    await design_service.update_test_design(design.id, TestDesignUpdate(scenario_model=scenario))
+                await session.commit()
             async with self.session_factory() as session:
                 ai = AIService(
                     requirement_repo=RequirementRepository(session),
@@ -503,6 +516,14 @@ class QualityDiscoveryService(
             raise DiscoveryBlocked("This action requires a configured real AI provider; no draft was generated.")
 
     async def _create_requirement_draft(self, run_id: str, gap_id: str) -> dict[str, Any]:
+        from project_model.lifecycle import (
+            BusinessFlowStep,
+            CoverageReferences,
+            RequirementDocument,
+            RequirementRisk,
+            TestScenario,
+        )
+        from project_model.lifecycle import RequirementAnalysis as StructuredRequirementAnalysis
         from project_model.models import RequirementCreate, RequirementStatus
 
         for attempt in range(5):
@@ -542,6 +563,60 @@ class QualityDiscoveryService(
                         feature.get("description")
                         or f"功能由 Quality Discovery 在 {feature.get('page') or row.start_url} 上观察到。"
                     )
+                    evidence_ids = [str(item) for item in feature.get("evidence_ids", []) if item]
+                    identifier = hashlib.sha256(f"{run_id}:{gap_id}".encode()).hexdigest()[:12]
+                    flow_id = f"FLOW-{identifier}"
+                    risk_id = f"RISK-{identifier}"
+                    risk_level = str(gap.get("risk") or "Medium").title()
+                    severity = risk_level if risk_level in {"High", "Medium", "Low"} else "Medium"
+                    scenario_steps = next(
+                        (
+                            item.get("steps", [])
+                            for item in result.get("journeys", [])
+                            if any(
+                                step.get("state_id") in feature.get("state_ids", []) for step in item.get("steps", [])
+                            )
+                        ),
+                        [],
+                    )
+                    scenario = TestScenario(
+                        id=f"SCN-{identifier}",
+                        title=f"Discovery — {feature['name']}"[:200],
+                        intent=f"Verify the observed {feature['name']} behavior and mitigate its {severity.lower()} coverage risk.",
+                        path_type="normal",
+                        technique="risk_based",
+                        domain="UI",
+                        priority={"High": "P1", "Medium": "P2", "Low": "P3"}[severity],
+                        coverage=CoverageReferences(risk_ids=[risk_id], flow_ids=[flow_id]),
+                        actions=[
+                            (f"{step['action']}: {step['title']}" if step.get("action") else f"Open {step['title']}")
+                            for step in scenario_steps
+                            if step.get("title")
+                        ][:30]
+                        or [f"Exercise the observed {feature['name']} interface."],
+                        expected_outcomes=[description[:1500]],
+                        rationale=f"Derived from Discovery run {run_id}, gap {gap_id}, evidence {', '.join(evidence_ids)[:700]}.",
+                    )
+                    structured_requirement = RequirementDocument(
+                        criteria=[],
+                        analysis=StructuredRequirementAnalysis(
+                            summary=description[:2000],
+                            business_flow=[
+                                BusinessFlowStep(id=flow_id, title=feature["name"][:120], summary=description[:500])
+                            ],
+                            risks=[
+                                RequirementRisk(
+                                    id=risk_id,
+                                    title=f"Uncovered {feature['name']} behavior"[:160],
+                                    severity=severity,
+                                    impact=description[:1000],
+                                    suggested_coverage=[scenario.title],
+                                    rationale=scenario.rationale,
+                                )
+                            ],
+                            scenarios=[scenario],
+                        ),
+                    )
                     requirement = await RequirementRepository(session).create(
                         RequirementCreate(
                             project_id=row.project_id,
@@ -551,6 +626,7 @@ class QualityDiscoveryService(
                             ],
                             acceptance_criteria="\n".join(item for item in criteria if item)[:5000],
                             status=RequirementStatus.DRAFT,
+                            qa_model=structured_requirement,
                         )
                     )
                     response = {"requirement_id": requirement.id, "status": "DRAFT", "created": True}

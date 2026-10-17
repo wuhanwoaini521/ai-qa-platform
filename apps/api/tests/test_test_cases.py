@@ -50,3 +50,30 @@ async def test_test_case_crud(client: AsyncClient):
     list_res = await client.get(f"/api/test-cases?project_id={proj_id}")
     assert list_res.status_code == 200
     assert len(list_res.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_binding_rejects_workspace_from_another_project(client: AsyncClient):
+    projects = []
+    for name in ("Binding owner", "Foreign workspace"):
+        response = await client.post("/api/projects", json={"name": name, "bootstrap_workspace": False})
+        assert response.status_code == 201, response.text
+        projects.append(response.json()["id"])
+
+    case = await client.post(
+        "/api/test-cases",
+        json={"project_id": projects[0], "title": "Project-owned case", "expected_result": "Pass"},
+    )
+    assert case.status_code == 201, case.text
+    binding = await client.post(
+        f"/api/test-cases/{case.json()['id']}/binding",
+        json={
+            "test_case_id": case.json()["id"],
+            "workspace_id": projects[1],
+            "nodeid": "tests/test_project.py::test_isolation",
+            "file_path": "tests/test_project.py",
+            "status": "ACTIVE",
+        },
+    )
+    assert binding.status_code == 422
+    assert binding.json()["detail"] == "Workspace does not belong to the test case project"

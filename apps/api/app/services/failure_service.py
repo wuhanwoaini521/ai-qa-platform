@@ -1483,26 +1483,46 @@ class FailureService:
         proposal = failure.repair_proposal or {}
         if not original_run or original_run.workspace_id != workspace_id:
             raise ValueError("回滚工作区与原失败运行不一致。")
-        if not proposal.get("applied") or not isinstance(proposal.get("rollback_content"), str):
+        if not isinstance(proposal.get("rollback_content"), str):
             raise ValueError("没有可回滚的修复补丁。")
         file_path = str(proposal.get("file_path") or failure.test_nodeid.split("::")[0])
+        original_content = proposal["rollback_content"]
+        original_hash = hashlib.sha256(original_content.encode("utf-8")).hexdigest()
+        if original_hash != proposal.get("rollback_original_sha256"):
+            raise ValueError("回滚快照校验失败；未修改工作区。")
         current_content = await self.workspace_service.read_file(workspace_id, file_path)
         current_hash = hashlib.sha256(current_content.encode("utf-8")).hexdigest()
-        if current_hash != proposal.get("applied_sha256"):
-            raise ValueError("修复应用后文件已变化；为避免覆盖后续编辑，未执行回滚。")
-        original_content = proposal["rollback_content"]
-        if hashlib.sha256(original_content.encode("utf-8")).hexdigest() != proposal.get("rollback_original_sha256"):
-            raise ValueError("回滚快照校验失败；未修改工作区。")
-        await self.workspace_service.write_file(workspace_id, file_path, original_content)
-        await self.failure_repo.update_repair_proposal(
-            failure.id,
-            {
-                **proposal,
-                "applied": False,
-                "rolled_back_at": utc_now().isoformat(),
-                "rollback_status": "ROLLED_BACK",
-            },
-        )
+        if current_hash != original_hash:
+            if not proposal.get("applied") or current_hash != proposal.get("applied_sha256"):
+                raise ValueError("修复应用后文件已变化；为避免覆盖后续编辑，未执行回滚。")
+            if proposal.get("rollback_status") != "ROLLBACK_PENDING":
+                await self.failure_repo.update_repair_proposal(
+                    failure.id, {**proposal, "rollback_status": "ROLLBACK_PENDING"}
+                )
+                await self.transaction.commit()
+            await self.workspace_service.write_file_if_unchanged(
+                workspace_id,
+                file_path,
+                original_content,
+                expected_exists=True,
+                expected_sha256=proposal.get("applied_sha256"),
+            )
+        elif proposal.get("rollback_status") not in {"ROLLBACK_PENDING", "ROLLED_BACK"}:
+            raise ValueError("没有可回滚的修复补丁。")
+        if proposal.get("applied") or proposal.get("rollback_status") != "ROLLED_BACK":
+            try:
+                await self.failure_repo.update_repair_proposal(
+                    failure.id,
+                    {
+                        **proposal,
+                        "applied": False,
+                        "rolled_back_at": proposal.get("rolled_back_at") or utc_now().isoformat(),
+                        "rollback_status": "ROLLED_BACK",
+                    },
+                )
+            except Exception:
+                await self.transaction.rollback()
+                raise
         return {"status": "rolled_back", "file_path": file_path}
 
     @staticmethod

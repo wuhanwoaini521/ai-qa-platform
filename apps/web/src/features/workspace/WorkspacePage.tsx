@@ -1114,7 +1114,12 @@ export function WorkspacePage() {
                 projectId={projectId}
                 initialRequirementId={context.requirementId}
                 onOpenRequirement={(requirementId) => updateContext({ requirementId, testCaseId: undefined, runId: undefined, stage: 'requirement', view: 'requirement' })}
-                onOpenCase={(testCaseId, requirementId) => updateContext({ testCaseId, requirementId: requirementId?.split(':REQ-')[0], stage: 'cases', view: 'cases' })}
+                onOpenCase={async (testCaseId, requirementId) => {
+                  const nextCases = await api.getTestCases(projectId);
+                  if (!nextCases.some((item) => item.id === testCaseId)) return;
+                  setCases(nextCases);
+                  updateContext({ testCaseId, requirementId: requirementId?.split(':REQ-')[0], stage: 'cases', view: 'cases' });
+                }}
                 onOpenAutomation={(testCaseId, filePath) => updateContext({ testCaseId, file: filePath, nodeId: undefined, stage: 'automation', view: 'code', returnTo: 'workspace' })}
                 onOpenRun={(runId, testCaseId) => updateContext({ runId, testCaseId, taskId: undefined, failureId: undefined, stage: 'result', view: 'results' })}
                 onOpenTask={(taskId) => openRunDetails({ taskId })}

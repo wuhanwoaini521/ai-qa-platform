@@ -89,7 +89,10 @@ async def create_or_update_binding(
 ):
     if data.test_case_id != case_id:
         raise HTTPException(status_code=400, detail="Mismatched test_case_id in body")
-    return await service.bind_test_case(data)
+    try:
+        return await service.bind_test_case(data)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
 
 @router.delete("/{case_id}/binding")

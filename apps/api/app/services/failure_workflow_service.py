@@ -165,11 +165,7 @@ class FailureWorkflowService:
     async def _recover_interrupted_apply(self, failure, analysis: dict[str, Any]) -> bool:
         proposal = failure.repair_proposal or {}
         selected = (analysis.get("result") or {}).get("repair_proposal") or {}
-        if (
-            proposal.get("applied") is not True
-            or proposal.get("candidate_id") != selected.get("candidate_id")
-            or proposal.get("proposed_locator") != selected.get("proposed_locator")
-        ):
+        if proposal.get("applied") is not True or not self._same_repair_proposal(proposal, selected):
             return False
         repair = await self._locator_repair_for_analysis(analysis["id"])
         expected_state = FailureRepairState.PATCH_READY
@@ -810,12 +806,24 @@ class FailureWorkflowService:
         if automatic and not get_config().repair.auto_rollback:
             raise ValueError("Automatic rollback is disabled by the effective AppConfig")
         state = await self.get_repair_workflow(failure_id, analysis_id)
-        if "ROLLBACK" not in state.allowed_actions:
-            raise ValueError(f"Repair state {state.state} does not allow rollback")
         failure = await self.failures.get_failure_state(failure_id)
         analysis = next((row for row in await self._history_list(failure_id) if row["id"] == analysis_id), None)
         if failure is None or analysis is None:
             raise ValueError("Failure or analysis record not found")
+        failure_proposal = failure.repair_proposal or {}
+        analysis_proposal = (analysis.get("result") or {}).get("repair_proposal") or {}
+        retrying_rollback = (
+            self._same_repair_proposal(failure_proposal, analysis_proposal)
+            and failure_proposal.get("rollback_status") == "ROLLED_BACK"
+        )
+        if (
+            "ROLLBACK" not in state.allowed_actions
+            and not (
+                failure_proposal.get("applied") and self._same_repair_proposal(failure_proposal, analysis_proposal)
+            )
+            and not retrying_rollback
+        ):
+            raise ValueError(f"Repair state {state.state} does not allow rollback")
         original = await self.failures.run_repo.get_by_id(failure.run_id)
         if original is None or original.workspace_id is None:
             raise ValueError("Failure workspace is unavailable")
@@ -836,15 +844,16 @@ class FailureWorkflowService:
         }
         if automatic:
             transition_metadata.update(automatic=True, auto_rolled_back=True)
-        await self._record_transition(
-            failure,
-            analysis,
-            "ROLLED_BACK",
-            "repair.rolled_back",
-            "Repair patch rolled back",
-            file_path=result["file_path"],
-            **transition_metadata,
-        )
+        if not any(event.get("type") == "repair.rolled_back" for event in analysis.get("events", [])):
+            await self._record_transition(
+                failure,
+                analysis,
+                "ROLLED_BACK",
+                "repair.rolled_back",
+                "Repair patch rolled back",
+                file_path=result["file_path"],
+                **transition_metadata,
+            )
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
 
@@ -872,6 +881,25 @@ class FailureWorkflowService:
         )
         await self._history_append(analysis["id"], event, result=result, expected_current_state=expected_current_state)
 
+    @staticmethod
+    def _utc_timestamp(value: datetime | str) -> datetime:
+        timestamp = datetime.fromisoformat(value) if isinstance(value, str) else value
+        if timestamp.tzinfo is None:
+            return timestamp.replace(tzinfo=timezone.utc)
+        return timestamp.astimezone(timezone.utc)
+
+    @staticmethod
+    def _same_repair_proposal(applied: dict[str, Any], selected: dict[str, Any]) -> bool:
+        identity_fields = ("candidate_id", "file_path", "proposed_locator")
+        return all(
+            isinstance(applied.get(field), str)
+            and bool(applied[field].strip())
+            and isinstance(selected.get(field), str)
+            and bool(selected[field].strip())
+            and selected[field] == applied[field]
+            for field in identity_fields
+        )
+
     async def attach_verification(self, failure_id: str, analysis_id: str, run_id: str) -> None:
         failure = await self.failures.get_failure_state(failure_id)
         run = await self.failures.run_repo.get_by_id(run_id)
@@ -884,8 +912,21 @@ class FailureWorkflowService:
             raise ValueError("Verification run must execute exactly the failed test case")
         analyses = await self._history_list(failure_id)
         analysis = next((item for item in analyses if item["id"] == analysis_id), None)
-        if analysis is None or run.created_at.isoformat() < analysis["created_at"]:
+        if analysis is None or self._utc_timestamp(run.created_at) < self._utc_timestamp(analysis["created_at"]):
             raise ValueError("Verification run must be created after the selected analysis")
+        applied_proposal = failure.repair_proposal or {}
+        selected_proposal = (analysis.get("result") or {}).get("repair_proposal") or {}
+        if not applied_proposal.get("applied") or not isinstance(applied_proposal.get("applied_at"), str):
+            raise ValueError("Verification requires an applied repair with an application timestamp")
+        if not self._same_repair_proposal(applied_proposal, selected_proposal):
+            raise ValueError("Verification repair does not match the proposal selected for this analysis")
+        try:
+            applied_at = self._utc_timestamp(applied_proposal["applied_at"])
+        except ValueError as error:
+            raise ValueError("Applied repair timestamp is invalid") from error
+        verification_started_at = self._utc_timestamp(run.started_at or run.created_at)
+        if verification_started_at < applied_at:
+            raise ValueError("Verification run must start after the repair was applied")
         await self._history_attach_verification(analysis_id, failure_id, run_id)
 
     async def list_history(self, failure_id: str) -> list[dict[str, Any]]:
@@ -917,8 +958,8 @@ class FailureWorkflowService:
             proposal = failure.repair_proposal or {}
             analysis_proposal = result.get("repair_proposal") or {}
             applied_to_analysis = bool(
-                proposal.get("applied")
-                and proposal.get("proposed_locator") == analysis_proposal.get("proposed_locator")
+                self._same_repair_proposal(proposal, analysis_proposal)
+                and (proposal.get("applied") or proposal.get("rollback_status") == "ROLLED_BACK")
             )
             if applied_to_analysis and not reconciled:
                 result["repair_state"] = "VERIFIED" if verified else "FAILED" if completed else "VERIFYING_FIX"
@@ -958,10 +999,15 @@ class FailureWorkflowService:
                     stage="repair",
                     step_id=f"{row['id']}:repair:{result['repair_state'].lower()}",
                     title="Repair verified" if verified else "Repair verification failed",
+                    status="COMPLETED" if verified else "FAILED",
                     message=f"Exact-case verification {run.status}",
                     metadata={
                         "analysis_id": row["id"],
                         "verification_run_id": run.id,
+                        "test_nodeid": failure.test_nodeid,
+                        "test_rerun": True,
+                        "verified": verified,
+                        "evidence_source": "pytest_execution",
                         "state": result["repair_state"],
                     },
                 )

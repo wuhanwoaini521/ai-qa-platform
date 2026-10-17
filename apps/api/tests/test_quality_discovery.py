@@ -19,6 +19,7 @@ from app.persistence.models import (
     ProjectORM,
     QualityDiscoveryRunORM,
     RequirementORM,
+    WorkspaceORM,
     utc_now,
 )
 from app.persistence.models import (
@@ -620,6 +621,54 @@ def test_latest_execution_uses_newest_matching_attempt_within_run():
     latest = QualityDiscoveryService._latest_execution(nodeid, [run], "workspace", target_url)
 
     assert latest == (run, newer)
+
+
+def test_latest_execution_uses_newest_attempt_across_runs():
+    now = utc_now()
+    nodeid = "tests/test_search.py::test_search"
+    target_url = "http://127.0.0.1:8080/catalog"
+
+    def make_run(run_id, status, started_at):
+        execution = SimpleNamespace(id=f"execution-{run_id}", nodeid=nodeid, status=status, started_at=started_at)
+        return SimpleNamespace(
+            id=run_id,
+            workspace_id="workspace",
+            created_at=started_at,
+            executions=[execution],
+            browser_sessions=[SimpleNamespace(case_execution_id=execution.id, nodeid=nodeid, current_url=target_url)],
+        ), execution
+
+    old_run, _ = make_run("old", "PASSED", now)
+    new_run, new_execution = make_run("new", "FAILED", now + timedelta(seconds=1))
+
+    latest = QualityDiscoveryService._latest_execution(nodeid, [old_run, new_run], "workspace", target_url)
+
+    assert latest == (new_run, new_execution)
+
+
+def test_latest_execution_breaks_equal_timestamp_ties_independently_of_run_order():
+    now = utc_now()
+    nodeid = "tests/test_search.py::test_search"
+    target_url = "http://127.0.0.1:8080/catalog"
+
+    def make_run(run_id, status):
+        execution = SimpleNamespace(id=f"execution-{run_id}", nodeid=nodeid, status=status, started_at=now)
+        return SimpleNamespace(
+            id=run_id,
+            workspace_id="workspace",
+            created_at=now,
+            executions=[execution],
+            browser_sessions=[SimpleNamespace(case_execution_id=execution.id, nodeid=nodeid, current_url=target_url)],
+        ), execution
+
+    older_id, _ = make_run("a", "PASSED")
+    stable_winner, winner_execution = make_run("z", "FAILED")
+
+    for runs in ([older_id, stable_winner], [stable_winner, older_id]):
+        assert QualityDiscoveryService._latest_execution(nodeid, runs, "workspace", target_url) == (
+            stable_winner,
+            winner_execution,
+        )
 
 
 @pytest.mark.asyncio
@@ -3458,6 +3507,17 @@ async def test_generate_automation_gap_action_commits_binding_and_idempotency_re
             )
         )
         session.add(
+            WorkspaceORM(
+                id=f"workspace-{project_id}",
+                project_id=project_id,
+                path=f"/workspace/{project_id}",
+                branch="main",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
             RequirementORM(
                 id=requirement_id,
                 project_id=project_id,
@@ -3585,8 +3645,11 @@ async def test_automation_draft_reuses_action_marked_file_after_write_before_dat
             return case
 
     class WorkspaceRepository:
+        async def get_by_id(self, _workspace_id):
+            return None
+
         async def get_by_project_id(self, _project_id):
-            return object()
+            return SimpleNamespace(project_id=_project_id)
 
     class BindingRepository:
         binding = None

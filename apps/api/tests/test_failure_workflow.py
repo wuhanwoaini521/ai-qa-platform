@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from types import SimpleNamespace
@@ -115,15 +116,22 @@ async def test_repair_verification_command_creates_and_links_exact_idempotent_ru
         failure = await session.get(FailureRecordORM, failure_id)
         original_run = await session.get(TestRunORM, failure.run_id)
         original_run.runner_type = runner_type
-        failure.repair_proposal = {"applied": True, "proposed_locator": "#checkout-new"}
+        applied_proposal = {
+            "applied": True,
+            "applied_at": datetime.now(timezone.utc).isoformat(),
+            "candidate_id": "candidate-verification",
+            "file_path": "tests/test_workflow.py",
+            "proposed_locator": "#checkout-new",
+        }
+        failure.repair_proposal = applied_proposal
         session.add(
             FailureAnalysisORM(
                 id=analysis_id,
                 failure_id=failure_id,
                 status="COMPLETED",
                 result={
-                    "repair_state": "PATCH_READY",
-                    "repair_proposal": {"proposed_locator": "#checkout-new"},
+                    "repair_state": "PATCH_APPLIED",
+                    "repair_proposal": applied_proposal,
                 },
             )
         )
@@ -192,7 +200,14 @@ async def test_repair_verification_api_exposes_resource_command(client, test_db_
     analysis_id = "repair-analysis-api"
     async with test_db_session() as session:
         failure = await session.get(FailureRecordORM, failure_id)
-        failure.repair_proposal = {"applied": True, "proposed_locator": "#checkout-new"}
+        applied_proposal = {
+            "applied": True,
+            "applied_at": datetime.now(timezone.utc).isoformat(),
+            "candidate_id": "candidate-api",
+            "file_path": "tests/test_workflow.py",
+            "proposed_locator": "#checkout-new",
+        }
+        failure.repair_proposal = applied_proposal
         session.add(
             FailureAnalysisORM(
                 id=analysis_id,
@@ -200,7 +215,7 @@ async def test_repair_verification_api_exposes_resource_command(client, test_db_
                 status="COMPLETED",
                 result={
                     "repair_state": "PATCH_READY",
-                    "repair_proposal": {"proposed_locator": "#checkout-new"},
+                    "repair_proposal": applied_proposal,
                 },
             )
         )
@@ -374,6 +389,8 @@ async def test_terminal_manual_verification_records_completion_even_if_state_was
         "code_diff": "- old locator\\n+ new locator",
         "source_sha256": "source-hash",
         "applied": True,
+        "applied_at": datetime.now(timezone.utc).isoformat(),
+        "file_path": "tests/test_workflow.py",
     }
     async with test_db_session() as session:
         repo = TestRunRepository(session)
@@ -1147,6 +1164,13 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(
 
         interrupted_failure = await service.get_failure_state(failure_id)
         interrupted_history = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
+        selected_proposal = interrupted_history["result"]["repair_proposal"]
+        interrupted_history["result"]["repair_proposal"] = {
+            **selected_proposal,
+            "file_path": "tests/another_file.py",
+        }
+        assert await workflow._recover_interrupted_apply(interrupted_failure, interrupted_history) is False
+        interrupted_history["result"]["repair_proposal"] = selected_proposal
         event_count_before_stale_recovery = len(interrupted_history["events"])
         async with test_db_session() as session:
             analysis_row = await session.get(FailureAnalysisORM, analysis_id)
@@ -1181,12 +1205,60 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(
         )
         assert len(after_late_completion["events"]) == recovered_event_count
 
-        rolled_back = await workflow.rollback_repair(failure_id, analysis_id)
-        assert rolled_back["repair"]["state"] == "ROLLED_BACK"
-        rolled_back_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)
-        assert rolled_back_analysis["result"]["changes_applied"] is False
-        assert rolled_back_analysis["result"]["repair_proposal"]["applied"] is False
+        applied_content = await service.workspace_service.read_file(project_id, "tests/test_workflow.py")
+        await service.workspace_service.write_file(project_id, "tests/test_workflow.py", source)
+        with pytest.raises(ValueError, match="没有可回滚的修复补丁"):
+            await workflow.rollback_repair(failure_id, analysis_id)
+        assert (await service.get_failure_state(failure_id)).repair_proposal["applied"] is True
+        await service.workspace_service.write_file(project_id, "tests/test_workflow.py", applied_content)
+
+        failure_repo = workflow.failures.failure_repo
+        persist_rollback = failure_repo.update_repair_proposal
+        rollback_updates = 0
+
+        async def fail_rollback_persistence_once(*args, **kwargs):
+            nonlocal rollback_updates
+            rollback_updates += 1
+            result = await persist_rollback(*args, **kwargs)
+            if rollback_updates == 2:
+                raise RuntimeError("synthetic rollback persistence failure")
+            return result
+
+        monkeypatch.setattr(failure_repo, "update_repair_proposal", fail_rollback_persistence_once)
+        with pytest.raises(RuntimeError, match="synthetic rollback persistence failure"):
+            await workflow.rollback_repair(failure_id, analysis_id)
         assert await service.workspace_service.read_file(project_id, "tests/test_workflow.py") == source
+        await session.rollback()
+        await session.close()
+
+        async with test_db_session() as verify_session:
+            persisted_failure = await get_failure_service(verify_session).get_failure_state(failure_id)
+            assert persisted_failure.repair_proposal["applied"] is True
+            assert persisted_failure.repair_proposal["rollback_status"] == "ROLLBACK_PENDING"
+
+        async with test_db_session() as retry_session:
+            retry_service = get_failure_service(retry_session)
+            retry_workflow = FailureWorkflowService(retry_service)
+            rolled_back = await retry_workflow.rollback_repair(failure_id, analysis_id)
+            assert rollback_updates == 2
+            assert rolled_back["repair"]["state"] == "ROLLED_BACK"
+            rolled_back_analysis = next(
+                row for row in await retry_workflow._history_list(failure_id) if row["id"] == analysis_id
+            )
+            assert rolled_back_analysis["result"]["changes_applied"] is False
+            assert rolled_back_analysis["result"]["repair_proposal"]["applied"] is False
+            assert sum(event["type"] == "repair.rolled_back" for event in rolled_back_analysis["events"]) == 1
+            repeated_rollback = await retry_workflow.rollback_repair(failure_id, analysis_id)
+            assert repeated_rollback["repair"]["state"] == "ROLLED_BACK"
+            repeated_history = next(
+                row for row in await retry_workflow._history_list(failure_id) if row["id"] == analysis_id
+            )
+            assert sum(event["type"] == "repair.rolled_back" for event in repeated_history["events"]) == 1
+            assert await retry_service.workspace_service.read_file(project_id, "tests/test_workflow.py") == source
+
+        async with test_db_session() as final_session:
+            final_failure = await get_failure_service(final_session).get_failure_state(failure_id)
+            assert final_failure.repair_proposal["applied"] is False
 
 
 @pytest.mark.asyncio
@@ -1695,6 +1767,8 @@ async def test_cancel_and_restart_preserve_incomplete_analysis(client, test_db_s
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [RunStatus.PASSED, RunStatus.FAILED])
 async def test_only_an_actual_matching_rerun_updates_verification(client, test_db_session, status):
+    from app.persistence.models import FailureRecordORM
+
     project_id, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
     async with test_db_session() as session:
         service = get_failure_service(session)
@@ -1707,6 +1781,44 @@ async def test_only_an_actual_matching_rerun_updates_verification(client, test_d
         with pytest.raises(ValueError, match="new run"):
             await workflow.attach_verification(failure_id, analysis_id, original.run_id)
         nodeid = "tests/test_workflow.py::test_workflow"
+        pre_apply_run = await repo.create_run(
+            TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+        )
+        await session.commit()
+        applied_at = datetime.now(timezone.utc).isoformat()
+        failure_record = await session.get(FailureRecordORM, failure_id)
+        analysis_record = await session.get(FailureAnalysisORM, analysis_id)
+        applied_proposal = {
+            "applied": True,
+            "applied_at": applied_at,
+            "candidate_id": "candidate-verification",
+            "file_path": "tests/test_workflow.py",
+            "proposed_locator": 'get_by_test_id("checkout")',
+        }
+        failure_record.repair_proposal = applied_proposal
+        analysis_record.result = {
+            **(analysis_record.result or {}),
+            "repair_state": "PATCH_APPLIED",
+            "repair_proposal": applied_proposal,
+        }
+        await session.commit()
+        with pytest.raises(ValueError, match="start after the repair was applied"):
+            await workflow.attach_verification(failure_id, analysis_id, pre_apply_run.id)
+        valid_analysis_result = dict(analysis_record.result)
+        for mismatched_proposal in (
+            {**applied_proposal, "candidate_id": "different-candidate"},
+            {key: value for key, value in applied_proposal.items() if key != "candidate_id"},
+        ):
+            analysis_record.result = {**valid_analysis_result, "repair_proposal": mismatched_proposal}
+            await session.commit()
+            mismatched_run = await repo.create_run(
+                TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+            )
+            await session.commit()
+            with pytest.raises(ValueError, match="proposal selected"):
+                await workflow.attach_verification(failure_id, analysis_id, mismatched_run.id)
+        analysis_record.result = valid_analysis_result
+        await session.commit()
         wrong = await repo.create_run(
             TestRunCreate(
                 project_id=project_id, workspace_id=project_id, nodeids=["tests/test_workflow.py::other_case"]

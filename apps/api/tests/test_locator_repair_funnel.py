@@ -202,6 +202,8 @@ async def test_failure_get_paths_project_verification_without_persisting_or_clea
             )
         )
         proposal = {
+            "candidate_id": "candidate-read-only",
+            "file_path": "tests/test_checkout.py",
             "proposed_locator": 'get_by_test_id("checkout")',
             "applied": True,
             "applied_at": utc_now().isoformat(),

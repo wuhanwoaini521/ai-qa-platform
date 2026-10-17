@@ -51,6 +51,15 @@ class AutomationBindingService:
         return self._to_dto(orm)
 
     async def bind_test_case(self, data: AutomationBindingCreate) -> AutomationBinding:
+        test_case = await self.test_case_repo.get_by_id(data.test_case_id)
+        if test_case is None:
+            raise ValueError("Test case not found")
+        workspace = await self.workspace_repo.get_by_id(data.workspace_id)
+        if workspace is None:
+            workspace = await self.workspace_repo.get_by_project_id(data.workspace_id)
+        if workspace is None or workspace.project_id != test_case.project_id:
+            raise ValueError("Workspace does not belong to the test case project")
+        data = data.model_copy(update={"workspace_id": workspace.project_id})
         orm = await self.binding_repo.create_or_update(data)
         # Also update TestCase automation status
         auto_status = (

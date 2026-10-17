@@ -1499,6 +1499,7 @@ class QualityDiscoveryProjectionMixin:
         origin = cls._url_origin(target_url)
         if origin is None:
             return None
+        matching_runs = []
         for run in runs:
             if run.workspace_id != workspace_id:
                 continue
@@ -1512,16 +1513,27 @@ class QualityDiscoveryProjectionMixin:
                 for execution in run.executions
                 if execution.nodeid == nodeid and execution.id in matching_execution_ids
             ]
-            if matching:
-
-                def execution_started_at(execution: Any) -> datetime:
-                    timestamp = execution.started_at or execution.finished_at or run.created_at
-                    if timestamp.tzinfo is None:
-                        timestamp = timestamp.replace(tzinfo=timezone.utc)
-                    return timestamp.astimezone(timezone.utc)
-
-                return run, max(matching, key=execution_started_at)
-        return None
+            for execution in matching:
+                timestamp = execution.started_at or execution.finished_at or run.created_at
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                run_created_at = run.created_at
+                if run_created_at.tzinfo is None:
+                    run_created_at = run_created_at.replace(tzinfo=timezone.utc)
+                matching_runs.append(
+                    (
+                        timestamp.astimezone(timezone.utc),
+                        run_created_at.astimezone(timezone.utc),
+                        str(getattr(run, "id", "")),
+                        str(getattr(execution, "id", "")),
+                        run,
+                        execution,
+                    )
+                )
+        if not matching_runs:
+            return None
+        _, _, _, _, run, execution = max(matching_runs, key=lambda item: item[:4])
+        return run, execution
 
     @classmethod
     def _latest_execution_status(
