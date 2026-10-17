@@ -22,12 +22,16 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | Round3 实现与 handoff 均已本地提交；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
+| 当前工作树 | Round4 的失败概览修复与巡检 harness 已本地提交（`38a89cb`、`01518a2`）；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
+| Round4 本轮提交 | `38a89cb fix(failures): surface the assertion detail in the failure summary`、`01518a2 test(e2e): capture round 4 route, viewport and interaction evidence` |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
+| Round4 evidence | `.ai-runs/night-continuation/round-4/evidence/{before,after}/`（本地未跟踪） |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
+
+Round 4（2026-10-17，用户任务 m01676）：全局 QA 工作台 UX 复核与证据化改造，详见 §3.1；Round 3 成果与结论保持有效，未回退。
 
 Round3 接管（2026-10-17）：初始 HEAD `e6734c7`；保留既有 Round2 代码与 `.ai-runs` 证据并纳入实现提交 `f64f711`。审计覆盖 `Requirement → TestDesign/TestScenario → TestCase → AutomationBinding → TestRun/TestExecution → Discovery Coverage`；现有实体能表达链路，无需重复 schema。修复 latest execution projection、foreign-workspace binding、Discovery draft 风险/结构化场景、case navigation/selection；并完成继承的 verification freshness/rollback recovery（durable `ROLLBACK_PENDING`、proposal identity match、rollback-event dedupe）。
 
@@ -43,6 +47,38 @@ Round3 接管（2026-10-17）：初始 HEAD `e6734c7`；保留既有 Round2 代�
 最新 opt-in acceptance attempt 19：**2 passed / 32.10s**；3 个 debug sessions 均 `CLOSED`，合成 Playwright 失败 Run 为 `FAILED` 且 trace 保留，API/console errors 为空。真实 Python 语义：Step Out 停在 `calculate:11` 时 assignment 尚未存入 `intermediate`；再 Step Over 后才断言 `intermediate == 41`。Before/after、断点、桌面/平板/手机、手机 console 截图位于 `.ai-runs/night-continuation/round-1/attempt-19/screenshots/`。
 
 Reviewer 发现的 config/workspace teardown、手机布局和 document-width assertion 均已修复；attempt 19 与最终全仓回归通过。最终复审确认无其他 finding；Round-1 reports 已更新，本地 commit 待完成。历史 D5/ACL/Docker/PostgreSQL/Worker 状态见 `.ai-runs/enterprise-continuation/round-2/`。
+
+## 3.1 Round 4（全局 UI/UX 评审与改造，m01676）
+
+范围：复核既有 IA（`apps/web/src/app/routes.tsx`、`apps/web/src/app/navigation.ts`、`apps/web/src/features/workspace/WorkspacePage.tsx`）并用真实 Chromium 逐页巡检；不新增第二套 Runtime/Agent/Provider，未替换既有功能。
+
+证据（本地未跟踪，保留不提交）：
+
+- 基线：`.ai-runs/night-continuation/round-4/evidence/before/`
+- 改造后：`.ai-runs/night-continuation/round-4/evidence/after/`（75 个文件；`page-matrix.json` 61 条 = 14 条路由 + 40 条响应式 + 7 个需求标签页）
+- 视口 1920×1080 / 1440×900 / 1366×768 / 390×844；每个视口断言 `scrollWidth <= innerWidth`。
+
+真实交互（非纯截图）：侧栏「项目管理」点击导航、需求知识关系图搜索空态/类型筛选/适配画布/节点聚焦/来源文档展开、Failure「查看原始错误」展开、Studio 通过 `?file=` 打开绑定文件、Failure 深链启动真实 debug 会话（`POST /api/debug/sessions` 200，返回 `workspace_id`/`nodeid`/`failure_id` 与 fixture 一致，状态 `STARTING`）。
+
+本轮唯一产品修复（独立 reviewer P2）：失败概览此前只显示「测试断言未通过。」，真实断言文本只能展开原始详情才看得到。现在断言类失败在通用标签下追加一行 `实际错误：<error_message 最后一行>`（>180 字符截断），分类、诊断信任策略和后端行为不变。
+
+- `apps/web/src/features/failures/failureWorkspaceModel.ts`：新增 `failureErrorPreview()`
+- `apps/web/src/features/failures/FailureOverview.tsx`：仅 `assertion` 摘要渲染该行
+- `apps/web/src/i18n/locales/{zh-CN,en}/failures.json`：`summary.errorDetail`
+- `apps/web/src/index.css`：`.failure-error-detail` 与 `.failure-root-cause` 同排版
+- `apps/web/tests/failure-workspace-model.test.mjs`：多行取末行、超长截断、纯空白返回空串
+
+reviewer 另一条（Studio「工作区尚未初始化」死路）**无法复现**：1440 截图与 API 都显示文件树完整、绑定文件 `tests/test_discovered_search.py` 在 4 个视口均渲染真实源码，因此不改该状态，只记录结论。
+
+E2E 巡检 harness（`apps/api/tests/test_discovery_coverage_e2e.py`）稳定性改动：
+
+- `ROUND4_SCREENSHOT_PHASE=before|after` 选择证据目录，避免覆盖基线截图。
+- `_goto_app()`：Vite 冷启动偶发空白壳时重载（最多 3 次）。
+- `_shot()`：全页截图偶发卡在 Playwright 的 `waiting for fonts to load`，同图重试 3 次。
+- 浏览器 context 阻断 `fonts.googleapis.com` / `fonts.gstatic.com`：本机网络不可达会让 `document.fonts.ready` 永不完成；阻断后字体回退，截图确定。这是测试环境限制，不是产品缺陷。
+- 断言改为比较 `.view-lines` 的 `textContent` 并去掉全部空白：390px 下 Monaco 自动换行会让 `innerText` 插入换行，旧断言因此误判「文件未渲染」。
+- debug 会话监听移到真正导航的 `page`；响应式巡检的 debugger 使用不带 `nodeid` 的 URL，避免每个视口各起一个 debugpy 并拖死 teardown。
+- 失败 fixture id 缩短到 35 字符内（原合成 id 触发 API 校验失败，debugger 深链因此报 `Request validation failed.`）。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -148,6 +184,9 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 
 ## 7. 未完成 / 待办
 
+- [x] Round4 全页真实浏览器巡检（14 路由 × 4 视口 + 7 需求标签页 + 交互点击）与失败概览断言详情修复，结论见 §3.1。
+- [ ] Round4 未做且证据不支持改动：IA/布局重排（reviewer 认为现有结构连贯）；字体自托管（离线环境）；这两项不得当作已完成。
+
 Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全平台项目权限。
 
 - [x] Discovery、结构化 RequirementRisk/TestScenario、TestDesign、TestCase、ACTIVE binding、真实 Run、latest execution 与 map coverage 的关联/状态；没有将“有用例”当成通过。
@@ -181,9 +220,17 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - 项目权限仍是 P0/P3 架构风险：`ProjectORM` 没有 owner/team 关系，RBAC roles 全局；本次只限制非管理员刷新自己发起的 run，不能据此宣称系统级 project isolation 已完成。
 - 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。Round-2 历史后端回归为 829 passed / 9 skipped / 55 warnings；Round3 最终全仓 834 passed / 10 skipped / 55 warnings，见 §3。当前 rollback 是 filesystem + DB 两阶段操作，无法跨两者原子提交；先持久化 `ROLLBACK_PENDING`，再用 hash-guarded restore，最后保存 `ROLLED_BACK`。DB 最后一步失败时保留 durable pending intent，调用方重试可恢复；不引入第二 Runtime。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
+- Round4 巡检环境限制：本机无法访问 `fonts.googleapis.com`，`document.fonts.ready` 永不完成会让 Playwright 全页截图卡在 `waiting for fonts to load`；harness 阻断该域名并同图重试 3 次。应用字体回退正常，但「离线/内网首屏字体」未做产品级自托管，属已知限制，不作为 UI 缺陷处理。
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+Round4（当前代码，2026-10-17）：
+
+- 全仓后端：`uv run pytest apps/api/tests packages -q` → **837 passed / 10 skipped / 57 warnings / 566.49s**。
+- 全仓 lint：`python scripts/task.py lint` → Ruff、Python format、i18n、OpenAPI、ESLint 全通过。
+- 前端：`pnpm --filter @ai-qa/web typecheck` 通过；`node --test tests/failure-workspace-model.test.mjs` → **10 passed**。
+- 真实浏览器巡检：`ROUND4_SCREENSHOT_PHASE=after uv run pytest apps/api/tests/test_discovery_coverage_e2e.py::test_real_browser_discovery_to_playwright_coverage_e2e -q -s` → **1 passed / 91.14s**，产物 `round-4/evidence/after/`（75 文件、`page-matrix.json` 61 条）。验收基于最后一次修改后的代码（后续只改 handoff/提交，无源码变更）。
 
 Round3 结果和实际浏览器证据保存于 `.ai-runs/night-continuation/round-3/implementation-log.md` 与 `.ai-runs/night-continuation/round-3/evidence/`；历史 Round2 见 `.ai-runs/enterprise-continuation/round-2/test-results.md`。
 
