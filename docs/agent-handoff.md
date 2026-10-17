@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-当前优先完成 Automation Studio 真实浏览器验收（用户任务 m04803）：确认 Monaco 编辑/保存、真实 debugpy 断点与 DAP stepping、暂停/停止/重复运行、失败证据及多分辨率 UI。此后继续原接管任务（m00001、m00628）：验证并完善「需求 → AI/Jev → 场景 → 用例 → 自动化 → 执行 → 结果 → 失败修复 → 验证」真实全链路，不重写已有正确功能。
+Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/需求/场景/用例/自动化/执行/覆盖关联，修复已证实的状态与项目绑定缺陷；用受控 loopback 网站、真实 Chromium/BrowserRuntime、真实 Playwright worker、临时 API/Vite 与实际 UI 点击验收 Discovery → Quality Map → 风险/场景 → 用例 → binding → Run → coverage。新证据位于 `.ai-runs/night-continuation/round-3/evidence/`。旧 Studio/Round-2 成果为历史，不重复实施。
+
+仍需独立排期的 P0：平台全局 project-resource ACL 缺失；本轮只证明业务数据按 project 分区、跨项目 workspace binding 拒绝，不代表 API 访问授权完成。legacy ownerless project 如何认领需产品/安全决策。
 
 ## 2. Git 状态
 
@@ -20,14 +22,17 @@
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | Studio 源码/测试提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`；本文件是其后的 handoff-only 文档更新。`.ai-runs/night-continuation/` 是本地证据，不提交大型日志/截图。 |
+| 当前工作树 | Round3 实现 commit `f64f711`；handoff 文档正在同步本次状态，`.ai-runs/night-continuation/` 证据仍为本地未跟踪文件、保留且不暂存。 |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | 远程 main | 未修改、未合并 |
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
 
-当前阶段：Round-1 Automation Studio 核心真实浏览器验收 attempt 19、全仓回归/lint、最终独立复审均通过；Round-1 报告已更新，源码/测试已本地提交 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`，未推送。旧 Round-2 的 17 个主流程 + 14 个失败/幂等检查仍是历史证据，不能代替本轮。
+Round3 接管（2026-10-17）：初始 HEAD `e6734c7`；保留既有 Round2 代码与 `.ai-runs` 证据并纳入实现提交 `f64f711`。审计覆盖 `Requirement → TestDesign/TestScenario → TestCase → AutomationBinding → TestRun/TestExecution → Discovery Coverage`；现有实体能表达链路，无需重复 schema。修复 latest execution projection、foreign-workspace binding、Discovery draft 风险/结构化场景、case navigation/selection；并完成继承的 verification freshness/rollback recovery（durable `ROLLBACK_PENDING`、proposal identity match、rollback-event dedupe）。
+
+最终验收（commit `f64f711` 后源码未再修改）：`python scripts/task.py test` → **834 passed / 10 skipped / 55 warnings / 474.19s**；Web **160 passed**，typecheck、ESLint、build 均通过；`python scripts/task.py lint` → Ruff、428-file format、i18n（25 namespaces/3025 keys）、OpenAPI、ESLint 全通过。最后单独重跑实际 Chromium E2E → **1 passed / 13.32s**。受控 loopback 站点探索、UI 草稿/场景审阅/用例生成与选中、UI 手工 ACTIVE binding、UI 发起真实 Playwright PASS、Quality Map 刷新重载 VERIFIED、项目切换隔离均有证据。Independent final review found no remaining blocker; ACL/PostgreSQL limits见 §8。实现已本地提交，不推送、不提交 `.ai-runs`。
+历史基线：Automation Studio Round-1 attempt 19 已提交于 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`；本节以上 Round3 测试结果是其后最新结论，旧 Round-2 的 17 个主流程 + 14 个失败/幂等检查不能代替本轮证据。
 
 本轮修复/完善：
 - `apps/api/tests/conftest.py` 的 client fixture 使用 teardown 恢复 workspace path；opt-in UI test 的 AI/Jev health probes 在测试期显式 disabled，并在 `finally` 恢复全局 config/runtime，避免外部请求和测试污染。
@@ -52,6 +57,7 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 
 | 项目 | 证据 |
 | --- | --- |
+| **Round3 Discovery→Coverage 真实 Chromium + UI 验收** | `.ai-runs/night-continuation/round-3/evidence/discovery-to-coverage.json`; includes `automation-binding-review.png`. Controlled local site, fixture AI/Jev, real BrowserRuntime/Chromium/Playwright worker; UI creates draft, reviews scenario, selects case, manually creates ACTIVE binding, starts real run, refresh/reload verifies VERIFIED, and project switching shows isolation. |
 | **Studio 真实调试全流程（历史第二轮）** | `round-2/studio-debug-acceptance.md`（31 项声称 PASS；当前 Round-1 必须重新实测） |
 | **真实 AI + Jev 失败修复（API + UI）** | `round-2/ai-jev-live-acceptance.md`（真实 provider/Jev、信心 1.0、人工审批、精确 pytest 复验、回滚；screenshots 在 `round-2/screenshots/failure-ui/`） |
 | **D8 AI Disabled 可靠性** | `round-2/ai-disabled-provider.md`（43 GET 路由无 5xx；真实 AI 操作明确 502） |
@@ -142,17 +148,21 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 
 ## 7. 未完成 / 待办
 
-（第二轮，按优先级）
+Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全平台项目权限。
 
-- [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed、SQLite duplicate Apply/stale-source/持久化后恢复和真实 Jev 客户端 loopback 503 fail-closed 已验证；尚缺远程 Jev outage、源码/提案持久化前 interruption、verification worker restart 和 PostgreSQL 并发证据。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
+- [x] Discovery、结构化 RequirementRisk/TestScenario、TestDesign、TestCase、ACTIVE binding、真实 Run、latest execution 与 map coverage 的关联/状态；没有将“有用例”当成通过。
+- [x] 实际 UI 打开并审核草稿、场景设计、生成并选中用例；真实 Chromium 探索 loopback 商店、实际 Playwright 执行、Refresh/reload、另项目切换后的数据空态。
+- [x] latest matching execution 不再受旧 Run 排序或 500 项截断误导；外国项目 Workspace binding 被拒绝。
+- [ ] 系统级项目 ACL：覆盖所有资源 API、list/query/body/WS 的 owner/team授权与 legacy project认领规则；Round3 E2E 仅证明 tenant数据投影/Workspace绑定项目一致，不能替代 authorization。
+- [ ] AI + Jev 修复审批安全决策矩阵：真实高置信度 UI/API 成功及低置信度 fail-closed、SQLite duplicate Apply/stale-source/持久化后恢复和真实 Jev 客户端 loopback 503 fail-closed 已验证；本接管新增 verification freshness / proposal identity / rollback retry persistence / duplicate rollback event 定向覆盖，全仓回归通过。尚缺远程 Jev outage、源码/提案持久化前 interruption、verification worker restart 和 PostgreSQL 并发证据。已覆盖 mocked human reject、AI/Jev readiness block、rollback；逐项证据见 `round-2/failure-repair-matrix.md`。
 - [ ] AI 诊断需加强对存在其他控件时的分类稳定性；一次真实页面干扰控件试验把 locator 错误分类成 `TEST_DATA_ERROR`，当前 clean fixture full chain 通过，见 `round-2/ai-jev-live-acceptance.md`。
 - [x] Discovery → Coverage API/integration 闭环：真实探索 → AI requirement/case generation → 人工编写 active Playwright binding → browser execution → explicit refresh → VERIFIED；D5 evidence in `round-2/test-results.md`.
 - [x] Discover 的 Refresh Coverage 按钮已在真实浏览器点击并显示成功 / VERIFIED；历史 run-switch feedback reset 有实现和确定性覆盖。
-- [ ] 最新 strict D5 live UI harness 要求 HTTP 200 / 无 API errors / per-run screenshots，Provider 恢复后最多再跑一次；系统性 project/team ACL 仍缺失（本端点仅 requester/admin scoped）。
+- [x] Round3 strict controlled-site Chromium + actual UI journey: UI creates draft, opens/reviews scenario, selects case, configures binding, starts real run, clicks Refresh Coverage, reloads and switches project; report/screenshot evidence lives in Round3. Separate real AI/Jev provider acceptance remains historical Round2 and must not be inferred from this deterministic-fixture run.
 - [x] Studio 核心真实浏览器 acceptance：attempt 19 通过编辑/保存、真实 debugpy 断点与 stepping/continue、Pause/Stop、重复会话、失败证据及 desktop/tablet/mobile；证据 `.ai-runs/night-continuation/round-1/attempt-19/`。
 - [x] 最终全仓 regression、Python/Web lint、typecheck、build、document-width viewport assertion。
 - [x] Round-1 reports 更新、最终独立 reviewer 无 actionable finding。
-- [x] 本地 semantic commit `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`（no push）。
+- [x] Round3 实现本地 semantic commit `f64f711`（no push）；Round3 evidence stays local/untracked.
 - [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
 - [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
 - [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
@@ -169,19 +179,25 @@ Reviewer 发现的 config/workspace teardown、手机布局和 document-width as
 - Studio locale-tolerant selectors、debug-view flex sizing、phone DebugPanel layout 已修复并在 attempt 19 实测；编辑器 161px desktop / ≥140px tablet-mobile，mobile details 纵向滚动可读，documentWidth 在 1440/768/390px 均不超过 viewport。
 - Discovery 最终化修复已提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。D5 refresh endpoint uses terminal guard and per-run lock; double-refresh regression observes serialization in one process. No multi-process/PostgreSQL evidence.
 - 项目权限仍是 P0/P3 架构风险：`ProjectORM` 没有 owner/team 关系，RBAC roles 全局；本次只限制非管理员刷新自己发起的 run，不能据此宣称系统级 project isolation 已完成。
-- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。Round-2 历史后端回归为 829 passed / 9 skipped，已由 Round-1 最终全仓 830 passed / 10 skipped / 55 warnings supersede，详见 §9。
+- 已提交 CAS/recovery/stale-history 修复（`919cfcd`）；Jev loopback 503 fail-closed 集成测试后，`test_failure_workflow.py` **47 passed / 1 warning**。参数化恢复 **2/2 passed**，PATCH_READY 并发场景 20/20 次通过；stale `ROLLED_BACK` source 不会追加 recovery event。Round-2 历史后端回归为 829 passed / 9 skipped / 55 warnings；Round3 最终全仓 834 passed / 10 skipped / 55 warnings，见 §3。当前 rollback 是 filesystem + DB 两阶段操作，无法跨两者原子提交；先持久化 `ROLLBACK_PENDING`，再用 hash-guarded restore，最后保存 `ROLLED_BACK`。DB 最后一步失败时保留 durable pending intent，调用方重试可恢复；不引入第二 Runtime。
 - 真实 AI 曾把带干扰控件的 locator 失败分类为 `TEST_DATA_ERROR`，暂不证明模糊页面分类稳定。
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
 
-第二轮结果汇总于 `.ai-runs/enterprise-continuation/round-2/test-results.md`。
+Round3 结果和实际浏览器证据保存于 `.ai-runs/night-continuation/round-3/implementation-log.md` 与 `.ai-runs/night-continuation/round-3/evidence/`；历史 Round2 见 `.ai-runs/enterprise-continuation/round-2/test-results.md`。
+
+- Round3 最终全仓：`python scripts/task.py test` → **834 passed / 10 skipped / 55 warnings / 474.19s**。Web 160 passed；typecheck/ESLint/build 都通过。PostgreSQL lane 跳过（`AI_QA_TEST_DATABASE_URL` 未配置，当前无 DB/Docker）。
+- Round3 全仓 lint：`python scripts/task.py lint` → Ruff、428 个 Python 文件格式、25 个 i18n namespaces/3025 keys、OpenAPI 和 ESLint 全通过。
+- 真实集成验收：`apps/api/tests/test_discovery_coverage_e2e.py::test_real_browser_discovery_to_playwright_coverage_e2e`，最后独立重跑 **1 passed / 13.32s**。Chromium真实访问 loopback test shop；发现证据 `3 states/2 actions/6 evidence items`；UI创建需求草稿、查看结构化风险与 scenario、生成并选中 TestCase；UI modal手动创建 ACTIVE binding，UI `结果 → 开始运行` 发起真实 Playwright Run PASSED，点击 refresh + reload 后 Coverage `VERIFIED`；foreign project页面无 Discovery 数据，跨项目 workspace binding API 返回 422。E2E真实 Playwright是测试过程生成且执行的代码。
+- 本轮 AI/Jev 使用 deterministic test fixtures；仅浏览器访问/BrowserRuntime/真实 Playwright执行是真实，不可将其宣称为真实生产 AI/Jev验收。
+- 独立 reviewer：覆盖Round3 diff；记录的 E2E 选中case断言已补为 URL `caseId` +渲染case steps，并复测成功。rollback 文件race由 `write_file_if_unchanged(expected_sha256=...)` fail-closed，持久 `ROLLBACK_PENDING`，不覆盖其他用户修改。
 
 - 最新 Studio opt-in acceptance attempt 19：**2 passed / 32.10s**，真实 Chromium + debugpy；3 sessions CLOSED、synthetic failure Run 为 FAILED 且保留 trace，API/console errors 为空。1440/768/390px `documentWidth <= viewport`。全套截图、metrics、log：`.ai-runs/night-continuation/round-1/attempt-19/`。
 - Studio attempts 1–18 为排障历史；attempt 19 为当前事实。早期 locale selector、Monaco 5px flex collapse、breakpoint verification locator、Step Out 停点等问题已通过修正 harness/布局后解决；最终结果不得引用这些旧失败代替 attempt 19。
 - D5 real API C chain 成功：真实 AI/Jev/本地浏览器、AI 需求/用例、人工 ACTIVE Playwright binding、Run PASSED、刷新后 coverage `VERIFIED`；一次真实 Web UI 点击也显示成功。D5 strict live retries 曾被 provider timeout 阻断；本轮 Studio acceptance 不调用真实 AI/Jev，测试 fixture 明确禁用 health probes 并在 teardown 恢复，不能把这项结果说成 AI/Jev 验收。
 - D5 OpenAPI 403/404/409、requester/Admin endpoint boundary、run-switch UI stale-feedback 和 timestamp latest-execution均修复；`TestRunRepository.list_runs` newest-first。一次独立 review 发现 strict harness路径/status断言问题，已改；最终 reviewer 复查当前 diff：无剩余 blocker。
-- 本轮最终全仓回归（attempt 19 后）：**830 passed / 10 skipped / 55 warnings / 453.15s**；PostgreSQL lane skipped（`AI_QA_TEST_DATABASE_URL` 未设置）。Frontend **160 passed**，typecheck/ESLint/build 通过；`python scripts/task.py lint` 通过 Ruff、427-file format、i18n（25 namespaces/3025 keys）、OpenAPI 与 ESLint。日志 `.ai-runs/night-continuation/round-1/logs/full-regression-final.log`、`lint-final.log`。Vite 6.4.3 警告大型 chunk（Monaco JS 4,031.76KB）。
+- Studio Round1 全仓历史回归（attempt 19 后）：**830 passed / 10 skipped / 55 warnings / 453.15s**；Round3 最新验收结果见上述 834/10/55；PostgreSQL lane skipped（`AI_QA_TEST_DATABASE_URL` 未设置）。Vite 6.4.3 有大型 chunk 警告（Monaco JS 4,031.76KB）。
 - Failure workflow CAS/recovery + Jev 503 suite：**47 passed / 1 warning**；duplicate Apply 20/20 重复、exactly one workspace write。Monaco chunk 4.03 MB；PostgreSQL blocked；remote Worker/Jenkins not run。
 - 系统级项目隔离仍未解决：Project 无 owner/team ACL，RBAC 角色为全局；D5 仅 requester/Admin 可刷新其 run，不代表其他 API 已隔离。
 
@@ -195,6 +211,8 @@ pnpm --filter @ai-qa/web typecheck && pnpm --filter @ai-qa/web lint && pnpm --fi
 ```
 
 ## 10. 下一步具体命令
+
+Round3 已验收并将在本地提交；下一组首要任务为 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。旧 Studio/Strict D5 命令如下仅供历史重跑参考，不是当前 Round3 的待执行项。
 
 ```bash
 # 核对现场
@@ -234,8 +252,9 @@ pnpm -r typecheck && pnpm -r lint
 
 ## 11. 下一个 Agent 应当继续的工作
 
-1. 核对本 handoff、`git status` 与 `git diff --check`；当前 attempt 19、全回归、lint 和 reviewer 均有证据，除非代码发生变化不要重复运行。
-2. 核对 `git log -2 --oneline` 与 `git status --short`；Studio source commit 为 `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5`，其后只有 handoff 文档更新；`.ai-runs/` 不暂存；不得 push。
-3. Studio Round-1 后继续 m00001/m00628 企业接管。优先完成 project ACL：owner + project-team 关联、admin-only legacy claim 机制、集中 resource-to-project resolver、覆盖 191 个 route families 的拒绝/列表过滤/WS 测试；再处理 repair matrix 剩余边界、PostgreSQL/Worker-Jenkins 和未验收业务链路/UI。该 ACL 尚未实现。
+1. 先核对最新 HEAD、`git status --short`、commit 内容和本 Round3 `.ai-runs` evidence；不要丢弃未提交/新用户改动。
+2. Round3 已有全仓测试、lint、独立 reviewer 与真实 Chromium证据；没有新的源码变更时不要重跑整个套件。
+3. 下一组任务是项目资源 ACL：先获取 owner/team 和 legacy ownerless project claim 策略，再复用 `apps/api/app/api/authz.py` 中央策略表及审计表实施，覆盖 191 API route families 的 resource resolver/list/query/body/WS隔离。不能把本轮按 project ID分组的 Quality Map 或 Workspace binding验证说成安全 ACL。
+4. Round2 AI/Jev repair matrix 尚缺远程 outage、持久化前 interruption、verification worker restart、PostgreSQL并发；仅在具备环境时继续，保留明确 blocked 状态。
 
 旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。
