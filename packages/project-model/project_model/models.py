@@ -91,11 +91,16 @@ class ProjectUpdate(EntityBase):
     repository_url: str | None = None
     default_branch: str | None = None
     framework_type: FrameworkType | None = None
+    # Ownership transfer / legacy claim. Only a security admin or the current owner may change these.
+    owner_id: str | None = None
+    team_id: str | None = None
 
 
 class Project(ProjectBase):
     id: str
     demo_kind: str | None = None
+    owner_id: str | None = None
+    team_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from project_model.models import TestRun, TestRunCreate
+from project_model.models import Permission, TestRun, TestRunCreate, User
 
+from app.api.authz import get_current_user, require_permission
+from app.api.project_acl import enforce_project_access, run_access, visible_project_ids
 from app.container import get_run_service
 from app.container import open_run_service as _open_run_service
 from app.event_stream import event_frame
@@ -16,22 +18,32 @@ router = APIRouter(prefix="/runs", tags=["Test Runs"])
 async def list_runs(
     project_id: str | None = None,
     service: TestRunService = Depends(get_run_service),
+    user: User = Depends(get_current_user),
 ):
-    return await service.list_runs(project_id=project_id)
+    if project_id:
+        await enforce_project_access(user, project_id)
+        return await service.list_runs(project_id=project_id)
+    allowed = await visible_project_ids(user)
+    runs = await service.list_runs()
+    if allowed is None:
+        return runs
+    return [run for run in runs if run.project_id in allowed]
 
 
 @router.post("", response_model=TestRun, status_code=status.HTTP_201_CREATED)
 async def trigger_test_run(
     data: TestRunCreate,
     service: TestRunService = Depends(get_run_service),
+    user: User = Depends(get_current_user),
 ):
+    await enforce_project_access(user, data.project_id)
     try:
         return await service.create_and_execute_run(data)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@router.get("/{run_id}", response_model=TestRun)
+@router.get("/{run_id}", response_model=TestRun, dependencies=[Depends(run_access)])
 async def get_run(
     run_id: str,
     service: TestRunService = Depends(get_run_service),
@@ -42,7 +54,7 @@ async def get_run(
     return run
 
 
-@router.post("/recover-stale")
+@router.post("/recover-stale", dependencies=[Depends(require_permission(Permission.SECURITY_ADMIN))])
 async def recover_stale_runs(
     stale_after_seconds: float = Query(7200.0, ge=60),
     service: TestRunService = Depends(get_run_service),
@@ -52,7 +64,7 @@ async def recover_stale_runs(
     return {"recovered_run_ids": recovered}
 
 
-@router.post("/{run_id}/cancel", response_model=TestRun)
+@router.post("/{run_id}/cancel", response_model=TestRun, dependencies=[Depends(run_access)])
 async def cancel_run(
     run_id: str,
     service: TestRunService = Depends(get_run_service),
@@ -63,7 +75,7 @@ async def cancel_run(
     return run
 
 
-@router.get("/{run_id}/events")
+@router.get("/{run_id}/events", dependencies=[Depends(run_access)])
 async def stream_run_events(
     run_id: str,
     service: TestRunService = Depends(get_run_service),

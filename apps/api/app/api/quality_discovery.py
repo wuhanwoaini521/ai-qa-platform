@@ -5,6 +5,11 @@ from project_model.models import Permission, User, UserRole
 from project_model.task_models import Task
 
 from app.api.authz import get_current_user, require_permission
+from app.api.project_acl import (
+    discovery_run_access,
+    enforce_project_access,
+    project_query_access,
+)
 from app.container import get_quality_discovery_service
 from app.services.quality_discovery_service import (
     DiscoveryRunCreate,
@@ -12,7 +17,11 @@ from app.services.quality_discovery_service import (
     discovery_run_dict,
 )
 
-router = APIRouter(prefix="/discovery", tags=["Quality Discovery"])
+router = APIRouter(
+    prefix="/discovery",
+    tags=["Quality Discovery"],
+    dependencies=[Depends(discovery_run_access), Depends(project_query_access("project_id"))],
+)
 
 
 @router.post("/runs", status_code=status.HTTP_202_ACCEPTED)
@@ -21,6 +30,7 @@ async def create_discovery_run(
     user: User = Depends(get_current_user),
     service: QualityDiscoveryService = Depends(get_quality_discovery_service),
 ):
+    await enforce_project_access(user, data.project_id)
     try:
         run = await service.create(data, str(user.id))
     except ValueError as error:

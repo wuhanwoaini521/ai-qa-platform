@@ -12,11 +12,16 @@ from project_model.models import (
     Workspace,
 )
 
+from app.api.project_acl import project_query_access, workspace_access
 from app.api.workspace_dependencies import get_workspace_catalog_service
 from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import SecurityException, WorkspaceService
 
-router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
+router = APIRouter(
+    prefix="/workspaces",
+    tags=["Workspaces"],
+    dependencies=[Depends(workspace_access), Depends(project_query_access("project_id"))],
+)
 
 
 @router.get("", response_model=list[Workspace])

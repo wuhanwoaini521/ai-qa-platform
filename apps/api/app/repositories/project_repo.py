@@ -33,7 +33,7 @@ class ProjectRepository:
         result = await self.session.execute(select(ProjectORM).where(ProjectORM.id == project_id).with_for_update())
         return result.scalar_one_or_none()
 
-    async def create(self, data: ProjectCreate) -> ProjectORM:
+    async def create(self, data: ProjectCreate, owner_id: str | None = None) -> ProjectORM:
         proj_id = f"proj_{uuid.uuid4().hex[:12]}"
         now = utc_now()
         orm = ProjectORM(
@@ -43,6 +43,7 @@ class ProjectRepository:
             repository_url=data.repository_url,
             default_branch=data.default_branch,
             framework_type=data.framework_type.value,
+            owner_id=owner_id,
             created_at=now,
             updated_at=now,
         )

@@ -34,6 +34,8 @@ class ProjectService:
             repository_url=orm.repository_url,
             default_branch=orm.default_branch,
             framework_type=FrameworkType(orm.framework_type),
+            owner_id=orm.owner_id,
+            team_id=orm.team_id,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
@@ -51,8 +53,8 @@ class ProjectService:
             return None
         return self._to_dto(orm)
 
-    async def create_project(self, data: ProjectCreate) -> Project:
-        orm = await self.project_repo.create(data)
+    async def create_project(self, data: ProjectCreate, owner_id: str | None = None) -> Project:
+        orm = await self.project_repo.create(data, owner_id=owner_id)
         # Create workspace record
         ws_create = WorkspaceCreate(project_id=orm.id, branch=data.default_branch)
         ws_path = str(self.workspace_service.get_workspace_dir(orm.id))

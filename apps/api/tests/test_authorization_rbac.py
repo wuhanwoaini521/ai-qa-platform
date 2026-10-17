@@ -100,7 +100,9 @@ async def test_viewer_can_read_but_never_mutate(client: AsyncClient, credentials
 
     async with credentials_client(*VIEWER_CREDENTIALS) as viewer:
         assert (await viewer.get("/api/projects")).status_code == 200
-        assert (await viewer.get(f"/api/projects/{project_id}")).status_code == 200
+        # Role-wise a viewer may read projects, but project ACL still applies: this viewer is neither
+        # owner nor team member, so the project must not even be acknowledged (see test_project_acl).
+        assert (await viewer.get(f"/api/projects/{project_id}")).status_code == 404
         assert (await viewer.get("/api/workers")).status_code == 200
         assert (await viewer.get("/api/jobs")).status_code == 200
 
@@ -134,9 +136,17 @@ async def test_viewer_can_read_but_never_mutate(client: AsyncClient, credentials
     assert [p["id"] for p in listing.json()] == [project_id]
 
 
+async def _assign_owner(admin: AsyncClient, project_id: str, email: str) -> None:
+    """Make the seeded role account the project owner so the role test is not also an ACL test."""
+    users = (await admin.get("/api/users")).json()
+    user_id = next(u["id"] for u in users if u["email"] == email)
+    assert (await admin.patch(f"/api/projects/{project_id}", json={"owner_id": user_id})).status_code == 200
+
+
 async def test_engineer_may_author_but_not_gate_or_administer(client: AsyncClient, role_client):
     project = await client.post("/api/projects", json={"name": "RBAC Engineer Target"})
     project_id = project.json()["id"]
+    await _assign_owner(client, project_id, ROLE_CREDENTIALS["QA_ENGINEER"][0])
 
     async with role_client("QA_ENGINEER") as engineer:
         test_case = await engineer.post(
@@ -154,6 +164,7 @@ async def test_engineer_may_author_but_not_gate_or_administer(client: AsyncClien
 async def test_lead_may_gate_but_not_administer(client: AsyncClient, role_client):
     project = await client.post("/api/projects", json={"name": "RBAC Lead Target"})
     project_id = project.json()["id"]
+    await _assign_owner(client, project_id, ROLE_CREDENTIALS["QA_LEAD"][0])
 
     async with role_client("QA_LEAD") as lead:
         created = await lead.post(

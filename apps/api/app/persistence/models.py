@@ -107,6 +107,14 @@ class ProjectORM(Base):
     default_branch: Mapped[str] = mapped_column(String(100), default="main")
     framework_type: Mapped[str] = mapped_column(String(50), default="playwright_python")
     demo_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Project-level ownership. Nullable so pre-existing ("legacy") projects stay admin-only until a
+    # security admin explicitly claims them; new projects always record their creator.
+    owner_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    team_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 

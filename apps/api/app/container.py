@@ -16,6 +16,7 @@ from app.repositories.api_key_repo import ApiKeyRepository
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.failure_repo import FailureRepository
 from app.repositories.integration_audit_repo import IntegrationAuditRepository
+from app.repositories.project_access_repo import ProjectAccessRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.release_repo import ReleaseRepository
 from app.repositories.requirement_repo import RequirementRepository
@@ -51,6 +52,7 @@ from app.services.metrics_service import MetricsService
 from app.services.onboarding_service import OnboardingService
 from app.services.platform_health_service import PlatformHealthService
 from app.services.pr_service import PullRequestService
+from app.services.project_access_service import ProjectAccessService
 from app.services.project_knowledge_service import ProjectKnowledgeQueryService
 from app.services.project_service import ProjectService
 from app.services.qa_assistant_service import QAAssistantService
@@ -189,6 +191,16 @@ def get_run_service(session: AsyncSession = Depends(get_db)) -> TestRunService:
 async def open_run_service() -> AsyncGenerator[TestRunService, None]:
     async with async_session_factory() as session:
         yield build_run_service(session)
+
+
+def get_project_access_service(session: AsyncSession = Depends(get_db)) -> ProjectAccessService:
+    return ProjectAccessService(ProjectAccessRepository(session))
+
+
+@asynccontextmanager
+async def open_project_access_service() -> AsyncGenerator[ProjectAccessService, None]:
+    async with async_session_factory() as session:
+        yield ProjectAccessService(ProjectAccessRepository(session))
 
 
 def get_dashboard_service(session: AsyncSession = Depends(get_db)) -> DashboardService:

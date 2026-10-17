@@ -14,12 +14,13 @@ from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
 
 from app.api.authz import get_current_user
+from app.api.project_acl import enforce_project_access, failure_access, visible_project_ids
 from app.container import get_failure_service, get_failure_workflow_service
 from app.event_stream import event_frame
 from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
 from app.services.failure_workflow_service import FailureWorkflowService
 
-router = APIRouter(prefix="/failures", tags=["Failures & Healing"])
+router = APIRouter(prefix="/failures", tags=["Failures & Healing"], dependencies=[Depends(failure_access)])
 
 
 @router.get("", response_model=list[FailureRecord])
@@ -27,8 +28,18 @@ async def list_failures(
     project_id: str | None = Query(default=None, description="Only failures of this project's runs"),
     limit: int = Query(default=50, ge=1, le=200),
     service: FailureService = Depends(get_failure_service),
+    user: User = Depends(get_current_user),
 ):
-    return await service.list_failures(project_id=project_id, limit=limit)
+    if project_id:
+        await enforce_project_access(user, project_id)
+        return await service.list_failures(project_id=project_id, limit=limit)
+    allowed = await visible_project_ids(user)
+    if allowed is None:
+        return await service.list_failures(limit=limit)
+    # Repo filtering is per-project; for a scoped caller fan out and keep creation order.
+    records = [f for pid in allowed for f in await service.list_failures(project_id=pid, limit=limit)]
+    records.sort(key=lambda r: r.created_at, reverse=True)
+    return records[:limit]
 
 
 @router.get("/{failure_id}", response_model=FailureRecord)

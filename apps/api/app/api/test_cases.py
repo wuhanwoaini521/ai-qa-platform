@@ -6,14 +6,26 @@ from project_model.models import (
     TestCase,
     TestCaseCreate,
     TestCaseUpdate,
+    User,
 )
 
+from app.api.authz import get_current_user
+from app.api.project_acl import (
+    case_access,
+    enforce_project_access,
+    project_query_access,
+    visible_project_ids,
+)
 from app.container import get_binding_service, get_test_case_service
 from app.services.automation_binding_service import AutomationBindingService
 from app.services.operation_trace import stream_operation
 from app.services.test_case_service import TestCaseService
 
-router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
+router = APIRouter(
+    prefix="/test-cases",
+    tags=["Test Cases"],
+    dependencies=[Depends(case_access), Depends(project_query_access("project_id"))],
+)
 
 
 @router.post("/{case_id}/generate-automation/stream")
@@ -35,15 +47,23 @@ async def stream_automation_generation(case_id: str, service: AutomationBindingS
 async def list_test_cases(
     project_id: str | None = None,
     service: TestCaseService = Depends(get_test_case_service),
+    user: User = Depends(get_current_user),
 ):
-    return await service.list_test_cases(project_id=project_id)
+    if project_id:
+        return await service.list_test_cases(project_id=project_id)
+    allowed = await visible_project_ids(user)
+    if allowed is None:
+        return await service.list_test_cases()
+    return [tc for tc in await service.list_test_cases() if tc.project_id in allowed]
 
 
 @router.post("", response_model=TestCase, status_code=status.HTTP_201_CREATED)
 async def create_test_case(
     data: TestCaseCreate,
     service: TestCaseService = Depends(get_test_case_service),
+    user: User = Depends(get_current_user),
 ):
+    await enforce_project_access(user, data.project_id)
     try:
         return await service.create_test_case(data)
     except ValueError as error:

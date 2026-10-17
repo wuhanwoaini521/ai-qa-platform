@@ -6,27 +6,47 @@ from project_model.models import (
     ReleaseCreate,
     ReleaseGateReport,
     ReleaseUpdate,
+    User,
 )
 
+from app.api.authz import get_current_user
+from app.api.project_acl import (
+    enforce_project_access,
+    project_query_access,
+    release_access,
+    visible_project_ids,
+)
 from app.container import get_release_service
 from app.services.release_service import ReleaseService
 
-router = APIRouter(prefix="/releases", tags=["Release Management & Quality Gate"])
+router = APIRouter(
+    prefix="/releases",
+    tags=["Release Management & Quality Gate"],
+    dependencies=[Depends(release_access), Depends(project_query_access("project_id"))],
+)
 
 
 @router.get("", response_model=list[Release])
 async def list_releases(
     project_id: str | None = Query(default=None),
     service: ReleaseService = Depends(get_release_service),
+    user: User = Depends(get_current_user),
 ):
-    return await service.list_releases(project_id=project_id)
+    if project_id:
+        return await service.list_releases(project_id=project_id)
+    allowed = await visible_project_ids(user)
+    if allowed is None:
+        return await service.list_releases()
+    return [r for r in await service.list_releases() if r.project_id in allowed]
 
 
 @router.post("", response_model=Release, status_code=status.HTTP_201_CREATED)
 async def create_release(
     body: ReleaseCreate,
     service: ReleaseService = Depends(get_release_service),
+    user: User = Depends(get_current_user),
 ):
+    await enforce_project_access(user, body.project_id)
     return await service.create_release(body)
 
 

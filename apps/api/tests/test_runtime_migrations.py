@@ -15,7 +15,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_debug_session_lineage"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
         assert {"decision_value", "locator_repair_id"} <= {
             column["name"] for column in inspect(connection).get_columns("ai_invocations")
         }
