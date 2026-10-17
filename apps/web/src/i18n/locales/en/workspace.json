@@ -110,7 +110,11 @@
     "noCases": "The current requirement has no linked cases.",
     "noFailures": "This project has no failure records.",
     "noRuns": "There are no runs yet.",
-    "noFiles": "No workspace files to show."
+    "noFiles": "No workspace files to show.",
+    "filterPlaceholder": "Filter…",
+    "noMatches": "No matching items.",
+    "showMore": "Show {{count}} more",
+    "showLess": "Show less"
   },
   "dock": {
     "title": "Run Dock",

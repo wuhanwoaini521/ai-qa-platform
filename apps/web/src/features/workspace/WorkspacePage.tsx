@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Sparkles, Workflow, X } from 'lucide-react';
+import { ArrowRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Search, Sparkles, Workflow, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useProjectScope, useRouteProjectScope } from '../../app/ProjectScope';
 import { buildProjectDisplayNames } from '../../app/projectSelectionModel';
@@ -997,39 +997,52 @@ export function WorkspacePage() {
             <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div>
             {['requirement', 'discover'].includes(stage) && <section className="workspace-context-group">
               <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3></div>
-              <div className="workspace-context-list">
-                {requirements.slice(0, 12).map((item) => <button key={item.id} type="button" className={item.id === context.requirementId ? 'is-selected' : ''} aria-pressed={item.id === context.requirementId} onClick={() => selectRequirement(item.id)}>
-                  <span>{item.qa_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong>
-                </button>)}
-                {!contextDataLoaded ? <p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p> : !requirements.length && <><p className="workspace-muted">{t('context.noRequirements')}</p>{projects.length > 1 && <Link className="btn btn-secondary btn-sm" to="/projects">{t('context.chooseProject')}</Link>}</>}
-              </div>
+              {!contextDataLoaded
+                ? <div className="workspace-context-list"><p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p></div>
+                : <WorkspaceContextList
+                  items={requirements}
+                  limit={12}
+                  filterText={(item) => `${item.qa_model?.display_id ?? ''} ${item.title}`}
+                  renderItem={(item) => <button key={item.id} type="button" className={item.id === context.requirementId ? 'is-selected' : ''} aria-pressed={item.id === context.requirementId} onClick={() => selectRequirement(item.id)}>
+                    <span>{item.qa_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong>
+                  </button>}
+                  emptyState={<><p className="workspace-muted">{t('context.noRequirements')}</p>{projects.length > 1 && <Link className="btn btn-secondary btn-sm" to="/projects">{t('context.chooseProject')}</Link>}</>}
+                />}
             </section>}
             {['cases', 'automation'].includes(stage) && <section className="workspace-context-group">
               <div className="workspace-group-heading"><h3>{t('context.cases')}</h3></div>
-              <div className="workspace-context-list">
-                {relatedCases.slice(0, 10).map((item) => <button key={item.id} type="button" className={item.id === context.testCaseId ? 'is-selected' : ''} aria-pressed={item.id === context.testCaseId} onClick={() => selectCase(item)}>
-                  <span>{item.test_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong><small>{item.automation_status}</small>
-                </button>)}
-                {!contextDataLoaded ? <p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p> : !relatedCases.length && <p className="workspace-muted">{t('context.noCases')}</p>}
-              </div>
+              {!contextDataLoaded
+                ? <div className="workspace-context-list"><p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p></div>
+                : <WorkspaceContextList
+                  items={relatedCases}
+                  limit={10}
+                  filterText={(item) => `${item.test_model?.display_id ?? ''} ${item.title}`}
+                  renderItem={(item) => <button key={item.id} type="button" className={item.id === context.testCaseId ? 'is-selected' : ''} aria-pressed={item.id === context.testCaseId} onClick={() => selectCase(item)}>
+                    <span>{item.test_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong><small>{item.automation_status}</small>
+                  </button>}
+                  emptyState={<p className="workspace-muted">{t('context.noCases')}</p>}
+                />}
             </section>}
             {stage === 'failure' && <section className="workspace-context-group workspace-failure-queue" aria-label={t('context.failures')}>
               <div className="workspace-group-heading"><h3>{t('context.failures')}</h3><span>{failures.length}</span></div>
-              <div className="workspace-context-list">
-                {failures.slice(0, 5).map((item) => <Link
-                  key={item.id}
-                  to={buildWorkspaceHref({ projectId, runId: item.run_id, failureId: item.id, stage: 'failure', view: 'results' })}
-                  aria-current={item.id === context.failureId ? 'page' : undefined}
-                  className={item.id === context.failureId ? 'is-selected' : ''}
-                  title={item.error_message}
-                >
-                  <strong>{item.test_name || item.test_nodeid.split('::').at(-1) || item.test_nodeid}</strong>
-                  <small>{item.classification}</small>
-                </Link>)}
-                {!contextDataLoaded
-                  ? <p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p>
-                  : !failures.length && <p className="workspace-muted">{t('context.noFailures')}</p>}
-              </div>
+              {!contextDataLoaded
+                ? <div className="workspace-context-list"><p className="workspace-muted">{contextLoading ? t('context.loading') : t('context.unavailable')}</p></div>
+                : <WorkspaceContextList
+                  items={failures}
+                  limit={5}
+                  filterText={(item) => `${item.test_name ?? ''} ${item.test_nodeid} ${item.classification}`}
+                  renderItem={(item) => <Link
+                    key={item.id}
+                    to={buildWorkspaceHref({ projectId, runId: item.run_id, failureId: item.id, stage: 'failure', view: 'results' })}
+                    aria-current={item.id === context.failureId ? 'page' : undefined}
+                    className={item.id === context.failureId ? 'is-selected' : ''}
+                    title={item.error_message}
+                  >
+                    <strong>{item.test_name || item.test_nodeid.split('::').at(-1) || item.test_nodeid}</strong>
+                    <small>{item.classification}</small>
+                  </Link>}
+                  emptyState={<p className="workspace-muted">{t('context.noFailures')}</p>}
+                />}
             </section>}
             {stage === 'automation' && binding && <section className="workspace-context-group workspace-binding-card">
               <div className="workspace-group-heading"><h3>{t('context.automation')}</h3><span className={`workspace-binding-status is-${binding.status.toLowerCase()}`}>{binding.status}</span></div>
@@ -1317,6 +1330,52 @@ export function WorkspacePage() {
         </section>
       </div>}
     </div>
+  );
+}
+
+function WorkspaceContextList<T>({
+  items,
+  limit,
+  filterText,
+  renderItem,
+  emptyState,
+}: {
+  items: T[];
+  limit: number;
+  filterText: (item: T) => string;
+  renderItem: (item: T) => ReactNode;
+  emptyState: ReactNode;
+}) {
+  const { t } = useTranslation('workspace');
+  const [query, setQuery] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? items.filter((item) => filterText(item).toLowerCase().includes(normalizedQuery))
+    : items;
+  const visible = showAll ? filtered : filtered.slice(0, limit);
+  const hiddenCount = filtered.length - visible.length;
+  return (
+    <>
+      <div className="workspace-context-filter">
+        <Search size={13} aria-hidden="true" />
+        <input
+          type="search"
+          value={query}
+          aria-label={t('context.filterPlaceholder')}
+          placeholder={t('context.filterPlaceholder')}
+          onChange={(event) => { setQuery(event.target.value); setShowAll(false); }}
+        />
+      </div>
+      <div className="workspace-context-list">
+        {visible.map(renderItem)}
+        {!filtered.length && (normalizedQuery
+          ? <p className="workspace-muted">{t('context.noMatches')}</p>
+          : emptyState)}
+      </div>
+      {hiddenCount > 0 && <button type="button" className="workspace-context-more" onClick={() => setShowAll(true)}>{t('context.showMore', { count: hiddenCount })}</button>}
+      {showAll && filtered.length > limit && <button type="button" className="workspace-context-more" onClick={() => setShowAll(false)}>{t('context.showLess')}</button>}
+    </>
   );
 }
 

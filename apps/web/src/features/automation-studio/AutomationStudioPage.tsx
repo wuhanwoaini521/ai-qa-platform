@@ -41,6 +41,7 @@ import { BranchModal } from './components/BranchModal';
 import { PullRequestModal } from './components/PullRequestModal';
 import { DebugPanel } from './components/DebugPanel';
 import { buildWorkspaceHref, readWorkspaceContext } from '../../app/workspaceContext';
+import { usePaneResize } from '../workspace/usePaneResize';
 
 export interface AutomationStudioPageProps {
   projects: Project[];
@@ -127,6 +128,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   const [languageIssues, setLanguageIssues] = useState<Record<string, import('../../types').ValidationIssue[]>>({});
   useEffect(() => { setLanguageIssues({}); }, [currentProjectId]);
   const [executionLocation, setExecutionLocation] = useState<{ path: string; line: number } | null>(null);
+  const bottomDock = usePaneResize({ storageKey: 'studio.bottomPanelHeight', min: 120, max: 520, initial: 220 });
 
   const closeBrowserDrawer=()=>{setShowBrowser(false);toolsMenuTriggerRef.current?.focus();};
   const handleBrowserDrawerKeyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{
@@ -789,8 +791,17 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           />
         )}
 
-        {/* Collapsible Bottom Problems Panel */}
-        <div className="studio-bottom-panels" style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)' }}>
+        {/* Resizable, collapsible bottom dock: problems + quick run output */}
+        <div
+          className={`studio-bottom-panels${problems.showProblemsPanel ? '' : ' is-collapsed'}`}
+          style={{ borderTop: '1px solid var(--ui-line)', background: 'var(--ui-surface-raised)', '--studio-dock-height': `${bottomDock.size}px` } as React.CSSProperties}
+        >
+          <div
+            className="studio-dock-resize"
+            aria-label={t('bottomDock.resizePanel')}
+            title={t('bottomDock.resizePanel')}
+            {...bottomDock.handleProps}
+          />
           <ProblemsPanel
             issues={[...problems.validationIssues, ...Object.values(languageIssues).flat()]}
             expanded={problems.showProblemsPanel}
@@ -803,7 +814,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           />
 
           {/* Quick Execution Log notification bar */}
-          <RunOutputPanel lastRunResult={run.lastRunResult} runId={run.activeRunId} onNavigateToRuns={onNavigateToRuns} />
+          <div className="studio-dock-runoutput">
+            <RunOutputPanel lastRunResult={run.lastRunResult} runId={run.activeRunId} onNavigateToRuns={onNavigateToRuns} />
+          </div>
         </div>
 
         <WorkbenchStatusBar

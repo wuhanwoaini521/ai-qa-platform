@@ -69,8 +69,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
         </span>
       </button>
 
-      {expanded && (
-        <div id="studio-problems-panel" role="region" aria-label={t('problems.title')} style={{ height: '140px', overflowY: 'auto', padding: '8px' }}>
+      <div id="studio-problems-panel" role="region" aria-label={t('problems.title')} className="studio-problems-body">
           {validating && <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '12px', color: 'var(--text-muted)', fontSize: '12px' }}><LoaderCircle size={14} aria-hidden="true" />{t('problems.validating')}</div>}
           {validationFailed && !validating && <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', color: 'var(--ui-rose-strong)', fontSize: '12px' }}><AlertCircle size={14} aria-hidden="true" /><span>{t('problems.validationFailed')}</span><button type="button" className="btn btn-secondary btn-sm" onClick={onValidate}>{t('problems.retryValidation')}</button></div>}
           {!hasValidated && !validationFailed && !validating && <div role="status" style={{ color: 'var(--text-muted)', padding: '16px', fontSize: '12px' }}>{t('problems.notChecked')}</div>}
@@ -115,8 +114,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({
               </tbody>
             </table>
           )}
-        </div>
-      )}
+      </div>
     </>
   );
 };

@@ -110,7 +110,11 @@
     "noCases": "当前需求还没有关联用例。",
     "noFailures": "当前项目没有失败记录。",
     "noRuns": "还没有运行记录。",
-    "noFiles": "没有可显示的工作区文件。"
+    "noFiles": "没有可显示的工作区文件。",
+    "filterPlaceholder": "筛选…",
+    "noMatches": "没有匹配项。",
+    "showMore": "再显示 {{count}} 项",
+    "showLess": "收起"
   },
   "dock": {
     "title": "运行 Dock",

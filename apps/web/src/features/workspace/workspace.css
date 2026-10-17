@@ -332,6 +332,48 @@
 
 .workspace-group-heading > a:hover { background: var(--surface-hover); color: var(--ink); }
 
+.workspace-context-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  color: var(--ink-muted);
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.workspace-context-filter input {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+}
+
+.workspace-context-filter input:focus-visible { outline: none; }
+.workspace-context-filter:focus-within { border-color: var(--accent-blue); }
+
+.workspace-context-more {
+  justify-self: start;
+  padding: 5px 8px;
+  color: var(--accent-blue);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-xs);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workspace-context-more:hover { background: var(--surface-hover); }
+.workspace-context-more:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+
 .workspace-context-list {
   display: grid;
   gap: 3px;
@@ -1379,6 +1421,7 @@
   .workspace-main-heading h2 { margin: 0; font-size: 14px; }
   .workspace-shell .lc-studio-toolbar { gap: 6px; padding: 4px 8px; }
   .workspace-shell .studio-problems-toggle { display: none; }
+  .workspace-shell .studio-bottom-panels.is-collapsed { height: 0; }
   .workspace-shell .studio-editor-tabs {
     flex-wrap: nowrap;
     justify-content: flex-start;

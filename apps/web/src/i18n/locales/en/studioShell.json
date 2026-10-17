@@ -141,5 +141,8 @@
     "label": "Studio modes",
     "code": "Code and debug",
     "recorder": "Browser and recorder"
+  },
+  "bottomDock": {
+    "resizePanel": "Resize bottom panel; use up and down arrow keys to adjust"
   }
 }

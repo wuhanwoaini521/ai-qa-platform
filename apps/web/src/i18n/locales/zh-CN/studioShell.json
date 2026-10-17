@@ -141,5 +141,8 @@
     "label": "工作室模式",
     "code": "代码与调试",
     "recorder": "浏览器与录制"
+  },
+  "bottomDock": {
+    "resizePanel": "调整底部面板高度，使用上下方向键微调"
   }
 }
