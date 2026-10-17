@@ -8,10 +8,12 @@ from project_model.models import (
     FailureRecurrenceItem,
     FailureRepairWorkflow,
     TestRun,
+    User,
 )
 from qa_core.ai.models import FailureAnalysisResponse, LocatorSemanticReview
 from qa_core.healing.models import LocatorRepairProposal
 
+from app.api.authz import get_current_user
 from app.container import get_failure_service, get_failure_workflow_service
 from app.event_stream import event_frame
 from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
@@ -92,11 +94,12 @@ async def apply_analysis_repair(
     failure_id: str,
     analysis_id: str,
     payload: ApplyRepairRequest = Body(...),
+    user: User = Depends(get_current_user),
     service: FailureService = Depends(get_failure_service),
     workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
     try:
-        return await workflow.apply_repair(failure_id, analysis_id, payload)
+        return await workflow.apply_repair(failure_id, analysis_id, payload, actor=user)
     except LocatorRepairNotApplicableError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except ValueError as error:
@@ -107,11 +110,12 @@ async def apply_analysis_repair(
 async def rollback_analysis_repair(
     failure_id: str,
     analysis_id: str,
+    user: User = Depends(get_current_user),
     service: FailureService = Depends(get_failure_service),
     workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
     try:
-        return await workflow.rollback_repair(failure_id, analysis_id)
+        return await workflow.rollback_repair(failure_id, analysis_id, actor=user)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -281,6 +285,7 @@ async def apply_repair_proposal(
     failure_id: str,
     workspace_id: str = Query(..., description="Target workspace ID"),
     payload: ApplyRepairRequest = Body(...),
+    user: User = Depends(get_current_user),
     service: FailureService = Depends(get_failure_service),
     workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
@@ -293,6 +298,7 @@ async def apply_repair_proposal(
             state.analysis_id,
             payload,
             expected_workspace_id=workspace_id,
+            actor=user,
         )
     except LocatorRepairNotApplicableError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -304,6 +310,7 @@ async def apply_repair_proposal(
 async def rollback_repair(
     failure_id: str,
     workspace_id: str = Query(..., description="Target workspace ID"),
+    user: User = Depends(get_current_user),
     service: FailureService = Depends(get_failure_service),
     workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
 ):
@@ -315,6 +322,7 @@ async def rollback_repair(
             failure_id,
             state.analysis_id,
             expected_workspace_id=workspace_id,
+            actor=user,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

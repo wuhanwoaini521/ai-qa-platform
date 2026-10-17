@@ -35,36 +35,6 @@ def make_run_service(failure_service, session):
     )
 
 
-@pytest.fixture
-def local_html_url():
-    servers = []
-
-    def serve(html: str) -> str:
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                body = html.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, *_args):
-                pass
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        servers.append((server, thread))
-        return f"http://127.0.0.1:{server.server_port}/"
-
-    yield serve
-    for server, thread in servers:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
-
-
 @pytest.mark.asyncio
 async def test_verified_locator_heal_is_counted_once_and_unverified_is_not(client, test_db_session):
     from app.persistence.models import FailureAnalysisORM, LocatorHistoryORM
@@ -373,7 +343,7 @@ async def test_terminal_manual_verification_records_completion_even_if_state_was
     project_id, failure_id, _ = await seed(
         client, test_db_session, error='Timeout waiting for locator("#checkout")', kind="UI"
     )
-    analysis_id = "analysis-manual-verification-reconcile"
+    analysis_id = "analysis-manual-verify"
     proposal = {
         "proposed_locator": 'get_by_test_id("checkout-new")',
         "verified": True,
@@ -1111,10 +1081,13 @@ async def test_manual_repair_persists_applied_and_rolled_back_state(
         assert successful_write_count == 1
         assert all(result["status"] == "applied" for result in successful_applies)
         if rejected_applies:
-            assert isinstance(rejected_applies[0], ValueError), concurrent_results
-            assert "does not allow applying a patch" in str(
-                rejected_applies[0]
-            ) or "state changed before patch application" in str(rejected_applies[0]), concurrent_results
+            rejection = rejected_applies[0]
+            # Any guard may lose the race: the repair-state or candidate-staleness check (ValueError)
+            # or the workspace optimistic write guard, which is a 409 conflict by design
+            # (FileExistsError). What matters is that the loser refuses to write.
+            assert isinstance(rejection, (ValueError, FileExistsError)), concurrent_results
+            message = str(rejection)
+            assert "does not allow applying a patch" in message or "changed" in message, concurrent_results
         applied = successful_applies[0]
         assert applied["repair"]["state"] == "PATCH_APPLIED"
         applied_analysis = next(row for row in await workflow._history_list(failure_id) if row["id"] == analysis_id)

@@ -15,7 +15,9 @@ from __future__ import annotations
 import os
 import sys
 from contextlib import asynccontextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 import pytest
@@ -26,6 +28,7 @@ from app.persistence import models as models_module  # noqa: F401
 from app.persistence.database import Base, get_db
 from app.settings import settings
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 POSTGRES_TEST_URL = os.environ.get("AI_QA_TEST_DATABASE_URL", "").strip()
@@ -109,24 +112,75 @@ def restore_database(state: dict[str, Any]) -> None:
                 setattr(module, name, original)
 
 
+async def reset_test_schema(connection) -> None:
+    """Create an empty schema for the next test.
+
+    PostgreSQL cannot ``DROP TABLE`` the ``test_runs``/``failure_records`` pair because their
+    foreign keys reference each other, so the schema is replaced instead of sorting tables.
+    """
+    if using_postgres():
+        database = make_url(POSTGRES_TEST_URL).database or ""
+        if "test" not in database.lower():
+            raise RuntimeError(
+                f"Refusing to drop the schema of non-test database {database!r}; "
+                "AI_QA_TEST_DATABASE_URL must point at a throwaway test database."
+            )
+        await connection.execute(text("DROP SCHEMA public CASCADE"))
+        await connection.execute(text("CREATE SCHEMA public"))
+        return
+    await connection.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture
+def local_html_url():
+    """Serve HTML on a loopback port for a single test; returns a serve() factory."""
+    servers = []
+
+    def serve(html: str) -> str:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        servers.append((server, thread))
+        return f"http://127.0.0.1:{server.server_port}/"
+
+    yield serve
+    for server, thread in servers:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 @pytest_asyncio.fixture
 async def test_db_session(tmp_path: Path):
     engine = create_test_engine(tmp_path)
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await reset_test_schema(conn)
         await conn.run_sync(Base.metadata.create_all)
-        if not using_postgres():
-            from alembic.runtime.migration import MigrationContext
-            from alembic.script import ScriptDirectory
-            from app.persistence.migrations import migration_config
+        # The schema is created from the models, which the migration-drift test keeps equal to
+        # Alembic head; stamping keeps the readiness probe (schema-current check) meaningful.
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from app.persistence.migrations import migration_config
 
-            script_directory = ScriptDirectory.from_config(migration_config())
-            await conn.run_sync(
-                lambda sync_connection: MigrationContext.configure(sync_connection).stamp(
-                    script_directory, script_directory.get_current_head()
-                )
+        script_directory = ScriptDirectory.from_config(migration_config())
+        await conn.run_sync(
+            lambda sync_connection: MigrationContext.configure(sync_connection).stamp(
+                script_directory, script_directory.get_current_head()
             )
+        )
 
     async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 

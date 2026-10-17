@@ -132,7 +132,26 @@ class JobQueueService:
         )
 
     async def cancel_job(self, job_id: str) -> ExecutionJob | None:
-        return await self.job_repo.update_job_status(job_id=job_id, status=JobStatus.CANCELLED)
+        job = await self.job_repo.get_by_id(job_id)
+        if job is None:
+            return None
+        cancelled = await self.job_repo.update_job_status(job_id=job_id, status=JobStatus.CANCELLED)
+        # Cancelling only the job left the run RUNNING in the UI and in every pass-rate figure,
+        # so the run (and its worker-side execution) is cancelled through the same service the
+        # runs API uses.
+        if job.status in (JobStatus.QUEUED, JobStatus.ASSIGNED, JobStatus.RUNNING):
+            from app.services.test_run_service import TestRunService
+
+            async with self.repository_scope() as repositories:
+                service = TestRunService(
+                    repositories.test_runs,
+                    repositories.workspaces,
+                    WorkspaceService(),
+                    repository_scope=self.repository_scope,
+                    repositories=repositories,
+                )
+                await service.cancel_run(job.run_id)
+        return cancelled
 
     async def list_jobs(
         self,

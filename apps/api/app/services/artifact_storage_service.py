@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
@@ -72,7 +71,13 @@ class ArtifactStorageService:
         orm = await self.artifact_repo.get_by_id(artifact_id)
         if not orm:
             return None
-        if os.path.exists(orm.storage_path):
-            content = Path(orm.storage_path).read_bytes()
-            return content, orm.filename, orm.content_type
+        # Containment is re-checked here because the stored path is plain data: a tampered row must
+        # not turn the download route into an arbitrary-file read. The configured root is re-read so
+        # the check follows the live config, not only the value captured at construction.
+        roots = {self.base_dir.resolve(), Path(get_config().app.artifact_storage_dir).resolve()}
+        path = Path(orm.storage_path).resolve()
+        if not any(path.is_relative_to(root) for root in roots):
+            return None
+        if path.exists():
+            return path.read_bytes(), orm.filename, orm.content_type
         return None

@@ -96,7 +96,7 @@ run:
 
 pytest:
   workers: 1
-  timeout_seconds: 120
+  timeout_seconds: ${AI_QA_PYTEST_TIMEOUT_SECONDS:-120}
   default_args: []
 
 agent:
@@ -161,8 +161,8 @@ worker:
   heartbeat_interval_seconds: 10
   poll_interval_seconds: 3
   http_timeout_seconds: 30
-  workspace_storage_dir: ./runtime/workspaces
-  artifact_storage_dir: ./runtime/artifacts
+  workspace_storage_dir: ${AI_QA_WORKER_WORKSPACE_DIR:-./runtime/workspaces}
+  artifact_storage_dir: ${AI_QA_WORKER_ARTIFACT_DIR:-./runtime/artifacts}
 
 integrations:
   github:

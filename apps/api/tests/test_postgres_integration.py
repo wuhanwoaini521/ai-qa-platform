@@ -30,12 +30,13 @@ from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.job_queue_service import JobQueueService
 from httpx import AsyncClient
-from project_model.models import RunStatus, TestRunCreate
+from project_model.models import AutomationBindingCreate, AutomationBindingStatus, RunStatus, TestRunCreate
 
 pytestmark = [pytest.mark.postgres, pytest.mark.integration]
 
 CHECKOUT_NODEID = "tests/test_checkout.py::test_verify_checkout_total"
 TIMING_ISSUE = "TIMING_ISSUE"
+LOCATOR_CHANGED = "LOCATOR_CHANGED"
 
 
 async def _create_project(client: AsyncClient, name: str, bootstrap: bool = False) -> dict:
@@ -362,12 +363,17 @@ async def test_run_execution_failure_and_history_analytics(client: AsyncClient, 
     assert set(by_id) == {first_failure_id, second_failure_id}
     assert by_id[first_failure_id]["test_nodeid"] == CHECKOUT_NODEID
     assert by_id[first_failure_id]["test_name"] == "test_verify_checkout_total"
-    assert by_id[first_failure_id]["classification"] == TIMING_ISSUE
+    # The deterministic classifier owns the classification a caller sees, so a stale stored value
+    # can never expose a locator repair for a failure the error text contradicts (see
+    # test_legacy_assertion_proposals_are_not_exposed_as_repairs).
+    assert by_id[first_failure_id]["classification"] == LOCATOR_CHANGED
     assert by_id[first_failure_id]["console_logs"] == ["waiting for selector"]
     assert by_id[first_failure_id]["run_id"] == run_id
 
     recurrence = (await client.get(f"/api/failures/{first_failure_id}/recurrence")).json()
     assert [item["failure_id"] for item in recurrence] == [second_failure_id]
+    # Recurrence groups failures by the recorded diagnosis, so it reports that stored value; only
+    # the failure payloads apply the deterministic classifier override.
     assert recurrence[0]["classification"] == TIMING_ISSUE
     assert recurrence[0]["error_message"] == "Locator timed out again"
 
@@ -386,10 +392,21 @@ async def test_run_execution_failure_and_history_analytics(client: AsyncClient, 
     assert dashboard["pass_rate_today"] == 66.7
 
     # --- execution coverage needs test cases linked to executed nodeids ---
-    await _create_test_case(
+    automated_case = await _create_test_case(
         client, project_id, title="Automated checkout total", priority="P1", automation_status="AUTOMATED"
     )
     await _create_test_case(client, project_id, title="Manual coupon check", priority="P1", automation_status="MANUAL")
+    async with test_db_session() as session:
+        await AutomationBindingRepository(session).create_or_update(
+            AutomationBindingCreate(
+                test_case_id=automated_case["id"],
+                workspace_id=project_id,
+                nodeid=CHECKOUT_NODEID,
+                file_path="tests/test_checkout.py",
+                status=AutomationBindingStatus.ACTIVE,
+            )
+        )
+        await session.commit()
     coverage = (await client.get(f"/api/quality/coverage?project_id={project_id}")).json()
     assert coverage["total_test_cases"] == 2
     assert coverage["automated_cases"] == 1

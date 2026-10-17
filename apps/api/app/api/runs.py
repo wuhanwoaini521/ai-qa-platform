@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from project_model.models import TestRun, TestRunCreate
 
@@ -44,7 +44,7 @@ async def get_run(
 
 @router.post("/recover-stale")
 async def recover_stale_runs(
-    stale_after_seconds: float = 7200.0,
+    stale_after_seconds: float = Query(7200.0, ge=60),
     service: TestRunService = Depends(get_run_service),
 ) -> dict[str, list[str]]:
     """Close runs that were abandoned mid-flight so they never stay RUNNING forever."""

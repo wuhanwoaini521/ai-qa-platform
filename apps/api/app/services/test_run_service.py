@@ -55,6 +55,10 @@ from app.settings import get_config
 
 DEFAULT_STALE_RUN_SECONDS = 7200.0
 
+#: A distributed job is only recovered once its worker has been silent this long; a worker that
+#: is merely slow still sends heartbeats.
+DEFAULT_WORKER_OFFLINE_SECONDS = 600.0
+
 logger = logging.getLogger("app.services.test_run")
 
 
@@ -1085,19 +1089,27 @@ class TestRunService:
         threshold are closed as CANCELLED rather than FAILED: the platform does not know their
         outcome, and must never invent a verdict.
 
-        This assumes a single API instance. It only recovers local runs; a worker heartbeat alone
-        does not prove its active job is abandoned, so distributed runs stay with queue recovery.
+        This assumes a single API instance. Local runs are recovered from their own age; a
+        distributed job is recovered only when the owning worker stopped heartbeating, because a
+        slow worker is not a dead one.
         """
-        cutoff = utc_now() - timedelta(seconds=stale_after_seconds)
-        # Only local child processes are owned by this API. Distributed jobs use queue leases and
-        # Jenkins runs use the remote controller; recovering either here would orphan live work.
+        now = utc_now()
+        cutoff = now - timedelta(seconds=stale_after_seconds)
+        # Only local child processes are owned by this API. Distributed jobs are recovered from
+        # their worker's heartbeat, and Jenkins runs stay with the remote controller.
         stale = await self.run_repo.list_unfinished_runs(older_than=cutoff, runner_types=["LOCAL"])
+        stale_run_ids = [orm.id for orm in stale]
+        worker_offline_before = now - timedelta(seconds=max(stale_after_seconds, DEFAULT_WORKER_OFFLINE_SECONDS))
+        abandoned = await self._repositories().jobs.list_abandoned_run_ids(
+            older_than=cutoff, worker_offline_before=worker_offline_before
+        )
         recovered: list[str] = []
-        for orm in stale:
-            changed = await self.run_repo.cancel_active_run(orm.id, finished_at=utc_now())
+        for run_id in dict.fromkeys([*stale_run_ids, *abandoned]):
+            changed = await self.run_repo.cancel_active_run(run_id, finished_at=utc_now())
             if not changed:
                 continue
-            recovered.append(orm.id)
+            recovered.append(run_id)
+            await self._repositories().jobs.cancel_active_jobs_for_run(run_id)
 
         if recovered:
             await self._repositories().commit()

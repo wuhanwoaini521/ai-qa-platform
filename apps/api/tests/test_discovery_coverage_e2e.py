@@ -509,7 +509,8 @@ def test_discovered_search():
                 Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation/round-4/evidence" / screenshot_phase
             )
             round4_evidence.mkdir(parents=True, exist_ok=True)
-            failed_run_id, failed_execution_id = (f"round4-{uuid4().hex}" for _ in range(2))
+            # Ids must stay within the 36-character column contract the PostgreSQL schema enforces.
+            failed_run_id, failed_execution_id = (f"r4-{uuid4().hex}" for _ in range(2))
             failure_id = f"r4-{uuid4().hex}"
             now = datetime.now(UTC)
             async with test_db_session() as session:

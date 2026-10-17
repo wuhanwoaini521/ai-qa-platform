@@ -15,6 +15,7 @@ from project_model.models import (
     FailureRepairWorkflow,
     TestRun,
     TestRunCreate,
+    User,
 )
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.failure.classifier import FailureClassifier
@@ -22,6 +23,7 @@ from qa_core.failure.models import FailureCategory
 from qa_core.failure.redactor import SensitiveRedactor
 
 from app.ports.repository_scope import RepositoryScopeFactory
+from app.repositories.security_audit_repo import SecurityAuditRepository
 from app.services.ai_settings_service import AISettingsService
 from app.services.failure_service import FailureService, LocatorRepairNotApplicableError
 from app.services.locator_decision_service import LocatorDecisionService
@@ -694,8 +696,31 @@ class FailureWorkflowService:
             repair_proposal={**selected_proposal, **proposal} if selected_proposal else None,
         )
 
+    async def _audit_repair(self, action: str, failure_id: str, analysis_id: str, actor: User | None) -> None:
+        """Record who approved or reverted a write to the project workspace.
+
+        The workspace write already happened, so an audit failure must not turn a successful apply
+        into an error the caller cannot retry.
+        """
+        try:
+            await SecurityAuditRepository().log(
+                action=action,
+                actor_id=actor.id if actor else "system",
+                actor_email=actor.email if actor else "system",
+                target_resource=f"failure:{failure_id}/analysis:{analysis_id}",
+                status="SUCCESS",
+            )
+        except Exception:
+            logger.exception("Failed to record %s audit for failure %s", action, failure_id)
+
     async def apply_repair(
-        self, failure_id: str, analysis_id: str, payload, *, expected_workspace_id: str | None = None
+        self,
+        failure_id: str,
+        analysis_id: str,
+        payload,
+        *,
+        expected_workspace_id: str | None = None,
+        actor: User | None = None,
     ) -> dict[str, Any]:
         state = await self.get_repair_workflow(failure_id, analysis_id)
         if "APPLY" not in state.allowed_actions:
@@ -733,6 +758,7 @@ class FailureWorkflowService:
             async with self.repository_scope() as repositories:
                 current_failure = await repositories.failures.get_by_id(failure_id)
             if current_failure and await self._recover_interrupted_apply(current_failure, analysis):
+                await self._audit_repair("REPAIR_APPLY", failure_id, analysis_id, actor)
                 workflow = await self.get_repair_workflow(failure_id, analysis_id)
                 return {"status": "applied", "file_path": payload.file_path, "repair": workflow.model_dump(mode="json")}
             await self._record_transition(
@@ -770,6 +796,7 @@ class FailureWorkflowService:
                 current_failure = await repositories.failures.get_by_id(failure_id)
             if not current_failure or not await self._recover_interrupted_apply(current_failure, analysis):
                 raise
+        await self._audit_repair("REPAIR_APPLY", failure_id, analysis_id, actor)
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
 
@@ -802,6 +829,7 @@ class FailureWorkflowService:
         *,
         expected_workspace_id: str | None = None,
         automatic: bool = False,
+        actor: User | None = None,
     ) -> dict[str, Any]:
         if automatic and not get_config().repair.auto_rollback:
             raise ValueError("Automatic rollback is disabled by the effective AppConfig")
@@ -854,6 +882,9 @@ class FailureWorkflowService:
                 file_path=result["file_path"],
                 **transition_metadata,
             )
+        # Only a rollback that actually restored the file is a workspace change worth auditing.
+        if result.get("restored"):
+            await self._audit_repair("REPAIR_ROLLBACK", failure_id, analysis_id, actor)
         workflow = await self.get_repair_workflow(failure_id, analysis_id)
         return {**result, "repair": workflow.model_dump(mode="json")}
 

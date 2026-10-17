@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 from app.api.failures import get_failure_service
+from app.api.qa_assistant import get_assistant_service
+from app.main import app
 from app.persistence.models import (
     BreakpointORM,
     BrowserSessionORM,
@@ -22,16 +24,19 @@ from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskR
 from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.failure_service import FailureService, _validated_trace_events
+from app.services.qa_assistant_service import QAAssistantService
 from app.services.test_run_service import TestRunService as _TestRunService
 from app.services.test_run_service import event_bus
 from app.services.workspace_service import WorkspaceService
 from httpx import AsyncClient
 from project_model.models import RunStatus, TestRunCreate
 from qa_core.ai.models import FailureAnalysisResponse
+from qa_core.ai.provider import FakeAIProvider
 from qa_core.ai.trace import AITraceEvent, make_trace_event
 from qa_core.execution.models import SingleTestResult, SuiteExecutionResult, TestExecutionStatus
 from qa_core.execution.runner_backend import RunnerStatusResult
 from qa_core.healing.models import LocatorRepairProposal
+from qa_core.orchestrator.orchestrator import ProductionQAOrchestrator
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
@@ -441,17 +446,30 @@ def test_intentional_locator_failure():
     assert failures_res.status_code == 200
 
     # 6. Test QA Assistant chat
-    assistant_res = await client.post(
-        "/api/qa-assistant/chat",
-        json={
-            "action": "explain",
-            "context": {
-                "project_id": proj_id,
-                "requirement_title": "Checkout Verification",
-                "current_file": "tests/test_failing.py",
-            },
-        },
+    # 助手侧车用确定性 fake provider：这条用例验证的是 run/failure 链路，真实 provider 超时会
+    # 让回归随机变红（见 test_qa_assistant_stream.py 中的超时/降级负向用例）。
+    class _NoopAIRepository:
+        async def record_invocation(self, **_):
+            return None
+
+    app.dependency_overrides[get_assistant_service] = lambda: QAAssistantService(
+        orchestrator=ProductionQAOrchestrator(ai_provider=FakeAIProvider()),
+        ai_repo=_NoopAIRepository(),
     )
+    try:
+        assistant_res = await client.post(
+            "/api/qa-assistant/chat",
+            json={
+                "action": "explain",
+                "context": {
+                    "project_id": proj_id,
+                    "requirement_title": "Checkout Verification",
+                    "current_file": "tests/test_failing.py",
+                },
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_assistant_service, None)
     assert assistant_res.status_code == 200
     assert "explain" in assistant_res.json()["action_type"]
 

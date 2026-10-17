@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from project_model.models import ExecutionJob, ExecutionJobCreate, JobStatus
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence import database
-from app.persistence.models import ExecutionJobORM, utc_now
+from app.persistence.models import ExecutionJobORM, WorkerORM, utc_now
 
 
 class JobRepository:
@@ -143,25 +144,62 @@ class JobRepository:
         error_message: str | None = None,
         session: AsyncSession | None = None,
     ) -> ExecutionJob | None:
+        terminal = [JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value]
+        target = status.value if isinstance(status, JobStatus) else str(status)
+        now = utc_now()
+        values: dict = {"status": target, "updated_at": now}
+        if duration_ms > 0:
+            values["duration_ms"] = duration_ms
+        if error_message:
+            values["error_message"] = error_message
+        if target in terminal:
+            values["finished_at"] = now
+
         async def _exec(s: AsyncSession) -> ExecutionJob | None:
-            stmt = select(ExecutionJobORM).where(ExecutionJobORM.id == job_id)
-            res = await s.execute(stmt)
-            orm = res.scalar_one_or_none()
-            if not orm:
-                return None
-            if orm.status in {JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value}:
-                return self._to_model(orm)
-            orm.status = status.value if isinstance(status, JobStatus) else str(status)
-            if duration_ms > 0:
-                orm.duration_ms = duration_ms
-            if error_message:
-                orm.error_message = error_message
-            if status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
-                orm.finished_at = utc_now()
-            orm.updated_at = utc_now()
+            # A read-modify-write let a completed worker call resurrect a job cancelled in the
+            # meantime; the conditional UPDATE makes the first terminal transition the only one.
+            await s.execute(
+                update(ExecutionJobORM)
+                .where(ExecutionJobORM.id == job_id, ExecutionJobORM.status.notin_(terminal))
+                .values(**values)
+            )
             await s.commit()
-            await s.refresh(orm)
-            return self._to_model(orm)
+            orm = await s.get(ExecutionJobORM, job_id)
+            return self._to_model(orm) if orm else None
+
+        return await self._run(session, _exec)
+
+    async def list_abandoned_run_ids(
+        self,
+        older_than: datetime,
+        worker_offline_before: datetime,
+        session: AsyncSession | None = None,
+    ) -> list[str]:
+        """Runs whose only job is stuck on a worker that stopped heartbeating.
+
+        A crashed worker leaves its job in ASSIGNED/RUNNING forever, and the run with it. Only
+        jobs with no recent queue activity *and* an offline worker are returned, so a slow but
+        live worker is never recovered.
+        """
+
+        async def _exec(s: AsyncSession) -> list[str]:
+            stmt = (
+                select(ExecutionJobORM.run_id)
+                .outerjoin(WorkerORM, WorkerORM.id == ExecutionJobORM.assigned_worker_id)
+                .where(
+                    ExecutionJobORM.status.in_([JobStatus.ASSIGNED.value, JobStatus.RUNNING.value]),
+                    ExecutionJobORM.updated_at < older_than,
+                    or_(
+                        ExecutionJobORM.assigned_worker_id.is_(None),
+                        WorkerORM.id.is_(None),
+                        # coalesce: a worker row without a heartbeat must still be treated as offline
+                        # instead of making the comparison NULL and leaving the run RUNNING forever.
+                        func.coalesce(WorkerORM.last_heartbeat_at, datetime.min) < worker_offline_before,
+                    ),
+                )
+            )
+            res = await s.execute(stmt)
+            return list(dict.fromkeys(res.scalars().all()))
 
         return await self._run(session, _exec)
 

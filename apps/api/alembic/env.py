@@ -12,6 +12,9 @@ config = context.config
 
 
 def migrate(connection):
+    from app.persistence.migrations import ensure_version_column_capacity
+
+    ensure_version_column_capacity(connection)
     context.configure(
         connection=connection,
         target_metadata=Base.metadata,

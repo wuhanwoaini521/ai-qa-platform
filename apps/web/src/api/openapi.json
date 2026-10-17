@@ -6920,6 +6920,7 @@
             "required": false,
             "schema": {
               "type": "number",
+              "minimum": 60,
               "default": 7200.0,
               "title": "Stale After Seconds"
             }

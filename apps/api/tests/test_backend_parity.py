@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from app.persistence.database import Base, build_engine
+from app.persistence.migrations import upgrade_database
 from app.persistence.models import (
     ProjectORM,
     RequirementORM,
@@ -28,6 +29,7 @@ from app.persistence.models import (
 )
 from app.repositories.run_history_repo import RunHistoryRepository
 from app.repositories.test_run_repo import TestRunRepository
+from conftest import using_postgres
 from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -112,7 +114,17 @@ async def test_on_delete_cascade_is_enforced_by_the_database(test_db_session) ->
 
 
 async def test_platform_sqlite_engine_enforces_foreign_keys(tmp_path) -> None:
-    """The engine the platform builds for SQLite must enforce ON DELETE CASCADE."""
+    """The engine the platform builds for SQLite must enforce ON DELETE CASCADE.
+
+    Skipped on a PostgreSQL test run: SQLAlchemy decides once per ``MetaData`` whether a circular
+    foreign key must be added with ``ALTER TABLE``, and SQLite cannot do that, so a schema built
+    with ``create_all`` *after* the same metadata was created for PostgreSQL silently loses those
+    constraints. Production SQLite schemas come from the migrations, which
+    :func:`test_migrated_sqlite_schema_enforces_project_cascade` covers on both backends.
+    """
+    if using_postgres():
+        pytest.skip("SQLAlchemy cannot build the cyclic metadata for SQLite after a PostgreSQL run")
+
     engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'platform.db'}")
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     try:
@@ -127,6 +139,29 @@ async def test_platform_sqlite_engine_enforces_foreign_keys(tmp_path) -> None:
             await session.execute(text("DELETE FROM projects WHERE id = :pid"), {"pid": "proj_cascade"})
             await session.commit()
 
+        async with session_factory() as session:
+            await _assert_cascade_graph_deleted(session)
+    finally:
+        await engine.dispose()
+
+
+async def test_migrated_sqlite_schema_enforces_project_cascade(tmp_path) -> None:
+    """A migrated SQLite database (what production runs) must cascade the same way."""
+    engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'migrated.db'}")
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(upgrade_database)
+            foreign_keys = (await conn.execute(text("PRAGMA foreign_key_list(test_runs)"))).all()
+
+        assert ("projects", "project_id", "CASCADE") in {(fk[2], fk[3], fk[6]) for fk in foreign_keys}
+
+        async with session_factory() as session:
+            await _insert_cascade_graph(session)
+            await session.commit()
+        async with session_factory() as session:
+            await session.execute(text("DELETE FROM projects WHERE id = :pid"), {"pid": "proj_cascade"})
+            await session.commit()
         async with session_factory() as session:
             await _assert_cascade_graph_deleted(session)
     finally:

@@ -1492,6 +1492,7 @@ class FailureService:
             raise ValueError("回滚快照校验失败；未修改工作区。")
         current_content = await self.workspace_service.read_file(workspace_id, file_path)
         current_hash = hashlib.sha256(current_content.encode("utf-8")).hexdigest()
+        restored = False
         if current_hash != original_hash:
             if not proposal.get("applied") or current_hash != proposal.get("applied_sha256"):
                 raise ValueError("修复应用后文件已变化；为避免覆盖后续编辑，未执行回滚。")
@@ -1507,6 +1508,7 @@ class FailureService:
                 expected_exists=True,
                 expected_sha256=proposal.get("applied_sha256"),
             )
+            restored = True
         elif proposal.get("rollback_status") not in {"ROLLBACK_PENDING", "ROLLED_BACK"}:
             raise ValueError("没有可回滚的修复补丁。")
         if proposal.get("applied") or proposal.get("rollback_status") != "ROLLED_BACK":
@@ -1523,7 +1525,7 @@ class FailureService:
             except Exception:
                 await self.transaction.rollback()
                 raise
-        return {"status": "rolled_back", "file_path": file_path}
+        return {"status": "rolled_back", "file_path": file_path, "restored": restored}
 
     @staticmethod
     def _source_locator_for_failure(content: str, locator: str, *, function_name: str | None = None) -> str | None:
