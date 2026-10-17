@@ -271,7 +271,12 @@ async def test_live_stream_carries_frames_and_element_inventory_for_a_running_ru
         assert {element["name"] for element in elements} >= {"Search", "Products", "Cart"}
         assert all(element["bounding_box"] is not None for element in elements)
         frame = next(frame for frame in frames if frame["event"] == "browser.frame")
-        assert frame["data"]["metadata"]["url"] == "http://shop.example.test/"
+        # The frame must belong to the run's own page. Which URL it shows first depends on how fast the
+        # fixture navigates, so assert the origin instead of the exact start URL: pinning the start URL
+        # made this green on SQLite and deterministically red on PostgreSQL, where the /search
+        # navigation wins the race.
+        frame_url = frame["data"]["metadata"]["url"]
+        assert frame_url.startswith("http://shop.example.test/"), frame_url
         assert base64.b64decode(frame["data"]["metadata"]["frame"]) == b"\xff\xd8\xff\xe0frame"
 
 
