@@ -1,0 +1,159 @@
+{
+  "steps": [
+    {
+      "step": 0,
+      "action": "UI login (no token)",
+      "result": "OK: UI login form used",
+      "duration_s": 4.09,
+      "navigations": 0,
+      "obstacle": null,
+      "evidence": "screenshots/j00_login.png",
+      "detail": ""
+    },
+    {
+      "step": 1,
+      "action": "Sidebar → QA 工作台 → requirement stage",
+      "result": "OK: requirement REQ-001 + AC-001 shown",
+      "duration_s": 2.0,
+      "navigations": 1,
+      "obstacle": null,
+      "evidence": "screenshots/j01_requirement.png",
+      "detail": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&requirementId=req_golden_shop_v1&testDesignId=des_golden_009&caseId=case_golden_009&bindingId=bind_golden_009&nodeid=tests%2Ftest_shop.py%3A%3Atest_cart_quantity_controls_and_remove&stage=requirement&file=tests%2Ftest_shop.py"
+    },
+    {
+      "step": 2,
+      "action": "Click 让 QA Agent 分析需求 (real provider)",
+      "result": "HANG/UNKNOWN: no explicit failure notice within 90s",
+      "duration_s": 91.07,
+      "navigations": 1,
+      "obstacle": "no alert/inline error",
+      "evidence": "screenshots/j02_requirement_ai.png",
+      "detail": ""
+    },
+    {
+      "step": 3,
+      "action": "Stage rail → 用例",
+      "result": "OK: TC-001..TC-009 listed",
+      "duration_s": 1.69,
+      "navigations": 1,
+      "obstacle": null,
+      "evidence": "screenshots/j03_cases.png",
+      "detail": ""
+    },
+    {
+      "step": 4,
+      "action": "Open TC-004 case detail",
+      "result": "OK: case steps + oracle shown",
+      "duration_s": 1.7,
+      "navigations": 1,
+      "obstacle": null,
+      "evidence": "screenshots/j04_case_detail.png",
+      "detail": ""
+    },
+    {
+      "step": 5,
+      "action": "Stage rail → 自动化 → open pages/shop.py",
+      "result": "OK: Monaco ready 1.88s; real add() uses role 'Add to cart'=False; stale legacy-add-cart=True",
+      "duration_s": 5.74,
+      "navigations": 1,
+      "obstacle": null,
+      "evidence": "screenshots/j05_studio_file.png",
+      "detail": "monaco_ready_s=1.88"
+    },
+    {
+      "step": 6,
+      "action": "Studio → 运行文件 (tests/test_shop.py)",
+      "result": "OK: run run_90015e2152c5 PASSED in 7.9s",
+      "duration_s": 10.8,
+      "navigations": 1,
+      "obstacle": null,
+      "evidence": "screenshots/j06_run_from_studio.png",
+      "detail": "null"
+    },
+    {
+      "step": 7,
+      "action": "Run result surface (status/duration/per-case)",
+      "result": "PARTIAL: summary incomplete",
+      "duration_s": 2.84,
+      "navigations": 0,
+      "obstacle": null,
+      "evidence": "screenshots/j07_run_result.png",
+      "detail": "运行通过 · TC-004"
+    },
+    {
+      "step": 8,
+      "action": "Run tests/test_known_locator.py → failure + screenshot",
+      "result": "OK: red run FAILED; failure text=no; screenshot preview=no",
+      "duration_s": 20.39,
+      "navigations": 1,
+      "obstacle": "failure text not found",
+      "evidence": "screenshots/j08_failure_evidence.png",
+      "detail": "rid=run_1953951cf4db"
+    },
+    {
+      "step": 9,
+      "action": "Debug surface for the failure",
+      "result": "live debugger only; stored failure file:line shown=no; stack=yes; vars=yes; all empty states",
+      "duration_s": 3.82,
+      "navigations": 1,
+      "obstacle": "failure location NOT shown in 调试 view (only in 源码 tab)",
+      "evidence": "screenshots/j09_debug.png",
+      "detail": ""
+    },
+    {
+      "step": 10,
+      "action": "AI diagnosis from result surface",
+      "result": "triggered; alerts=1; 'AI provider unavailable'=no; workflow blocked=no",
+      "duration_s": 3.98,
+      "navigations": 1,
+      "obstacle": "playwright._impl._errors.TimeoutError\n[data-testid=\"legacy-add-cart\"]\n\nplaywright._impl._errors.TimeoutError: Locator.click: Timeout 3000ms exceeded.\nCall log:\n",
+      "evidence": "screenshots/j10_ai_diagnosis.png",
+      "detail": ""
+    },
+    {
+      "step": 11,
+      "action": "Repair proposal surface",
+      "result": "patch section=yes; approve button=0; apply button=0",
+      "duration_s": 0.07,
+      "navigations": 0,
+      "obstacle": "no proposal produced (AI unavailable)",
+      "evidence": "screenshots/j11_repair.png",
+      "detail": ""
+    },
+    {
+      "step": 12,
+      "action": "Repair approval gating (isolated)",
+      "result": "NOT EXERCISABLE: no proposal exists (AI BLOCKED before patch generation)",
+      "duration_s": 0.0,
+      "navigations": 0,
+      "obstacle": "cannot observe human-approval gate without a proposal",
+      "evidence": "screenshots/j11_repair.png",
+      "detail": "apply path requires 批准并应用补丁 button, rendered only when repair.allowed_actions includes APPLY"
+    },
+    {
+      "step": 13,
+      "action": "Requirement→case→automation→run→result linkage",
+      "result": "rail stages=True; req→case=True; case→script=True; run/exec id visible=True",
+      "duration_s": 0.07,
+      "navigations": 0,
+      "obstacle": "stage rail shows counts; per-case script link only for the selected case",
+      "evidence": "screenshots/j13_linkage.png",
+      "detail": ""
+    },
+    {
+      "step": 14,
+      "action": "Totals (whole journey)",
+      "result": "clicks=16 url_changes=9 full_page_loads=16",
+      "duration_s": 0.0,
+      "navigations": 9,
+      "obstacle": null,
+      "evidence": "-",
+      "detail": "{\"clicks\": 16, \"full_loads\": 16, \"url_changes\": 9}"
+    }
+  ],
+  "totals": {
+    "clicks": 16,
+    "full_loads": 16,
+    "url_changes": 9
+  }
+}

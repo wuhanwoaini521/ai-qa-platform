@@ -1,0 +1,54 @@
+{
+  "runs": [
+    {
+      "iter": 1,
+      "chromium_before": "7",
+      "monaco_s": 2.87,
+      "runs_before": 7,
+      "click_to_dock_terminal_s": 0.15,
+      "dock_present": false,
+      "dock_run_id": null,
+      "dock_status": "失败",
+      "dock_has_per_step": false,
+      "dock_kept_state_4s": null,
+      "after_reload_editor_file": "?",
+      "runs_after": 8,
+      "duplicate_runs": 0,
+      "chromium_after": "7"
+    },
+    {
+      "iter": 2,
+      "chromium_before": "7",
+      "monaco_s": 2.9,
+      "runs_before": 8,
+      "click_to_dock_terminal_s": 0.14,
+      "dock_present": false,
+      "dock_run_id": null,
+      "dock_status": "失败",
+      "dock_has_per_step": false,
+      "dock_kept_state_4s": null,
+      "after_reload_editor_file": "?",
+      "runs_after": 9,
+      "duplicate_runs": 0,
+      "chromium_after": "13"
+    },
+    {
+      "iter": 3,
+      "chromium_before": "13",
+      "monaco_s": 2.84,
+      "runs_before": 9,
+      "click_to_dock_terminal_s": 0.16,
+      "dock_present": false,
+      "dock_run_id": null,
+      "dock_status": "失败",
+      "dock_has_per_step": false,
+      "dock_kept_state_4s": null,
+      "after_reload_editor_file": "?",
+      "runs_after": 10,
+      "duplicate_runs": 0,
+      "chromium_after": "13"
+    }
+  ],
+  "distinct_full_file_runs": 0,
+  "chromium_final": "7"
+}

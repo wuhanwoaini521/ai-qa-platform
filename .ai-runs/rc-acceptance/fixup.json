@@ -1,0 +1,72 @@
+{
+  "S5": {
+    "monaco_ready_s": 3.81,
+    "editor_has": {
+      "name=\"Add to cart\"": false,
+      "legacy-add-cart": true,
+      "def add_with_legacy_locator": false
+    },
+    "disk_has": {
+      "name=\"Add to cart\"": true,
+      "legacy-add-cart": true,
+      "def add_with_legacy_locator": true
+    },
+    "editor_tail": "locator(self): |         \"\"\"Retained stale selector for the real failure/repair demonstration.\"\"\" |         self.page.locator('[data-testid=\"legacy-add-cart\"]').click() |     def cart(self): |         self.page.get_by_role(\"button\", name=\"Cart (\", exact=False).click()"
+  },
+  "recorder_entry": {
+    "开始录制": 2,
+    "停止": 1,
+    "选择元素": 1,
+    "生成脚本": 1,
+    "AI 探索当前页": 1,
+    "保存为 Case 并运行": 1
+  },
+  "S7": {
+    "record_page_has_summary": true,
+    "per_case": {}
+  },
+  "S8": {
+    "exception_banner": true,
+    "locator_shown": true,
+    "stack_hint": true,
+    "screenshot_preview_ok": true,
+    "summary": "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。 | 运行失败 | 总用例 | 通过 | 失败 | 跳过 | 耗时 | 失败 | 通过 | 跳过 | 运行失败 · 3.4 s | 1. 失败证据收集 | 模型正在根据失败证据生成根因、假设和建议。"
+  },
+  "S10": {
+    "started": false,
+    "terminal": null,
+    "duration_s": 200.8,
+    "provider_unavailable_in_ui": false,
+    "patch_step_blocked": false,
+    "step_statuses": [
+      "1. 失败证据收集",
+      "2. AI 根因分析",
+      "3. Jev 策略决策",
+      "4. 代码补丁生成",
+      "5. 应用补丁",
+      "6. 回归验证"
+    ]
+  },
+  "S11": {
+    "patch_section": true,
+    "approve_button": 0,
+    "apply_button": 0,
+    "generate_proposal_button": 0,
+    "blocked_or_no_patch_text": [
+      "尚未生成代码补丁 Diff"
+    ]
+  },
+  "sidebar_context": {
+    "运行": {
+      "url": "http://127.0.0.1:5173/runs",
+      "workspace_rail_present": false,
+      "current_project_chip": true
+    },
+    "质量洞察": {
+      "url": "http://127.0.0.1:5173/quality",
+      "workspace_rail_present": false,
+      "current_project_chip": true
+    }
+  },
+  "chromium_after": "7"
+}

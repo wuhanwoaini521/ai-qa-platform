@@ -1,0 +1,42 @@
+{
+  "chrome_before_launch": 0,
+  "studio_buttons": [
+    "系统",
+    "EN",
+    "展开上下文",
+    "检查器",
+    "运行控制",
+    "1 需求 1 项需求 · 最近 QA 分析：成功",
+    "2 发现 探索产品并对照需求与覆盖",
+    "3 用例 9 条用例",
+    "4 自动化 8/9 已绑定",
+    "5 结果 本次运行 PASSED · 已保存 8/8 条逐例结果",
+    "工作区文件",
+    "快速打开文件（Cmd+P）",
+    "保存",
+    "校验 —",
+    "运行文件",
+    "调试",
+    "工作区问题与校验 尚未校验 展开"
+  ],
+  "dock_appear_s": 0.48,
+  "dock_text": "运行详情\nAutomation Studio\n执行观察台\nTest Run run_c7ea1e5e22e8\n测试运行 #run_c7ea1e5e22e8\nrun_c7ea1e5e22e8\n已完成\n已记录\n概览\n逐条结果\n流程图\n时间线\n执行追踪\n浏览器\n制品\n\n此独立 TestRun 没有关联 TaskStep DAG。\n\n实时事件流\n30\n4:45:55 AM\n浏览器\n浏览器操作 · 选择选项 · internal:label=\"Size\"s · 通过\n通过 · <100ms\n4:45:55 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Add to cart\"s] · 通过\n通过 · <100ms\n4:45:56 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Add to cart\"s] · 通过\n通过 · <100ms\n4:45:56 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Cart (\"i] · 通过\n通过 · <100ms\n4:45:56 AM\n浏览器\n网络请求 · GET · http://127.0.0.1:42575/index.html · 200\n已完成 · <100ms\n4:45:56 AM\n浏览器\n网络请求 · GET · http://127.0.0.1:42575/catalog.json · 200\n已完成 · <100ms\n4:45:56 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"View Everyday Tee\"i] · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 选择选项 · internal:label=\"Color\"s · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 选择选项 · internal:label=\"Size\"s · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Add to cart\"s] · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Cart (\"i] · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Increase quantity of Everyday Tee\"i] · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Decrease quantity of Everyday Tee\"i] · 通过\n通过 · <100ms\n4:45:57 AM\n浏览器\n浏览器操作 · 点击 · internal:role=button[name=\"Remove Everyday Tee\"i] · 通过\n通过 · <100ms\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.4s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.3s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.4s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.7s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.6s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.6s\n4:45:58 AM\n测试\n测试已结束\n通过 · 0.8s\n4:45:58 AM\n测试\n测试已结束\n通过 · 1.0s\n4:45:58 AM\n任务\n测试运行已完成\n通过",
+  "dock_terminal_s": 11.2,
+  "dock_run_id": "run_c7ea1e5e22e8",
+  "dock_summary": "运行详情 | Automation Studio | 执行观察台 | Test Run run_c7ea1e5e22e8 | 测试运行 #run_c7ea1e5e22e8 | run_c7ea1e5e22e8 | 已完成 | 已记录 | 概览 | 逐条结果 | 流程图 | 时间线 | 执行追踪 | 浏览器 | 制品 |  | 此独立 TestRun 没有关联 TaskStep DAG。 |  | 实时事件流 | 30 | 4:45:55 AM | 浏览器 | 浏览器操作 · 选择选项 · internal:label=\"Size\"s · 通过 | 通过 · <100ms | 4:45:55 AM | 浏览器 | 浏览器操作 · 点击 · internal:role=button[name=\"Add to cart\"s] · 通过 | 通过 · <100ms | 4:45:56 AM | 浏览器 | 浏览器操作 · 点击 · internal:role=button[name=\"Add to cart\"s] ",
+  "dock_has_result_tabs": [
+    "概览",
+    "流程图",
+    "时间线",
+    "执行追踪",
+    "浏览器",
+    "制品",
+    "实时事件流"
+  ],
+  "dock_kept_state_5s": true,
+  "overlay_after_close": 0,
+  "after_reload_has_case_script": true,
+  "after_reload_overlay": 0,
+  "chrome_after_close": 0,
+  "chrome_leaked": 0
+}

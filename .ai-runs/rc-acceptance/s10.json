@@ -1,0 +1,9 @@
+{
+  "button_label": "重新分析",
+  "button_count": 0,
+  "duration_s": 0.1,
+  "provider_msg_in_ui": false,
+  "blocked_ui": false,
+  "analysis_state_line": "配置已启用，但本 Run 未调用 Jev | 已完成 | 未调用 | 配置已启用，但本 Run 未调用 Jev",
+  "approve_button_after": 0
+}
