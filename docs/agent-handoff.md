@@ -22,7 +22,8 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
 | 当前工作分支 | `agent/wsl-continuation`（未推送；`main` 与远程 main 未修改） |
-| 当前工作树 | Round4 的失败概览修复与巡检 harness 已本地提交（`38a89cb`、`01518a2`）；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
+| 当前工作树 | Round 5 改动已本地提交（`71f6f14`）；`docs/agent-handoff.md` 在本次提交后更新；`.ai-runs/night-continuation/` 证据为本地未跟踪文件，保留且不暂存。 |
+| Round5 本轮提交 | `71f6f14 fix(db,worker,security): make PostgreSQL migrations and worker recovery reliable` + 本轮 handoff 提交（仍未 push） |
 | Round4 本轮提交 | `38a89cb fix(failures): surface the assertion detail in the failure summary`、`01518a2 test(e2e): capture round 4 route, viewport and interaction evidence` |
 | 本轮 Studio evidence | `.ai-runs/night-continuation/round-1/attempt-19/`（真实 Chromium/debugpy acceptance、响应式截图与日志） |
 | Round4 evidence | `.ai-runs/night-continuation/round-4/evidence/{before,after}/`（本地未跟踪） |
@@ -30,6 +31,8 @@ Round 3（用户任务 m00157）已完成本轮可交付范围：审计发现/�
 | 远程 | 已 fetch，无本地领先/落后意外差异（工作分支为新增本地骨架） |
 
 ## 3. 当前开发阶段
+
+Round 5（2026-10-17，用户任务 m05655）：企业级可靠性、PostgreSQL、Worker 与安全整改，详见 §3.2。
 
 Round 4（2026-10-17，用户任务 m01676）：全局 QA 工作台 UX 复核与证据化改造，详见 §3.1；Round 3 成果与结论保持有效，未回退。
 
@@ -79,6 +82,93 @@ E2E 巡检 harness（`apps/api/tests/test_discovery_coverage_e2e.py`）稳定性
 - 断言改为比较 `.view-lines` 的 `textContent` 并去掉全部空白：390px 下 Monaco 自动换行会让 `innerText` 插入换行，旧断言因此误判「文件未渲染」。
 - debug 会话监听移到真正导航的 `page`；响应式巡检的 debugger 使用不带 `nodeid` 的 URL，避免每个视口各起一个 debugpy 并拖死 teardown。
 - 失败 fixture id 缩短到 35 字符内（原合成 id 触发 API 校验失败，debugger 深链因此报 `Request validation failed.`）。
+
+## 3.2 Round 5（企业级可靠性、数据库、Worker 与安全整改，m05655）
+
+范围：真实 PostgreSQL 兼容性、Worker 任务可靠性、后端安全加固、CI/WSL 约束与能力缺口评估。要求「先证据、后结论」，不得用 SQLite 结果冒充 PostgreSQL 验收，不做纯 UI 的"企业功能"，不新增第二套 Runtime/Agent/Provider。
+
+### Part 1 — PostgreSQL（不再是 BLOCKED）
+
+本机无系统 PostgreSQL / Docker，但通过 **隔离的本地开发实例** 完成了真实 PostgreSQL 验收，未做任何系统级安装或配置修改：
+
+```bash
+test -d /tmp/sock-aiqa || mkdir -m 700 /tmp/sock-aiqa
+uv venv /tmp/pgvenv --python 3.13 && /tmp/pgvenv/bin/pip install embedded-postgres==18.6.3
+/tmp/pgvenv/bin/python -c "import embedded_postgres as ep; ep.initdb(['-U','postgres','-D','/tmp/pgdata-aiqa','-A','trust','-E','UTF8'])"
+/tmp/pgvenv/bin/python -c "import embedded_postgres as ep; ep.pg_ctl(['-o','-p 55432 -k /tmp/sock-aiqa -c listen_addresses=127.0.0.1','-l','/tmp/pg55432.log','-w','start'], pgdata='/tmp/pgdata-aiqa')"
+# 测试库必须放在名字含 test 的数据库：conftest 的 reset_test_schema 会 DROP SCHEMA public，非 test 库直接拒绝运行
+/tmp/pgvenv/bin/python -c "import embedded_postgres as ep; ep.psql(['-h','127.0.0.1','-p','55432','-U','postgres','-d','postgres','-c','CREATE DATABASE aiqa_test'])"
+AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test uv run pytest apps/api -q
+```
+
+PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `/tmp/sock-aiqa`，trust 认证，用户 `postgres`，测试库 `aiqa_test`）。抛出的 `/tmp/pgvenv` 与 datadir 都是临时目录，仓库 lockfile 与系统未变。CI 的 `postgres:16` service job（`.github/workflows/ci.yml` → `backend-postgres`，本轮已把它的 `POSTGRES_DB`/URL 改为 `aiqa_test` 以配合下面的防护）仍未在本地跑过，本地验收针对 18.6。
+
+修复的真实兼容性/迁移缺陷：
+
+1. **PostgreSQL 无法迁移（阻断级）**：Alembic 建 `alembic_version.version_num VARCHAR(32)`，而 3 个 revision id 超长（`0004_one_running_failure_analysis` 33、`0005_raise_ai_request_preflight_budget` 38、`0010_locator_repair_state_machine` 33），`alembic upgrade head` 直接 `StringDataRightTruncationError`。SQLite 不校验声明长度所以本地一直看不见。修复：`apps/api/app/persistence/migrations.py` 新增 `ensure_version_column_capacity()`（SQLite 直接返回；否则 `CREATE TABLE IF NOT EXISTS` + `ALTER COLUMN ... TYPE VARCHAR(128)`），由 `upgrade_database()` 与 `apps/api/alembic/env.py` 调用。
+2. **测试库初始化在 PG 上不可用**：`Base.metadata.drop_all()` 对循环 FK（`test_runs.origin_failure_id ↔ failure_records.run_id`）抛 `CircularDependencyError`。`apps/api/tests/conftest.py` 新增 `reset_test_schema()`：PG 用 `DROP SCHEMA public CASCADE`/`CREATE SCHEMA public`，SQLite 仍用 `drop_all`；同时把 Alembic head stamp 改成两种后端都执行（否则 PG 上 `/api/health/ready` 报 `not_ready`）。
+3. **PG 集成测试自身漂移**：`apps/api/tests/test_postgres_integration.py` 缺少真实 ACTIVE `AutomationBinding`，`executed_cases_recent` 永远为 0；已补真实 binding 并修正分类预期（`FailureService.get_recurrence` 按**存储**分类分组，而 failure payload 由确定性分类器覆盖，两者故意不同）。
+
+新增回归护栏 `apps/api/tests/test_postgres_migrations.py`：起一个临时库 `aiqa_migrations_<hex>`，用 `AUTOCOMMIT` 引擎执行真实 `upgrade_database`，断言 `alembic_version == ScriptDirectory...get_current_head()`，并用 `compare_metadata(MigrationContext.configure(...), Base.metadata)` 断言无 schema drift（只忽略一个已定位的假阳性：`Enum(native_enum=False)` 反射回 `VARCHAR(32)`），最后 `DROP DATABASE ... WITH (FORCE)`。它会在任何未来 revision 与模型漂移时直接失败。
+
+`apps/api/tests/test_backend_parity.py`：`test_platform_sqlite_engine_enforces_foreign_keys` 在 PG 全量运行里失败（同一 `MetaData` 先为 PG 建表后，SQLAlchemy 不再把循环 FK 交给 SQLite 的 `create_all`，因为 SQLite 不能 `ALTER TABLE ADD CONSTRAINT`）；已改为在 PG 下 `skip` 并新增基于真实迁移的 SQLite 级联测试 `test_migrated_sqlite_schema_enforces_project_cascade`（SQLite 生产库由 Alembic DDL 建立，不受该限制影响）。
+
+### Part 2 — Worker 可靠性（真实 worker 进程）
+
+代码修复（`apps/api`）：
+
+- `app/repositories/job_repo.py`：`update_job_status()` 改为单条条件 UPDATE + 回读（`WHERE id=:id AND status NOT IN ('COMPLETED','FAILED','CANCELLED')`）。原读-改-写会让收尾 worker 覆盖取消结果，或把一次判定的 `duration_ms` 和另一次判定的 `error_message` 拼在一起。新增 `list_abandoned_run_ids()`：ASSIGNED/RUNNING 且 `updated_at` 超时、且（无 assigned worker / worker 不存在 / `last_heartbeat_at` 超时）的 run。
+- `app/services/job_queue_service.py`：`cancel_job()` 除了取消 job，还会对 QUEUED/ASSIGNED/RUNNING 的 job 调用 `TestRunService.cancel_run(run_id)`。此前 `POST /api/jobs/{id}/cancel` 只改 job 行，Run 永远停在 RUNNING。
+- `app/services/test_run_service.py`：新增 `DEFAULT_WORKER_OFFLINE_SECONDS = 600.0`；`recover_stale_runs()` 现在把本地 stale run 与 `list_abandoned_run_ids()`（死 worker 遗弃的 run）合并恢复，逐个 `cancel_active_run` + `cancel_active_jobs_for_run`，并发布 `RUN_CANCELLED`。原实现只扫 `runner_types=["LOCAL"]`，worker 崩溃后 run 永久 RUNNING。
+
+新增两个测试文件：
+
+- `apps/api/tests/test_job_reliability.py`（4 个测试，SQLite 2.71s）：取消 job 必须取消 run；终态不可被覆盖（`asyncio.gather` 同时写 COMPLETED(1500ms) 与 FAILED("worker crashed")，断言不出现字段混搭）；心跳过期 1h 的 worker 遗弃 job 在 `recover_stale_runs(stale_after_seconds=0)` 后 run+job 都 CANCELLED；心跳 5s 的活跃 worker 不被误回收。
+- `apps/api/tests/test_worker_process_integration.py`：**真实 worker 子进程**验收（不是 fake httpx），由测试自己起临时 Uvicorn + 真实 `python -m worker.main`：submit → 认领 → 真实 pytest 执行 → 结果持久化 → 状态上报；同时覆盖干净取消（job 取消后子进程停止、Run CANCELLED）、超时击杀、崩溃后恢复、重复请求不重复执行、临时目录与子进程回收。
+
+### Part 3 — 安全加固（真实负向测试）
+
+- 审计确认无系统级 project ACL（见 §8），本轮不假装完成授权，只修可验证的真实缺陷：
+- **artifact 任意文件读取**：`app/services/artifact_storage_service.py` 的 `read_artifact_bytes()` 直接打开 `ArtifactORM.storage_path`，没有 containment 校验（`stored_artifacts` 表没有 project_id，任何能写该行的人都能读到进程可读的任意文件）。已加入解析后必须位于 storage root 内的校验；`apps/api/tests/test_security_hardening.py::test_artifact_download_refuses_a_path_outside_the_storage_root` 用真实篡改行断言下载返回 404 且响应体不含文件内容，metadata 仍可读。
+- **AI 修复缺审计**：apply/rollback 会写用户仓库，却只有认证/用户/团队操作写审计。`app/api/failures.py` 现在把当前用户传给服务，`app/services/failure_workflow_service.py` 在 apply/rollback 时写 `SecurityAuditRepository`（`REPAIR_APPLY` / `REPAIR_ROLLBACK`，actor + failure/analysis 目标）。`test_security_hardening.py::test_applying_a_repair_is_recorded_in_the_security_audit` 走真实 HTTP apply + rollback，并从 `GET /api/audit/security` 读出两条审计。
+- `config/config.yaml`：worker 的 `workspace_storage_dir`/`artifact_storage_dir` 支持 `AI_QA_WORKER_WORKSPACE_DIR`/`AI_QA_WORKER_ARTIFACT_DIR` 覆盖，`pytest.timeout_seconds` 支持 `AI_QA_PYTEST_TIMEOUT_SECONDS`（默认值不变；仅这样测试才能把执行目录指向临时目录、把超时压到秒级）。
+- 仍然存在且未修的 P0：见 §8（无 project ACL；`read_artifact_bytes` 之外的 `storage_path` 写入方均已有 sanitize；pytest 子进程非 OS 沙箱）。
+
+### Part 4 — CI / WSL
+
+- CI（`.github/workflows/ci.yml`）已有 `backend`（SQLite）、`backend-postgres`（postgres:16 service）、`windows`、`frontend` 四个 job，本轮未改 CI 定义；新增测试自然进入 `uv run pytest` 两条 lane。
+- WSL 内存 7.9 GB：全量 pytest / Playwright E2E / 前端 build 必须串行执行，并行会 OOM；本轮所有重负载测试都是串行跑的。
+- 未升级任何依赖；Playwright 仍固定 1.62.0。
+- Windows：worker 子进程测试在非 POSIX 平台走 `process.kill()`（POSIX 用 `os.killpg` 杀进程组），未在 Windows 实机执行 → Windows lane 结果由 CI 给出，本地未验证。
+
+### Part 5 — 能力缺口评估（结论，不改代码）
+
+只评估、只在「已有能力实现不完整」时修复，不新增纯 UI 企业功能：
+
+| 能力 | 现状/证据 | 结论 |
+| --- | --- | --- |
+| 权限/审计 | 全局 RBAC + 审计表已存在且本轮扩展了修复审计；无 project ACL | 缺口=project 级 ACL（P0，需产品决策） |
+| 环境管理 | worker 按 workspace 用自己的 venv（`.qa-platform-runtime`），无宿主机安装 | 已够用，不做 |
+| 测试数据 | 无独立数据管理；fixture/DB 隔离已有 | 不做 |
+| 并发调度 | `max_concurrency` + 原子 claim；无 lease/heartbeat based requeue | 本轮已修「死 worker 遗弃」；lease 属下一轮 |
+| 质量趋势 | Quality Map/覆盖已有，无时间序列 API | 不做（无需求证据） |
+| Flaky test | 无检测/重试策略字段被使用 | 未实现，评估为独立需求 |
+| AI 预算 | `max_steps`/`max_runtime_seconds` + preflight 预算已有 | 已够用 |
+| 运行监控 | run/job 状态、事件、日志、worker 心跳已有；无 metrics/告警 | 不做（无需求证据） |
+| CI/CD | 见 Part 4 | 已够用；仅缺 Playwright browser E2E job |
+| 扩展机制 | integrations 包预留；无插件生命周期 | 不做 |
+
+### 独立评审（read-only reviewer `del_mvcarjds_lqgs`）
+
+评审覆盖本次全部未提交改动，提出的问题已修复：
+
+- **P1** 修复审计只有两个 analysis 维度路由传了 actor，兄弟路由 `POST /failures/{id}/apply-repair`、`POST /failures/{id}/rollback-repair` 仍记 `actor=system` → 四条路由全部传 `user = Depends(get_current_user)`。
+- **P2** `POST /api/runs/recover-stale?stale_after_seconds=-86400` 会把 cutoff 推到未来，把还在跑的 LOCAL run 全部 CANCELLED → 参数改为 `Query(7200.0, ge=60)`。
+- **P2** 审计写入失败会把已成功的 apply 变成 500（且因 `PATCH_APPLIED` 状态无法重试）→ `_audit_repair` 改为 log-and-continue；中断恢复分支（patch 已写盘）现在也补写 `REPAIR_APPLY`；rollback 只在真正恢复文件（`FailureService.rollback_repair` 新增 `restored` 字段）时写 `REPAIR_ROLLBACK`，不再为“只对齐状态”的重试记假审计。
+- **P2** `reset_test_schema` 会对 `AI_QA_TEST_DATABASE_URL` 指向的任意库 `DROP SCHEMA public CASCADE` → 现在库名不含 `test` 时直接拒绝；CI 的 `POSTGRES_DB`/URL 同步改为 `aiqa_test`。
+- **P3** worker `last_heartbeat_at` 为 NULL 时 `NULL < ts` 永远不为真，死 worker 的 run 仍会卡 RUNNING → 改用 `func.coalesce(..., datetime.min)`；`ensure_version_column_capacity` 改为只在 `postgresql` 上执行；新增测试里三个永真的安全断言已修正，终端状态用例补了一个确定性的“二次上报不得改写”断言。
+
+有意未修（记录为剩余风险，不声称完成）：job 状态抢输一方仍拿到赢家行（无法区分“我赢了”与“我输了”，外部 HTTP 契约不变）；`stale_after_seconds` 的 600s floor 使 `DEFAULT_WORKER_OFFLINE_SECONDS` 默认下不生效（保守，人工可调）；修改 `app.artifact_storage_dir` 与 `AI_QA_WORKER_ARTIFACT_DIR` 可以使 worker 产出被 API 静默丢弃（配置脚枪，日志会告警但不会失败）；artifact 路径为相对路径时依赖进程 CWD（历史行为）；启动时的建表/拓宽列在双实例并发启动下可能报重复对象；审计目标未记录文件路径，`ip_address` 仍是硬编码。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -202,8 +292,10 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - [x] 最终全仓 regression、Python/Web lint、typecheck、build、document-width viewport assertion。
 - [x] Round-1 reports 更新、最终独立 reviewer 无 actionable finding。
 - [x] Round3 实现本地 semantic commit `f64f711`（no push）；Round3 evidence stays local/untracked.
-- [ ] PostgreSQL 集成测试：BLOCKED（本机无 PostgreSQL / Docker）
-- [ ] Worker / Jenkins 真实集群测试：NOT RUN（无集群可用）
+- [x] PostgreSQL 集成测试：本轮用隔离的本地 PostgreSQL 18.6（`embedded-postgres`，`127.0.0.1:55432`）跑通 API 全量 + 迁移/模型 drift 护栏，见 §3.2 Part 1。仍未在本机验证 CI 的 `postgres:16` service job。
+- [x] Worker 真实进程集成测试：`apps/api/tests/test_worker_process_integration.py` 起临时 API + 真实 `python -m worker.main` 子进程，覆盖提交/认领/执行/结果/取消/超时/崩溃恢复/重复请求/资源回收，见 §3.2 Part 2。真实 Jenkins 或分布式集群仍 NOT RUN（无集群）。
+- [ ] 系统级 project ACL（P0，见 §8）：覆盖全部资源 API 的 owner/team 授权与 legacy project 认领规则；本轮只修了 artifact 路径穿越与修复审计，不代表授权完成。
+- [ ] Worker job lease/heartbeat requeue：本轮修了「死 worker 遗弃 job 会被回收」，但没有 lease 续租/超时重投递；属下一轮。
 - [ ] Studio 的 Monaco 全量导入（`MonacoEditorPane` chunk 4.03 MB）按需拆分，需配套浏览器回归
 - [ ] 构建峰值内存与新 Bundle 体积证据（第二轮性能小节）
 - [ ] 暗色主题验收（低优先级，不得抢占核心功能时间）
@@ -214,6 +306,10 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 8. 已知 Bug / 阻断
 
+- Round5 新增结论：
+  - **已修**：artifact 下载可被篡改为任意文件读取（storage root containment 校验 + 负向测试）；AI 修复 apply/rollback 无审计（现在写 `REPAIR_APPLY`/`REPAIR_ROLLBACK`）；job 取消不取消 run；worker 崩溃后 run 永久 RUNNING；job 终态可被覆盖；PostgreSQL 无法执行 Alembic 迁移（`alembic_version VARCHAR(32)`）。
+  - **仍未修（不声称完成）**：没有系统级 project-resource ACL（同下行）；pytest 子进程不是 OS 沙箱（以宿主用户运行）；worker 无 lease/续租机制（只靠心跳超时回收）；`ArtifactORM` 没有 project_id 列，artifact 的可见性只能靠上传者约束；CI 的 `postgres:16` job 未在本地验证（本地为 18.6）。
+  - PostgreSQL 测试限制：同一进程内先为 PG 建过表的 `MetaData` 不能再为 SQLite `create_all` 循环 FK（SQLAlchemy 行为），因此 `test_backend_parity.py` 在 PG 下 skip 那一项，另以真实迁移的 SQLite 级联测试替代。SQLite 生产 schema 由 Alembic DDL 建立，不受影响。
 - 已确认的企业安全 blocker：191 条 API route 尚无系统级 project-resource scoping；`ProjectORM` 无 owner/team，`authorize_request` 仅检查全局角色。必须覆盖所有资源 ID / query / body / list / WebSocket，不能用单路由 ACL 代替。Legacy ownerless projects 的迁移规则未获决策；安全建议为 admin-only 直到显式 claim，禁止静默分配 owner。
 - Studio locale-tolerant selectors、debug-view flex sizing、phone DebugPanel layout 已修复并在 attempt 19 实测；编辑器 161px desktop / ≥140px tablet-mobile，mobile details 纵向滚动可读，documentWidth 在 1440/768/390px 均不超过 viewport。
 - Discovery 最终化修复已提交：终态必须等 Quality Map 写入后才暴露；finalization 期间 stop/pause/resume 返回冲突，重复 task cancellation 下 shielded finalizer 与 BrowserRuntime cleanup 均收敛。D5 refresh endpoint uses terminal guard and per-run lock; double-refresh regression observes serialization in one process. No multi-process/PostgreSQL evidence.
@@ -225,7 +321,19 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-Round4（当前代码，2026-10-17）：
+Round5（最终代码，2026-10-18；含 reviewer 修复与全部 Round 5 改动）：
+
+- 全仓后端（SQLite）：`uv run pytest apps/api/tests packages -q` → **848 passed / 11 skipped / 60 warnings / 573.06s / exit 0**（`/tmp/sqlite-final2.log`）。
+- PostgreSQL lane（嵌入式 PostgreSQL 18.6，`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test`，`uv run pytest apps/api -q`）→ **697 passed / 7 skipped / 76 warnings / 354.03s / exit 0**（`/tmp/pg-final2.log`）。这是本仓第一次在真实 PostgreSQL 上跑通完整 `apps/api` 套件。
+- 上述两个全量运行之后仅有一次 `ruff format`（4 个文件，含 `apps/api/app/persistence/migrations.py`，仅格式/空行），随后重跑了涉及文件：SQLite `test_job_reliability + test_worker_process_integration + test_failure_workflow + test_runtime_migrations + test_postgres_migrations` → **60 passed / 1 skipped / 68.00s**；PG `test_job_reliability + test_worker_process_integration + test_postgres_migrations + test_backend_parity + test_postgres_integration` → **17 passed / 1 skipped / 31.69s**。
+- 全仓 lint：`python scripts/task.py lint` → Ruff、429 Python 文件格式、i18n（25 namespaces / 3026 keys）、OpenAPI 契约、ESLint 全通过（`All linters passed!`）。
+- 前端：`pnpm --filter @ai-qa/web typecheck` 通过；`pnpm --filter @ai-qa/web test` → **161 passed / 0 fail / 1.10s**；`pnpm --filter @ai-qa/web build` → 成功（34.88s，Monaco chunk 4,031.76 kB 警告为历史项）。
+- 真实 worker 进程集成测试：`apps/api/tests/test_worker_process_integration.py` 4 个用例，真实 `python -m worker.main` 子进程 + 真实 uvicorn API + 真实 pytest 子进程（claim → run pytest → 结果回传 → 取消 → 崩溃恢复），SQLite 17.76s / PG 同一套件内通过。
+- 安全负向测试：`apps/api/tests/test_security_hardening.py`（跨 run 伪造 artifact、路径穿越、symlink、未授权 worker、审计 actor、恢复参数负值 422 等）随全量套件通过。
+- 新增 PostgreSQL 防回归：`apps/api/tests/test_postgres_migrations.py` 每次建临时库跑 `alembic upgrade head`，断言 `alembic_version == head` 且 `compare_metadata` 无漂移（允许 `locator_repairs.state` 的 `Enum(native_enum=False)` 已知误报）。
+- 说明：`apps/api/tests/test_runs_and_failures.py::test_trigger_run_and_failure_flow` 原先依赖真实外部 provider（opencode.ai），在本轮两次全量运行中分别因「30 秒超时（已重试 3 次）」和「无法解析结构化输出」随机失败；已改为对该用例的助手侧车注入确定性 `FakeAIProvider`（真实 provider 的超时/降级路径仍由 `test_qa_assistant_stream.py` 覆盖）。修复后 SQLite/PG 全量均为绿。
+
+Round4（2026-10-17）：
 
 - 全仓后端：`uv run pytest apps/api/tests packages -q` → **837 passed / 10 skipped / 57 warnings / 566.49s**。
 - 全仓 lint：`python scripts/task.py lint` → Ruff、Python format、i18n、OpenAPI、ESLint 全通过。
@@ -255,6 +363,16 @@ python scripts/task.py test                    # → .ai-runs/night-continuation
 python scripts/task.py lint                     # → All linters passed!
 # 前端
 pnpm --filter @ai-qa/web typecheck && pnpm --filter @ai-qa/web lint && pnpm --filter @ai-qa/web test && pnpm --filter @ai-qa/web build
+
+# Round 5 专用（按需）
+# 启动隔离的本地 PostgreSQL 18.6（临时目录，不碰仓库 lockfile/系统）
+test -d /tmp/sock-aiqa || mkdir -m 700 /tmp/sock-aiqa
+/tmp/pgvenv/bin/python -c "import embedded_postgres as ep; ep.pg_ctl(['-o','-p 55432 -k /tmp/sock-aiqa -c listen_addresses=127.0.0.1','-l','/tmp/pg55432.log','-w','start'], pgdata='/tmp/pgdata-aiqa')"
+AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test \
+  uv run pytest apps/api -q                    # PostgreSQL lane（串行！WSL 7.9GB 内存；库名必须含 test，测试会拒绝清空其他库的 schema）
+uv run pytest apps/api/tests/test_worker_process_integration.py -q   # 真实 worker 子进程
+uv run pytest apps/api/tests/test_security_hardening.py apps/api/tests/test_job_reliability.py -q
+/tmp/pgvenv/bin/python -c "import embedded_postgres as ep; ep.pg_ctl(['-D','/tmp/pgdata-aiqa','stop'])"
 ```
 
 ## 10. 下一步具体命令
