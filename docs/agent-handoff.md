@@ -29,7 +29,8 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Studio 本轮基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699` |
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
-| 当前工作分支 | `agent/ui-workspace-redesign`（Round 8 起自 `d8b332d`；Round 9 验收绑定 `3cbd2a8`；未推送；`main` 与远程 main 未修改、未合并） |
+| 当前工作分支 | `main` 已合并 `agent/ui-workspace-redesign`（fast-forward，main 现为 `15abcf8`；`origin/main` 仍为 `d8a2eef`，**尚未 push**） |
+| main 合并 | `15abcf8`（fast-forward，无 merge commit；合并后 main 工作树与已验证分支树 `31297f9` 完全一致） |
 | Round 9（RC 验收）验收 SHA | `3cbd2a8 test(discovery): assert the frame origin, not the exact start URL`（本轮所有自动化门禁在此提交上重跑） |
 | Round 8 提交 | `1fb35a5`（设计系统强制测试与字体/变量修复）、`2f69d34`（工作台上下文筛选与 pane resize）、`f77c046`（Studio 底部 Dock 可拖拽/键盘）、`23e73ab`（handoff 记录） |
 | Round 7 分支 | `agent/discovery-live-engine` 停在 `d8b332d`，未合并 |
@@ -312,7 +313,7 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 
 ## 3.6 Round 9（Release Candidate 与真实 QA 产品验收，m01734）
 
-验收绑定 SHA：**`3cbd2a8`**（分支 `agent/ui-workspace-redesign`）。完整报告（已入库）：`docs/RC_ACCEPTANCE.md`；同内容证据副本：`.ai-runs/rc-acceptance/RC-REPORT.md`；UI Before/After 截图：`.ai-runs/ui-redesign/{before,after}/`；UI 走查原始证据：`.ai-runs/rc-acceptance/{journey.json,repeatability.json,fixpath.json,screenshots/}`（均未跟踪，不提交）。
+验收绑定 SHA：**`3cbd2a8`**，已于用户明确指示下 fast-forward 合并进 `main`（main 现为 `15abcf8`；其后仅文档/证据提交，代码树未变）。完整报告（已入库）：`docs/RC_ACCEPTANCE.md`；同内容证据副本：`.ai-runs/rc-acceptance/RC-REPORT.md`；UI Before/After 截图：`.ai-runs/ui-redesign/{before,after}/`；UI 走查原始证据：`.ai-runs/rc-acceptance/{journey.json,repeatability.json,fixpath.json,screenshots/}`（均未跟踪，不提交）。
 
 ### 本轮真实结论（PARTIAL）
 
