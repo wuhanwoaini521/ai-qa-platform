@@ -87,6 +87,11 @@ export function summarizeFailureError(error = '', failureClassification?: string
   return firstLine.length > 118 ? `${firstLine.slice(0, 115)}…` : firstLine;
 }
 
+export function failureErrorPreview(error = ''): string {
+  const detail = error.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? '';
+  return detail.length > 180 ? `${detail.slice(0, 179)}…` : detail;
+}
+
 export function observedRoleLocatorMismatch(
   failure: Pick<FailureRecord, 'failing_locator' | 'error_message' | 'stack_trace' | 'evidence_bundle'>,
 ): { role: string; expectedName: string; observedNames: string[] } | null {

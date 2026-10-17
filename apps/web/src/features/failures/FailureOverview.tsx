@@ -17,6 +17,7 @@ import type {
 import {
   displayedFailureClassification,
   failedLocatorFromFailure,
+  failureErrorPreview,
   summarizeFailureError,
   type DiagnosisState,
   type PrimaryAction,
@@ -121,6 +122,7 @@ export const FailureOverview: React.FC<{
     failure.error_message,
     failure.failure_kind ?? failure.classification,
   );
+  const failureErrorDetail = summaryKind === 'assertion' ? failureErrorPreview(failure.error_message) : '';
   const isChinese = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('zh');
   const locatorTimeout = /TimeoutError|Locator\.\w+: Timeout/i.test(failure.error_message);
   const failedLocator = failedLocatorFromFailure(failure) || '未知定位器';
@@ -210,6 +212,11 @@ export const FailureOverview: React.FC<{
                     ? t('summary.assertion')
                     : t('summary.generic', { detail: summarizeFailureError(failure.error_message) })}
             </p>
+            {failureErrorDetail && (
+              <p className="failure-error-detail">
+                {t('summary.errorDetail', { detail: failureErrorDetail })}
+              </p>
+            )}
             {rootCause && (
               <p id="failure-root-cause" className="failure-root-cause"><b>{t('rootCause')}</b> {rootCause}</p>
             )}

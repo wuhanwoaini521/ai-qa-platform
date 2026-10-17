@@ -4,6 +4,7 @@ import {
   availableEvidenceTabs,
   displayedFailureClassification,
   extractRelevantFrames,
+  failureErrorPreview,
   failureSourceLocation,
   failureFingerprint,
   normalizeFailureClassification,
@@ -63,6 +64,15 @@ test('Stored repair proposals survive failure selection and invalid patches are 
   assert.equal(proposal?.applied, true);
   assert.equal(storedRepairProposal({ old_locator: 'text=Save', proposed_locator: 'text=Save', strategy: 'text' }), null);
   assert.equal(storedRepairProposal({ old_locator: 'text=Save', proposed_locator: 'text=Save' }), null);
+});
+
+test('Failure preview exposes the final cause line and safely truncates long errors', () => {
+  assert.equal(
+    failureErrorPreview('Traceback (most recent call last):\n  File "test.py", line 1\nAssertionError: expected checkout to succeed'),
+    'AssertionError: expected checkout to succeed',
+  );
+  assert.equal(failureErrorPreview('x'.repeat(200)), `${'x'.repeat(179)}…`);
+  assert.equal(failureErrorPreview('\n  '), '');
 });
 
 test('Raw error and stack are summarized into actionable labels and relevant frames', () => {

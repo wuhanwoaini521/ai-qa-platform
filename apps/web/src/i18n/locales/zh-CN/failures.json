@@ -278,6 +278,7 @@
     "locatorTimeout": "定位器 {{locator}} 未能在页面中找到目标元素。",
     "timeout": "测试执行超时。",
     "assertion": "测试断言未通过。",
+    "errorDetail": "实际错误：{{detail}}",
     "generic": "失败摘要：{{detail}}",
     "environmentHint": "可能与环境或运行时有关；这是启发式提示，尚未确认。"
   }

@@ -3612,7 +3612,7 @@ button, input, select, textarea {
 .failure-decision-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .65fr); gap: 18px; padding: 15px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); }
 .failure-decision-copy, .failure-decision-action { min-width: 0; }
 .failure-summary-text { margin: 5px 0; color: var(--ink); font-size: 15px; line-height: 1.5; font-weight: 650; }
-.failure-root-cause { margin: 9px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.failure-root-cause, .failure-error-detail { margin: 9px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .failure-heuristic-badge { display: inline-flex; margin-top: 7px; padding: 3px 7px; border-radius: 999px; color: var(--accent-amber); background: var(--accent-amber-soft); font-size: 10px; font-weight: 700; }
 .failure-state-line { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; color: var(--ink-muted); font-size: 11px; }
 .failure-state-line strong { color: var(--ink); }

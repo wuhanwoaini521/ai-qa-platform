@@ -278,6 +278,7 @@
     "locatorTimeout": "The locator {{locator}} did not resolve to an element on the page.",
     "timeout": "The test execution timed out.",
     "assertion": "The test assertion did not pass.",
+    "errorDetail": "Observed error: {{detail}}",
     "generic": "Failure summary: {{detail}}",
     "environmentHint": "This may involve the environment or runtime. This is a heuristic and is unconfirmed."
   },
