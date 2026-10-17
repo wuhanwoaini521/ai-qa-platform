@@ -321,11 +321,12 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-Round5（最终代码，2026-10-18；含 reviewer 修复与全部 Round 5 改动）：
+Round5（提交 `71f6f14` + `a8c21a1` 的最终代码，2026-10-18；含 reviewer 修复与全部 Round 5 改动）：
 
-- 全仓后端（SQLite）：`uv run pytest apps/api/tests packages -q` → **848 passed / 11 skipped / 60 warnings / 573.06s / exit 0**（`/tmp/sqlite-final2.log`）。
-- PostgreSQL lane（嵌入式 PostgreSQL 18.6，`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test`，`uv run pytest apps/api -q`）→ **697 passed / 7 skipped / 76 warnings / 354.03s / exit 0**（`/tmp/pg-final2.log`）。这是本仓第一次在真实 PostgreSQL 上跑通完整 `apps/api` 套件。
-- 上述两个全量运行之后仅有一次 `ruff format`（4 个文件，含 `apps/api/app/persistence/migrations.py`，仅格式/空行），随后重跑了涉及文件：SQLite `test_job_reliability + test_worker_process_integration + test_failure_workflow + test_runtime_migrations + test_postgres_migrations` → **60 passed / 1 skipped / 68.00s**；PG `test_job_reliability + test_worker_process_integration + test_postgres_migrations + test_backend_parity + test_postgres_integration` → **17 passed / 1 skipped / 31.69s**。
+- **最终验收对着提交后的 HEAD 重跑（代码冻结）**：
+  - 全仓后端（SQLite）：`uv run pytest apps/api/tests packages -q` → **848 passed / 11 skipped / 60 warnings / 578.93s / exit 0**（`/tmp/sqlite-head.log`）。
+  - PostgreSQL lane：`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test uv run pytest apps/api -q` → **697 passed / 7 skipped / 76 warnings / 388.54s / exit 0**（`/tmp/pg-head.log`）。这是本仓第一次在真实 PostgreSQL 上跑通完整 `apps/api` 套件。
+- 早前一轮（格式化前，仅差 `ruff format` 的空白改动）：SQLite 848/11/60 573.06s（`/tmp/sqlite-final2.log`）、PG 697/7/76 354.03s（`/tmp/pg-final2.log`）；随后 `ruff format` 改动 4 个文件（含 `apps/api/app/persistence/migrations.py`），重跑涉及文件：SQLite **60 passed / 1 skipped / 68.00s**，PG **17 passed / 1 skipped / 31.69s**。
 - 全仓 lint：`python scripts/task.py lint` → Ruff、429 Python 文件格式、i18n（25 namespaces / 3026 keys）、OpenAPI 契约、ESLint 全通过（`All linters passed!`）。
 - 前端：`pnpm --filter @ai-qa/web typecheck` 通过；`pnpm --filter @ai-qa/web test` → **161 passed / 0 fail / 1.10s**；`pnpm --filter @ai-qa/web build` → 成功（34.88s，Monaco chunk 4,031.76 kB 警告为历史项）。
 - 真实 worker 进程集成测试：`apps/api/tests/test_worker_process_integration.py` 4 个用例，真实 `python -m worker.main` 子进程 + 真实 uvicorn API + 真实 pytest 子进程（claim → run pytest → 结果回传 → 取消 → 崩溃恢复），SQLite 17.76s / PG 同一套件内通过。
