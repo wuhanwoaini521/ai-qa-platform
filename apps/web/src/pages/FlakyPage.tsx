@@ -239,7 +239,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                   <tr key={item.nodeid}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{item.test_name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {item.nodeid}
                       </div>
                     </td>
@@ -319,7 +319,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <div className="modal-header">
               <div>
                 <h3>{t('modalTitle')}</h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   {selectedTestNodeId}
                 </div>
               </div>
@@ -412,7 +412,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                             <td>
                               <span
                                 style={{
-                                  fontFamily: 'monospace',
+                                  fontFamily: 'var(--font-mono)',
                                   fontSize: '0.8rem',
                                   color: 'var(--color-primary)',
                                   cursor: 'pointer',
@@ -436,7 +436,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                               <span
                                 style={{
                                   fontSize: '0.75rem',
-                                  fontFamily: 'monospace',
+                                  fontFamily: 'var(--font-mono)',
                                   color: 'var(--color-error)',
                                 }}
                               >

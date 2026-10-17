@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI QA Platform</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!--
+      No external font CDN on purpose: the platform must render correctly in air-gapped and
+      CSP-restricted deployments, and a blocked webfont also blocks document.fonts.ready, which
+      hangs Playwright screenshot capture. Typography comes from --font-sans/--font-mono
+      (local and system stacks). To ship a licensed font, self-host it under public/fonts and
+      declare it with @font-face in src/index.css.
+    -->
   </head>
   <body>
     <div id="root"></div>

@@ -91,8 +91,9 @@
   --shadow-frame: 0 1px 2px rgba(27, 27, 29, 0.05);
 
   /* --- Typography -------------------------------------------------------------------------- */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Menlo, monospace;
+  /* Local and system stacks only — no webfont request (see apps/web/index.html). */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-label: 13px;
@@ -146,6 +147,14 @@
   --ui-amber: var(--accent-amber-dot);
   --ui-rose: var(--accent-red);
   --ui-violet: var(--accent-violet);
+  /* Status text/strong aliases: referenced by runtime.css and the recorder panels, previously
+     undeclared so they silently fell back to hard-coded hex values. */
+  --ui-success-strong: #15803d;
+  --ui-warning-strong: #b45309;
+  --success-text: var(--ui-success-strong);
+  --danger-text: var(--accent-red);
+  --accent-orange: #ea580c;
+  --accent: var(--accent-blue);
 
   --ui-ink: var(--ink);
   --ui-ink-soft: var(--ink-soft);
@@ -1903,6 +1912,56 @@ button, input, select, textarea {
 }
 
 .studio-problems-toggle { display: flex; }
+
+/* Bottom dock: problems + quick run output, resizable and collapsible */
+.studio-bottom-panels {
+  display: flex;
+  flex-direction: column;
+  height: var(--studio-dock-height, 220px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-bottom-panels.is-collapsed { height: 32px; }
+
+.studio-dock-resize {
+  position: relative;
+  flex: 0 0 auto;
+  height: 6px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: row-resize;
+}
+
+.studio-dock-resize::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--line-strong);
+  opacity: 0.45;
+}
+
+.studio-dock-resize:hover::after,
+.studio-dock-resize:focus-visible::after { opacity: 1; background: var(--accent-blue); }
+
+.studio-dock-resize:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+
+.studio-bottom-panels.is-collapsed .studio-dock-resize,
+.studio-bottom-panels.is-collapsed .studio-problems-body,
+.studio-bottom-panels.is-collapsed .studio-dock-runoutput { display: none; }
+
+.studio-problems-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
 
 .studio-editor-tabs {
   display: flex;

@@ -645,7 +645,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               placeholder={t('impactChangedFilesPlaceholder')}
               value={changedFilesText}
               onChange={(e) => setChangedFilesText(e.target.value)}
-              style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%' }}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', width: '100%' }}
             />
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button
@@ -726,7 +726,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     backgroundColor: 'var(--bg-base)',
                     padding: '10px',
                     borderRadius: 'var(--r-xs)',
-                    fontFamily: 'monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '0.85rem',
                     maxHeight: '180px',
                     overflowY: 'auto',
