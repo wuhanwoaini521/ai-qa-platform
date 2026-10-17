@@ -5,11 +5,13 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 8 —— 全平台 UI/UX 工作台改造（用户任务 m01373，分支 `agent/ui-workspace-redesign`）。** 目标：把平台从「后台管理页面集合」改造成一个连续的专业 QA 工作台，核心链路 需求 → 用例 → 自动化 → 执行 → 结果 → 失败调试 → AI/Jev 修复 → 验证 在同一工作台上下文内完成。进度见 §3.5。
+**当前活动轮次：Round 9 —— Release Candidate 与真实 QA 产品验收（用户任务 m01734，分支 `agent/ui-workspace-redesign`，验收绑定 SHA `3cbd2a8`）。** 结论 **PARTIAL**；完整报告见 `.ai-runs/rc-acceptance/RC-REPORT.md`（该目录未纳入版本库）。摘要：核心日常链路仅靠 UI 可完成、PostgreSQL/Worker/RBAC/契约/迁移门禁通过、Jev 现场决策为 LIVE、AI 规划 Provider 仍 BLOCKED（超时降级已真实验证）、发现并记录 D1/D2 两个高影响 UX 缺陷与 1 个高负载下的偶发 E2E 失败。进度见 §3.6。
+
+Round 8（用户任务 m01373，全平台 UI/UX 工作台改造）已交付为 `23e73ab`（分支 `agent/ui-workspace-redesign`，未合并 main），结论 PARTIAL，明细见 §3.5。
 
 Round 7（用户任务 m00227，Quality Discovery 实时可视化探索引擎）已提交至 `d8b332d`（分支 `agent/discovery-live-engine`，未合并），仅剩最终 A–F 报告与三项未验证验收项；详细进度见 §3.4。
 
-Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支的起点基线（§3.3）。用户任务 m00001/m00002「Release Candidate 与真实 QA 产品验收」六阶段验收**已暂停**（未被取消，被 m00227 取代为当前活动目标）；未经用户重新确认不要当作活动任务继续执行。
+Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支的起点基线（§3.3）。用户任务 m00001/m00002 与 m01734 为同一份「Release Candidate 与真实 QA 产品验收」六阶段验收任务；它曾因 m00227 暂停，现已由 m01734 重新下发并处于**活动**状态。
 
 历史（Round 3，用户任务 m00157）：已完成本轮可交付范围：审计发现/需求/场景/用例/自动化/执行/覆盖关联，修复已证实的状态与项目绑定缺陷；用受控 loopback 网站、真实 Chromium/BrowserRuntime、真实 Playwright worker、临时 API/Vite 与实际 UI 点击验收 Discovery → Quality Map → 风险/场景 → 用例 → binding → Run → coverage。新证据位于 `.ai-runs/night-continuation/round-3/evidence/`。旧 Studio/Round-2 成果为历史，不重复实施。
 
@@ -27,8 +29,9 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Studio 本轮基点 HEAD | `7cac0be55118992b551c72ad184cb236dbe29699` |
 | Studio 源码/测试提交 | `63ae3027ec1632b0dbaa3e8e1298147247d4e4b5` (`fix(studio): restore responsive debug workspace`) |
 | 最近 AI Disabled 修复提交 | `1720bf3 fix(ai): keep read APIs available when provider is disabled`，父提交 `1ffbaf6` |
-| 当前工作分支 | `agent/ui-workspace-redesign`（Round 8，从 `d8b332d` 起；未推送；`main` 与远程 main 未修改、未合并） |
-| Round 8 提交 | 见 `git log` 顶部（UI 设计系统强制测试、工作台上下文筛选、Studio dock、迁移加固、真实不稳定修复） |
+| 当前工作分支 | `agent/ui-workspace-redesign`（Round 8 起自 `d8b332d`；Round 9 验收绑定 `3cbd2a8`；未推送；`main` 与远程 main 未修改、未合并） |
+| Round 9（RC 验收）验收 SHA | `3cbd2a8 test(discovery): assert the frame origin, not the exact start URL`（本轮所有自动化门禁在此提交上重跑） |
+| Round 8 提交 | `1fb35a5`（设计系统强制测试与字体/变量修复）、`2f69d34`（工作台上下文筛选与 pane resize）、`f77c046`（Studio 底部 Dock 可拖拽/键盘）、`23e73ab`（handoff 记录） |
 | Round 7 分支 | `agent/discovery-live-engine` 停在 `d8b332d`，未合并 |
 | Round 7 起点 | `b6bb5fc feat(security): scope API access to a caller's own or shared projects`（P1 project ACL 第一版，含迁移 `0013_project_ownership.py`） |
 | Round 7 后端提交 | `534c252 feat(discovery): live observation stream, viewport frames and element geometry` |
@@ -306,6 +309,25 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - Studio 首屏可用时间实测 12–17s（Monaco 懒加载），期间无进度反馈。
 - Recorder / Debugger / AI 修复面板尚未逐一改造；`.ai-runs` 之外的截图只覆盖主要页面。
 - 组件级 UI 回归测试仍缺失（最大结构性风险，详见 `docs/UI_DESIGN_SYSTEM.md` §已知缺口）。
+
+## 3.6 Round 9（Release Candidate 与真实 QA 产品验收，m01734）
+
+验收绑定 SHA：**`3cbd2a8`**（分支 `agent/ui-workspace-redesign`）。完整报告（已入库）：`docs/RC_ACCEPTANCE.md`；同内容证据副本：`.ai-runs/rc-acceptance/RC-REPORT.md`；UI Before/After 截图：`.ai-runs/ui-redesign/{before,after}/`；UI 走查原始证据：`.ai-runs/rc-acceptance/{journey.json,repeatability.json,fixpath.json,screenshots/}`（均未跟踪，不提交）。
+
+### 本轮真实结论（PARTIAL）
+
+- **日常链路**：需求 → 用例 → 脚本 → Studio 运行 → 结果 → 失败证据 → 调试入口，全部可只经 UI 完成（16 次点击 / 9 次 URL 变化 / 0 次回终端）；真实 AI 环节因 Provider 不可达而只验证了诚实失败与降级。
+- **门禁结果**：SQLite 全量 `1 failed, 870 passed, 11 skipped, 658.73s`；PostgreSQL 全量 `875 passed, 7 skipped, 448.83s`；前端 179 passed / typecheck 0 / lint clean / build 29.8s；i18n 3067 keys passed；OpenAPI current；`-m security` 16 passed（SQLite+PG 各一次）；Worker 真实进程 SQLite 4 / PG 4 passed；迁移 0013 在 SQLite 与 PG 均 upgrade/downgrade 往返成功。
+- **现场真实 Provider 证据**：**Jev = LIVE**（`provider=jev`, `model=jev-1.13.0`, confidence 0.96/1.0/1.0，3 条决策，且 UI/`result.decisions[]` 可追溯）；**AI 规划 Provider = BLOCKED**（20s 超时 → `ai.unavailable`，降级继续，states=3/actions=3/features=9，未伪造结果）。证据：`.ai-runs/discovery-live/evidence/ai-degradation-live.txt`。
+- **本轮新增的真实修复**：(1) 迁移 0013 启动崩溃（手工加列 + 旧 `alembic_version` → `duplicate column name`）——改为 inspector 探测 + 新增回归测试；(2) Discovery 直播流订阅/发布竞态——`event_generator` 订阅先行 + `LIVE_STREAM_IDLE_TIMEOUT_S=3.0` 空闲收尾 + 新增回归测试。
+
+### 未关闭缺陷（下一轮优先级）
+
+- **D1（高）**：AI/Jev 修复分析在使用者中途离开后卡在 `status=RUNNING` / `ANALYZING` / `allowed_actions=[]`，重载后 UI 显示「未启动」且隐藏全部操作；UI 与 API 矛盾。
+- **D2（高）**：AI 分析 90s+ 无失败提示，任务可无限显示「运行中」。
+- **D3（中）**：调试页无失败文件:行号（仅源码页有）。**D4（中）**：侧边栏 `/runs`、`/quality` 离开工作台丢上下文。**D5（低-中）**：结果摘要偏薄。**D6（低）**：Studio 无录制入口。
+- **偶发失败（中）**：`apps/api/tests/test_browser_agent_e2e.py::test_browser_agent_checks_and_switches_to_popup_landing[selenium.dev-False-False]` 在高负载全量套件中偶发 `TargetClosedError: Locator.count: Target page, context or browser has been closed`；单独运行 3/3 passed。根因方向见 `apps/api/app/adapters/playwright/locator.py:30` 与 `apps/api/app/services/task_browser_executor.py:245` 的已关闭弹窗枚举；本轮**未做盲目修补**。
+- **企业部署缺口**：备份/恢复演练、CI/CD 证据、发布/回滚演练、密钥托管轮换、审计字段完整性、产物级项目隔离（`ArtifactORM` 无 `project_id`）、探索循环纳入 TaskRuntimeService。
 
 ## 4. 环境基线（WSL / Linux）
 

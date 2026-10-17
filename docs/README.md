@@ -44,6 +44,7 @@ Every document in this repository belongs to one of three lifecycle categories:
 | [autonomous-qa-agent-v1.md](autonomous-qa-agent-v1.md) | `[CURRENT]` | Autonomous QA Agent: `QA_GOAL` preview token flow, capability matrix, execution constraints, pause/resume, and result contract. |
 | [jev-browser-orchestration-v1.md](jev-browser-orchestration-v1.md) | `[CURRENT]` | JEV browser action loop: observation, candidate selection, safety boundaries, and live execution. |
 | [QUALITY_DISCOVERY.md](QUALITY_DISCOVERY.md) | `[CURRENT]` | Quality Discovery live engine: real-browser observation, live frames, element geometry + on-page highlights, event contract, AI degradation, and the exploration security boundary. |
+| [RC_ACCEPTANCE.md](RC_ACCEPTANCE.md) | `[CURRENT]` | Release Candidate acceptance report (six phases: wind-down, real-QA-engineer UI walkthrough, stability, enterprise gate, UX fixes, final gates) with per-SHA evidence and a PASS/PARTIAL/FAIL verdict. |
 
 ---
 
