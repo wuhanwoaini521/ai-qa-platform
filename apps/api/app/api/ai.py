@@ -18,13 +18,24 @@ from project_model.models import (
 )
 
 from app.api.authz import require_permission
+from app.api.project_acl import requirement_id_access, test_design_access, test_design_id_access
 from app.container import get_ai_service, get_ai_settings_service, get_platform_health_service
 from app.services.ai_service import AIService
 from app.services.ai_settings_service import AISettingsService
 from app.services.operation_trace import stream_operation
 from app.services.platform_health_service import PlatformHealthService
 
-router = APIRouter(prefix="/ai", tags=["Production AI Intelligence"])
+# The requirement/design routes name the project indirectly; each guard ignores routes whose path
+# parameter it does not know, so settings/status/usage routes stay unguarded.
+router = APIRouter(
+    prefix="/ai",
+    tags=["Production AI Intelligence"],
+    dependencies=[
+        Depends(requirement_id_access),
+        Depends(test_design_id_access),
+        Depends(test_design_access),
+    ],
+)
 
 
 @router.get("/settings", response_model=AIProviderSettingsResponse)

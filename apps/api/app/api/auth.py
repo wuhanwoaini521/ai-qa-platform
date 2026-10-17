@@ -45,7 +45,7 @@ async def create_stream_ticket(
     if not has_permission(user, permission):
         raise HTTPException(status_code=403, detail="Insufficient permission for this stream")
 
-    exists = await resources.exists(payload.kind, payload.resource_id, str(user.id))
+    exists = await resources.exists(payload.kind, payload.resource_id, str(user.id), user)
     if not exists:
         raise HTTPException(status_code=404, detail="Stream resource not found")
 

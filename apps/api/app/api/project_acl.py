@@ -27,14 +27,20 @@ __all__ = [
     "case_access",
     "discovery_run_access",
     "enforce_project_access",
+    "enforce_resource_access",
     "failure_access",
     "is_admin",
     "project_path_access",
     "project_query_access",
     "release_access",
     "requirement_access",
+    "requirement_id_access",
+    "requirement_query_access",
     "resource_path_access",
+    "resource_query_access",
     "run_access",
+    "test_design_access",
+    "test_design_id_access",
     "visible_project_ids",
     "workspace_access",
 ]
@@ -61,11 +67,34 @@ async def enforce_project_access(user: User, project_id: str | None) -> None:
         raise _not_found()
 
 
+async def enforce_resource_access(user: User, kind: str, resource_id: str | None) -> None:
+    """Guard a resource named by ``kind``/``resource_id`` that is not in the request path.
+
+    Unknown resources are admin-only so an outsider cannot tell "does not exist" from "not yours".
+    """
+    project_id = None
+    if resource_id:
+        async with open_project_access_service() as service:
+            project_id = await service.project_of(kind, resource_id)
+    if project_id is None:
+        if not is_admin(user):
+            raise _not_found()
+        return
+    await enforce_project_access(user, project_id)
+
+
 def project_path_access(param: str):
-    """Guard for a route whose path parameter *is* a project id."""
+    """Guard for a route whose path parameter *is* a project id.
+
+    Safe to attach to a whole router: routes that do not carry ``param`` (for example
+    ``/onboarding/preview``) are left alone.
+    """
 
     async def _guard(request: Request, user: User = Depends(get_current_user)):
-        await enforce_project_access(user, request.path_params.get(param))
+        project_id = request.path_params.get(param)
+        if not project_id:
+            return
+        await enforce_project_access(user, project_id)
 
     return _guard
 
@@ -96,13 +125,19 @@ def resource_path_access(param: str, kind: str):
         resource_id = request.path_params.get(param)
         if not resource_id:
             return
-        async with open_project_access_service() as service:
-            project_id = await service.project_of(kind, resource_id)
-        if project_id is None:
-            if not is_admin(user):
-                raise _not_found()
+        await enforce_resource_access(user, kind, resource_id)
+
+    return _guard
+
+
+def resource_query_access(param: str, kind: str):
+    """Like ``resource_path_access`` for a resource named by a query parameter."""
+
+    async def _guard(request: Request, user: User = Depends(get_current_user)):
+        resource_id = request.query_params.get(param)
+        if not resource_id:
             return
-        await enforce_project_access(user, project_id)
+        await enforce_resource_access(user, kind, resource_id)
 
     return _guard
 
@@ -114,3 +149,8 @@ requirement_access = resource_path_access("req_id", "requirement")
 case_access = resource_path_access("case_id", "case")
 release_access = resource_path_access("release_id", "release")
 discovery_run_access = resource_path_access("run_id", "discovery_run")
+# The AI and test-design routers name the same concepts with different parameters.
+requirement_id_access = resource_path_access("requirement_id", "requirement")
+test_design_access = resource_path_access("design_id", "test_design")
+test_design_id_access = resource_path_access("test_design_id", "test_design")
+requirement_query_access = resource_query_access("requirement_id", "requirement")

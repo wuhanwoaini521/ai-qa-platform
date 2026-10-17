@@ -17,11 +17,16 @@ from project_model.models import (
     PullRequestInfo,
 )
 
+from app.api.project_acl import workspace_access
 from app.container import get_pr_service
 from app.services.pr_service import PullRequestService
 from app.services.workspace_service import WorkspaceService
 
-router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["Git & PR Workflow"])
+# Same `/workspaces/{workspace_id}` prefix as workspaces.py, which carries the same guard: without
+# it any caller with AUTOMATION_EDIT could commit/push/PR against another project's workspace.
+router = APIRouter(
+    prefix="/workspaces/{workspace_id}", tags=["Git & PR Workflow"], dependencies=[Depends(workspace_access)]
+)
 
 
 def get_workspace_service() -> WorkspaceService:

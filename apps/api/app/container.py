@@ -345,6 +345,7 @@ def get_stream_resource_service(session: AsyncSession = Depends(get_db)) -> Stre
         recorder_service,
         debug_session_service,
         QualityDiscoveryRepository(session),
+        ProjectAccessRepository(session),
     )
 
 

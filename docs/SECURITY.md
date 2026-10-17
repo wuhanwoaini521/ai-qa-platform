@@ -62,6 +62,6 @@ Quality Discovery points a real Chromium browser at a user-supplied URL, so the 
 - **Bounded execution** — `max_actions`, `max_failures`, `max_depth`, `max_states`, `max_runtime_minutes`, `max_candidates`, `max_screenshots`, `max_events`. No unattended outer loop.
 - **Redaction** — sensitive values are masked before they reach an event, evidence bundle or the UI.
 - **Artifact confinement** — evidence files must resolve inside the configured artifact root.
-- **Project ACL** — every discovery route, including the live SSE stream, passes the same project access guard as the run (non-members get 404, not 403, so project existence is not probeable).
+- **Project ACL** — every discovery route, including the live SSE stream, passes the same project access guard as the run (non-members get 404, not 403, so project existence is not probeable). The same guard covers the neighbouring project-scoped families: `/workspaces/{id}/git/*` and `/pr/*`, `/ai/requirements/{id}/*`, `/ai/test-designs/{id}/*`, `/test-designs/*`, `/lifecycle/projects/{id}/*`, `/onboarding/{id}/*` and `/runs/{id}/runtime`. Routes whose resources carry no project column (worker/job endpoints, artifact upload/download) stay role-only, and their access model is unchanged.
 
 **Known gaps (open):** the allowlist matches host names only (no private-IP/link-local/CIDR blocking, no port restriction); the exploration loop runs as an in-process task rather than through `TaskRuntimeService`, so it is not visible in Task Runtime and does not survive a restart.

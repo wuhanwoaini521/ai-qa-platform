@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from qa_core.onboarding import AllureImportReport, CollectionOutcome, RuntimeProvisioningResult
 
 from app.api.authz import require_permission
+from app.api.project_acl import project_path_access
 from app.container import get_onboarding_service
 from app.services.onboarding_service import (
     DetectionPreview,
@@ -22,7 +23,9 @@ from app.services.onboarding_service import (
     OnboardingService,
 )
 
-router = APIRouter(prefix="/onboarding", tags=["onboarding"])
+# preview/import name no project; every other route addresses one, and the guard ignores the
+# routes whose path parameter it does not know.
+router = APIRouter(prefix="/onboarding", tags=["onboarding"], dependencies=[Depends(project_path_access("project_id"))])
 
 
 class ImportRequest(BaseModel):

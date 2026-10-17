@@ -92,7 +92,8 @@ observed state is already saved as an artifact.
   (`live_frame_interval_ms`, default 1000 ms). No viewer ⇒ no screenshots ⇒ no cost.
 - If a paint is not ready (page mid-navigation, browser closed) the capture returns nothing and the pump retries
   sooner (min(interval, 250 ms)); the run is never blocked or failed by a slow frame.
-- On viewer disconnect the pump stops; on cancellation/stop/exit the hub is flushed and frames dropped.
+- On viewer disconnect the pump stops and the run's frame slot is released; when the run ends (or is finalized)
+  the hub drops every frame it kept for that run, so nothing is retained for the process lifetime.
 
 ---
 
@@ -215,8 +216,9 @@ The Quality Discovery workbench (`apps/web/src/features/workspace/DiscoveryLiveV
   observed element inventory, and evidence links.
 - **Bottom — event timeline.** The DevTools-style ordered stream (page, element, action, AI, evidence, error
   entries) with `seq`, timestamp and jump-to-evidence.
-- **Historical vs live.** Once a run ends the timeline keeps the persisted history and the last captured frame
-  is labelled as the last evidence frame — the view never pretends an ended run is still live.
+- **Historical vs live.** Once a run ends the timeline keeps the persisted history, and the browser pane keeps the
+  last frame a viewer actually received, labelled as the last evidence frame; a run that had already finished when
+  the viewer attached streams no frames at all, so the view never pretends an ended run is still live.
 
 All strings are bilingual: add keys to both `apps/web/src/i18n/locales/en/qualityDiscovery.json` and
 `.../zh-CN/qualityDiscovery.json`, then run `uv run python scripts/i18n_check.py`.

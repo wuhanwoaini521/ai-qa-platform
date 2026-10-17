@@ -18,6 +18,7 @@ RESOLVERS = {
     "failure": "project_of_failure",
     "workspace": "project_of_workspace",
     "requirement": "project_of_requirement",
+    "test_design": "project_of_test_design",
     "case": "project_of_case",
     "release": "project_of_release",
     "discovery_run": "project_of_discovery_run",

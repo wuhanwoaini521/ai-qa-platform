@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from project_model.models import Permission
 
 from app.api.authz import require_permission
+from app.api.project_acl import project_path_access
 from app.container import (
     get_golden_demo_service,
     get_project_knowledge_service,
@@ -41,7 +42,8 @@ async def seed_demo(service: GoldenDemoService = Depends(get_golden_demo_service
 
 
 @router.post(
-    "/projects/{project_id}/demo/reset", dependencies=[Depends(require_permission(Permission.AUTOMATION_EDIT))]
+    "/projects/{project_id}/demo/reset",
+    dependencies=[Depends(project_path_access("project_id")), Depends(require_permission(Permission.AUTOMATION_EDIT))],
 )
 async def reset_demo(project_id: str, service: GoldenDemoService = Depends(get_golden_demo_service)):
     try:
@@ -50,7 +52,7 @@ async def reset_demo(project_id: str, service: GoldenDemoService = Depends(get_g
         raise HTTPException(409, str(error)) from error
 
 
-@router.get("/projects/{project_id}/knowledge")
+@router.get("/projects/{project_id}/knowledge", dependencies=[Depends(project_path_access("project_id"))])
 async def project_knowledge(
     project_id: str,
     focus: str | None = None,

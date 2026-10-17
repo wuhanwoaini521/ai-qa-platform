@@ -130,6 +130,7 @@ class QualityDiscoveryService(
         self._live_sessions: dict[str, str] = {}
         self._live_urls: dict[str, str] = {}
         self._event_seq: dict[str, int] = {}
+        self._pumps: dict[str, asyncio.Task] = {}
 
     def _assert_runtime_ready(self, config) -> None:
         if not self._uses_runtime_provider:
@@ -812,12 +813,16 @@ class QualityDiscoveryService(
         if url:
             self._live_urls[run_id] = url
 
+    def _live_seq(self, run_id: str) -> int:
+        """Per-run monotonic sequence, shared by persisted and stream-only events."""
+        seq = self._event_seq.get(run_id, 0) + 1
+        self._event_seq[run_id] = seq
+        return seq
+
     def _live_status(self, run_id: str, status: str, message: str) -> None:
         self.live.publish(
             run_id,
-            event_payload(
-                "run.status", seq=self._event_seq.get(run_id, 0), message=message, metadata={"status": status}
-            ),
+            event_payload("run.status", seq=self._live_seq(run_id), message=message, metadata={"status": status}),
         )
 
     async def event_generator(self, run_id: str) -> AsyncGenerator[str, None]:
@@ -839,12 +844,15 @@ class QualityDiscoveryService(
         if row.status in self.TERMINAL:
             yield event_frame("run.finished", event_payload("run.finished", seq=0, metadata={"status": row.status}))
             return
-        pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
-        try:
-            async for payload in self.live.subscribe(run_id):
-                yield event_frame(str(payload.get("type") or "message"), payload)
-        finally:
-            pump.cancel()
+        pump = self._pumps.get(run_id)
+        if pump is None or pump.done():
+            # One pump per run, shared by every viewer: two viewers must not double the screenshot cost.
+            pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
+            self._pumps[run_id] = pump
+        async for payload in self.live.subscribe(run_id):
+            yield event_frame(str(payload.get("type") or "message"), payload)
+        # The pump stops on its own once the last viewer leaves (it loops on ``has_subscribers``)
+        # and finalization cancels it; a single viewer leaving must not disturb the others.
 
     async def _live_viewport(self, session_id: str) -> dict[str, int]:
         """Viewport size of the run's browser, so a viewer can place element boxes over the frame."""
@@ -874,7 +882,7 @@ class QualityDiscoveryService(
                         run_id,
                         event_payload(
                             "run.finished",
-                            seq=self._event_seq.get(run_id, 0),
+                            seq=self._live_seq(run_id),
                             message="探索已结束。",
                             metadata={"status": row.status},
                         ),
@@ -891,7 +899,7 @@ class QualityDiscoveryService(
                             run_id,
                             event_payload(
                                 "browser.frame",
-                                seq=self._event_seq.get(run_id, 0),
+                                seq=self._live_seq(run_id),
                                 metadata={
                                     "mime_type": "image/jpeg",
                                     "url": self._live_urls.get(run_id, ""),
@@ -951,7 +959,7 @@ class QualityDiscoveryService(
                     run_id,
                     event_payload(
                         "run.finished",
-                        seq=self._event_seq.get(run_id, 0),
+                        seq=self._live_seq(run_id),
                         message=f"探索状态：{status}",
                         metadata={"status": status},
                     ),
@@ -959,9 +967,15 @@ class QualityDiscoveryService(
         finally:
             self._finalizing.discard(run_id)
             # The live view is ephemeral: a finished run keeps its persisted evidence, not its frames.
+            pump = self._pumps.pop(run_id, None)
+            if pump is not None and not pump.done():
+                pump.cancel()
+                await asyncio.gather(pump, return_exceptions=True)
+            self.live.release(run_id)
             self._live_sessions.pop(run_id, None)
             self._live_urls.pop(run_id, None)
             self._event_seq.pop(run_id, None)
+            self._stop_events.pop(run_id, None)
 
     async def _change_result(self, run_id: str, change: Callable[[dict[str, Any]], None]) -> None:
         for attempt in range(5):

@@ -39,14 +39,15 @@ HIGHLIGHT_SCRIPT = r"""boxes => {
     layer.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
     document.documentElement.appendChild(layer);}
   layer.textContent='';
-  for(const box of (boxes||[]).slice(0,50)){
+  const draw=(boxes||[]).slice(0,50);
+  for(const box of draw){
     const mark=document.createElement('div');
     const color=box.color||'#22d3ee';
     mark.style.cssText='position:fixed;left:'+box.x+'px;top:'+box.y+'px;width:'+box.width+'px;height:'+box.height+
       'px;border:2px solid '+color+';background:'+color+'22;border-radius:4px';
     layer.appendChild(mark);
   }
-  return (boxes||[]).length;
+  return draw.length;
 }"""
 
 

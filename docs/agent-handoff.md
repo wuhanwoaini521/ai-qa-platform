@@ -228,11 +228,26 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - `ruff check apps/api packages` → All checks passed；`ruff format --check .` → 441 files already formatted。
 - 前端 `pnpm --filter @ai-qa/web test|typecheck|lint|build` → **172 passed**、typecheck/lint 无错、build 30.05s。
 - `scripts/i18n_check.py` → 25 namespaces / 2 languages / 3062 keys passed；`export_openapi.py --check` → current。
-- 全量后端回归与 Before/After UI 截图在本轮收尾时执行：全量 **867 passed / 11 skipped / 654.84s**；截图证据路径与结论见 §11 与 `.ai-runs/discovery-live/screenshots/NOTES.md`（若 Before 缺失按 BLOCKED 记录）。
+- 全量后端回归（评审修复后重跑）：`uv run --no-sync pytest apps/api/tests packages -q` → **869 passed / 11 skipped / 599.96s**。
+- Before/After UI 截图：`.ai-runs/discovery-live/screenshots/before-discovery-form.png`（旧：表单 + 数字计数器 + 文字日志 + 状态图）与 `after-live-discovery.png`（新：真实浏览器画面 + 3 个绿色元素高亮框 + 元素清单 + DevTools 式事件时间线，`naturalWidth=1280`、`boxes=3`）。委派 `del_mvcof1z7_ufyh` 超时（30m）但交付物已产出并已由本人复核。
 
-阻断与未完成（诚实记录）：
+### 真实 provider 现场证据（2026-10-18 通过真实 UI 启动两次探索，DB `/tmp/discovery-live/ai_qa_platform.db`）
 
-- **真实 AI/Jev 在线验收 BLOCKED**：外部 provider 不可达（opencode.ai 400 `MissingSessionID`、api.typesafe.ai ConnectTimeout）；因此 R6「真实 AI/Jev 链路验证」只能用受控 fixture 决策 + 真实浏览器完成，报告中不得称为真实 AI 验收。
+证据文件：`.ai-runs/discovery-live/evidence/ai-degradation-live.txt`。
+
+- **Jev 真实在线可用**：`decisions` 里 `provider=jev, model=jev-1.13.0`，confidence `0.96 / 1.0 / 1.0`，动作按 Jev 选择真实执行并 `action.verified`。
+- **AI 规划 provider 真实超时**：`ai.unavailable`（`"AI Provider 在 20 秒内未返回结果（已重试 0 次）"`，`code=timeout`）——运行**没有**变 FAILED，继续以确定性候选策略 + Jev 决策推进（`states=3, actions=3, features=9`），截图/DOM 证据全部保留。这正是 §9 要求的降级行为，且是在真实 provider 失败下验证的。
+- 因此修正上一版结论：**Jev 链路为真实通过**；**AI 规划 provider 的成功路径仍为 BLOCKED**（超时），不得把降级通过当成 AI 验收通过。
+
+### 独立评审与整改（reviewer `del_mvcozbwq_mbiv`，报告 `/tmp/acp-delegate/del_mvcozbwq_mbiv.out`）
+
+评审结论：Quality Discovery 功能本身无 P0，但分支捆绑的 ACL 不完整 + live hub 内存泄漏必须修；已全部整改并重跑全量（上述 869 passed）：
+
+- **P1（已修）**：`git_pr.py` 挂在同一 `/workspaces/{workspace_id}` 前缀却没有项目守卫，任何持有 `AUTOMATION_EDIT` 的 QA_ENGINEER 都能对别的项目工作区 `git commit/push`。已加 `workspace_access`；同类缺口一并补齐：`/ai/requirements|test-designs/*`、`/test-designs/*`、`/lifecycle/projects/{id}/*`、`/onboarding/{id}/*`、`/runs/{id}/runtime`（新增 `test_design` 解析器、`resource_query_access`、`enforce_resource_access`）。新增两条 ACL 测试（台工作区 git 路由、发现流 ticket 不得成为存在性探测器）。
+- **P2（已修）**：`DiscoveryLiveHub` 的 `_frames` 在「查看者先断开、运行后结束」时永久残留 → 新增 `release()`，在 `_finish_locked` finally 与最后一个订阅者离开时释放，并删除死代码 `latest_frame()`；每个查看者各起一个抓帧泵 → 改为每 run 单个共享泵，并在 finalization 里 `cancel + gather`。
+- **P2（已修）**：`/api/auth/stream-ticket` 的 `discovery` 分支只查存在性 → 现在按项目 ACL 判定（非成员 404）。
+- **P3（已修）**：live-only 事件 `seq` 不再是重复值（新增 `_live_seq`，与持久化事件共享单调计数）；`_stop_events` 在 finalization 释放；`HIGHLIGHT_SCRIPT` 返回真实绘制数量（`slice(0,50)` 之后）；`test_project_acl.py` 里那条“用 requirement id 当 failure id”的空洞断言改为真实 `test_executions → failure_records` 链；`docs/QUALITY_DISCOVERY.md` 中与代码不符的帧生命周期描述已修正。
+- **P3（未修，已知）**：`collect_controls` 仍先 `evaluate_all` 再 `slice(0,100)`（恶意大 DOM 成本，历史行为）；`DiscoveryLiveView` 的 effect 依赖只有 `[runId]`（eslint 未启用 exhaustive-deps），若流断开时状态转终态不会自动停。
 - **OSS 调研 BLOCKED**：Skyvern/Stagehand/browser-use/agent-browser/playwright-mcp/crawl4ai/firecrawl 的调研委派因网络超时（30 分钟上限）无产出；未引入任何 OSS 代码或依赖，报告中不得声称研究/采用过这些项目。
 - 安全缺口（`docs/QUALITY_DISCOVERY.md` §7 已写明）：允许域名只匹配 host，无私有 IP/link-local/CIDR 与端口限制；探索循环仍是进程内 `asyncio` 任务，未纳入 `TaskRuntimeService`，重启不存活。
 - 发现→Requirement/TestCase/Automation 的关联目前是 id 级与测试断言，未做 schema 级 provenance。

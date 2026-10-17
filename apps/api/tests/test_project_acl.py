@@ -11,7 +11,10 @@ single-operator workflow is unchanged.
 from __future__ import annotations
 
 import pytest
+from app.persistence.models import FailureRecordORM as FailureRow
 from app.persistence.models import ProjectORM, TeamMemberORM, TeamORM
+from app.persistence.models import QualityDiscoveryRunORM as QualityDiscoveryRunRow
+from app.persistence.models import TestExecutionORM as ExecutionRow
 from app.persistence.models import TestRunORM as RunRow
 from conftest import bearer_client, login_token
 from httpx import AsyncClient
@@ -83,6 +86,21 @@ async def test_foreign_project_resources_are_invisible(client: AsyncClient, test
         session.add(RunRow(id="run_acl", project_id=foreign, workspace_id="ws_acl", status="PASSED"))
         await session.commit()
 
+    # A failure needs a real failure id: asserting 404 for an id that does not exist at all would
+    # pass whether or not the ACL guard is present.
+    async with test_db_session() as session:
+        session.add(ExecutionRow(id="exec_acl", run_id="run_acl", nodeid="tests/test_acl.py::test_secret"))
+        session.add(
+            FailureRow(
+                id="fail_acl",
+                run_id="run_acl",
+                execution_id="exec_acl",
+                test_nodeid="tests/test_acl.py::test_secret",
+                test_name="test_secret",
+            )
+        )
+        await session.commit()
+
     async with await _as(client, email) as outsider:
         assert (await outsider.get(f"/api/requirements/{req_id}")).status_code == 404
         assert (await outsider.get("/api/runs/run_acl")).status_code == 404
@@ -90,12 +108,62 @@ async def test_foreign_project_resources_are_invisible(client: AsyncClient, test
         assert (await outsider.get("/api/workspaces", params={"project_id": foreign})).status_code == 404
         assert (await outsider.get("/api/runs", params={"project_id": foreign})).status_code == 404
         assert (await outsider.get("/api/failures", params={"project_id": foreign})).status_code == 404
-        assert (await outsider.get(f"/api/failures/{req_id}")).status_code == 404
+        assert (await outsider.get("/api/failures/fail_acl")).status_code == 404
         # Writes to a foreign project are refused as firmly as reads.
         assert (
             await outsider.post("/api/requirements", json={"project_id": foreign, "title": "injected"})
         ).status_code == 404
         assert (await outsider.get(f"/api/requirements/{req_id}")).status_code == 404
+
+
+async def test_workspace_git_routes_are_project_scoped(client: AsyncClient, test_db_session):
+    """The git/PR router shares the /workspaces/{id} prefix, so it needs the same guard.
+
+    Without it any role holding AUTOMATION_EDIT (a plain QA_ENGINEER) could commit and push to a
+    workspace belonging to another project.
+    """
+    foreign = await _create_project(client, "ACL Git Private")
+    email = "acl.git.outsider@example.com"
+    await _create_user(client, email)
+    async with test_db_session() as session:
+        session.add(RunRow(id="run_git", project_id=foreign, workspace_id="ws_git_acl", status="PASSED"))
+        await session.commit()
+
+    async with await _as(client, email) as outsider:
+        assert (await outsider.get("/api/workspaces/ws_git_acl/git/status")).status_code == 404
+        assert (await outsider.get("/api/workspaces/ws_git_acl/git/log")).status_code == 404
+        assert (await outsider.post("/api/workspaces/ws_git_acl/git/push")).status_code == 404
+        assert (
+            await outsider.post("/api/workspaces/ws_git_acl/git/commit", json={"message": "injected"})
+        ).status_code == 404
+        # The owner of the project still reaches its own workspace routes.
+    assert (await client.get("/api/workspaces/ws_git_acl/git/status")).status_code != 404
+
+
+async def test_discovery_stream_ticket_is_project_scoped(client: AsyncClient, test_db_session):
+    """A stream ticket must not become an existence oracle for other projects' discovery runs."""
+    foreign = await _create_project(client, "ACL Discovery Private")
+    email = "acl.ticket.outsider@example.com"
+    await _create_user(client, email)
+    async with test_db_session() as session:
+        session.add(
+            QualityDiscoveryRunRow(
+                id="qd_acl",
+                project_id=foreign,
+                requested_by="acl_admin",
+                mode="EXPLORE",
+                start_url="https://example.test/",
+                status="RUNNING",
+            )
+        )
+        await session.commit()
+
+    async with await _as(client, email) as outsider:
+        denied = await outsider.post("/api/auth/stream-ticket", json={"kind": "discovery", "resource_id": "qd_acl"})
+        assert denied.status_code == 404
+    # The administrator (and any member) can still obtain the ticket.
+    allowed = await client.post("/api/auth/stream-ticket", json={"kind": "discovery", "resource_id": "qd_acl"})
+    assert allowed.status_code == 200
 
 
 async def test_legacy_project_without_owner_is_admin_only(client: AsyncClient, test_db_session):

@@ -17,6 +17,7 @@ from app.persistence.models import (
     RequirementORM,
     TeamMemberORM,
     TestCaseORM,
+    TestDesignORM,
     TestRunORM,
     WorkspaceORM,
 )
@@ -49,6 +50,14 @@ class ProjectAccessRepository:
 
     async def project_of_requirement(self, requirement_id: str) -> str | None:
         return await self._scalar(select(RequirementORM.project_id).where(RequirementORM.id == requirement_id))
+
+    async def project_of_test_design(self, test_design_id: str) -> str | None:
+        # A design has no project column of its own; it inherits the requirement's project.
+        return await self._scalar(
+            select(RequirementORM.project_id)
+            .join(TestDesignORM, TestDesignORM.requirement_id == RequirementORM.id)
+            .where(TestDesignORM.id == test_design_id)
+        )
 
     async def project_of_case(self, case_id: str) -> str | None:
         return await self._scalar(select(TestCaseORM.project_id).where(TestCaseORM.id == case_id))

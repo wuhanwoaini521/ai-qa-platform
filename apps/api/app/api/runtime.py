@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from project_model.models import User
 
 from app.api.authz import get_current_user
+from app.api.project_acl import run_access
 from app.container import get_runtime_projection
 from app.services.runtime_models import RuntimeSnapshot, RuntimeStepDetail
 from app.services.runtime_projection import RuntimeProjection
@@ -24,7 +25,7 @@ async def task_runtime(
     return snapshot
 
 
-@router.get("/runs/{run_id}/runtime", response_model=RuntimeSnapshot)
+@router.get("/runs/{run_id}/runtime", response_model=RuntimeSnapshot, dependencies=[Depends(run_access)])
 async def run_runtime(
     run_id: str,
     user: User = Depends(get_current_user),

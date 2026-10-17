@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from project_model.models import IntegrationAuditEntry
+from project_model.models import IntegrationAuditEntry, User, UserRole
 from project_model.task_models import TaskStatus
 
 from app.repositories.api_key_repo import ApiKeyRepository
@@ -66,15 +66,25 @@ class ApiKeyService:
 
 
 class StreamResourceService:
-    def __init__(self, run_repo, task_repo, project_repo, recorder_service, debug_session_service, discovery_repo=None):
+    def __init__(
+        self,
+        run_repo,
+        task_repo,
+        project_repo,
+        recorder_service,
+        debug_session_service,
+        discovery_repo=None,
+        project_access_repo=None,
+    ):
         self.run_repo = run_repo
         self.task_repo = task_repo
         self.project_repo = project_repo
         self.discovery_repo = discovery_repo
+        self.project_access_repo = project_access_repo
         self.recorder_service = recorder_service
         self.debug_session_service = debug_session_service
 
-    async def exists(self, kind: str, resource_id: str, owner_id: str) -> bool:
+    async def exists(self, kind: str, resource_id: str, owner_id: str, user: User | None = None) -> bool:
         if kind == "run":
             return await self.run_repo.get_by_id(resource_id) is not None
         if kind == "task":
@@ -86,8 +96,18 @@ class StreamResourceService:
         if kind == "debug":
             return await self.debug_session_service.get(resource_id, owner_id) is not None
         if kind == "discovery":
-            # Existence only: the discovery stream endpoint still enforces project access itself.
-            return self.discovery_repo is not None and await self.discovery_repo.get(resource_id) is not None
+            # Project-scoped like the other kinds: a bare existence check would let any caller probe
+            # which discovery run ids exist in projects it cannot open.
+            if self.discovery_repo is None:
+                return False
+            row = await self.discovery_repo.get(resource_id)
+            if row is None:
+                return False
+            if user is not None and user.role is UserRole.ADMIN:
+                return True
+            if self.project_access_repo is None:
+                return False
+            return row.project_id in await self.project_access_repo.owned_or_shared_project_ids(owner_id)
         return False
 
 

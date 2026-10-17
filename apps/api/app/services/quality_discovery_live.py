@@ -62,14 +62,15 @@ class DiscoveryLiveHub:
         for queue in list(queues):
             self._put(queue, payload)
         if payload.get("type") in TERMINAL_EVENT_TYPES:
-            self._frames.pop(run_id, None)
+            self.release(run_id)
 
     def publish_frame(self, run_id: str, payload: dict) -> None:
         self._frames[run_id] = payload
         self.publish(run_id, payload)
 
-    def latest_frame(self, run_id: str) -> dict | None:
-        return self._frames.get(run_id)
+    def release(self, run_id: str) -> None:
+        """Drop everything held for a run; called when it ends and when it is finalized."""
+        self._frames.pop(run_id, None)
 
     async def subscribe(self, run_id: str) -> AsyncGenerator[dict, None]:
         queue: asyncio.Queue = asyncio.Queue(maxsize=self.max_queue)
@@ -86,6 +87,9 @@ class DiscoveryLiveHub:
                 queues.discard(queue)
                 if not queues:
                     self._subscribers.pop(run_id, None)
+                    # Last viewer left: a frame kept for late joiners would otherwise be retained
+                    # for the lifetime of the process.
+                    self.release(run_id)
 
     @staticmethod
     def _put(queue: asyncio.Queue, payload: dict) -> None:
