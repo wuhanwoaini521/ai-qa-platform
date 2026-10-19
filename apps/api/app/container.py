@@ -154,6 +154,11 @@ async def recover_failure_analyses() -> None:
         await workflow.recover_interrupted_analyses()
 
 
+async def recover_ai_invocations() -> int:
+    """Close AI calls a previous process left RUNNING so usage never reports a stuck invocation."""
+    return await AIRepository().recover_interrupted_invocations()
+
+
 async def recover_quality_discovery_runs() -> int:
     """Pause explorations a previous process abandoned so an operator can resume them."""
     return await get_quality_discovery_service().recover_interrupted_runs()

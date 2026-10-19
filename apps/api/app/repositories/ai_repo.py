@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from project_model.models import AIInvocationDTO, AIUsageSummary
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import case, desc, func, select, update
 
 from app.persistence import database
 from app.persistence.models import AIInvocationORM, utc_now
@@ -105,6 +105,17 @@ class AIRepository:
                 row.retry_count = response.retry_count
             await session.commit()
             return row
+
+    async def recover_interrupted_invocations(self) -> int:
+        """Close calls a dead process left RUNNING so the usage view never shows a stuck invocation."""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                update(AIInvocationORM)
+                .where(AIInvocationORM.status == "RUNNING")
+                .values(status="INTERRUPTED", error_type="process_interrupted")
+            )
+            await session.commit()
+            return result.rowcount
 
     async def get_usage_summary(
         self, limit: int = 50, since: datetime | None = None, feature: str | None = None

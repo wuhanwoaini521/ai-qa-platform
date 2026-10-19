@@ -54,6 +54,23 @@ async def test_shared_usage_records_reported_tokens_and_prompt_version(test_db_s
 
 
 @pytest.mark.asyncio
+async def test_a_dead_process_leaves_no_running_invocation_behind(test_db_session):
+    repo = AIRepository()
+    record = await repo.record_invocation(
+        task="failure_diagnosis", provider="test-real", model="reported-model", status="RUNNING"
+    )
+
+    recovered = await repo.recover_interrupted_invocations()
+
+    assert recovered >= 1
+    summary = await repo.get_usage_summary()
+    row = next(item for item in summary.invocations if item.id == record.id)
+    # A crashed call must not read as permanently running in the usage view.
+    assert row.status == "INTERRUPTED"
+    assert row.error_type == "process_interrupted"
+
+
+@pytest.mark.asyncio
 async def test_daily_hard_limit_is_atomic_across_concurrent_calls(test_db_session):
     provider = Provider()
     service = AIExecutionService(provider, max_daily_requests=2, repository_scope=TaskRepositoryScopeFactory())

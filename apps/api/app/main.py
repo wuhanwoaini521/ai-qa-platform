@@ -119,8 +119,9 @@ async def lifespan(app: FastAPI):
     )
     # Initialize database tables
     await init_db()
-    from app.container import get_requirement_lifecycle_service, recover_failure_analyses
+    from app.container import get_requirement_lifecycle_service, recover_ai_invocations, recover_failure_analyses
 
+    await recover_ai_invocations()
     await recover_failure_analyses()
 
     await get_requirement_lifecycle_service().recover_interrupted()
