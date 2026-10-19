@@ -14,17 +14,25 @@ class Base(DeclarativeBase):
     pass
 
 
-def enable_sqlite_foreign_keys(engine: AsyncEngine) -> None:
-    """SQLite ignores ``ON DELETE CASCADE`` unless foreign keys are enforced.
+def configure_sqlite_connection(engine: AsyncEngine) -> None:
+    """Apply the pragmas that make SQLite behave like the PostgreSQL lane.
 
-    PostgreSQL enforces them unconditionally, so without this pragma the same
-    code path behaves differently on the two backends.
+    ``foreign_keys``: SQLite ignores ``ON DELETE CASCADE`` unless foreign keys are
+    enforced, so without this pragma the same code path behaves differently on the
+    two backends.
+
+    ``journal_mode=WAL``: the default rollback journal blocks every writer while
+    another connection holds a read transaction, and this API keeps long-lived SSE
+    responses (plus the request session behind them) open for a whole analysis or
+    browser run. WAL lets readers and the single writer proceed without waiting on
+    each other; concurrent writes still serialise.
     """
 
     @event.listens_for(engine.sync_engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):  # noqa: ARG001
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
 
 
@@ -55,7 +63,7 @@ def build_engine(database_url: str | None = None) -> AsyncEngine:
         **engine_kwargs,
     )
     if is_sqlite:
-        enable_sqlite_foreign_keys(engine)
+        configure_sqlite_connection(engine)
     return engine
 
 

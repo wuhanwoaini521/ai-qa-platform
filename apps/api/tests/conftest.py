@@ -52,13 +52,9 @@ def pytest_collection_modifyitems(config, items):  # noqa: ARG001
             item.add_marker(skip)
 
 
-def enable_sqlite_foreign_keys(engine) -> None:
-    """SQLite ignores ``ON DELETE CASCADE`` unless foreign keys are enforced.
-
-    PostgreSQL enforces them always, so without this pragma the same code path
-    behaves differently in tests than in production.
-    """
-    db_module.enable_sqlite_foreign_keys(engine)
+def configure_sqlite_connection(engine) -> None:
+    """Apply the pragmas the application relies on so tests match production."""
+    db_module.configure_sqlite_connection(engine)
 
 
 def create_test_engine(tmp_path: Path):
@@ -70,7 +66,7 @@ def create_test_engine(tmp_path: Path):
         echo=False,
         connect_args={"check_same_thread": False},
     )
-    enable_sqlite_foreign_keys(engine)
+    configure_sqlite_connection(engine)
     return engine
 
 

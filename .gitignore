@@ -86,6 +86,9 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db-journal
+# SQLite write-ahead log sidecar files (WAL mode)
+*.db-wal
+*.db-shm
 
 # Runtime data (ignore contents but keep .gitkeep)
 runtime/acceptance-*/

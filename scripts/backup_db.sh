@@ -30,7 +30,22 @@ else
     BACKUP_FILE="${BACKUP_DIR}/aiqa_sqlite_${TIMESTAMP}.db.gz"
 
     if [ -f "$SQLITE_DB" ]; then
-        gzip -c "$SQLITE_DB" > "$BACKUP_FILE"
+        # The database runs in WAL mode, so copying the file alone can miss committed
+        # transactions still in the write-ahead log. Snapshot it through SQLite's online
+        # backup API first.
+        SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/aiqa_sqlite_backup.XXXXXX.db")"
+        "${AI_QA_PYTHON:-python3}" - "$SQLITE_DB" "$SNAPSHOT" <<'PY'
+import sqlite3, sys
+
+source = sqlite3.connect(sys.argv[1])
+target = sqlite3.connect(sys.argv[2])
+with target:
+    source.backup(target)
+target.close()
+source.close()
+PY
+        gzip -c "$SNAPSHOT" > "$BACKUP_FILE"
+        rm -f "$SNAPSHOT"
         echo "SQLite backup created successfully: $BACKUP_FILE"
     else
         echo "Warning: SQLite database file not found at $SQLITE_DB. Creating empty marker backup."

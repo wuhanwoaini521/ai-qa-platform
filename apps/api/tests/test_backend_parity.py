@@ -14,6 +14,7 @@ engines used to disagree:
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -164,6 +165,42 @@ async def test_migrated_sqlite_schema_enforces_project_cascade(tmp_path) -> None
             await session.commit()
         async with session_factory() as session:
             await _assert_cascade_graph_deleted(session)
+    finally:
+        await engine.dispose()
+
+
+async def test_wal_keeps_a_long_reader_from_blocking_a_writer(tmp_path) -> None:
+    """A long-lived SSE response holds a read transaction for the whole analysis or run.
+
+    With the default rollback journal that read transaction blocked every writer until
+    ``sqlite_timeout_seconds`` expired, so a healthy analysis failed with "database is
+    locked". WAL lets the single writer proceed next to open readers.
+    """
+    if using_postgres():
+        pytest.skip("SQLite-specific journal behaviour")
+
+    db_file = tmp_path / "wal.db"
+    engine = build_engine(f"sqlite+aiosqlite:///{db_file}")
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE probe (id INTEGER PRIMARY KEY)"))
+            journal_mode = (await conn.execute(text("PRAGMA journal_mode"))).scalar()
+        assert journal_mode == "wal"
+
+        reader = sqlite3.connect(db_file)
+        try:
+            reader.execute("BEGIN")
+            reader.execute("SELECT count(*) FROM probe")
+            # A short busy timeout keeps the assertion fast: without WAL the insert waits
+            # for the reader instead of failing immediately.
+            writer = sqlite3.connect(db_file, timeout=0.5)
+            try:
+                writer.execute("INSERT INTO probe (id) VALUES (1)")
+                writer.commit()
+            finally:
+                writer.close()
+        finally:
+            reader.close()
     finally:
         await engine.dispose()
 
