@@ -43,11 +43,20 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
             column["name"] for column in inspect(connection).get_columns("stored_artifacts")
         }
         downgrade_database(connection, "0013_project_ownership")
-        assert "source_line" not in {column["name"] for column in inspect(connection).get_columns("failure_records")}
-        assert "created_by" not in {column["name"] for column in inspect(connection).get_columns("stored_artifacts")}
+        assert not {"source_file", "source_line"} & {
+            column["name"] for column in inspect(connection).get_columns("failure_records")
+        }
+        assert not {"project_id", "created_by"} & {
+            column["name"] for column in inspect(connection).get_columns("stored_artifacts")
+        }
         upgrade_database(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
-        assert "project_id" in {column["name"] for column in inspect(connection).get_columns("stored_artifacts")}
+        assert {"source_file", "source_line"} <= {
+            column["name"] for column in inspect(connection).get_columns("failure_records")
+        }
+        assert {"project_id", "created_by"} <= {
+            column["name"] for column in inspect(connection).get_columns("stored_artifacts")
+        }
     engine.dispose()
 
 

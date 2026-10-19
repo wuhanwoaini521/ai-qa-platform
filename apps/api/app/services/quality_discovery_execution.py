@@ -64,6 +64,12 @@ class QualityDiscoveryExecutionMixin:
                 ),
             )
             self._assert_runtime_ready(config)
+            # A run paused before its task was picked up must not call the provider, open a browser or
+            # navigate: wait here so the pause is honoured before any side effect happens.
+            await self._wait_if_paused(run_id)
+            if self._stop_events.setdefault(run_id, asyncio.Event()).is_set():
+                await self._finish(run_id, DiscoveryStatus.STOPPED.value, "用户停止了探索。")
+                return
             if row.status != DiscoveryStatus.PAUSED.value:
                 # A run paused before its task was picked up stays paused until someone resumes it.
                 await self._update(run_id, status=DiscoveryStatus.RUNNING.value, error=None)

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 from uuid import uuid4
 
 from project_model.lifecycle import StructuredRequirementModel
-from project_model.task_models import TaskCreate, TaskType
+from project_model.task_models import TaskCreate, TaskStatus, TaskType
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.exc import StaleDataError
@@ -800,9 +800,14 @@ class QualityDiscoveryService(
         row = await self.get(run_id)
         if row is None or row.status in self.TERMINAL:
             return
-        if await self._runtime_task_in_flight(row):
-            # A task scheduled earlier (still queued or running) already owns this run; a second one
-            # would drive a second exploration loop against the same customer site.
+        recorded_id, recorded_status = await self._runtime_task_state(row)
+        if recorded_status is not None and recorded_status not in TASK_TERMINAL_STATUSES:
+            # A task scheduled earlier (queued, running or claimed by the scheduler) already owns this run;
+            # a second one would drive a second exploration loop against the same customer site.
+            if recorded_status in {TaskStatus.PAUSED.value, TaskStatus.PAUSING.value}:
+                # A task paused from the task centre is never claimed again, so the run the operator just
+                # resumed would sit RUNNING with no executor: hand the paused task back to the queue.
+                await self.task_commands.resume(recorded_id, row.requested_by)
             return
         self._resume_events.setdefault(run_id, asyncio.Event()).set()
         self._stop_events.setdefault(run_id, asyncio.Event()).clear()
@@ -818,13 +823,13 @@ class QualityDiscoveryService(
         self._runtime_tasks[run_id] = task.id
         await self._change_result(run_id, lambda result: result.__setitem__("runtime_task_id", task.id))
 
-    async def _runtime_task_in_flight(self, row: QualityDiscoveryRunORM) -> bool:
-        """True when the run's recorded runtime task has not reached a terminal status yet."""
+    async def _runtime_task_state(self, row: QualityDiscoveryRunORM) -> tuple[str, str | None]:
+        """The run's recorded runtime task id and its status, when the runtime still knows the task."""
         task_id = str((row.result or {}).get("runtime_task_id") or self._runtime_tasks.get(row.id, ""))
         if not task_id or self.task_commands is None:
-            return False
+            return "", None
         task = await self.task_commands.get(task_id)
-        return task is not None and task.status not in TASK_TERMINAL_STATUSES
+        return task_id, (task.status if task is not None else None)
 
     async def execute_run(self, run_id: str) -> dict[str, Any]:
         """Run one bounded exploration pass for a runtime-owned task and report its outcome."""

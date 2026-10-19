@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +22,7 @@ class _NoBrowser:
 class _CaptureTasks:
     def __init__(self, status: str = "PENDING") -> None:
         self.created: list[tuple[object, str]] = []
+        self.resumed: list[str] = []
         self.status = status
 
     async def create(self, data, owner_id):
@@ -31,6 +33,10 @@ class _CaptureTasks:
         if task_id != "task-discovery":
             return None
         return SimpleNamespace(id=task_id, status=self.status)
+
+    async def resume(self, task_id, owner_id):
+        self.resumed.append(task_id)
+        return SimpleNamespace(id=task_id, status="PENDING")
 
 
 async def _project(session_factory, project_id: str = "project_discovery_task") -> str:
@@ -151,6 +157,81 @@ async def test_a_pause_issued_while_queued_survives_the_loop_starting(test_db_se
     await service.execute_run(run_id)
 
     assert seen == [False]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finished", ["COMPLETED", "BLOCKED"])
+async def test_a_finished_task_no_longer_owns_its_run(test_db_session, finished):
+    project_id = await _project(test_db_session)
+    tasks = _CaptureTasks(status=finished)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser(), task_commands=tasks)
+    run = await service.create(
+        DiscoveryRunCreate(project_id=project_id, start_url="https://example.test/shop"),
+        "owner-1",
+    )
+
+    # COMPLETED is the normal end; BLOCKED is what the scheduler writes after a restart, and both must
+    # let the next resume schedule a fresh attempt.
+    await service.pause(run.id)
+    assert (await service.resume(run.id)).status == DiscoveryStatus.RUNNING.value
+    assert len(tasks.created) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_task_paused_in_the_task_centre_is_handed_back_to_the_queue(test_db_session):
+    project_id = await _project(test_db_session)
+    tasks = _CaptureTasks(status="PAUSED")
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser(), task_commands=tasks)
+    run = await service.create(
+        DiscoveryRunCreate(project_id=project_id, start_url="https://example.test/shop"),
+        "owner-1",
+    )
+
+    # A paused task is never claimed again, so resuming only the run must requeue that task instead of
+    # leaving the run RUNNING with no executor.
+    await service.pause(run.id)
+    assert (await service.resume(run.id)).status == DiscoveryStatus.RUNNING.value
+    assert tasks.resumed == ["task-discovery"]
+    assert len(tasks.created) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_second_loop_cannot_drive_the_same_run(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    owner = asyncio.ensure_future(asyncio.Event().wait())
+    service._tasks[run_id] = owner
+    try:
+        with pytest.raises(TaskBlocked, match="Another exploration loop"):
+            await service.execute_run(run_id)
+    finally:
+        owner.cancel()
+
+
+@pytest.mark.asyncio
+async def test_a_paused_run_takes_no_action_before_it_is_resumed(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.PAUSED.value)
+    opened: list[str] = []
+
+    class _RecordingBrowser:
+        async def create_session(self, **_kwargs):
+            opened.append("create_session")
+            raise AssertionError("the loop must not open a browser while paused")
+
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_RecordingBrowser())
+    service._assert_runtime_ready = lambda _config: None
+
+    running = asyncio.ensure_future(service.execute_run(run_id))
+    await asyncio.sleep(0.05)
+    assert opened == []
+    assert (await service.get(run_id)).status == DiscoveryStatus.PAUSED.value
+
+    service._resume_events[run_id].set()
+    with pytest.raises(TaskBlocked, match="ended FAILED"):
+        await running
+    assert opened == ["create_session"]
 
 
 @pytest.mark.asyncio
