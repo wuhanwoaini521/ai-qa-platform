@@ -2631,6 +2631,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/failures/{failure_id}/analyses/{analysis_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Analysis */
+        post: operations["cancel_analysis_api_failures__failure_id__analyses__analysis_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/failures/{failure_id}/analyses/{analysis_id}/apply": {
         parameters: {
             query?: never;
@@ -4789,7 +4806,7 @@ export interface components {
          * FailureRepairAction
          * @enum {string}
          */
-        FailureRepairAction: "START_ANALYSIS" | "APPLY" | "REJECT" | "VERIFY" | "ROLLBACK" | "RETRY" | "CREATE_ISSUE_DRAFT";
+        FailureRepairAction: "START_ANALYSIS" | "CANCEL" | "APPLY" | "REJECT" | "VERIFY" | "ROLLBACK" | "RETRY" | "CREATE_ISSUE_DRAFT";
         /**
          * FailureRepairState
          * @enum {string}
@@ -14564,6 +14581,38 @@ export interface operations {
         };
     };
     reject_analysis_repair_api_failures__failure_id__analyses__analysis_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                failure_id: string;
+                analysis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FailureRepairWorkflow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_analysis_api_failures__failure_id__analyses__analysis_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;

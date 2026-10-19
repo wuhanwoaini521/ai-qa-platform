@@ -102,6 +102,21 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     setDiagnosisEvents(analysis.events);
     setAiDiagnosis(analysis.result.diagnosis ?? null);
     setDiagnosisError('');
+    // A persisted terminal state must explain itself, also after a reload.
+    if (analysis.status === 'CANCELLED') {
+      setDiagnosisError(t('diagnosisCancelled'));
+    } else if (
+      analysis.status === 'FAILED' ||
+      analysis.status === 'TIMEOUT' ||
+      analysis.status === 'INTERRUPTED'
+    ) {
+      const lastRunEvent = [...analysis.events]
+        .reverse()
+        .find((event) => event.type.startsWith('run.'));
+      setDiagnosisError(
+        lastRunEvent?.message || t('alertDiagnoseFailed', { error: analysis.status }),
+      );
+    }
   };
 
   useEffect(() => {
@@ -122,7 +137,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         if (!active || analysisSelectionRequestRef.current !== requestId) return;
         setAnalysisHistory(rows);
         const preferredAnalysis = rows.find((item) => item.id === preferredAnalysisId) ?? rows[0];
-        if (preferredAnalysis && !diagnosisController.current) restoreAnalysis(preferredAnalysis);
+        if (preferredAnalysis && !diagnosisController.current) {
+          restoreAnalysis(preferredAnalysis);
+          // Reloading during a live analysis must resume the stream instead of showing a frozen page.
+          if (preferredAnalysis.status === 'RUNNING') void followFailureAnalysis(selectedFailure.id);
+        }
         try {
           const workflow = await api.getFailureRepairWorkflow(selectedFailure.id, preferredAnalysis?.id);
           if (!active || analysisSelectionRequestRef.current !== requestId) return;
@@ -484,28 +503,30 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
-  const handleDiagnoseAI = async () => {
-    if (!selectedFailure) return;
-    diagnosisController.current?.abort();
+  // One server-side analysis can be followed twice: when it is started here, and after a reload.
+  const followFailureAnalysis = async (failureId: string, reset = false) => {
+    if (reset) {
+      diagnosisController.current?.abort();
+      setSelectedAnalysisId('');
+      setAiDiagnosis(null);
+      setDiagnosisEvents([]);
+      setDiagnosisError('');
+      setRepairWorkflow(null);
+      setRepairProposal(null);
+      setRepairError('');
+      setSemanticReview(null);
+      setSelectedCandidate('');
+      setVerificationRun(null);
+      setRerunMessage(null);
+    }
     const controller = new AbortController();
     diagnosisController.current = controller;
-    setSelectedAnalysisId('');
-    setAiDiagnosis(null);
-    setDiagnosisEvents([]);
-    setDiagnosisError('');
-    setRepairWorkflow(null);
-    setRepairProposal(null);
-    setRepairError('');
-    setSemanticReview(null);
-    setSelectedCandidate('');
-    setVerificationRun(null);
-    setRerunMessage(null);
     setDiagnosing(true);
     let terminal = false;
     let analysisId = '';
     try {
       await api.streamFailureWorkflow(
-        selectedFailure.id,
+        failureId,
         (event) => {
           if (
             diagnosisController.current !== controller ||
@@ -532,8 +553,19 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 ? { ...current, repair_proposal: proposal }
                 : current);
             }
-          } else if (event.type === 'run.failed') {
+          } else if (
+            event.type === 'run.failed' ||
+            event.type === 'run.timeout' ||
+            event.type === 'run.interrupted' ||
+            event.type === 'run.cancelled'
+          ) {
             terminal = true;
+            setDiagnosisError(
+              event.message ||
+                (event.type === 'run.cancelled'
+                  ? t('diagnosisCancelled')
+                  : t('diagnosisStreamIncomplete')),
+            );
           }
         },
         controller.signal,
@@ -557,26 +589,22 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         diagnosisController.current = null;
         setDiagnosing(false);
       }
-      void api.getFailure(selectedFailure.id).then((refreshed) => {
-        if (selectedFailureIdRef.current === selectedFailure.id) {
-          setSelectedFailure((current) => current?.id === selectedFailure.id
+      void api.getFailure(failureId).then((refreshed) => {
+        if (selectedFailureIdRef.current === failureId) {
+          setSelectedFailure((current) => current?.id === failureId
             ? { ...current, evidence_bundle: refreshed.evidence_bundle }
             : current);
         }
       }).catch(() => undefined);
       void api
-        .getFailureAnalyses(selectedFailure.id)
+        .getFailureAnalyses(failureId)
         .then(async (rows) => {
-          if (
-            selectedFailureIdRef.current !== selectedFailure.id ||
-            diagnosisController.current
-          )
-            return;
+          if (selectedFailureIdRef.current !== failureId || diagnosisController.current) return;
           setAnalysisHistory(rows);
           const saved = rows.find((item) => item.id === analysisId);
           if (saved) restoreAnalysis(saved);
-          const workflow = await api.getFailureRepairWorkflow(selectedFailure.id, analysisId || undefined);
-          if (selectedFailureIdRef.current === selectedFailure.id) {
+          const workflow = await api.getFailureRepairWorkflow(failureId, analysisId || undefined);
+          if (selectedFailureIdRef.current === failureId) {
             setRepairWorkflow(workflow);
             if (workflow.repair_proposal) {
               setRepairProposal(workflow.repair_proposal as LocatorRepairProposal);
@@ -587,11 +615,33 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     }
   };
 
-  const handleCancelDiagnosis = () => {
+  const handleDiagnoseAI = async () => {
+    if (!selectedFailure) return;
+    await followFailureAnalysis(selectedFailure.id, true);
+  };
+
+  const handleCancelDiagnosis = async () => {
+    const failureId = selectedFailure?.id;
+    const analysisId = selectedAnalysisIdRef.current || repairWorkflow?.analysis_id || '';
+    // Cancelling must stop the server-side task, not only the browser stream.
+    if (failureId && analysisId) {
+      try {
+        setRepairWorkflow(await api.cancelFailureAnalysis(failureId, analysisId));
+        const rows = await api.getFailureAnalyses(failureId);
+        if (selectedFailureIdRef.current === failureId) {
+          setAnalysisHistory(rows);
+          const saved = rows.find((item) => item.id === analysisId);
+          if (saved) restoreAnalysis(saved);
+        }
+      } catch (err: unknown) {
+        setDiagnosisError(
+          t('alertDiagnoseFailed', { error: err instanceof Error ? err.message : String(err) }),
+        );
+      }
+    }
     diagnosisController.current?.abort();
     diagnosisController.current = null;
     setDiagnosing(false);
-    setDiagnosisError(t('diagnosisCancelled'));
   };
 
   const handleSemanticReview = async () => {

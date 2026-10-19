@@ -8116,6 +8116,57 @@
         }
       }
     },
+    "/api/failures/{failure_id}/analyses/{analysis_id}/cancel": {
+      "post": {
+        "tags": [
+          "Failures & Healing"
+        ],
+        "summary": "Cancel Analysis",
+        "operationId": "cancel_analysis_api_failures__failure_id__analyses__analysis_id__cancel_post",
+        "parameters": [
+          {
+            "name": "failure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Failure Id"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureRepairWorkflow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/failures/{failure_id}/analyses/{analysis_id}/apply": {
       "post": {
         "tags": [
@@ -13444,6 +13495,7 @@
         "type": "string",
         "enum": [
           "START_ANALYSIS",
+          "CANCEL",
           "APPLY",
           "REJECT",
           "VERIFY",

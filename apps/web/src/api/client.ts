@@ -667,6 +667,11 @@ export const api = {
       `/failures/${encodeURIComponent(failureId)}/analyses/${encodeURIComponent(analysisId)}/reject`,
       { method: 'POST' },
     ),
+  cancelFailureAnalysis: (failureId: string, analysisId: string) =>
+    request<FailureRepairWorkflow>(
+      `/failures/${encodeURIComponent(failureId)}/analyses/${encodeURIComponent(analysisId)}/cancel`,
+      { method: 'POST' },
+    ),
   linkFailureVerification: (id: string, analysisId: string, runId: string) =>
     request(
       `/failures/${encodeURIComponent(id)}/analyses/${encodeURIComponent(analysisId)}/verification?run_id=${encodeURIComponent(runId)}`,

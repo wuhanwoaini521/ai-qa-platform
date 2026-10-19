@@ -1076,7 +1076,7 @@ export interface AIFailureDiagnosisResponse {
 export interface FailureAnalysisRun {
   id: string;
   failure_id: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT' | 'INTERRUPTED';
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'TIMEOUT' | 'INTERRUPTED';
   events: AITraceEvent[];
   result: {
     domain?: string;
