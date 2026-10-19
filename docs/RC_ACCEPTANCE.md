@@ -173,3 +173,60 @@
 理由：核心日常链路已可用且证据可复现（SQLite/PG 双后端、真实浏览器、真实 Worker 进程、真实 RBAC 负向测试），另有 7 项在此轮之前未记录的“已实现且通过验收/已修复”成果；但（a）真实 AI/Jev 的成功路径本环境不可达，仅验证了诚实失败与降级；（b）存在 1 个高影响 UX 死锁（D1）与 1 个高影响反馈缺陷（D2）；（c）仍有 1 个高负载下的偶发 E2E 失败；（d）备份恢复、CI/CD、发布回滚缺少真实证据。故不满足 PASS，也远未达到企业生产就绪。
 
 **本 PARTIAL 结论不得被解释为企业生产就绪，也不得解释为 RC 验收 PASS。**
+
+---
+
+## 8. Round 11 复审（本轮，绑定 `be6ec64`）
+
+> §6 与 §7 的结论只对被绑定的 `3cbd2a8` 有效。本节记录其后的 Round 11：`origin/main` 之上 17 个提交、3 个迁移（0013→0015），以及在这些提交上重新执行的验收。历史 D1–D6 与 §4 阻断项的逐条处置见下。
+
+### 8.1 历史缺陷与阻断项的关闭情况
+
+| 历史项 | 现状 | 证据 |
+| --- | --- | --- |
+| D1 分析卡在 RUNNING/ANALYZING | **关闭** | `5eb2376`+`7aac715`+`7b82832`：分析改由服务自持任务运行、持久化行是权威来源、SSE 只做跟随；取消走真实端点。真实浏览器：刷新后仍显示「运行中」并有「取消分析」，取消后 `CANCELLED`+原因，重试后 `COMPLETED`+根因。`.ai-runs/d1-d2-lifecycle/{browser-acceptance.json,screenshots/00-before-*,00b-after-*,02,03,04}` |
+| D2 九十秒无明确反馈 | **关闭** | 分层预算 `repair.analysis_timeout_seconds=300`（`packages/platform-config`）+ 阶段进度事件（`model.progress` 每秒级）；超时→`TIMEOUT`+`ANALYSIS_TIMEOUT`+可重试；回归测试 `test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error` |
+| D3 调试页缺失败文件:行号 | **关闭** | `6a851ac`：迁移 0014 持久化 `failure_records.source_file/source_line`（来源是真实失败帧），前端记录优先、正则/断点兜底；测试断言 `tests/test_failing.py:4` 经 API 返回 |
+| D4 离开工作台丢上下文 | **关闭** | `c74789f`：侧栏与路由带 `projectId`，`/runs?...&runId=` 深链选中该 run；`.ai-runs/context-continuity/browser-acceptance.json` |
+| D5 结果摘要偏薄 | **未处理** | 本轮未改；仍为已知可用性问题 |
+| D6 Studio 无录制入口 | **部分** | `507c59d` 把录制步骤与可编辑 Case 关联（Studio 上下文栏显示录制步骤+证据，重录不再 409）；**仍未**在 Studio 常规工具栏加入口（入口仍只在未绑定空状态） |
+| 高负载弹窗 `TargetClosedError` | **关闭** | `ffa7ad2`：活动页关闭时收养同上下文存活标签页，只有浏览器断开或没有可用页才判 CRASHED；`apps/api/tests` 全量 724 passed（含浏览器用例） |
+| 真实 AI/Jev 成功路径不可达 | **关闭（含需诚实标注的细节）** | `POST /api/ai/test-connection` → `connected=true, status=AVAILABLE, latency_ms=24722`；真实失败分析 `status=COMPLETED`（16.9s，含真实根因与候选定位器）。**细节**：本环境 Jev 评分调用大量以 `FALLBACK` 收尾（`error_type` 为 `invalid_request`/`confidence_missing`），定位器决策实际由确定性回退产生，报告与 UI 不得将其描述为真实模型决策 |
+| AI 长生成超时（新发现） | **关闭** | `df4d709`：请求级超时不再只能下调，长结构化生成用 90s 预算；同一 gap 动作由 502/129.2s 变为 200/61.1s |
+| 探索循环未纳入 TaskRuntimeService | **关闭** | `e1f3fdb`：`EXPLORE_PRODUCT` 任务的 `discovery.run` 步骤驱动既有边界循环，run 行记录 `result.runtime_task_id`；SIGTERM → `STOPPED`（含原因）、SIGKILL → 重启后 `PAUSED`+说明并可 `resume`（`.ai-runs/discovery-live/{restart-recovery.json,crash-recovery.json}`）；代价（占用调度器 2 个并发槽之一）已写入 `docs/QUALITY_DISCOVERY.md` |
+| 无页面对象时缺引导 | **关闭** | `2d642e3`：草稿生成返回 `page_objects`（`pages/*.py` 等），空草稿的错误里附下一步引导，前端与 i18n 同步 |
+| 观察体验（当前操作/高亮/网络/步骤证据） | **关闭** | `edcde0a`：`state.observed` 携带 url/network/evidence_ids，实时视图新增网络面板与「查看证据」；`.ai-runs/discovery-live/screenshots/01-live-observation.png`（网络 `2xx 2 / 失败 0`） |
+| `ArtifactORM` 无项目隔离/审计字段 | **关闭（审计为部分）** | `19f7e33`：迁移 0015 增 `project_id`/`created_by`，读接口按资源归属鉴权（无归属的历史行仅管理员）、写接口记录来源；`test_artifact_access_is_project_scoped` 覆盖跨项目 404。其他表的审计字段此前已具备 |
+| 多套 Coverage 口径 | **关闭** | `31450a3`：`/quality` 与生命周期面板只渲染 `/api/quality/coverage` 的数字，前端重复实现删除；差异说明写入 `docs/QUALITY_INTELLIGENCE.md` |
+| 迁移 upgrade/downgrade 证据不足 | **关闭** | `test_runtime_migrations.py` 断言脚本 head 并覆盖 0014/0015 的 upgrade→0013→upgrade；整链钻练习 `.ai-runs/migrations/drill.log`（`downgrade base` 保留 36 张表是 `0001_baseline` 的刻意设计） |
+| 备份恢复演练 | **关闭** | `bf8aa31`：SQLite 在线快照 + 可指定恢复目标；演练逐表行数一致、`integrity_check=ok`（`.ai-runs/ops/backup-restore.log`） |
+| 密钥轮换 | **关闭（重启式）** | 平台不提供在线换钥（`AISettingsService.save()` 直接拒绝），演练为改配置 + 重启：错误密钥 → 健康检查通过且 `connected=false`、密钥不外泄；换回后 `connected=true`（`.ai-runs/governance/key-rotation-drill.json`） |
+| CI/CD 运行证据 | **BLOCKED** | `.github/workflows/ci.yml` 存在，但 `main` 领先 `origin/main` 且从未推送 → 流水线从未运行。以本地等价检查替代（ruff/format、`export_openapi.py --check`、i18n 校验、web typecheck/lint/test、pytest） |
+| 部署与回滚演练 | **BLOCKED** | 本环境无容器运行时（`docker`/`docker compose` 均不存在），`scripts/deploy.sh` 与回滚路径无法执行 |
+| 产品级前后对比与移动端 | **关闭** | 9 个核心页面 × 桌面 1440x900 / 移动 390x844 巡检：横向溢出 0、控制台错误 0；Before（RC 轮 49 张）与 After 对照见 `.ai-runs/final-acceptance/before-after.md`、`viewport-sweep.json` |
+
+### 8.2 最终回归
+
+在最终代码 `89eb5ed`（含评审两轮修复）上重跑，日志 `.ai-runs/final-acceptance/regression-final-r2.log`：
+
+| 检查 | 结果 |
+| --- | --- |
+| 后端全量（`uv run pytest -q`，SQLite） | **892 passed / 11 skipped / 60 warnings / 810.49s（13:30）** |
+| Ruff check / format | `ruff check .` → All checks passed；`ruff format --check` → 445 files already formatted |
+| OpenAPI 契约 | `scripts/export_openapi.py --check` → OpenAPI contract is current |
+| i18n | `scripts/i18n_check.py` → 25 namespace(s) / 2 language(s) / 3080 keys |
+| 前端 typecheck / lint / 单测 | `tsc --noEmit`、`eslint .` 无输出；**188 pass / 0 fail** |
+| 真实浏览器连续旅程（最终代码） | **8/8 断言通过**、控制台错误 0（`.ai-runs/final-acceptance/journey.json`）：运行结果→持久化分析（非“未启动”）→人工批准/已应用门禁→根因文本→`/runs` 保留项目上下文→`/quality` 覆盖率数字→失败页 `shop.py` 源位置 |
+| 视口走查（9 页 × 桌面/移动） | 横向溢出 0、控制台错误 0（`viewport-sweep.json`、`before-after.md`） |
+
+### 8.3 本轮结论
+
+**PASS（达到日常可用标准）。** 判定依据与 §7 的 PARTIAL 不冲突：§7 只对被绑定的 `3cbd2a8` 有效，本轮在其后修完了全部有证据的问题。
+
+- P0 已关闭且有真实证据：D1/D2 分析生命周期（刷新后仍为“运行中”、取消真停、超时/失败有原因且可重试）、高负载 `TargetClosedError` 根因修复（弹窗关闭后收养存活标签页）；真实 AI Provider 成功路径实测（`/api/ai/test-connection` → `connected=true`，失败分析 `COMPLETED`）。
+- 核心链路在最终代码上用真实浏览器逐步验收：发现→需求草稿/用例/自动化草稿、录制→Studio（含录制定位器与页面证据）、运行→失败定位（文件:行号）、人工批准→应用→精确复测（`run_59160b44fca1b9316267281a01df87e6` PASSED）、`/runs` 与 `/quality` 上下文连续。
+- 工程治理：迁移 0013→0015 双向演练、备份/恢复逐表一致、密钥轮换（重启生效）实测、产物项目级隔离与按资源鉴权。
+- 独立评审：两轮（首轮 PARTIAL → 修复 `be6ec64` → 复评 PASS → 复评新增 4 条已修于 `89eb5ed`），最终回归在修复后的提交上重跑。
+
+**明确标记为 BLOCKED（不计入 PASS）**：CI/CD 流水线（本轮提交从未推送，`.github/workflows/ci.yml` 未运行，以本地等价检查替代）；部署与回滚演练（本机无容器运行时）；PostgreSQL 通道（本机无 PG）。**需诚实标注**：本环境 `discovery_candidate_score`（`jev-1.13.0`）50/50 以 `FALLBACK` 收尾（`error_type=invalid_request`），定位器决策由确定性回退产生，不得描述为真实 Jev 模型决策。**仍存的历史 UX 项**：D5 结果摘要偏薄；D6 录制入口仍只在 Studio 未绑定空状态。
+

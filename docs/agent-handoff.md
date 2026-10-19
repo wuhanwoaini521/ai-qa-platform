@@ -30,10 +30,10 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | 项 | 值 |
 | --- | --- |
 | 本轮起点 | `d8a2eef`（= `origin/main`，fetch 后未变；本轮修订**全部未推送**） |
-| 当前 HEAD | `bf8aa31 fix(ops): let a restore target a scratch database and snapshot what it overwrites`（本轮代码冻结点，最终全量回归在此运行；此后仅文档提交） |
+| 当前 HEAD | `89eb5ed fix(discovery): give a paused task back to the queue and hold a paused run`（权威提交点：本轮代码 + 评审修复；最终全量回归在此运行，此后仅文档提交） |
 | 本轮提交数 | 59（`git rev-list --count origin/main..HEAD`，含文档提交） |
 | 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据（保留、不暂存、不提交） |
-| 关键提交（按主题） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档 |
+| 关键提交（按主题） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
 | 迁移链 | `0013_project_ownership` → `0014_failure_source_location` → `0015_artifact_ownership`（本轮新增后两者，均连续、可升降） |
 | 远程 main | 未推送、未合并、未 force push |
 | CI | `.github/workflows/ci.yml` 存在；最近一次运行在 `d8a2eef` 上失败 4 条后端用例，那 4 条在当前 HEAD 本地重跑 **14 passed**；本轮修订从未在 CI 上运行（任务禁止推送）→ 记为 BLOCKED，改以本地等价门禁取证（见 `.ai-runs/governance/deploy-ci-evidence.json`） |
@@ -374,7 +374,7 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 
 ## 3.8 Round 11（核心工作流收敛与稳定性整改，m00041）
 
-**本轮起点**：`origin/main` = `d8a2eef`，本地 `main` 在其之上新增 59 笔提交，**全部未推送**。**本轮结论**：见 §1 与 §9（最终全量回归在冻结的 `bf8aa31` 上重跑；此后只有文档提交，无代码变更）。
+**本轮起点**：`origin/main` = `d8a2eef`，本地 `main` 在其之上新增 61 笔提交，**全部未推送**。**本轮结论**：见 §1 与 §9（最终全量回归在 `89eb5ed` 上重跑；此后只有文档提交，无代码变更）。
 
 ### 第一阶段：P0 阻断修复（D1/D2 统一生命周期）
 
@@ -416,6 +416,23 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - **迁移往返**：见 §7 与 `.ai-runs/migrations/drill.log`（修了 0015 的 SQLite `create_foreign_key` 缺陷与线上库缺索引漂移）。
 - **运维演练**：备份/恢复逐表一致；密钥轮换为“重启生效”并验证了降级行为；**部署/回滚与 CI 在本环境明确 BLOCKED**（无容器运行时；本轮修订从未推送，故 CI 未运行），证据 `.ai-runs/governance/{backup-restore-drill.json,key-rotation-drill.json,deploy-ci-evidence.json}`。
 
+### 独立评审与修复（`be6ec64`）
+
+第三轮独立评审（read-only reviewer，审 `origin/main..HEAD` 的全部提交）结论 **PARTIAL**：六项不变量均成立（无模型决定 PASS/FAIL、不经批准不改码、单一 runtime/agent/provider、外部写入有预览、无无人值守循环），但指出三处问题，已全部修复：
+
+1. `apps/api/tests/test_runtime_migrations.py` 硬编码 `0013_project_ownership` 在 head 变为 0015 后变红，且从未验证降级 —— 改为断言 `ScriptDirectory` 的脚本 head，并补 0014/0015 的 `upgrade → 0013 → upgrade`。
+2. Discovery 双重执行：运行任务仍在排队时 `pause` + `resume` 会为同一个 run 再建一个 `EXPLORE_PRODUCT` 任务（两个探索循环、动作预算翻倍），且排队期间的暂停会被启动时静默覆盖 —— `_start` 现在把“记录在案且未终态的任务”视为已拥有该 run，`execute_run` 拒绝被另一个活循环驱动的 run，暂停在排队期间也能保留（新增 2 个回归用例）。
+3. 失败页时间线在重连时重复追加服务端重放的事件 —— 按 `event_id` 去重。
+
+复评（`be6ec64` 上，read-only reviewer）：结论 **PASS**，三条 finding 均按根因关闭（证据 `.ai-runs/governance/review-round11-refix.md`），复评另提 4 条非阻断新发现，其中一条是状态机漏洞，已在 `89eb5ed` 修掉：
+
+- **A（状态机漏洞）**：`_runtime_task_in_flight` 把“被用户在任务中心暂停的任务”（`PAUSED`/`PAUSING`，非终态且调度器也不会再领取）当作在飞，于是 `resume()` 已把 run 写成 `RUNNING` 却没有任何执行者。现在 `_start` 遇到暂停态任务时调 `task_commands.resume(task_id, row.requested_by)` 把它交回队列。
+- **B（半真）**：暂停门原本只在循环内部，排队期间的暂停仍会先调用 Provider 需求分析、创建浏览器会话并导航。现在 `_assert_runtime_ready` 之后、`run.started` 之前先 `_wait_if_paused` + 停止检查，暂停状态下不产生任何副作用。
+- **C（文档过期）**：Git 状态表与 §9 未反映修复提交 —— 本节与 §2、§9 已同步。
+- **D（测试覆盖）**：补了暂停任务回队列、`BLOCKED` 后仍可重试、第二循环守卫、暂停运行无副作用四个用例，并让迁移测试在降级时断言两个新版本的全部列。前端事件去重是三行内联逻辑，不新增抽象，由真实浏览器旅程覆盖。
+
+最终回归与 verdict 见 §9。
+
 ### 本轮证据索引（全部在未跟踪的 `.ai-runs/` 下）
 
 | 主题 | 位置 |
@@ -436,6 +453,7 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 3. 运行中的探索占用调度器两个并发槽之一；多用户场景需要提高并发或把探索移出该并发池。
 4. 部署/回滚演练与 CI 运行证据在本环境 BLOCKED；换到有容器运行时的环境后必须补做（脚本已就绪：`scripts/deploy.sh`、`.github/workflows/ci.yml`）。
 5. 历史遗留（与本轮无关但仍在 §7/§8）：`AIProviderRegistry` 未 `configure_runtime` 时回落 fake provider、`POST /api/jobs/{id}/result` 抢输一方仍返回成功、Monaco chunk 体积、暗色主题验收、worker lease 续租。
+6. 本轮评审后仍未处理的历史 UX 项：D5（结果摘要偏薄）；D6 只完成了一半（录制步骤已与 Case 数据级关联，但常规 Studio 工具栏仍无录制入口，入口只在未绑定空状态）。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -594,6 +612,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+- **Round 11 最终回归（`89eb5ed`，权威数字；日志 `.ai-runs/final-acceptance/regression-final-r2.log`）**：后端全量 `uv run pytest -q`（SQLite）→ **892 passed / 11 skipped / 60 warnings / 810.49s（13:30）**；`ruff check .` → All checks passed，`ruff format --check` → 445 files already formatted；`scripts/export_openapi.py --check` → OpenAPI contract is current；`scripts/i18n_check.py` → 25 namespace / 2 language / 3080 keys；web `tsc --noEmit` + `eslint .` 无输出、`pnpm --filter @ai-qa/web test` → **188 pass / 0 fail**。真实浏览器连续旅程（最终代码）**8/8 断言、0 控制台错误**（`.ai-runs/final-acceptance/journey.json`）；9 页 × 桌面/移动视口横向溢出 0（`viewport-sweep.json`）。**Verdict：PASS（日常可用）**；BLOCKED 项（CI/CD、部署回滚、PostgreSQL 通道）与诚实标注（Jev 评分 50/50 走 `FALLBACK`）见 `docs/RC_ACCEPTANCE.md` §8.3。
 
 Round7（分支 `agent/discovery-live-engine`，本轮收尾提交；环境 WSL2，SQLite；本轮同时间有一个截图委派在跑本地 API/Vite/Chromium，已按串行原则排定）：
 

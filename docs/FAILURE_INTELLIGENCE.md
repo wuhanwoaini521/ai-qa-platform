@@ -18,7 +18,7 @@ The Failure Intelligence system automates test failure taxonomy classification, 
 
 ## 回顾与实际验证
 
-`GET /api/failures/{id}/analyses` 返回最近 20 次持久化分析。流中断或用户取消会取消模型任务并保存取消状态；服务重启时把未完成记录恢复为中断。失败和中断保留已有证据，不显示未执行步骤已完成。历史可以在详情页面选择和展开查看。
+`GET /api/failures/{id}/analyses` 返回最近 20 次持久化分析。分析由服务端任务持有，客户端的事件流只是观察者：断流（关页、刷新）不会终止分析，重新连接会重放已持久化事件并继续跟随真实状态；只有显式 `POST /api/failures/{id}/analyses/{analysis_id}/cancel`（或界面上的“取消分析”）才真正停止模型调用并把记录置为 `CANCELLED`。每次分析的总预算由 `repair.analysis_timeout_seconds`（默认 300 秒）约束，超时保存为 `TIMEOUT` 并在修复行记 `ANALYSIS_TIMEOUT`；服务重启把遗留的运行中记录收敛为 `INTERRUPTED`，进程被强杀后由孤儿收敛（超出预算 + 宽限）按超时收尾。失败、取消、超时、中断都保留已有证据、给出可读原因，并允许重新发起分析（新尝试保留原始错误与时间线）。失败和中断保留已有证据，不显示未执行步骤已完成。历史可以在详情页面选择和展开查看。
 
 “重跑测试用例”继承原运行环境、浏览器及 runner，并通过 `POST /api/failures/{id}/analyses/{analysis_id}/verification?run_id=...` 关联新复测。验证必须来自分析之后、同项目同 workspace、且精确运行该失败用例的新运行。只有运行及该用例的实际执行都为 `PASSED`，流程才显示验证通过。排队、运行中、跳过、失败、取消都不算通过。应用补丁显示“待复测”，不能仅凭写入代码宣称修复成功。通过复测仅证明该用例当前执行通过，业务语义仍需人工审查。
 
