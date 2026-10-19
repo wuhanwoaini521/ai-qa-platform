@@ -8,7 +8,7 @@ from app.persistence.models import ProjectORM
 from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.services.quality_discovery_models import DiscoveryRunCreate, DiscoveryStatus
 from app.services.quality_discovery_service import QualityDiscoveryService
-from app.services.task_errors import TaskBlocked
+from app.services.task_errors import TaskBlocked, TaskCancelled
 from project_model.task_models import TaskType
 
 pytestmark = pytest.mark.integration
@@ -85,7 +85,7 @@ async def test_a_discovery_run_is_owned_by_the_task_runtime(test_db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_stopped_run_blocks_the_runtime_task_instead_of_reporting_success(test_db_session):
+async def test_a_stopped_run_cancels_the_runtime_task_instead_of_blocking_it(test_db_session):
     project_id = await _project(test_db_session)
     run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
     service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
@@ -95,7 +95,34 @@ async def test_a_stopped_run_blocks_the_runtime_task_instead_of_reporting_succes
 
     service._execute = stop_immediately
 
-    with pytest.raises(TaskBlocked, match="STOPPED"):
+    # The operator stopped the exploration, so the task centre must show a cancellation, not a
+    # block that asks for a decision the user already made.
+    with pytest.raises(TaskCancelled, match="STOPPED"):
+        await service.execute_run(run_id)
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_run_that_finished_before_its_task_started_cancels_the_task(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.STOPPED.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    with pytest.raises(TaskCancelled):
+        await service.execute_run(run_id)
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_discovery_run_still_blocks_its_runtime_task(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    async def block_immediately(_run_id: str) -> None:
+        await service._update(_run_id, status=DiscoveryStatus.BLOCKED.value, error="Navigation outside the domain.")
+
+    service._execute = block_immediately
+
+    with pytest.raises(TaskBlocked, match="BLOCKED"):
         await service.execute_run(run_id)
 
 

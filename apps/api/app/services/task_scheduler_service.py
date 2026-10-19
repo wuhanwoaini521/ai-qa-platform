@@ -12,7 +12,7 @@ from project_model.task_models import (
 
 from app.persistence.models import utc_now
 from app.ports.task_unit_of_work import TaskUnitOfWorkFactory
-from app.services.task_errors import ApprovalRequired, TaskBlocked
+from app.services.task_errors import ApprovalRequired, TaskBlocked, TaskCancelled
 from app.services.task_execution_orchestrator import TaskExecutionOrchestrator
 from app.services.task_workspace import workspace_source_snapshot
 
@@ -264,7 +264,7 @@ class TaskSchedulerService:
                 *(self.execution._execute_step(task, step, deadline=deadline) for step in batch), return_exceptions=True
             )
             failed = any(
-                isinstance(result, TaskBlocked)
+                isinstance(result, (TaskBlocked, TaskCancelled))
                 or isinstance(result, BaseException)
                 and not isinstance(result, ApprovalRequired)
                 for result in results
@@ -273,6 +273,11 @@ class TaskSchedulerService:
                 return
             for result in results:
                 if isinstance(result, ApprovalRequired):
+                    return
+                if isinstance(result, TaskCancelled):
+                    # The user stopped the goal the executor was driving; that is a deliberate stop, not a
+                    # block that needs a decision.
+                    await self.execution._finish(task_id, TaskStatus.CANCELLED, str(result) or None)
                     return
                 if isinstance(result, TaskBlocked):
                     await self.execution._finish(task_id, TaskStatus.BLOCKED, str(result))

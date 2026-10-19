@@ -23,7 +23,7 @@ from app.services.task_ai_service import TaskAIService
 from app.services.task_browser_executor import TaskBrowserExecutor
 from app.services.task_code_generation_service import TaskCodeGenerationService
 from app.services.task_decision_service import TaskDecisionService
-from app.services.task_errors import ApprovalRequired, TaskBlocked
+from app.services.task_errors import ApprovalRequired, TaskBlocked, TaskCancelled
 from app.services.task_evidence_service import TaskEvidenceService
 from app.services.task_execution_ports import TaskExecutionPorts
 from app.services.task_failure_repair_service import TaskFailureRepairService
@@ -162,7 +162,7 @@ class TaskExecutionOrchestrator:
 
     async def _execute_step(
         self, task: TaskExecutionRecord, step: TaskStep, *, deadline: float | None = None
-    ) -> dict[str, Any] | ApprovalRequired | TaskBlocked:
+    ) -> dict[str, Any] | ApprovalRequired | TaskBlocked | TaskCancelled:
         condition = step.condition or {}
         skip = False
         condition_key = condition.get("input_exists")
@@ -282,6 +282,26 @@ class TaskExecutionOrchestrator:
                     )
                     await repositories.commit()
                 return ApprovalRequired()
+            except TaskCancelled as error:
+                elapsed = (time.perf_counter() - started) * 1000
+                async with self.repository_scope() as repositories:
+                    repo = repositories.tasks
+                    current = await repo.get_step(step.id)
+                    if current and current.status == TaskStepStatus.RUNNING.value:
+                        await repo.update_step(
+                            current.id,
+                            status=TaskStepStatus.CANCELLED.value,
+                            error=SensitiveRedactor.redact_text(str(error))[:4000],
+                            duration_ms=elapsed,
+                            finished_at=utc_now(),
+                        )
+                        await repo.add_event(
+                            task.id,
+                            "step.progress",
+                            {"step_id": step.id, "status": "CANCELLED", "duration_ms": elapsed},
+                        )
+                        await repositories.commit()
+                return error
             except TaskBlocked as error:
                 elapsed = (time.perf_counter() - started) * 1000
                 async with self.repository_scope() as repositories:

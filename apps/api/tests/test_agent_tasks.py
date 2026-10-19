@@ -14,7 +14,7 @@ from app.persistence.models import TaskORM, TaskStepORM
 from app.repositories.task_repo import TaskRepository
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.task_code_generation_service import TaskCodeGenerationService
-from app.services.task_errors import TaskBlocked
+from app.services.task_errors import TaskBlocked, TaskCancelled
 from app.services.task_runtime_service import TaskRuntimeService
 from app.services.task_workflows import build_plan, build_qa_goal_plan, parse_qa_goal
 from app.settings import settings
@@ -988,6 +988,36 @@ async def test_restart_recovery_blocks_active_steps_without_replaying_them(clien
     assert detail is not None and detail.status == TaskStatus.BLOCKED
     assert detail.steps[0].status == TaskStepStatus.FAILED
     assert "API restarted" in (detail.steps[0].error or "")
+
+
+@pytest.mark.asyncio
+async def test_a_user_stopped_goal_ends_the_task_and_its_step_as_cancelled(
+    client, test_db_session, monkeypatch: pytest.MonkeyPatch
+):
+    created = await client.post(
+        "/api/tasks",
+        json={
+            "type": "EXPLORE_PAGE",
+            "goal": "Stop a goal the user no longer wants",
+            "inputs": {"url": "http://127.0.0.1:1/"},
+        },
+    )
+    task_id = created.json()["id"]
+
+    async def stop_the_goal(*_args, **_kwargs):
+        raise TaskCancelled("The user stopped this exploration.")
+
+    monkeypatch.setattr(task_execution_service, "_run_step_tool", stop_the_goal)
+    await task_scheduler_service._execute_dag(task_id, time.monotonic())
+
+    # A deliberate stop must not read as a block that needs a decision.
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, task_id)
+        steps = await TaskRepository(session).steps_for_task(task_id)
+    assert task is not None and task.status == TaskStatus.CANCELLED.value
+    assert steps and steps[0].status == TaskStepStatus.CANCELLED.value
+    detail = await task_command_service.get(task_id)
+    assert detail is not None and detail.status == TaskStatus.CANCELLED
 
 
 @pytest.mark.asyncio

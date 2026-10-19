@@ -47,7 +47,7 @@ from app.services.quality_discovery_models import (
 )
 from app.services.quality_discovery_projection import QualityDiscoveryProjectionMixin
 from app.services.task_command_service import TASK_TERMINAL_STATUSES
-from app.services.task_errors import TaskBlocked
+from app.services.task_errors import TaskBlocked, TaskCancelled
 from app.settings import get_config
 
 if TYPE_CHECKING:
@@ -837,6 +837,8 @@ class QualityDiscoveryService(
         if row is None:
             raise ValueError("Quality Discovery run not found.")
         if row.status in self.TERMINAL:
+            if row.status == DiscoveryStatus.STOPPED.value:
+                raise TaskCancelled(f"The Quality Discovery run was stopped: {row.error or 'no detail'}")
             raise TaskBlocked(f"The Quality Discovery run already finished {row.status}.")
         current = asyncio.current_task()
         owner = self._tasks.get(run_id)
@@ -861,6 +863,9 @@ class QualityDiscoveryService(
         status = final.status if final is not None else DiscoveryStatus.FAILED.value
         if status != DiscoveryStatus.COMPLETED.value:
             detail = (final.error if final is not None else "") or "no detail"
+            if status == DiscoveryStatus.STOPPED.value:
+                # A run that the operator stopped must not surface as a blocked task in the task centre.
+                raise TaskCancelled(f"The Quality Discovery run ended {status}: {detail}")
             raise TaskBlocked(f"The Quality Discovery run ended {status}: {detail}")
         return {
             "discovery_run_id": run_id,

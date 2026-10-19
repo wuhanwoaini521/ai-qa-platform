@@ -12,5 +12,9 @@ class TaskBlocked(RuntimeError):
         self.details = details or {}
 
 
+class TaskCancelled(Exception):
+    """The goal was stopped by the user, so the runtime ends the task as cancelled, not blocked."""
+
+
 class ApprovalRequired(Exception):
     pass
