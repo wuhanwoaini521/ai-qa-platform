@@ -239,3 +239,28 @@
   .qd-live-timeline li { grid-template-columns: 62px minmax(0, 1fr); }
   .qd-live-timeline .qd-live-event-type { grid-column: 2; }
 }
+
+.qd-live-panel.is-network ul.qd-live-network {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qd-live-network li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+}
+
+.qd-live-network li strong {
+  color: var(--text-primary, #0f172a);
+}
+
+.qd-live-network li.is-failed strong {
+  color: var(--danger, #dc2626);
+}

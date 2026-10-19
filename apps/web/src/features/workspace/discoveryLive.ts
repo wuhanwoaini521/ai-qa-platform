@@ -33,6 +33,13 @@ export interface DiscoveryElement {
 
 export type DiscoveryStreamStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended';
 
+/** Redacted network summary the backend captured while observing one page state. */
+export interface DiscoveryNetwork {
+  responses: Record<string, number>;
+  failures: number;
+  sample_count: number;
+}
+
 export interface DiscoveryLiveState {
   status: string;
   streamStatus: DiscoveryStreamStatus;
@@ -44,6 +51,8 @@ export interface DiscoveryLiveState {
   /** True when the page moved on after the element inventory was captured. */
   elementsStale: boolean;
   aiUnavailable: { stage: string; code?: string | null } | null;
+  /** Network summary of the newest observed state, or null before the first observation. */
+  network: DiscoveryNetwork | null;
   decision: DiscoveryLiveEvent | null;
   currentAction: DiscoveryLiveEvent | null;
   timeline: DiscoveryLiveEvent[];
@@ -68,6 +77,7 @@ export function initialLiveState(): DiscoveryLiveState {
     elements: [],
     elementsStale: false,
     aiUnavailable: null,
+    network: null,
     decision: null,
     currentAction: null,
     timeline: [],
@@ -98,6 +108,25 @@ export function frameDataUrl(metadata: Record<string, any> | undefined): string 
   if (typeof frame !== 'string' || !frame) return null;
   const mime = metadata?.mime_type === 'image/png' ? 'image/png' : 'image/jpeg';
   return `data:${mime};base64,${frame}`;
+}
+
+export function networkFrom(metadata: Record<string, any> | undefined): DiscoveryNetwork | null {
+  const summary = metadata?.network;
+  if (!summary || typeof summary !== 'object') return null;
+  const responses: Record<string, number> = {};
+  const raw = (summary as Record<string, any>).responses;
+  if (raw && typeof raw === 'object')
+    for (const [status, count] of Object.entries(raw)) {
+      const value = Number(count);
+      if (Number.isFinite(value)) responses[status] = value;
+    }
+  const failures = Number((summary as Record<string, any>).failures);
+  const sampleCount = Number((summary as Record<string, any>).sample_count);
+  return {
+    responses,
+    failures: Number.isFinite(failures) ? failures : 0,
+    sample_count: Number.isFinite(sampleCount) ? sampleCount : 0,
+  };
 }
 
 function viewportFrom(metadata: Record<string, any> | undefined): { width: number; height: number } {
@@ -183,6 +212,10 @@ export function foldLiveEvent(
         elementsStale: false,
         counts: { ...next.counts, elements: elements.length },
       };
+    }
+    case 'state.observed': {
+      const network = networkFrom(event.metadata);
+      return { ...next, url: String(event.metadata?.url || next.url), network: network ?? next.network };
     }
     case 'page.opened':
     case 'page.state': {

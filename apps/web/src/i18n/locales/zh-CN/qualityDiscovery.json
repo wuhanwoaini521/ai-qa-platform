@@ -234,5 +234,8 @@
     "REQUIREMENT_AMBIGUOUS": "需求描述模糊",
     "TEST_INCOMPLETE": "测试关联置信度不足",
     "BLOCKED_BY_POLICY": "动作被安全策略阻止"
-  }
+  },
+  "liveNetwork": "网络请求",
+  "liveNoNetwork": "尚未捕获网络请求。",
+  "liveNetworkFailures": "失败"
 }

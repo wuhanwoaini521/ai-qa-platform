@@ -234,5 +234,8 @@
     "REQUIREMENT_AMBIGUOUS": "Ambiguous requirement",
     "TEST_INCOMPLETE": "Test mapping needs review",
     "BLOCKED_BY_POLICY": "Action blocked by safety policy"
-  }
+  },
+  "liveNetwork": "Network",
+  "liveNoNetwork": "No network request captured yet.",
+  "liveNetworkFailures": "Failed"
 }

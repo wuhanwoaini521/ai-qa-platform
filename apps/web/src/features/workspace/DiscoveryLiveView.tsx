@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Eye, MonitorPlay, MousePointerClick, Sparkles } from 'lucide-react';
+import { Activity, Bot, Eye, MonitorPlay, MousePointerClick, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import {
   foldLiveEvent,
@@ -146,6 +146,27 @@ export function DiscoveryLiveView({
               </>
             ) : (
               <p className="qd-empty">{t('liveNoDecision')}</p>
+            )}
+          </div>
+          <div className="qd-live-panel is-network">
+            <h4><Activity size={14} aria-hidden="true" />{t('liveNetwork')}<span>{state.network?.sample_count ?? 0}</span></h4>
+            {state.network === null ? (
+              <p className="qd-empty">{t('liveNoNetwork')}</p>
+            ) : (
+              <ul className="qd-live-network">
+                {Object.entries(state.network.responses)
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .map(([status, count]) => (
+                    <li key={status}>
+                      <span>{status}</span>
+                      <strong>{count}</strong>
+                    </li>
+                  ))}
+                <li className={state.network.failures > 0 ? 'is-failed' : undefined}>
+                  <span>{t('liveNetworkFailures')}</span>
+                  <strong>{state.network.failures}</strong>
+                </li>
+              </ul>
             )}
           </div>
           <div className="qd-live-panel is-elements">

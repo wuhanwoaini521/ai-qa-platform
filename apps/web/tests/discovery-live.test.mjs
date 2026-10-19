@@ -140,3 +140,28 @@ test('tone reflects the element, and malformed events are ignored', () => {
   const state = initialLiveState();
   assert.equal(foldLiveEvent(state, { type: '' }), state);
 });
+
+test('an observed state carries the network summary into the live panel', () => {
+  const state = foldLiveEvent(initialLiveState(), {
+    type: 'state.observed',
+    seq: 7,
+    at: '2026-01-01T00:00:07Z',
+    metadata: {
+      state_id: 's1',
+      url: 'http://shop.test/',
+      network: { responses: { '200': 12, '404': 1 }, failures: 1, sample_count: 20 },
+    },
+  });
+  assert.deepEqual(state.network, { responses: { '200': 12, '404': 1 }, failures: 1, sample_count: 20 });
+  assert.equal(state.url, 'http://shop.test/');
+});
+
+test('a state without a usable network summary keeps the last one instead of blanking the panel', () => {
+  const withNetwork = foldLiveEvent(initialLiveState(), {
+    type: 'state.observed',
+    seq: 7,
+    metadata: { network: { responses: { '200': 3 }, failures: 0, sample_count: 3 } },
+  });
+  const malformed = foldLiveEvent(withNetwork, { type: 'state.observed', seq: 8, metadata: { network: 'nope' } });
+  assert.deepEqual(malformed.network, { responses: { '200': 3 }, failures: 0, sample_count: 3 });
+});

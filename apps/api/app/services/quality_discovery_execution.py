@@ -180,7 +180,16 @@ class QualityDiscoveryExecutionMixin:
                     run_id,
                     "state.observed",
                     f"已观察：{safe_title or self._safe_url(snapshot.url)}",
-                    {"state_id": state_id},
+                    {
+                        "state_id": state_id,
+                        "url": self._safe_url(snapshot.url),
+                        "network": state.get("network"),
+                        "evidence_ids": [
+                            evidence_id
+                            for evidence_id in (state.get("evidence_id"), state.get("screenshot_evidence_id"))
+                            if evidence_id
+                        ],
+                    },
                 )
                 self.track_live_browser(run_id, url=self._safe_url(snapshot.url))
                 await self._publish_element_inventory(run_id, state_id, state)
