@@ -6,6 +6,7 @@ import type { AITraceEvent, FailureRecord, FailureRepairWorkflow, LocatorRepairP
 import type { RuntimeArtifact, RuntimeEvent, RuntimeSnapshot } from '../../types/runtime';
 import type { WorkspaceContext } from '../../app/workspaceContext';
 import { failedLocatorFromFailure, failureSourceLocation, normalizeFailureClassification, observedRoleLocatorMismatch, summarizeFailureError } from '../failures/failureWorkspaceModel';
+import { ANALYSIS_TERMINAL_EVENT_TYPES, analysisStageStatus, terminalAnalysisMessage } from './analysisLifecycleModel';
 import { RuntimeArtifactActions } from '../runtime/RuntimeArtifactActions';
 import { NetworkEvidenceList } from '../runtime/NetworkEvidenceList';
 import { resolveExecutionCase } from '../runs/testExecutionResultsModel';
@@ -78,6 +79,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+// Events that end an analysis with a user-visible reason. The analysis runner writes exactly one of
+// them, so the message it carries is the authoritative explanation of why the run stopped.
 function displayEvidence(value: unknown): string {
   if (typeof value === 'string') return value;
   try { return JSON.stringify(value, null, 2); } catch { return String(value); }
@@ -128,6 +131,7 @@ export function WorkspaceRunResult({
   const [analysisEvents, setAnalysisEvents] = useState<AITraceEvent[]>([]);
   const [analysisId, setAnalysisId] = useState('');
   const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState('');
   const [analysisError, setAnalysisError] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionRunning, setActionRunning] = useState(false);
@@ -229,6 +233,7 @@ export function WorkspaceRunResult({
   const diagnosisRootCause = typeof diagnosis?.root_cause === 'string' ? diagnosis.root_cause : '';
   const diagnosisEvidence = Array.isArray(diagnosis?.evidence) ? diagnosis.evidence.filter((value): value is string => typeof value === 'string') : [];
   const repairState = repair?.state ?? null;
+  const analysisCancelled = !analysisRunning && analysisStatus === 'CANCELLED';
   const canRestartAnalysis = repair?.allowed_actions.includes('START_ANALYSIS') === true
     || Boolean(!repair && analysisId && analysisError && !repairHistoryError);
   const canStartInitialAnalysis = !repair && !analysisId && !repairHistoryLoading && !repairHistoryError;
@@ -238,9 +243,9 @@ export function WorkspaceRunResult({
   const canRollbackPatch = Boolean(failure && analysisId && repair?.allowed_actions.includes('ROLLBACK'));
   const workflowStages = [
     { id: 'evidence', label: t('result.repairStages.evidence'), status: failure ? 'SUCCEEDED' : failureLoadState === 'loading' ? 'PENDING' : 'UNAVAILABLE', detail: failure ? t('result.caseEvidenceReady', { count: selectedArtifacts.length }) : t('result.caseEvidenceUnavailable') },
-    { id: 'diagnosis', label: t('result.repairStages.diagnosis'), status: analysisRunning ? 'RUNNING' : analysisError ? 'FAILED' : diagnosisRootCause ? 'SUCCEEDED' : 'NOT_STARTED', detail: diagnosisRootCause || analysisError || (analysisEvents.length ? aiEvent?.message ?? '' : t('result.aiNotStarted')) },
+    { id: 'diagnosis', label: t('result.repairStages.diagnosis'), status: analysisStageStatus({ running: analysisRunning, cancelled: analysisCancelled, error: analysisError, succeeded: Boolean(diagnosisRootCause) }), detail: diagnosisRootCause || analysisError || (analysisEvents.length ? aiEvent?.message ?? '' : t('result.aiNotStarted')) },
     { id: 'decision', label: t('result.repairStages.decision'), status: jevCalled ? jevEvent?.status ?? 'SUCCEEDED' : analysisRunning ? 'RUNNING' : 'NOT_CALLED', detail: jevCalled ? jevEvent?.message ?? t('result.jevActuallyCalled') : analysisError ? t('result.jevNotReached') : jevConfig?.enabled ? t('result.jevEnabledNotCalled') : jevConfig ? t('result.jevDisabled') : t('result.configUnavailable') },
-    { id: 'patch', label: t('result.repairStages.patch'), status: codeDiff ? 'SUCCEEDED' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : analysisError ? 'FAILED' : 'NOT_STARTED', detail: codeDiff ? proposal?.file_path ?? t('result.diffReady') : repairState === 'BLOCKED' ? t('result.repairWorkflowBlocked') : repairState === 'NOT_APPLICABLE' ? t('result.repairNotApplicable') : t('result.diffNotGenerated') },
+    { id: 'patch', label: t('result.repairStages.patch'), status: codeDiff ? 'SUCCEEDED' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : analysisError && !analysisCancelled ? 'FAILED' : 'NOT_STARTED', detail: codeDiff ? proposal?.file_path ?? t('result.diffReady') : repairState === 'BLOCKED' ? t('result.repairWorkflowBlocked') : repairState === 'NOT_APPLICABLE' ? t('result.repairNotApplicable') : t('result.diffNotGenerated') },
     { id: 'apply', label: t('result.repairStages.apply'), status: repairState === 'APPLYING' ? 'RUNNING' : repairState === 'ROLLED_BACK' ? 'ROLLED_BACK' : proposal?.applied || ['PATCH_APPLIED', 'VERIFYING_FIX', 'VERIFIED'].includes(repairState ?? '') ? 'SUCCEEDED' : canApplyPatch ? 'WAITING_APPROVAL' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : 'NOT_STARTED', detail: canApplyPatch ? t('result.patchApprovalPending') : repair?.repair_id ?? t('result.patchNotApplied') },
     { id: 'verify', label: t('result.repairStages.verify'), status: repairState === 'VERIFYING_FIX' ? 'RUNNING' : repair?.verified || repairState === 'VERIFIED' ? 'SUCCEEDED' : ['FAILED', 'ERROR', 'CANCELLED'].includes(repair?.verification_run_status ?? '') ? repair?.verification_run_status ?? 'FAILED' : canVerifyPatch ? 'WAITING' : repairState === 'BLOCKED' ? 'BLOCKED' : repairState === 'NOT_APPLICABLE' ? 'SKIPPED' : 'NOT_STARTED', detail: canVerifyPatch ? t('result.verificationReady') : repair?.verification_run_id ?? t('result.verificationNotStarted') },
   ];
@@ -297,20 +302,7 @@ export function WorkspaceRunResult({
     let active = true;
     setRepairHistoryLoading(true);
     setRepairHistoryError('');
-    void api.getFailureAnalyses(failure.id).then(async (rows) => {
-      if (!active) return;
-      const latest = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-      if (!latest) return;
-      setAnalysisId(latest.id);
-      setAnalysisEvents(latest.events);
-      setDiagnosis(asRecord(latest.result.diagnosis));
-      const failedEvent = [...latest.events].reverse().find((event) =>
-        event.type === 'run.failed' || (event.stage === 'diagnosis' && event.status === 'FAILED'),
-      );
-      setAnalysisError(failedEvent?.message ?? (latest.status === 'FAILED' ? t('result.aiAnalysisFailed') : ''));
-      const workflow = await api.getFailureRepairWorkflow(failure.id, latest.id);
-      if (active) setRepair(workflow);
-    }).catch((error) => {
+    void loadLatestAnalysis(failure.id, { follow: true, isActive: () => active }).catch((error) => {
       if (active) setRepairHistoryError(error instanceof Error ? error.message : String(error));
     }).finally(() => { if (active) setRepairHistoryLoading(false); });
     return () => { active = false; };
@@ -361,42 +353,36 @@ export function WorkspaceRunResult({
     onSelectExecution(nodeId, caseId);
   };
 
-  const startAnalysis = async () => {
-    if (!failure || analysisRunning) return;
-    analysisController.current?.abort();
-    const controller = new AbortController();
-    analysisController.current = controller;
+  const followAnalysis = async (controller: AbortController, failureId: string, reset: boolean) => {
+    if (reset) {
+      setAnalysisError('');
+      setDiagnosis(null);
+      setRepair(null);
+      setAnalysisEvents([]);
+      setAnalysisId('');
+      setActionError('');
+      setRepairHistoryError('');
+    }
     setAnalysisRunning(true);
-    setAnalysisError('');
-    setDiagnosis(null);
-    setRepair(null);
-    setAnalysisEvents([]);
-    setAnalysisId('');
-    setActionError('');
-    setRepairHistoryError('');
+    let streamedAnalysisId = '';
     try {
-      let completedAnalysisId = '';
-      await api.streamFailureWorkflow(failure.id, (event) => {
+      await api.streamFailureWorkflow(failureId, (event) => {
         if (controller.signal.aborted) return;
-        setAnalysisEvents((previous) => [...previous, event]);
+        // Re-attaching replays the persisted events, so a reload must not show them twice.
+        setAnalysisEvents((previous) => previous.some((item) => item.event_id === event.event_id) ? previous : [...previous, event]);
         const eventDiagnosis = asRecord(event.metadata.diagnosis);
         if (eventDiagnosis) setDiagnosis(eventDiagnosis);
         if (typeof event.metadata.analysis_id === 'string') {
-          completedAnalysisId = event.metadata.analysis_id;
+          streamedAnalysisId = event.metadata.analysis_id;
           setAnalysisId(event.metadata.analysis_id);
         }
         const eventProposal = asRecord(event.metadata.repair_proposal);
         if (eventProposal) setRepair((current) => current ? { ...current, repair_proposal: eventProposal as LocatorRepairProposal } : current);
-        if (event.type === 'run.failed') setAnalysisError(event.message || t('result.aiAnalysisFailed'));
+        if (ANALYSIS_TERMINAL_EVENT_TYPES.includes(event.type)) {
+          setAnalysisError(event.message || (event.type === 'run.failed' ? t('result.aiAnalysisFailed') : tFailures('diagnosisStreamIncomplete')));
+        }
       }, controller.signal, i18n.resolvedLanguage ?? i18n.language);
-      if (controller.signal.aborted) return;
-      const rows = await api.getFailureAnalyses(failure.id);
-      const analysis = rows.find((item) => item.id === completedAnalysisId) ?? rows[0];
-      if (!analysis) throw new Error(t('result.analysisRecordMissing'));
-      setAnalysisId(analysis.id);
-      setDiagnosis(asRecord(analysis.result.diagnosis));
-      const workflow = await api.getFailureRepairWorkflow(failure.id, analysis.id);
-      setRepair(workflow);
+      if (!controller.signal.aborted) await loadLatestAnalysis(failureId, { preferredId: streamedAnalysisId });
     } catch (error) {
       if (!controller.signal.aborted) setAnalysisError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -404,6 +390,57 @@ export function WorkspaceRunResult({
         analysisController.current = null;
         setAnalysisRunning(false);
       }
+    }
+  };
+
+  const loadLatestAnalysis = async (
+    failureId: string,
+    options: { preferredId?: string; follow?: boolean; isActive?: () => boolean } = {},
+  ) => {
+    const rows = await api.getFailureAnalyses(failureId);
+    if (options.isActive && !options.isActive()) return;
+    const analysis = (options.preferredId ? rows.find((item) => item.id === options.preferredId) : undefined)
+      ?? [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    if (!analysis) return;
+    setAnalysisId(analysis.id);
+    setAnalysisStatus(analysis.status);
+    setAnalysisEvents(analysis.events);
+    setDiagnosis(asRecord(analysis.result.diagnosis));
+    setAnalysisError(terminalAnalysisMessage(analysis, t('result.aiAnalysisFailed'), tFailures('diagnosisStreamIncomplete')));
+    const workflow = await api.getFailureRepairWorkflow(failureId, analysis.id);
+    if (options.isActive && !options.isActive()) return;
+    setRepair(workflow);
+    // A reload must never look like "not started": a persisted RUNNING analysis is followed, not restarted.
+    if (options.follow && analysis.status === 'RUNNING') attachToAnalysis(failureId);
+  };
+
+  const attachToAnalysis = (failureId: string) => {
+    if (analysisController.current) return;
+    const controller = new AbortController();
+    analysisController.current = controller;
+    void followAnalysis(controller, failureId, false);
+  };
+
+  const startAnalysis = async () => {
+    if (!failure || analysisRunning) return;
+    analysisController.current?.abort();
+    const controller = new AbortController();
+    analysisController.current = controller;
+    await followAnalysis(controller, failure.id, true);
+  };
+
+  const cancelAnalysis = async () => {
+    if (!failure || !analysisId) return;
+    setActionError('');
+    try {
+      // Cancel owns the run server-side; stop following only after the record is terminal.
+      setRepair(await api.cancelFailureAnalysis(failure.id, analysisId));
+      analysisController.current?.abort();
+      analysisController.current = null;
+      setAnalysisRunning(false);
+      await loadLatestAnalysis(failure.id, { preferredId: analysisId });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -564,7 +601,7 @@ export function WorkspaceRunResult({
               return <li key={stage.id} className={'is-' + tone}><span className="workspace-repair-marker"><Icon size={13} aria-hidden="true" /></span><div>
                 <div><strong>{index + 1}. {stage.label}</strong><small className={'workspace-result-state is-' + tone}>{stageLabel(stage.status)}</small></div>
                 <p>{stage.detail}</p>
-                {stage.id === 'diagnosis' && analysisRunning && <div className="workspace-repair-stage-actions"><button type="button" className="btn btn-secondary btn-sm" onClick={() => analysisController.current?.abort()}>{tFailures('workflow.cancel')}</button></div>}
+                {stage.id === 'diagnosis' && analysisRunning && <div className="workspace-repair-stage-actions"><button type="button" className="btn btn-secondary btn-sm" onClick={() => void cancelAnalysis()}>{tFailures('workflow.cancel')}</button></div>}
                 {stage.id === 'patch' && !analysisRunning && canStartAnalysis && <div className="workspace-repair-stage-actions"><button type="button" className={`btn ${canRestartAnalysis ? 'btn-secondary' : 'btn-primary'} btn-sm`} disabled={actionRunning || repairHistoryLoading} onClick={() => void startAnalysis()}><Bot size={13} aria-hidden="true" />{analysisId || diagnosisRootCause || analysisError ? t('result.rerunAIAnalysis') : t('result.startAIAnalysis')}</button></div>}
                 {stage.id === 'apply' && (canApplyPatch || canRollbackPatch) && <div className="workspace-repair-stage-actions">
                   {canApplyPatch && <button type="button" className="btn btn-primary btn-sm" disabled={actionRunning} onClick={() => void applyPatch()}>{t('result.approveAndApplyPatch')}</button>}
