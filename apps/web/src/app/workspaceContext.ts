@@ -189,3 +189,12 @@ export function buildStudioHref(context: WorkspaceContext): string {
     view: context.failureId ? 'debug' : 'code',
   });
 }
+
+/**
+ * A top-level page such as `/runs` or `/quality` keeps the scope it was opened from, so leaving
+ * the workspace does not silently fall back to another project.
+ */
+export function buildScopedHref(path: string, context: Pick<WorkspaceContext, 'projectId'>): string {
+  const query = writeWorkspaceContext('', context).toString();
+  return query ? `${path}?${query}` : path;
+}

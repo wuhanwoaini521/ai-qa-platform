@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
-import { buildWorkspaceHref } from '../app/workspaceContext';
+import { buildWorkspaceHref, buildScopedHref } from '../app/workspaceContext';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import { withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
@@ -145,8 +145,8 @@ export const Navigation: React.FC = () => {
     { id: 'dashboard', labelKey: 'dashboard', mobileLabelKey: 'dashboardMobile', icon: LayoutDashboard, to: '/', end: true },
     { id: 'workspace', labelKey: 'workspace', mobileLabelKey: 'workspaceMobile', icon: PanelsTopLeft, to: workspaceBase },
     { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: '/projects' },
-    { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: '/runs' },
-    { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: '/quality' },
+    { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: buildScopedHref('/runs', { projectId: selectedProjectId ?? undefined }) },
+    { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: buildScopedHref('/quality', { projectId: selectedProjectId ?? undefined }) },
   ];
   const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' };
   const platformItems: NavItem[] = [

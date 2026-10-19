@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { NavTab } from '../components/Navigation';
 import { useProjectScope } from './ProjectScope';
+import { buildScopedHref } from './workspaceContext';
 
 export function pathForTab(tab: NavTab, projectId: string | null): string {
   switch (tab) {
@@ -26,9 +27,9 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
     case 'automation':
       return projectId ? `/workspace/${projectId}?view=code` : '/projects';
     case 'runs':
-      return '/runs';
+      return buildScopedHref('/runs', { projectId: projectId ?? undefined });
     case 'tasks':
-      return '/runs/tasks';
+      return buildScopedHref('/runs/tasks', { projectId: projectId ?? undefined });
     case 'recorder':
       return projectId
         ? `/workspace/${projectId}?view=browser`
@@ -38,7 +39,7 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
     case 'failures':
       return '/failures';
     case 'quality':
-      return '/quality';
+      return buildScopedHref('/quality', { projectId: projectId ?? undefined });
     case 'security':
       return '/security';
     case 'workers':

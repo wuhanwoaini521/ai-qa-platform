@@ -128,15 +128,18 @@ const StudioRoute: React.FC = () => {
 };
 
 const RunsRoute: React.FC = () => {
-  const { runId } = useParams();
+  const { search } = useLocation();
   const nav = useAppNavigation();
   const { projects, selectedProjectId } = useProjectScope();
+  const context = readWorkspaceContext(search, selectedProjectId);
+  // A link from the workspace carries its project and run, so /runs opens the same scope.
+  useRouteProjectScope(context.projectId);
 
   return (
     <RunsPage
       projects={projects}
-      selectedProjectId={selectedProjectId}
-      initialRunId={runId ?? null}
+      selectedProjectId={context.projectId ?? selectedProjectId}
+      initialRunId={context.runId ?? null}
       onNavigateToFailures={nav.toFailures}
     />
   );
@@ -210,13 +213,16 @@ const FlakyRoute: React.FC = () => {
 };
 
 const QualityRoute: React.FC = () => {
+  const { search } = useLocation();
   const nav = useAppNavigation();
   const { projects, selectedProjectId } = useProjectScope();
+  const context = readWorkspaceContext(search, selectedProjectId);
+  useRouteProjectScope(context.projectId);
 
   return (
     <QualityPage
       projects={projects}
-      selectedProjectId={selectedProjectId}
+      selectedProjectId={context.projectId ?? selectedProjectId}
       onNavigateToRuns={nav.toRun}
     />
   );
