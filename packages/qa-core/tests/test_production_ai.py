@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel
 from qa_core.ai.budget import AIBudgetGuard, BudgetExceededError
 from qa_core.ai.models import (
+    LONG_GENERATION_TIMEOUT_SECONDS,
     AICompletionRequest,
     ProviderHealth,
 )
@@ -256,3 +257,39 @@ async def test_orchestrator_production_capabilities():
     )
     assert review.is_semantically_equivalent is False
     assert review.confidence == 0
+
+
+@pytest.mark.asyncio
+async def test_a_generation_call_may_outlast_the_default_attempt_timeout(monkeypatch):
+    """A 30s attempt cap timed every real test-case generation attempt out into a 502."""
+    seen: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}],
+                "usage": {},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    orig_client = httpx.AsyncClient
+
+    def patched(*args, **kwargs):
+        seen.append(kwargs["timeout"])
+        return orig_client(transport=transport)
+
+    monkeypatch.setattr(httpx, "AsyncClient", patched)
+    provider = OpenAICompatibleProvider(api_key="sk-test-mock-key-12345", base_url="https://mock-ai.local/v1")
+
+    await provider.complete(
+        AICompletionRequest(prompt="generate the cases", max_retries=0, timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS)
+    )
+    assert seen == [LONG_GENERATION_TIMEOUT_SECONDS]
+
+    # A silent request keeps the configured default, and an interactive call can still shorten it.
+    await provider.complete(AICompletionRequest(prompt="default budget", max_retries=0))
+    assert seen[-1] == 30.0
+    await provider.complete(AICompletionRequest(prompt="quick probe", max_retries=0, timeout_seconds=5))
+    assert seen[-1] == 5.0

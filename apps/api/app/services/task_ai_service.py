@@ -4,7 +4,12 @@ import json
 from typing import Any
 
 from project_model.task_models import EvidenceType
-from qa_core.ai.models import AICompletionRequest, BrowserAgentPlan, CodeAssistantResponse
+from qa_core.ai.models import (
+    LONG_GENERATION_TIMEOUT_SECONDS,
+    AICompletionRequest,
+    BrowserAgentPlan,
+    CodeAssistantResponse,
+)
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.failure.redactor import SensitiveRedactor
 from qa_core.prompts import TASK_CODE_PROMPT
@@ -180,6 +185,7 @@ class TaskAIService:
                 response_schema=CodeAssistantResponse,
                 prompt_id=TASK_CODE_PROMPT.prompt_id,
                 prompt_version=TASK_CODE_PROMPT.version,
+                timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
             )
         )
         async with self.context.repository_scope() as repositories:

@@ -486,7 +486,9 @@ class OpenAICompatibleProvider:
         max_retries = (
             min(self.max_retries, request.max_retries) if request.max_retries is not None else self.max_retries
         )
-        timeout = min(self.timeout, request.timeout_seconds) if request.timeout_seconds is not None else self.timeout
+        # A caller may shorten an interactive call or extend one long generation; the request
+        # model caps how far, so the configured default applies only when the request is silent.
+        timeout = request.timeout_seconds if request.timeout_seconds is not None else self.timeout
         retry_count = 0
         network_retry_count = 0
         structured_retry_count = 0
@@ -690,9 +692,8 @@ class OpenAICompatibleProvider:
         max_retries = (
             min(self.max_retries, request.max_retries) if request.max_retries is not None else self.max_retries
         )
-        timeout_seconds = (
-            min(self.timeout, request.timeout_seconds) if request.timeout_seconds is not None else self.timeout
-        )
+        # Same precedence as complete(): an explicit request budget wins in both directions.
+        timeout_seconds = request.timeout_seconds if request.timeout_seconds is not None else self.timeout
 
         for attempt in range(max_retries + 1):
             try:

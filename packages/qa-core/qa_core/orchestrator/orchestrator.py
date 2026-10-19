@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from qa_core.ai.budget import AIBudgetGuard
 from qa_core.ai.models import (
+    LONG_GENERATION_TIMEOUT_SECONDS,
     AICompletionRequest,
     AICompletionResponse,
     CodeAssistantResponse,
@@ -219,6 +220,7 @@ class ProductionQAOrchestrator:
             prompt=prompt_str,
             system_instruction=REQUIREMENT_ANALYSIS_PROMPT.system_instruction,
             prompt_id=REQUIREMENT_ANALYSIS_PROMPT.prompt_id,
+            timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
             prompt_version=REQUIREMENT_ANALYSIS_PROMPT.version,
             response_schema=RequirementAnalysisResponse,
         )
@@ -243,6 +245,7 @@ class ProductionQAOrchestrator:
             prompt=prompt_str,
             system_instruction=TEST_DESIGN_PROMPT.system_instruction,
             prompt_id=TEST_DESIGN_PROMPT.prompt_id,
+            timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
             prompt_version=TEST_DESIGN_PROMPT.version,
             response_schema=TestDesignGenerationResponse,
         )
@@ -269,6 +272,7 @@ class ProductionQAOrchestrator:
             prompt=prompt_str,
             system_instruction=TEST_CASE_GENERATION_PROMPT.system_instruction,
             prompt_id=TEST_CASE_GENERATION_PROMPT.prompt_id,
+            timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
             prompt_version=TEST_CASE_GENERATION_PROMPT.version,
             response_schema=TestCaseGenerationResponse,
         )
@@ -460,6 +464,7 @@ class ProductionQAOrchestrator:
             prompt=prompt_str,
             system_instruction=CODE_ASSISTANT_PROMPT.system_instruction,
             prompt_id=CODE_ASSISTANT_PROMPT.prompt_id,
+            timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
             prompt_version=CODE_ASSISTANT_PROMPT.version,
             max_tokens=CODE_ASSISTANT_MAX_OUTPUT_TOKENS,
             response_schema=CodeAssistantResponse,

@@ -32,6 +32,12 @@ class AIProviderType(str, Enum):
     GEMINI = "gemini"
 
 
+# Long structured generations (test designs, test cases, generated code) legitimately run past the
+# interactive default: a real provider needs 27-61s for one test-case batch, so a 30s attempt cap
+# timed every attempt out and the call ended as a 502. Generation calls may span this ceiling once.
+LONG_GENERATION_TIMEOUT_SECONDS = 90.0
+
+
 class AICompletionRequest(BaseModel):
     request_id: str | None = Field(default=None, max_length=128)
     task_id: str | None = Field(default=None, max_length=128)
@@ -42,6 +48,8 @@ class AICompletionRequest(BaseModel):
     # None leaves the output limit to the selected provider/model.
     max_tokens: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0, le=10)
+    # None keeps the provider default; a value overrides it for this call (a long generation may
+    # raise it, an interactive call usually lowers it).
     timeout_seconds: float | None = Field(default=None, gt=0, le=120)
     thinking_mode: Literal["enabled", "disabled"] | None = None
     response_schema: type[BaseModel] | None = None
