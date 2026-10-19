@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 11 —— 核心工作流收敛与稳定性整改（用户任务 m00041，分支 `main`，本轮完整记录见 §3.8）。** 本轮目标不是堆砌新功能，而是让平台达到“日常可用、核心流程连续、错误可恢复、结果可验证”。已完成：D1/D2 统一分析生命周期（持久化状态为权威、可取消/可重试/有界超时/重启收敛）、高负载 `TargetClosedError` 根因修复、Recorder→Studio 数据级集成、运行/质量页上下文连续、失败文件:行号持久化、Discovery 接入 TaskRuntimeService、无页面对象引导、产物项目隔离、覆盖率口径统一、迁移往返与备份恢复/密钥轮换演练；其中 D1/D2 的分析结论已从“后端上下文即可复现”升级为 真实浏览器 + 真实 AI Provider 的实测证据（§3.8）。
+**当前活动轮次：Round 12 —— 剩余阻断问题核实与真实端到端验收（分支 `audit-remaining-blockers`，完整记录见 §3.9，独立报告 `.ai-runs/e2e-round12/audit-report.md`）。** 本轮不重复开发、不重构：先逐项复核五项「声称已完成」的能力（D1/D2 分析生命周期、Recorder→Studio 真实数据、Discovery 进程内任务、真实 AI Provider 成功路径、密钥轮换恢复演练），再只修被证实的缺陷（共 3 笔提交：用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`、开发启动器被 `TIME_WAIT` 骗着换端口），最后在最终代码上用真实 Chromium + 真实 AI/Jev 跑通 `Discovery → Recorder → Studio → Save → Run → Debug → AI 分析 → 人工批准 → 精确验证`（旅程 A 16/16、B 17/17、C 10/10，控制台错误 0）。判定：核心用户路径 **PASS**；多实例一致性、部署/回滚、CI、PostgreSQL 仍为 **BLOCKED**（不计入 PASS）。
+
+**Round 11（上一轮，用户任务 m00041，分支 `main`，记录见 §3.8）。** 本轮目标不是堆砌新功能，而是让平台达到“日常可用、核心流程连续、错误可恢复、结果可验证”。已完成：D1/D2 统一分析生命周期（持久化状态为权威、可取消/可重试/有界超时/重启收敛）、高负载 `TargetClosedError` 根因修复、Recorder→Studio 数据级集成、运行/质量页上下文连续、失败文件:行号持久化、Discovery 接入 TaskRuntimeService、无页面对象引导、产物项目隔离、覆盖率口径统一、迁移往返与备份恢复/密钥轮换演练；其中 D1/D2 的分析结论已从“后端上下文即可复现”升级为 真实浏览器 + 真实 AI Provider 的实测证据（§3.8）。
 
 **结论与未完成项**：见 §9（最后执行的测试）与 §3.8“本轮未解决 / 边界”。
 
@@ -29,11 +31,12 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 
 | 项 | 值 |
 | --- | --- |
-| 本轮起点 | `d8a2eef`（= `origin/main`，fetch 后未变；本轮修订**全部未推送**） |
-| 当前 HEAD | `89eb5ed fix(discovery): give a paused task back to the queue and hold a paused run`（权威提交点：本轮代码 + 评审修复；最终全量回归在此运行，此后仅文档提交） |
-| 本轮提交数 | 59（`git rev-list --count origin/main..HEAD`，含文档提交） |
-| 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据（保留、不暂存、不提交） |
-| 关键提交（按主题） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
+| 本轮起点 | `5849b5f docs(handoff): record the Round 11 final regression and its verdict`（= Round 11 收尾提交；本轮修订**全部未推送**） |
+| 当前 HEAD | `2eb6901 fix(dev): reuse a port a stopped stack left in TIME_WAIT`（权威提交点：本轮 3 笔修复 + 文档；最终全量回归与真实浏览器旅程 A/B/C 均在此运行） |
+| 本轮提交数 | 3（`860f4f2`、`abe6a2a`、`2eb6901`）+ 本文档提交；与 `origin/main` 累计 65 笔未推送 |
+| 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
+| 本轮关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
+| Round 11 关键提交（历史） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
 | 迁移链 | `0013_project_ownership` → `0014_failure_source_location` → `0015_artifact_ownership`（本轮新增后两者，均连续、可升降） |
 | 远程 main | 未推送、未合并、未 force push |
 | CI | `.github/workflows/ci.yml` 存在；最近一次运行在 `d8a2eef` 上失败 4 条后端用例，那 4 条在当前 HEAD 本地重跑 **14 passed**；本轮修订从未在 CI 上运行（任务禁止推送）→ 记为 BLOCKED，改以本地等价门禁取证（见 `.ai-runs/governance/deploy-ci-evidence.json`） |
@@ -448,12 +451,40 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 
 ### 本轮未解决 / 边界（下一轮优先级）
 
-1. Discovery 停止后运行任务落在 `BLOCKED` 而非 `CANCELLED`（`execute_run` 抛 `TaskBlocked`）——语义可用，但没有“用户主动取消”的独立终态。
+1. Discovery 停止后运行任务落在 `BLOCKED` 而非 `CANCELLED`（`execute_run` 抛 `TaskBlocked`）——语义可用，但没有“用户主动取消”的独立终态。（**Round 12 已修：`860f4f2`**）
 2. 多副本部署下，取消信号无法跨进程传递给持有任务的实例；当前实现只在同一进程有效，跨进程时靠孤儿收敛（预算 + grace）。这是单进程部署的既定边界，需要多副本时再引入租约/信号通道。
 3. 运行中的探索占用调度器两个并发槽之一；多用户场景需要提高并发或把探索移出该并发池。
 4. 部署/回滚演练与 CI 运行证据在本环境 BLOCKED；换到有容器运行时的环境后必须补做（脚本已就绪：`scripts/deploy.sh`、`.github/workflows/ci.yml`）。
 5. 历史遗留（与本轮无关但仍在 §7/§8）：`AIProviderRegistry` 未 `configure_runtime` 时回落 fake provider、`POST /api/jobs/{id}/result` 抢输一方仍返回成功、Monaco chunk 体积、暗色主题验收、worker lease 续租。
 6. 本轮评审后仍未处理的历史 UX 项：D5（结果摘要偏薄）；D6 只完成了一半（录制步骤已与 Case 数据级关联，但常规 Studio 工具栏仍无录制入口，入口只在未绑定空状态）。
+
+## 3.9 Round 12（剩余阻断问题核实与真实端到端验收，分支 `audit-remaining-blockers`）
+
+完整报告：`.ai-runs/e2e-round12/audit-report.md`；证据：`.ai-runs/e2e-round12/{journey_a,journey_b,journey_c}.json` + `screenshots/`、`.ai-runs/governance/key-rotation-drill.json`。
+
+### 五项声称完成能力的复核判定
+
+| 能力 | 判定 | 依据 |
+| --- | --- | --- |
+| D1/D2 分析生命周期（超时/取消/重试/刷新恢复） | **PASS** | 模块级任务所有权 + `_finalize_analysis` 原子守卫 + `_reconcile_orphaned_analyses`/`recover_interrupted_analyses`；4 个生命周期用例；旅程 B：RUNNING + 取消可见 → 刷新仍 RUNNING → 取消 CANCELLED/16 事件/`ANALYSIS_CANCELLED`，且 `failure_diagnosis` 调用同刻 CANCELLED（取消到 provider 层） |
+| Recorder → Studio（真实录制数据进入编辑/保存/运行） | **PASS** | 录制会话 steps 3（API/UI 一致）→ `tc_rec_8f67904a75f040439578712bb991b` + `bind_95d61bff41f7` → `binding.recorder_steps` 2 条 → Studio「录制步骤（2）」→ Monaco 编辑持久化 → `run_6eab101ce918` PASSED 1/1。录制面板在「更多工具 → 测试上下文」内（`embedded` 时默认收起），不是缺陷 |
+| Discovery 分析循环的进程内任务依赖 | **单实例 PASS / 多实例 BLOCKED** | 循环已由 `TaskRuntimeService` 拥有、DB 原子 `claim_for_execution` 不会双跑；但 pause/stop 信号是 `_tasks`/`_resume_events`/`_stop_events` 进程内对象，且启动收敛把全部非终态 run 置 PAUSED、全部 unfinished 任务置 BLOCKED → 多副本滚动重启会误停别人的探索。正确修法需 lease/信号契约（属重新设计，未做） |
+| 真实 AI Provider 成功路径 | **PASS** | `/api/ai/status` = REAL_CONNECTED（streaming）、`/api/decision/runtime-check` = CONNECTED/READY（Jev）；真实业务 SUCCESS：failure_diagnosis 9、quality_discovery_planning 15、exploration/locator selection（jev）38、test_case_generation；本轮旅程 B 诊断 18.9s/补丁生成 41.6s、旅程 C 恢复后诊断→批准→验证 `run_68c6abfca821` |
+| 密钥轮换恢复演练 + 明确健康标准 | **PASS（重做后）** | 上一轮 `restored_stack_healthy` 是「未测量」不是通过。标准写进 `key-rotation-drill.json` 的 `health_standard`（health + readiness + login + 领域读 + web bundle + 禁止端口回退）；本轮 10/10：坏密钥栈 8 项全 true 且 `UNAVAILABLE` 不泄漏、分析 FAILED 保留重试；真钥栈 8 项全 true、零回退、`REAL_CONNECTED`、重试产出真诊断并被批准+验证 |
+
+### 本轮修复（3 笔，均带测试）
+
+1. `860f4f2` 用户停止探索不再是 `BLOCKED`：新增 `TaskCancelled`（`services/task_errors.py`），`quality_discovery_service.execute_run()` 对 STOPPED 抛它，调度器映射为 `CANCELLED`，orchestrator 把 RUNNING 步骤置 `CANCELLED` 并发 `step.progress`。测试：`test_discovery_task_runtime.py`（重写 1 + 新增 2）、`test_agent_tasks.py`（+1）。
+2. `abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用：`ai_repo.recover_interrupted_invocations()` → `INTERRUPTED`/`process_interrupted`，`main.py` lifespan 调用。测试：`test_ai_governance.py`（+1）。DB 中 4 行残留全部收敛，`RUNNING` 归零。
+3. `2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用：`scripts/task.py` 的 `_port_is_in_use()` 改为「有人 accept 才算占用」（旧实现对刚停掉的栈 bind 失败 → 静默换端口 → 上一轮轮换演练误记「未测量」）。测试：`test_dev_launcher_ports.py`（2 例）。
+
+### 本轮未解决 / 边界
+
+1. **多实例一致性仍 BLOCKED**（同 §4 上文的进程内信号 + 全量启动收敛）。
+2. **部署/回滚/CI/PostgreSQL 仍 BLOCKED**：本环境无 docker/compose/pg；CI 最近 3 次运行失败，那 4 条失败用例在本地重跑通过（环境差异），本轮代码从未在 CI 上跑过。
+3. P2 观察：失败页内联分析与 `FIX_FAILURE` 任务两条修复面并存（取消内联分析后 `locator_repairs` 停在 `BLOCKED/ANALYSIS_CANCELLED`，任务链随后验证同一处修复通过 → 两个事实都真但读起来矛盾）；已有分析历史时内联「重新分析」被「打开分析与修复任务」取代（`FailuresPage.tsx:322`）。
+4. Jev 评分通道持续 `FALLBACK`（`invalid_request`）；`provider_connection` 探针曾以 `output_limit` 假阴性。
+5. 等待人工审批的任务无过期策略（DB 里有一条 9 小时前的 `WAITING`）。
 
 ## 4. 环境基线（WSL / Linux）
 
@@ -593,6 +624,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 8. 已知 Bug / 阻断
 
+- **Round 12 现状（以此条为准，下面都是历史快照）**：P0 无开放项；P1 无新开项。本轮修掉两处运行状态错误（用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`）与一处开发启动器端口缺陷（`TIME_WAIT` 被当成端口占用）。仍为 **BLOCKED** 的是：多实例一致性（无 lease/heartbeat，启动收敛是全量的）；部署/回滚/CI/PostgreSQL（无环境）。P2 观察：失败页内联分析与 `FIX_FAILURE` 任务两条修复面的显示不一致；等待审批无过期策略；Jev 评分通道 `FALLBACK`；`provider_connection` 探针假阴性。详见 §3.9 与 `.ai-runs/e2e-round12/audit-report.md`。
+
 - Round6 新增结论：
   - **已修**：四个前端「异步失败被静默」（RunsPage/FailuresPage/QualityPage/SecurityPage）；禁用 TestRail 时伪造 `SUCCESS` 审计；登录审计 IP 硬编码。
   - **仍未修**：P0 project ACL（下方企业 blocker）；覆盖率存在需求加权与按特性两套计算可能不一致；`AIProviderRegistry` 未 `configure_runtime` 时会回落 fake provider；审计行字段仍不完整（`target_resource` 无文件路径、部分 actor 为 `system`）；`POST /api/jobs/{id}/result` 抢输一方仍返回成功；API 与 Worker 制品根目录不一致会静默丢弃制品。
@@ -613,7 +646,9 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-- **Round 11 最终回归（`89eb5ed`，权威数字；日志 `.ai-runs/final-acceptance/regression-final-r2.log`）**：后端全量 `uv run pytest -q`（SQLite）→ **892 passed / 11 skipped / 60 warnings / 810.49s（13:30）**；`ruff check .` → All checks passed，`ruff format --check` → 445 files already formatted；`scripts/export_openapi.py --check` → OpenAPI contract is current；`scripts/i18n_check.py` → 25 namespace / 2 language / 3080 keys；web `tsc --noEmit` + `eslint .` 无输出、`pnpm --filter @ai-qa/web test` → **188 pass / 0 fail**。真实浏览器连续旅程（最终代码）**8/8 断言、0 控制台错误**（`.ai-runs/final-acceptance/journey.json`）；9 页 × 桌面/移动视口横向溢出 0（`viewport-sweep.json`）。**Verdict：PASS（日常可用）**；BLOCKED 项（CI/CD、部署回滚、PostgreSQL 通道）与诚实标注（Jev 评分 50/50 走 `FALLBACK`）见 `docs/RC_ACCEPTANCE.md` §8.3。
+- **Round 12 最终回归（`2eb6901`，权威数字；单实例 SQLite + 真实 provider）**：后端全量 `uv run pytest -q` → **898 passed / 11 skipped / 60 warnings / 444.30s**（比 Round 11 多 6 例 = 本轮新增用例）；`uv run ruff check` → All checks passed；`ruff format --check` → 446 files already formatted；`scripts/export_openapi.py --check` → current；`scripts/i18n_check.py` → 25 namespaces / 3080 keys；web `tsc --noEmit` + `eslint .` 干净；`pnpm --filter @ai-qa/web test` → **188 pass / 0 fail**。真实浏览器（Playwright 1.62.0 + Chromium，真实 AI/Jev）：旅程 A（Discovery→Recorder→Studio→Run）**16/16**、旅程 B（失败→调试→分析取消/刷新→任务重试→人工批准→应用→精确验证）**17/17**、旅程 C（坏密钥/恢复密钥 + 轮换健康标准）**10/10**，三段 `console_errors` 均为 `[]`。DB 终态：`failure_analyses` RUNNING = 0、`ai_invocations` RUNNING = 0。报告：`.ai-runs/e2e-round12/audit-report.md`。
+
+- **Round 11 最终回归（`89eb5ed`；日志 `.ai-runs/final-acceptance/regression-final-r2.log`）**：后端全量 `uv run pytest -q`（SQLite）→ **892 passed / 11 skipped / 60 warnings / 810.49s（13:30）**；`ruff check .` → All checks passed，`ruff format --check` → 445 files already formatted；`scripts/export_openapi.py --check` → OpenAPI contract is current；`scripts/i18n_check.py` → 25 namespace / 2 language / 3080 keys；web `tsc --noEmit` + `eslint .` 无输出、`pnpm --filter @ai-qa/web test` → **188 pass / 0 fail**。真实浏览器连续旅程（最终代码）**8/8 断言、0 控制台错误**（`.ai-runs/final-acceptance/journey.json`）；9 页 × 桌面/移动视口横向溢出 0（`viewport-sweep.json`）。**Verdict：PASS（日常可用）**；BLOCKED 项（CI/CD、部署回滚、PostgreSQL 通道）与诚实标注（Jev 评分 50/50 走 `FALLBACK`）见 `docs/RC_ACCEPTANCE.md` §8.3。
 
 Round7（分支 `agent/discovery-live-engine`，本轮收尾提交；环境 WSL2，SQLite；本轮同时间有一个截图委派在跑本地 API/Vite/Chromium，已按串行原则排定）：
 
@@ -690,6 +725,22 @@ uv run pytest apps/api/tests/test_security_hardening.py apps/api/tests/test_job_
 
 ## 10. 下一步具体命令
 
+Round 12 已完成现状审计 + 3 笔最小修复 + 真实浏览器全路径验收（见 §3.9 与 `.ai-runs/e2e-round12/audit-report.md`）。复跑本轮证据只需要：
+
+```bash
+cd /home/hans/self-github/ai-qa-platform
+git log --oneline -4 && git status --short      # 期望 HEAD 2eb6901；仅 .ai-runs/** 未跟踪
+python scripts/task.py dev                      # API :8000 + Web :5173（日志会打印实际端口）
+# 三段真实浏览器旅程（顺序有依赖：B 产出 C 需要的 failure/analysis，A 独立）
+uv run python .ai-runs/e2e-round12/journey_a.py
+uv run python .ai-runs/e2e-round12/journey_b.py
+uv run python .ai-runs/e2e-round12/journey_c_provider_failure.py   # 会停/起 :8010 栈，最后恢复 :8000 开发栈
+# 回归
+uv run pytest -q && pnpm --filter @ai-qa/web test
+```
+
+与多副本/部署有关的下一步（未做，需设计）：先给 `agent_tasks` 加 lease/heartbeat 并把 `recover_interrupted*` 改成只收敛自己租约失效的任务，再改探索的 pause/stop 信号跨进程投递；在此之前不要把 `audit-remaining-blockers` 部署成多副本。
+
 Round6 已完成全系统独立验收（见 §3.3、§9 与 `.ai-runs/night-continuation/final-report.md`）；下一组首要任务仍是 P0 project-resource ACL。开始前需要产品/安全 owner-team 与 legacy ownerless project 认领规则；没有规则前不得静默分配 owner。provider 恢复后请单次复验浏览器内失败修复链路（60s/1 retry，失败即记 BLOCKED）。旧 Studio/Strict D5 命令如下仅供历史重跑参考。
 
 ```bash
@@ -729,6 +780,14 @@ pnpm -r typecheck && pnpm -r lint
 ```
 
 ## 11. 下一个 Agent 应当继续的工作
+
+**Round 12 后续（分支 `audit-remaining-blockers`，先读 §3.9 与 `.ai-runs/e2e-round12/audit-report.md`）：**
+
+1. 不要重做已验证的项：五项能力已经逐项取证，旅程 A/B/C 已在 `2eb6901` 上全绿（16/16、17/17、10/10）；非必要不重跑，避免重复消耗真实 provider 预算。
+2. 唯一真正的阻断是**多实例一致性**：`task_scheduler_service.recover_interrupted()` 与 `quality_discovery_service.recover_interrupted_runs()` 是全量收敛，探索的 pause/stop 信号是进程内对象。正确做法是先引入 lease/heartbeat（新迁移），再让收敛只针对失效租约，最后把信号落成 DB 行；这三步是一体的，不能只改其中一步。
+3. 部署/回滚/CI/PostgreSQL 仍需在有容器与多副本的环境里补做（脚本已就绪：`scripts/deploy.sh`、`.github/workflows/ci.yml`），失败即记 BLOCKED，不循环重试。
+4. P2 观察项（内联分析与 FIX_FAILURE 任务两条修复面的状态一致性、等待审批无过期策略、Jev 评分 FALLBACK）需产品决定后再动，不要自行重构。
+5. 重跑旅程前先确认 `scripts/task.py dev` 的日志没有被端口回退（现在只有真 LISTEN 才会回退）。
 
 **Round 7 先行事项（分支 `agent/discovery-live-engine`，先读 §3.4 与 `docs/QUALITY_DISCOVERY.md`）：**
 
