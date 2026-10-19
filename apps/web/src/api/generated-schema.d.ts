@@ -7794,7 +7794,7 @@ export interface components {
          * TaskType
          * @enum {string}
          */
-        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "RUN_REGRESSION" | "REVIEW_TEST";
+        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "EXPLORE_PRODUCT" | "RUN_REGRESSION" | "REVIEW_TEST";
         /** Team */
         Team: {
             /** Name */

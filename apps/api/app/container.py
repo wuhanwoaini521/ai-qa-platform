@@ -154,6 +154,11 @@ async def recover_failure_analyses() -> None:
         await workflow.recover_interrupted_analyses()
 
 
+async def recover_quality_discovery_runs() -> int:
+    """Pause explorations a previous process abandoned so an operator can resume them."""
+    return await get_quality_discovery_service().recover_interrupted_runs()
+
+
 def get_job_queue_service():
     from app.services.job_queue_service import JobQueueService
 

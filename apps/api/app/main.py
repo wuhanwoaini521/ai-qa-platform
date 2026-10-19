@@ -140,6 +140,16 @@ async def lifespan(app: FastAPI):
     task_runtime = get_task_runtime_service()
     app.state.task_runtime = task_runtime
     await task_runtime.start()
+    from app.container import recover_quality_discovery_runs
+
+    # The runtime owns the discovery loop, so anything it abandoned must come back as PAUSED
+    # instead of a run stuck RUNNING with no executor behind it.
+    try:
+        paused = await recover_quality_discovery_runs()
+        if paused:
+            logger.warning("Paused %d interrupted Quality Discovery run(s) at startup", paused)
+    except Exception as error:  # pragma: no cover - startup must never fail because of recovery
+        logger.warning("Quality Discovery run recovery skipped: %s", error)
     from app.container import get_platform_health_service
 
     readiness_task = asyncio.create_task(get_platform_health_service().check(refresh=True))

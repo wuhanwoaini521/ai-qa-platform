@@ -64,9 +64,14 @@ QualityDiscoveryService            apps/api/app/services/quality_discovery_servi
 | Decision + scoring | `DecisionService` (Jev) and `AIProviderRegistry` |
 | Frontend stream transport | `apps/web/src/api/eventStream.ts` (ticket auth, reconnect, duplicate suppression) |
 
-The discovery exploration itself runs as an in-process `asyncio` task created by
-`QualityDiscoveryService._schedule`. This is a **known deviation** from the roadmap rule that long-running work
-belongs to `TaskRuntimeService`; it is recorded as open work, not as a design goal (see §10).
+The discovery exploration is owned by `TaskRuntimeService`: `QualityDiscoveryService._start` (called from
+`create`/`resume`) creates an `EXPLORE_PRODUCT` task whose single step runs the bounded loop through the
+`discovery.run` runtime tool, and stores the task id in `result["runtime_task_id"]`. The loop body itself is
+unchanged — it still owns its own pause/resume events and its own persisted run row — but scheduling, cancel
+surface, and restart recovery now come from the shared runtime. The run row is paused at startup when a
+previous process left it RUNNING (`QualityDiscoveryService.recover_interrupted_runs`, wired in the API
+lifespan), so an abandoned exploration can be resumed explicitly instead of hanging forever. When no task
+commands are wired (unit tests, embedded use) `_schedule` still starts the loop in-process.
 
 ### Two data paths, one source of truth
 
@@ -197,8 +202,8 @@ Known gaps (open, tracked — do not read this section as "solved"):
 
 1. The host allowlist matches **host names only**: no private-IP / link-local / CIDR blocking and no port
    restriction, so an internal host name that a user is allowed to name is not blocked by policy.
-2. The exploration loop is an in-process task and not tracked by `TaskRuntimeService`, so it is not visible in
-   the Task Runtime view and does not survive a process restart.
+2. Discovery now runs as an `EXPLORE_PRODUCT` runtime task, so a running exploration occupies one
+   `TaskSchedulerService` concurrency slot (2 by default) for its whole duration.
 3. Discovery findings do not yet carry a per-finding provenance object into Requirement / Test Case /
    Automation runs; the linkage is by id and is asserted in tests, not schema-enforced.
 
@@ -257,6 +262,6 @@ Evidence of record:
   known coordinates, asserts the live inventory's `bounding_box` matches the page within 8 px, asserts streamed
   frames are the real adapter's JPEG bytes, and asserts the in-page highlight was actually painted.
 
-Open work (next rounds): private-IP/CIDR policy for the allowlist, moving the run loop onto `TaskRuntimeService`,
+Open work (next rounds): private-IP/CIDR policy for the allowlist,
 provenance linking into Requirement → Case → Automation, richer AI failure UX, and the two-way pagination of
 very long histories.

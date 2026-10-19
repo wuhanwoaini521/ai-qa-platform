@@ -539,6 +539,7 @@ export type AgentTaskType =
   | 'FIX_FAILURE'
   | 'OPTIMIZE_TEST'
   | 'EXPLORE_PAGE'
+  | 'EXPLORE_PRODUCT'
   | 'RUN_REGRESSION'
   | 'REVIEW_TEST';
 

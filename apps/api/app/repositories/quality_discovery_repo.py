@@ -25,6 +25,12 @@ class QualityDiscoveryRepository:
         )
         return list(result.scalars().all())
 
+    async def list_non_terminal(self) -> list[QualityDiscoveryRunORM]:
+        result = await self.session.execute(
+            select(QualityDiscoveryRunORM).where(QualityDiscoveryRunORM.status.in_(["QUEUED", "RUNNING"]))
+        )
+        return list(result.scalars().all())
+
     async def create(
         self,
         *,

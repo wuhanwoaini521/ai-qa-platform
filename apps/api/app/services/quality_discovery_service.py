@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 from uuid import uuid4
 
 from project_model.lifecycle import StructuredRequirementModel
+from project_model.task_models import TaskCreate, TaskType
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.exc import StaleDataError
@@ -45,6 +46,7 @@ from app.services.quality_discovery_models import (
     RequirementSignal,
 )
 from app.services.quality_discovery_projection import QualityDiscoveryProjectionMixin
+from app.services.task_errors import TaskBlocked
 from app.settings import get_config
 
 if TYPE_CHECKING:
@@ -126,6 +128,7 @@ class QualityDiscoveryService(
         self.workspace_service = workspace_service
         self.task_commands = task_commands
         self._tasks: dict[str, asyncio.Task] = {}
+        self._runtime_tasks: dict[str, str] = {}
         self._resume_events: dict[str, asyncio.Event] = {}
         self._stop_events: dict[str, asyncio.Event] = {}
         self._finalization_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
@@ -181,7 +184,7 @@ class QualityDiscoveryService(
             )
             await session.commit()
             run_id = row.id
-        self._schedule(run_id)
+        await self._start(run_id)
         return await self.get(run_id)
 
     async def get(self, run_id: str) -> QualityDiscoveryRunORM | None:
@@ -752,7 +755,7 @@ class QualityDiscoveryService(
                 self._live_status(run_id, DiscoveryStatus.RUNNING.value, "探索已继续。")
             active = self._tasks.get(run_id)
             if active is None or active.done():
-                self._schedule(run_id)
+                await self._start(run_id)
             return await self.get(run_id)
 
     async def stop(self, run_id: str) -> QualityDiscoveryRunORM | None:
@@ -784,6 +787,75 @@ class QualityDiscoveryService(
         task = asyncio.create_task(self._execute(run_id), name=f"quality-discovery:{run_id}")
         self._tasks[run_id] = task
         task.add_done_callback(lambda completed, key=run_id: self._tasks.pop(key, None))
+
+    async def _start(self, run_id: str) -> None:
+        """Run the loop in-process, or hand it to the task runtime when one is wired."""
+        active = self._tasks.get(run_id)
+        if active is not None and not active.done():
+            return
+        if self.task_commands is None:
+            self._schedule(run_id)
+            return
+        row = await self.get(run_id)
+        if row is None or row.status in self.TERMINAL:
+            return
+        self._resume_events.setdefault(run_id, asyncio.Event()).set()
+        self._stop_events.setdefault(run_id, asyncio.Event()).clear()
+        task = await self.task_commands.create(
+            TaskCreate(
+                type=TaskType.EXPLORE_PRODUCT,
+                goal=f"Run bounded Quality Discovery for {row.start_url} and persist its evidence.",
+                project_id=row.project_id,
+                inputs={"discovery_run_id": run_id},
+            ),
+            row.requested_by,
+        )
+        self._runtime_tasks[run_id] = task.id
+        await self._change_result(run_id, lambda result: result.__setitem__("runtime_task_id", task.id))
+
+    async def execute_run(self, run_id: str) -> dict[str, Any]:
+        """Run one bounded exploration pass for a runtime-owned task and report its outcome."""
+        row = await self.get(run_id)
+        if row is None:
+            raise ValueError("Quality Discovery run not found.")
+        if row.status in self.TERMINAL:
+            raise TaskBlocked(f"The Quality Discovery run already finished {row.status}.")
+        self._resume_events.setdefault(run_id, asyncio.Event()).set()
+        self._stop_events.setdefault(run_id, asyncio.Event()).clear()
+        current = asyncio.current_task()
+        if current is not None:
+            # Keeps pause/stop semantics identical to the in-process loop.
+            self._tasks[run_id] = current
+        try:
+            await self._execute(run_id)
+        finally:
+            self._runtime_tasks.pop(run_id, None)
+            if current is not None and self._tasks.get(run_id) is current:
+                self._tasks.pop(run_id, None)
+        final = await self.get(run_id)
+        status = final.status if final is not None else DiscoveryStatus.FAILED.value
+        if status != DiscoveryStatus.COMPLETED.value:
+            detail = (final.error if final is not None else "") or "no detail"
+            raise TaskBlocked(f"The Quality Discovery run ended {status}: {detail}")
+        return {
+            "discovery_run_id": run_id,
+            "status": status,
+            "progress": dict((final.progress if final is not None else {}) or {}),
+        }
+
+    async def recover_interrupted_runs(self) -> int:
+        """Pause runs a previous process left queued or running so they can be resumed."""
+        async with self.session_factory() as session:
+            stale = [row.id for row in await QualityDiscoveryRepository(session).list_non_terminal()]
+        for run_id in stale:
+            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
+            await self._update(
+                run_id,
+                status=DiscoveryStatus.PAUSED.value,
+                error="The process restarted while this exploration was running; resume it to continue.",
+            )
+            await self._event(run_id, "run.paused", "服务重启后探索已暂停，可以继续。")
+        return len(stale)
 
     async def _wait_if_paused(self, run_id: str) -> None:
         event = self._resume_events.setdefault(run_id, asyncio.Event())

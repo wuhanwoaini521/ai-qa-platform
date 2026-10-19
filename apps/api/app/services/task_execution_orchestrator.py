@@ -510,6 +510,7 @@ class TaskExecutionOrchestrator:
             "browser.act": self.browser_executor._browser_act,
             "browser.agent": self.browser_executor._browser_agent,
             "browser.verify": self.browser_executor._browser_verify,
+            "discovery.run": self._run_discovery_loop,
             "decision.select_candidate": self.browser_executor._decision_select,
             "tests.generate": self.code_generation._generate_test,
             "source.validate_generated": self.code_generation._validate_generated,
@@ -540,6 +541,16 @@ class TaskExecutionOrchestrator:
         if not handler:
             raise TaskBlocked(f"No runtime tool is registered for '{tool}'.")
         return await handler(task, outputs)
+
+    async def _run_discovery_loop(self, task: TaskExecutionRecord, outputs: dict[str, Any]) -> dict[str, Any]:
+        """Run one bounded Quality Discovery loop under this runtime's ownership."""
+        run_id = str(task.inputs.get("discovery_run_id") or "").strip()
+        if not run_id:
+            raise TaskBlocked("A Quality Discovery run id is required.")
+        # Imported lazily: the container builds the discovery service with this runtime's commands.
+        from app.container import get_quality_discovery_service
+
+        return await get_quality_discovery_service().execute_run(run_id)
 
     @staticmethod
     def _resolve_step_inputs(value: Any, outputs: dict[str, Any]) -> Any:

@@ -29,6 +29,37 @@ task_scheduler_service = task_runtime_service.scheduler
 
 
 @pytest.mark.asyncio
+async def test_a_finished_task_is_not_failed_by_its_wall_clock_budget(client, test_db_session):
+    created = await client.post(
+        "/api/tasks",
+        json={
+            "type": "EXPLORE_PAGE",
+            "goal": "Finish a long step after the wall-clock budget",
+            "inputs": {"url": "http://127.0.0.1:1/"},
+            "max_duration_seconds": 10,
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    async with test_db_session() as session:
+        repo = TaskRepository(session)
+        steps = await repo.steps_for_task(task_id)
+        assert steps
+        for step in steps:
+            await repo.update_step(step.id, status=TaskStepStatus.COMPLETED.value, outputs={"verified": True})
+        await session.commit()
+
+    # A single step can outlive the wall-clock budget (Quality Discovery explores for minutes);
+    # finished work must not be failed retroactively by it.
+    await task_scheduler_service._execute_dag(task_id, time.monotonic() - 3600)
+
+    async with test_db_session() as session:
+        task = await session.get(TaskORM, task_id)
+    assert task is not None
+    assert task.status == TaskStatus.COMPLETED.value
+
+
+@pytest.mark.asyncio
 async def test_task_creation_uses_runtime_loaded_ai_call_limit(client, monkeypatch):
     from qa_core.ai.registry import AIProviderRegistry
 

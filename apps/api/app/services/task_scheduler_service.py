@@ -203,14 +203,6 @@ class TaskSchedulerService:
             if task.status == TaskStatus.PAUSING.value:
                 await self._pause_at_boundary(task_id, elapsed_seconds=time.monotonic() - started)
                 return
-            deadline = started + task.max_duration_seconds
-            if time.monotonic() >= deadline:
-                await self.execution._finish(
-                    task_id,
-                    TaskStatus.BLOCKED,
-                    "Task duration limit reached; inspect active child operations before retrying.",
-                )
-                return
             if len(steps) > task.max_steps:
                 await self.execution._finish(task_id, TaskStatus.FAILED, "Task step limit exceeded.")
                 return
@@ -224,6 +216,16 @@ class TaskSchedulerService:
                     {"all_steps_terminal": True},
                 )
                 await self.execution._finish(task_id, TaskStatus.COMPLETED, None, verification=verification)
+                return
+            # Checked after completion so one long runtime step (Quality Discovery) cannot be
+            # failed retroactively for work it already finished.
+            deadline = started + task.max_duration_seconds
+            if time.monotonic() >= deadline:
+                await self.execution._finish(
+                    task_id,
+                    TaskStatus.BLOCKED,
+                    "Task duration limit reached; inspect active child operations before retrying.",
+                )
                 return
 
             ready: list[TaskStep] = []

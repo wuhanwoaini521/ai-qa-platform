@@ -67,6 +67,9 @@ def build_plan(task_type: TaskType) -> list[TaskStepSpec]:
         TaskType.EXPLORE_PAGE: [
             ("browser_agent", "逐步观察页面、决策并验证浏览操作", "browser.agent", (), {}),
         ],
+        TaskType.EXPLORE_PRODUCT: [
+            ("explore", "运行有界的产品探索循环并持久化证据", "discovery.run", (), {}),
+        ],
         TaskType.RUN_REGRESSION: [
             ("resolve", "Resolve requested regression cases", "tests.resolve", (), {}),
             ("run", "Execute regression scope", "tests.run_regression", ("resolve",), {}),
