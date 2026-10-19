@@ -68,6 +68,17 @@ async def test_recorder_save_case_retry_reuses_case_and_binding(client: AsyncCli
     first_case = first.json()["test_case"]
     first_binding = first.json()["binding"]
 
+    # Studio reads the recorded locator and its evidence pointer back from the binding.
+    fetched_binding = await client.get(f"/api/test-cases/{first_case['id']}/binding")
+    assert fetched_binding.status_code == 200, fetched_binding.text
+    recorded_steps = fetched_binding.json()["recorder_steps"]
+    assert len(recorded_steps) == 1, recorded_steps
+    assert recorded_steps[0]["action"] == "click"
+    assert recorded_steps[0]["evidence_id"] == f"recorder:{recorded_step.id}"
+    assert recorded_steps[0]["locator"]["kind"] == "role"
+    assert recorded_steps[0]["locator"]["value"] == "button"
+    assert recorded_steps[0]["url"] == "https://example.test/save"
+
     recording_session.steps = []
     retry_payload = {**payload, "test_case": {**payload["test_case"], "title": "Search official Selenium docs"}}
     retry = await client.post(url, json=retry_payload)

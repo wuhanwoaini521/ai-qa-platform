@@ -245,5 +245,7 @@
   "gapReason": {
     "no_test": "缺少关联用例",
     "no_automation": "缺少有效自动化绑定"
-  }
+  },
+  "recordedSteps": "录制步骤（{{count}}）",
+  "recordedStepEvidence": "页面证据 {{id}}"
 }

@@ -11500,6 +11500,14 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "recorder_steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Recorder Steps"
           }
         },
         "type": "object",

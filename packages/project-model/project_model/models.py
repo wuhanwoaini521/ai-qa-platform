@@ -289,6 +289,9 @@ class AutomationBinding(AutomationBindingBase):
     id: str
     created_at: datetime
     updated_at: datetime
+    # Read-only view of a recorder-created binding's steps: the locator each step uses and the
+    # evidence it was derived from, so Studio can show what the recording captured.
+    recorder_steps: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Workspace Validation Models (Problems Panel) ---

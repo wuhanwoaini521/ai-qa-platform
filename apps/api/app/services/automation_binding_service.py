@@ -42,7 +42,29 @@ class AutomationBindingService:
             status=AutomationBindingStatus(orm.status),
             created_at=orm.created_at,
             updated_at=orm.updated_at,
+            recorder_steps=self._recorder_steps(orm.recorder_evidence_bundle),
         )
+
+    @staticmethod
+    def _recorder_steps(bundle: dict | None) -> list[dict]:
+        """The captured locator and its evidence pointer per recorded step."""
+        if not isinstance(bundle, dict):
+            return []
+        steps = bundle.get("steps")
+        if not isinstance(steps, list):
+            return []
+        return [
+            {
+                "step_id": step.get("step_id"),
+                "action": step.get("action"),
+                "url": step.get("url"),
+                "frame_path": step.get("frame_path") or [],
+                "locator": step.get("locator"),
+                "evidence_id": step.get("evidence_id"),
+            }
+            for step in steps
+            if isinstance(step, dict)
+        ]
 
     async def get_binding(self, test_case_id: str) -> AutomationBinding | None:
         orm = await self.binding_repo.get_by_test_case_id(test_case_id)

@@ -3987,6 +3987,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Recorder Steps */
+            recorder_steps?: {
+                [key: string]: unknown;
+            }[];
         };
         /** AutomationBindingCreate */
         AutomationBindingCreate: {

@@ -520,7 +520,8 @@ export const RecorderPage: React.FC<{
     try {
       const normalizedPath = normalizeRecorderFilePath(filePath);
       if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
-      await api.createWorkspaceFile(projectId, normalizedPath, code);
+      // PUT creates or overwrites, so re-recording the same case no longer dead-ends in a 409.
+      await api.writeWorkspaceFile(projectId, normalizedPath, code);
       const savedCase = await saveRecorderCase(normalizedPath);
       if (onOpenRecordedCase) onOpenRecordedCase(savedCase, normalizedPath);
       else navigate(buildWorkspaceHref({
@@ -544,7 +545,8 @@ export const RecorderPage: React.FC<{
     try {
       const normalizedPath = normalizeRecorderFilePath(filePath);
       if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
-      await api.createWorkspaceFile(projectId, normalizedPath, code);
+      // PUT creates or overwrites, so re-recording the same case no longer dead-ends in a 409.
+      await api.writeWorkspaceFile(projectId, normalizedPath, code);
       const savedCase = await saveRecorderCase(normalizedPath);
       const markers = markersText.split(',').map((marker)=>marker.trim()).filter(Boolean);
       const runRequest: Omit<TestRunCreate, 'idempotency_key'> = {

@@ -245,5 +245,7 @@
   "gapReason": {
     "no_test": "No linked case",
     "no_automation": "No active automation binding"
-  }
+  },
+  "recordedSteps": "Recorded steps ({{count}})",
+  "recordedStepEvidence": "Evidence {{id}}"
 }
