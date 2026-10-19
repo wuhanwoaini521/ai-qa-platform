@@ -156,17 +156,31 @@ def _spawn(
     return process
 
 
+def _port_is_in_use(port: int) -> bool:
+    """True only when something is listening on the port.
+
+    A socket left in TIME_WAIT by a stack that just stopped refuses a plain bind but accepts no
+    connection, and treating it as occupied made a restarted stack quietly move to another port.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        try:
+            listener.bind(("127.0.0.1", port))
+        except OSError:
+            pass
+        else:
+            return False
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.25)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
 def _available_port(preferred: int, *, attempts: int = 100) -> int:
     """Use the requested local port, or find the next free port without killing its owner."""
     if not 1 <= preferred <= 65535:
         raise ValueError(f"port must be between 1 and 65535, got {preferred}")
 
     for port in range(preferred, min(preferred + attempts, 65536)):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-            try:
-                listener.bind(("127.0.0.1", port))
-            except OSError:
-                continue
+        if not _port_is_in_use(port):
             return port
     raise RuntimeError(f"no free localhost port found from {preferred} through 65535")
 
