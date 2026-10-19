@@ -441,9 +441,22 @@ def test_intentional_locator_failure():
     get_run = await client.get(f"/api/runs/{run_id}")
     assert get_run.status_code == 200
 
-    # 5. Check failures
+    # 5. Check failures once the local run finished
+    for _ in range(400):
+        run = (await client.get(f"/api/runs/{run_id}")).json()
+        if run["status"] in {"PASSED", "FAILED", "ERROR", "CANCELLED"}:
+            break
+        await asyncio.sleep(0.05)
     failures_res = await client.get("/api/failures")
     assert failures_res.status_code == 200
+    flow_failure = next(
+        item
+        for item in failures_res.json()
+        if item["test_nodeid"] == "tests/test_failing.py::test_intentional_locator_failure"
+    )
+    # Debug and Studio open this exact place, so the run must persist it instead of re-parsing the stack.
+    assert flow_failure["source_file"] == "tests/test_failing.py"
+    assert flow_failure["source_line"] == 4
 
     # 6. Test QA Assistant chat
     # 助手侧车用确定性 fake provider：这条用例验证的是 run/failure 链路，真实 provider 超时会

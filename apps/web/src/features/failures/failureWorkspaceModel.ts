@@ -142,9 +142,15 @@ export function extractRelevantFrames(stackTrace = '', limit = 3): string[] {
 }
 
 export function failureSourceLocation(
-  failure: Pick<FailureRecord, 'test_nodeid' | 'stack_trace'>,
+  failure: Pick<FailureRecord, 'test_nodeid' | 'stack_trace'> &
+    Partial<Pick<FailureRecord, 'source_file' | 'source_line'>>,
 ): { filePath: string | null; lineNumber: number | null } {
-  const filePath = failure.test_nodeid.split('::')[0]?.trim() || null;
+  const recordedFile = failure.source_file?.trim() || null;
+  const filePath = recordedFile ?? (failure.test_nodeid.split('::')[0]?.trim() || null);
+  // The run finaliser records the failing frame, so the stored location wins over re-reading the stack.
+  if (failure.source_line && failure.source_line > 0) {
+    return { filePath, lineNumber: failure.source_line };
+  }
   const fileName = filePath?.split(/[\\/]/).at(-1)?.toLowerCase();
   const frames = extractRelevantFrames(failure.stack_trace);
   const frame = frames.find((candidate) => {
@@ -153,6 +159,27 @@ export function failureSourceLocation(
   }) ?? frames[0];
   const line = frame?.match(/:(\d+)$/)?.[1];
   return { filePath, lineNumber: line ? Number(line) : null };
+}
+
+export function failureCodeFrames(
+  failure: Pick<FailureRecord, 'test_nodeid' | 'stack_trace'> &
+    Partial<Pick<FailureRecord, 'source_file' | 'source_line'>>,
+  limit = 3,
+): string[] {
+  const recordedFile = failure.source_file?.trim();
+  const recorded = recordedFile && failure.source_line ? `${recordedFile}:${failure.source_line}` : null;
+  const frames = recorded
+    ? [recorded, ...extractRelevantFrames(failure.stack_trace)]
+    : extractRelevantFrames(failure.stack_trace);
+  const seen = new Set<string>();
+  return frames
+    .filter((frame) => {
+      const key = frame.split(/[\\/]/).at(-1)?.toLowerCase() ?? frame;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
 }
 
 export function failureFingerprint(failure: FailureRecord): string | null {

@@ -5,8 +5,8 @@ import type { RuntimeArtifact } from '../../types/runtime';
 import { RuntimeArtifactActions } from '../runtime/RuntimeArtifactActions';
 import {
   availableEvidenceTabs,
-  extractRelevantFrames,
   failedLocatorFromFailure,
+  failureCodeFrames,
   normalizeFailureClassification,
   summarizeFailureError,
   type EvidenceTab,
@@ -89,7 +89,7 @@ export const FailureEvidence: React.FC<{
         .map((step) => withEvidenceRevision(step, revision.revision))
       : []),
   ];
-  const relevantFrames = extractRelevantFrames(failure.stack_trace);
+  const relevantFrames = failureCodeFrames(failure);
   const errorSummary = summarizeFailureError(
     failure.error_message,
     failure.failure_kind ?? failure.classification,

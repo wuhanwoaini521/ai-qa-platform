@@ -550,6 +550,8 @@ class FailureRecord(EntityBase):
     exception_type: str
     error_message: str
     stack_trace: str
+    source_file: str | None = None
+    source_line: int | None = None
     failing_locator: str | None = None
     screenshot_path: str | None = None
     trace_path: str | None = None

@@ -28,6 +28,8 @@ class FailureRepository:
             exception_type=row.exception_type,
             error_message=row.error_message or "",
             stack_trace=row.stack_trace or "",
+            source_file=row.source_file,
+            source_line=row.source_line,
             failing_locator=row.failing_locator,
             screenshot_path=row.screenshot_path,
             trace_path=row.trace_path,

@@ -365,7 +365,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     );
     onOpenInStudio(
       filePath,
-      failureBreakpoint?.line_number ?? sourceLocation.lineNumber ?? undefined,
+      // The recorded location is authoritative; the breakpoint only covers records saved before it existed.
+      sourceLocation.lineNumber ?? failureBreakpoint?.line_number ?? undefined,
       startDebug ? selectedFailure.test_nodeid : undefined,
       { failureId: selectedFailure.id, runId: selectedFailure.run_id },
     );

@@ -5,6 +5,7 @@ import {
   displayedFailureClassification,
   extractRelevantFrames,
   failureErrorPreview,
+  failureCodeFrames,
   failureSourceLocation,
   failureFingerprint,
   normalizeFailureClassification,
@@ -122,6 +123,18 @@ test('Failure source location keeps its test file and matches the stack line', (
     failureSourceLocation(failure({ stack_trace: 'TimeoutError: locator did not resolve' })),
     { filePath: 'tests/test_shop.py', lineNumber: null },
   );
+});
+
+test('The recorded failure location wins over the stack trace', () => {
+  const recorded = failure({
+    stack_trace: '  File "/workspace/tests/test_shop.py", line 7, in test_shop',
+    source_file: 'tests/test_shop.py',
+    source_line: 12,
+  });
+
+  assert.deepEqual(failureSourceLocation(recorded), { filePath: 'tests/test_shop.py', lineNumber: 12 });
+  assert.deepEqual(failureCodeFrames(recorded), ['tests/test_shop.py:12', 'test_shop.py:7']);
+  assert.deepEqual(failureCodeFrames(failure()), ['conftest.py:38']);
 });
 
 test('Evidence tabs only include sections backed by captured evidence', () => {

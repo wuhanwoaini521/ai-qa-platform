@@ -4760,6 +4760,10 @@ export interface components {
             error_message: string;
             /** Stack Trace */
             stack_trace: string;
+            /** Source File */
+            source_file?: string | null;
+            /** Source Line */
+            source_line?: number | null;
             /** Failing Locator */
             failing_locator?: string | null;
             /** Screenshot Path */

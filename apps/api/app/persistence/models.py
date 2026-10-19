@@ -419,6 +419,8 @@ class FailureRecordORM(Base):
     exception_type: Mapped[str] = mapped_column(String(200), default="")
     error_message: Mapped[str] = mapped_column(Text, default="")
     stack_trace: Mapped[str] = mapped_column(Text, default="")
+    source_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failing_locator: Mapped[str | None] = mapped_column(String(500), nullable=True)
     screenshot_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     trace_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

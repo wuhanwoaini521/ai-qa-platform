@@ -774,6 +774,13 @@ class TestRunService:
                     # A traceback is failure evidence, not proof of a replacement locator.
                     # Proposals are generated separately from observed browser/DOM candidates.
 
+                    # Resolve the failing frame once: the failure record and the Studio jump must
+                    # point at the same file and line.
+                    frame = (
+                        last_user_code_frame(safe_stack_trace, workspace_dir)
+                        if workspace_id and workspace_dir
+                        else None
+                    )
                     failure_record = await run_repo.create_failure_record(
                         run_id=run_id,
                         execution_id=exec_orm.id,
@@ -786,13 +793,13 @@ class TestRunService:
                         failing_locator=diag.failing_locator,
                         suggested_action=diag.suggested_action,
                         repair_proposal=proposal,
+                        source_file=frame[0] if frame else None,
+                        source_line=frame[1] if frame else None,
                     )
                     failure_ids.append(failure_record.id)
-                    if workspace_id and workspace_dir:
-                        frame = last_user_code_frame(safe_stack_trace, workspace_dir)
-                        if frame:
-                            file_path, line_number = frame
-                            await repositories.breakpoints.upsert_failure(workspace_id, file_path, line_number, run_id)
+                    if frame:
+                        file_path, line_number = frame
+                        await repositories.breakpoints.upsert_failure(workspace_id, file_path, line_number, run_id)
 
                 await repositories.commit()
 
