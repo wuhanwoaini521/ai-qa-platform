@@ -28,6 +28,8 @@ class ArtifactRepository:
         storage_type: str,
         storage_path: str,
         session: AsyncSession | None = None,
+        project_id: str | None = None,
+        created_by: str | None = None,
     ) -> ArtifactORM:
         art_id = str(uuid.uuid4())
         orm = ArtifactORM(
@@ -37,6 +39,8 @@ class ArtifactRepository:
             content_type=content_type,
             storage_type=storage_type,
             storage_path=storage_path,
+            project_id=project_id,
+            created_by=created_by,
             created_at=utc_now(),
         )
 

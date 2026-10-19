@@ -33,6 +33,8 @@ class ArtifactStorageService:
         content: bytes,
         content_type: str = "application/octet-stream",
         storage_type: str = "LOCAL",
+        project_id: str | None = None,
+        created_by: str | None = None,
     ) -> ArtifactUploadResponse:
         safe_name = Path(filename.replace("\\", "/")).name or "artifact.bin"
         file_path = self.base_dir / f"{uuid.uuid4().hex}_{safe_name}"
@@ -44,6 +46,8 @@ class ArtifactStorageService:
             content_type=content_type,
             storage_type=storage_type,
             storage_path=str(file_path),
+            project_id=project_id,
+            created_by=created_by,
         )
 
         return ArtifactUploadResponse(

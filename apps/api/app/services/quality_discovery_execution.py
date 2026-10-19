@@ -154,13 +154,17 @@ class QualityDiscoveryExecutionMixin:
                     bool(item.get("screenshot_evidence_id")) for item in current_result.get("states", [])
                 )
                 if not self._find_state(current_result, fingerprint):
-                    state["evidence_id"] = await self._save_state_evidence(run_id, state_id, state)
+                    state["evidence_id"] = await self._save_state_evidence(
+                        run_id, state_id, state, project_id=row.project_id, created_by=row.requested_by
+                    )
                 if (
                     snapshot.screenshot
                     and screenshot_count < config.max_screenshots
                     and not self._find_state(current_result, fingerprint)
                 ):
-                    state["screenshot_evidence_id"] = await self._save_screenshot(run_id, state_id, snapshot.screenshot)
+                    state["screenshot_evidence_id"] = await self._save_screenshot(
+                        run_id, state_id, snapshot.screenshot, project_id=row.project_id, created_by=row.requested_by
+                    )
                 result = await self._upsert_state(run_id, state)
                 state = self._find_state(result, fingerprint) or state
                 if row.mode == DiscoveryMode.VALIDATE.value and self._all_acceptance_criteria_passed(
@@ -1823,16 +1827,34 @@ class QualityDiscoveryExecutionMixin:
         states = result.get("states") or []
         return str(states[-1].get("url") or start_url) if states else start_url
 
-    async def _save_screenshot(self, run_id: str, state_id: str, screenshot: bytes) -> str | None:
+    async def _save_screenshot(
+        self,
+        run_id: str,
+        state_id: str,
+        screenshot: bytes,
+        *,
+        project_id: str | None = None,
+        created_by: str | None = None,
+    ) -> str | None:
         storage = ArtifactStorageService(ArtifactRepository(self.session_factory))
         saved = await storage.save_artifact(
             filename=f"{run_id}_{state_id}.png",
             content=screenshot,
             content_type="image/png",
+            project_id=project_id,
+            created_by=created_by,
         )
         return saved.artifact_id
 
-    async def _save_state_evidence(self, run_id: str, state_id: str, state: dict[str, Any]) -> str | None:
+    async def _save_state_evidence(
+        self,
+        run_id: str,
+        state_id: str,
+        state: dict[str, Any],
+        *,
+        project_id: str | None = None,
+        created_by: str | None = None,
+    ) -> str | None:
         evidence = {
             key: state.get(key)
             for key in (
@@ -1854,6 +1876,8 @@ class QualityDiscoveryExecutionMixin:
             filename=f"{run_id}_{state_id}_evidence.json",
             content=content,
             content_type="application/json",
+            project_id=project_id,
+            created_by=created_by,
         )
         return saved.artifact_id
 

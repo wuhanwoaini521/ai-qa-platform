@@ -672,6 +672,8 @@ class TestRunService:
             if existing is None or existing.status in ("CANCELLED", "PASSED", "FAILED", "ERROR"):
                 return
             run_workspace_id = existing.workspace_id
+            run_project_id = existing.project_id
+            run_requested_by = existing.requested_by
             origin_failure_id = existing.origin_failure_id
             # Artifact uploads happen outside the database lock; start the guarded write transaction
             # only after external I/O so a cancellation can win cleanly while uploads are pending.
@@ -689,7 +691,13 @@ class TestRunService:
                     logger.warning("Ignoring artifact larger than 20 MiB: %s", artifact_name)
                     continue
                 content_type = mimetypes.guess_type(artifact.name)[0] or "application/octet-stream"
-                uploaded = await storage.save_artifact(artifact.name, artifact.read_bytes(), content_type)
+                uploaded = await storage.save_artifact(
+                    artifact.name,
+                    artifact.read_bytes(),
+                    content_type,
+                    project_id=run_project_id,
+                    created_by=run_requested_by,
+                )
                 kind = (
                     "SCREENSHOT"
                     if content_type.startswith("image/")

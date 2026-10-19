@@ -741,6 +741,12 @@ class ArtifactORM(Base):
     content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
     storage_type: Mapped[str] = mapped_column(String(50), default="LOCAL")  # LOCAL, S3
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # Ownership: the project the artifact belongs to (NULL only for legacy rows and manual uploads)
+    # and who produced it. Both are what the project ACL and the artifact audit read.
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 

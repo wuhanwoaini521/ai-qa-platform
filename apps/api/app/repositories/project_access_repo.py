@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import (
+    ArtifactORM,
     FailureRecordORM,
     ProjectORM,
     QualityDiscoveryRunORM,
@@ -34,6 +35,9 @@ class ProjectAccessRepository:
         ids = set((await self.session.execute(owned)).scalars())
         ids.update((await self.session.execute(shared)).scalars())
         return ids
+
+    async def project_of_artifact(self, artifact_id: str) -> str | None:
+        return await self._scalar(select(ArtifactORM.project_id).where(ArtifactORM.id == artifact_id))
 
     async def project_of_run(self, run_id: str) -> str | None:
         return await self._scalar(select(TestRunORM.project_id).where(TestRunORM.id == run_id))

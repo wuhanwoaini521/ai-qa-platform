@@ -21,7 +21,9 @@ class TaskEvidenceService:
     async def create_artifact(
         self, task: TaskExecutionRecord, step_key: str, name: str, kind: str, content: bytes, content_type: str
     ) -> dict[str, Any]:
-        saved = await ArtifactStorageService().save_artifact(name, content, content_type)
+        saved = await ArtifactStorageService().save_artifact(
+            name, content, content_type, project_id=task.project_id, created_by=task.owner_id
+        )
         return {"artifact_id": saved.artifact_id, "name": name, "kind": kind}
 
     @staticmethod

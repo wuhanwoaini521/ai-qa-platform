@@ -201,3 +201,50 @@ async def test_creator_becomes_owner(client: AsyncClient):
     project = await _create_project(client, "ACL Creator")
     body = (await client.get(f"/api/projects/{project}")).json()
     assert body["owner_id"], "a newly created project must record its creator so it is never orphaned"
+
+
+async def test_artifact_access_is_project_scoped(client: AsyncClient):
+    """An artifact has no project column before 0015, so any authenticated caller could fetch it."""
+    from app.services.artifact_storage_service import ArtifactStorageService
+
+    owned = await _create_project(client, "ACL Artifacts")
+    foreign = await _create_project(client, "ACL Artifacts Foreign")
+    email = "acl.artifact@example.com"
+    user_id = await _create_user(client, email)
+    assert (await client.patch(f"/api/projects/{owned}", json={"owner_id": user_id})).status_code == 200
+
+    storage = ArtifactStorageService()
+    owned_artifact = await storage.save_artifact(
+        "owned.txt", b"evidence", "text/plain", project_id=owned, created_by=user_id
+    )
+    foreign_artifact = await storage.save_artifact(
+        "foreign.txt", b"evidence", "text/plain", project_id=foreign, created_by=user_id
+    )
+    legacy_artifact = await storage.save_artifact("legacy.txt", b"evidence", "text/plain")
+
+    async with await _as(client, email) as owner:
+        assert (await owner.get(f"/api/artifacts/{owned_artifact.artifact_id}/info")).status_code == 200
+        downloaded = await owner.get(f"/api/artifacts/{owned_artifact.artifact_id}/download")
+        assert downloaded.status_code == 200 and downloaded.content == b"evidence"
+        for artifact_id in (foreign_artifact.artifact_id, legacy_artifact.artifact_id):
+            assert (await owner.get(f"/api/artifacts/{artifact_id}/info")).status_code == 404
+            assert (await owner.get(f"/api/artifacts/{artifact_id}/download")).status_code == 404
+        # Uploading into another project is refused, and an upload names its owner.
+        assert (
+            await owner.post(
+                "/api/artifacts/upload",
+                params={"project_id": foreign},
+                files={"file": ("foreign.txt", b"x", "text/plain")},
+            )
+        ).status_code == 404
+        uploaded = await owner.post(
+            "/api/artifacts/upload",
+            params={"project_id": owned},
+            files={"file": ("owned.txt", b"y", "text/plain")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        assert (await owner.get(f"/api/artifacts/{uploaded.json()['artifact_id']}/info")).status_code == 200
+
+    # Administrators keep the unrestricted single-operator workflow, including legacy rows.
+    for artifact in (owned_artifact, foreign_artifact, legacy_artifact):
+        assert (await client.get(f"/api/artifacts/{artifact.artifact_id}/info")).status_code == 200

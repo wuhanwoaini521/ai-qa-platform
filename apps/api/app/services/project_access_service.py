@@ -14,6 +14,7 @@ from app.repositories.project_access_repo import ProjectAccessRepository
 
 #: resource kind -> repository method, used by the route guards.
 RESOLVERS = {
+    "artifact": "project_of_artifact",
     "run": "project_of_run",
     "failure": "project_of_failure",
     "workspace": "project_of_workspace",
