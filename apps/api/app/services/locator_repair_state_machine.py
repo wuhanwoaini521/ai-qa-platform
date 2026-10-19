@@ -216,9 +216,11 @@ class LocatorRepairStateMachine:
         value = cls._state(state)
         actions = {
             FailureRepairState.CREATED: ("START_ANALYSIS",),
-            FailureRepairState.ANALYZING: (),
-            FailureRepairState.DECIDING: (),
-            FailureRepairState.VERIFYING_CANDIDATE: (),
+            # An in-flight analysis is owned by the analysis runtime, so these are the states where the
+            # operator can still stop it instead of watching a request that never reports back.
+            FailureRepairState.ANALYZING: ("CANCEL",),
+            FailureRepairState.DECIDING: ("CANCEL",),
+            FailureRepairState.VERIFYING_CANDIDATE: ("CANCEL",),
             FailureRepairState.PATCH_READY: ("APPLY", "REJECT", "START_ANALYSIS"),
             FailureRepairState.APPLYING: (),
             FailureRepairState.PATCH_APPLIED: ("VERIFY", "ROLLBACK"),

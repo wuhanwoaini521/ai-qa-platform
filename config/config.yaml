@@ -63,6 +63,9 @@ repair:
   auto_rollback: true
   require_jev: true
   require_candidate_verification: true # safety invariant; the schema rejects false.
+  # Upper bound for one AI/Jev analysis. Per-stage progress events and ai.timeout_seconds (30s) keep
+  # the waiting time visible well below this budget; on expiry the run ends as TIMEOUT and can be retried.
+  analysis_timeout_seconds: 300
   rerun_exact_nodeid: true # false reruns the whole test module; its original case remains the acceptance check.
   allowed_paths:
     - tests/**

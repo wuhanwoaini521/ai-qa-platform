@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -37,6 +38,13 @@ from app.settings import get_config
 RETRYABLE_CLASSIFICATIONS = {"LOCATOR_CHANGED", "AUTOMATION_DEFECT", "ENVIRONMENT", "NETWORK", "TIMING", "TEST_DATA"}
 ISSUE_CLASSIFICATIONS = {"PRODUCT_DEFECT", "ENVIRONMENT"}
 _TERMINAL_RUN_STATUSES = {"PASSED", "FAILED", "ERROR", "CANCELLED"}
+ANALYSIS_TERMINAL_STATUSES = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "INTERRUPTED"}
+# The SSE route yields an event as soon as it is persisted, so the follow loop can poll slowly.
+ANALYSIS_STREAM_POLL_SECONDS = 0.2
+# Every request builds its own service instance, so the analyses they must all be able to reach
+# (watch, cancel, list) live on the process instead of on one instance.
+_ANALYSIS_TASKS: dict[str, asyncio.Task[None]] = {}
+_ANALYSIS_SUBSCRIBERS: dict[str, set[asyncio.Queue[AITraceEvent]]] = {}
 
 
 def _repair_verification_nodeids(test_nodeid: str) -> list[str]:
@@ -594,7 +602,7 @@ class FailureWorkflowService:
                 if repair_record is not None
                 else str(result.get("repair_state") or ("ANALYZING" if analysis["status"] == "RUNNING" else "BLOCKED"))
             )
-            if analysis["status"] in {"FAILED", "CANCELLED", "INTERRUPTED"} and state in {
+            if analysis["status"] in {"FAILED", "CANCELLED", "INTERRUPTED", "TIMEOUT"} and state in {
                 "ANALYZING",
                 "DECIDING",
                 "VERIFYING_CANDIDATE",
@@ -662,6 +670,10 @@ class FailureWorkflowService:
                     state = "VERIFIED" if verified else "FAILED"
 
         allowed_actions = self.repair_state_machine.allowed_actions(state)
+        if analysis is not None and analysis["status"] == "RUNNING" and "CANCEL" not in allowed_actions:
+            # The persisted record is authoritative: whatever the repair state says, a running
+            # analysis can always be stopped, and a stopped analysis always leaves a next action.
+            allowed_actions = (*allowed_actions, "CANCEL")
         if state in {"FAILED", "VERIFIED", "PATCH_APPLIED"} and not (same_repair and proposal.get("applied")):
             allowed_actions = tuple(action for action in allowed_actions if action == "START_ANALYSIS")
         if state == "FAILED" and proposal.get("applied"):
@@ -1062,22 +1074,61 @@ class FailureWorkflowService:
         start_new_analysis: bool | None = None,
         auto_triggered: bool = False,
     ) -> AsyncGenerator[AITraceEvent, None]:
+        """Follow one analysis until it reaches a terminal state.
+
+        The analysis is owned by this service, never by the connection: a page reload, a proxy
+        timeout or a closed tab must not cancel it or lose it. The persisted record is the only
+        source of truth, so re-attaching replays what was already produced and then follows it.
+        """
         failure = await self.failures.get_failure_state(failure_id)
         if failure is None:
             raise ValueError("Failure record not found")
         if analysis_id is None:
             analysis_id, start_new_analysis = await self.start_analysis(failure_id)
-        if start_new_analysis is False:
-            history = next(
-                (row for row in await self._history_list(failure_id) if row["id"] == analysis_id),
-                None,
-            )
-            if history:
-                for event in history["events"]:
-                    yield AITraceEvent.model_validate(event)
-            return
         if start_new_analysis is None:
             raise ValueError("Analysis claim state is required")
+        if start_new_analysis:
+            await self._prepare_analysis(failure_id, analysis_id)
+            self._schedule_analysis(
+                failure_id,
+                analysis_id,
+                response_language=response_language,
+                auto_triggered=auto_triggered,
+            )
+        else:
+            await self._reconcile_orphaned_analyses()
+        seen: set[str] = set()
+        queue: asyncio.Queue[AITraceEvent] = asyncio.Queue()
+        _ANALYSIS_SUBSCRIBERS.setdefault(analysis_id, set()).add(queue)
+        try:
+            while True:
+                record = await self._history_get(analysis_id)
+                if record is None:
+                    raise ValueError("Analysis record not found")
+                for serialized in record["events"]:
+                    event = AITraceEvent.model_validate(serialized)
+                    if event.event_id in seen:
+                        continue
+                    seen.add(event.event_id)
+                    yield event
+                if record["status"] in ANALYSIS_TERMINAL_STATUSES:
+                    return
+                try:
+                    live = await asyncio.wait_for(queue.get(), timeout=ANALYSIS_STREAM_POLL_SECONDS)
+                except TimeoutError:
+                    continue
+                if live.event_id in seen:
+                    continue
+                seen.add(live.event_id)
+                yield live
+        finally:
+            subscribers = _ANALYSIS_SUBSCRIBERS.get(analysis_id)
+            if subscribers is not None:
+                subscribers.discard(queue)
+                if not subscribers:
+                    _ANALYSIS_SUBSCRIBERS.pop(analysis_id, None)
+
+    async def _prepare_analysis(self, failure_id: str, analysis_id: str) -> None:
         repair = await self._ensure_locator_repair(failure_id, analysis_id)
         if repair.state == FailureRepairState.CREATED:
             async with self.repository_scope() as repositories:
@@ -1087,7 +1138,223 @@ class FailureWorkflowService:
                     FailureRepairState.ANALYZING,
                 )
                 await repositories.commit()
-        queue: asyncio.Queue[AITraceEvent | None] = asyncio.Queue()
+
+    def _schedule_analysis(
+        self,
+        failure_id: str,
+        analysis_id: str,
+        *,
+        response_language: str,
+        auto_triggered: bool = False,
+    ) -> None:
+        """Run the analysis in its own task so no HTTP connection owns its lifetime."""
+        if analysis_id in _ANALYSIS_TASKS:
+            return
+        task = asyncio.create_task(
+            self._run_analysis(
+                failure_id,
+                analysis_id,
+                response_language=response_language,
+                auto_triggered=auto_triggered,
+            ),
+            name=f"failure-workflow-{analysis_id}",
+        )
+        _ANALYSIS_TASKS[analysis_id] = task
+        task.add_done_callback(lambda completed: _ANALYSIS_TASKS.pop(analysis_id, None))
+
+    async def _run_analysis(
+        self,
+        failure_id: str,
+        analysis_id: str,
+        *,
+        response_language: str,
+        auto_triggered: bool = False,
+    ) -> None:
+        """Drive one analysis to a terminal state; no failure mode may leave it RUNNING."""
+        budget = float(get_config().repair.analysis_timeout_seconds)
+        try:
+            async with asyncio.timeout(budget):
+                await self._analyze(
+                    failure_id,
+                    analysis_id,
+                    response_language=response_language,
+                    auto_triggered=auto_triggered,
+                )
+        except TimeoutError:
+            await self._finalize_analysis(
+                failure_id,
+                analysis_id,
+                status="TIMEOUT",
+                event_type="run.timeout",
+                message=f"分析超过 {budget:g} 秒未完成，已终止；可以重试。",
+            )
+            logger.warning("Failure analysis timed out analysis_id=%s budget=%ss", analysis_id, budget)
+        except asyncio.CancelledError:
+            # A cancelled task still owes the record a terminal state, so the write is shielded.
+            await asyncio.shield(
+                self._finalize_analysis(
+                    failure_id,
+                    analysis_id,
+                    status="CANCELLED",
+                    event_type="run.cancelled",
+                    message="分析已取消，未执行修复或复测",
+                )
+            )
+            raise
+        except Exception as error:  # noqa: BLE001 - an unowned analysis must always converge
+            await self._finalize_analysis(
+                failure_id,
+                analysis_id,
+                status="FAILED",
+                event_type="run.failed",
+                message=SensitiveRedactor.redact_text(str(error))[:500],
+            )
+            logger.exception("Failure analysis crashed analysis_id=%s", analysis_id)
+
+    async def _finalize_analysis(
+        self,
+        failure_id: str,
+        analysis_id: str,
+        *,
+        status: str,
+        event_type: str,
+        message: str,
+    ) -> bool:
+        """Persist a terminal state once; a lost race must never overwrite the winner."""
+        failure = await self.failures.get_failure_state(failure_id)
+        run_id = failure.run_id if failure is not None else ""
+        async with self.repository_scope() as repositories:
+            record = await repositories.failure_analyses.get(analysis_id)
+            if record is None or record["status"] != "RUNNING":
+                return False
+            result = {
+                "repair_state": "BLOCKED",
+                "block_reason": f"ANALYSIS_{status}",
+                "verified": False,
+                "changes_applied": False,
+            }
+            closed = await repositories.failure_analyses.finalize(
+                analysis_id,
+                status=status,
+                event=make_trace_event(
+                    run_id,
+                    event_type,
+                    stage="workflow",
+                    title="分析结束",
+                    status="CANCELLED" if status == "CANCELLED" else "FAILED",
+                    message=message,
+                    metadata={"analysis_id": analysis_id, "analysis_status": status, **result},
+                ),
+                result=result,
+            )
+            await repositories.commit()
+        if closed:
+            await self._close_repair_for_analysis(analysis_id, block_reason=f"ANALYSIS_{status}")
+        return closed
+
+    async def _close_repair_for_analysis(self, analysis_id: str, *, block_reason: str) -> None:
+        """Release the repair workflow so a finished analysis always leaves a next action."""
+        async with self.repository_scope() as repositories:
+            repair = await repositories.locator_repairs.get_by_analysis(analysis_id)
+            if repair is None:
+                return
+            try:
+                await self.repair_state_machine.move(
+                    repositories.locator_repairs,
+                    repair.id,
+                    FailureRepairState.BLOCKED,
+                    block_reason=block_reason,
+                )
+            except (ValueError, KeyError):
+                # The repair already reached its own terminal state; the analysis record is the
+                # authority for why the run stopped and the operator can retry from there.
+                return
+            await repositories.commit()
+
+    def _fan_out(self, analysis_id: str, event: AITraceEvent) -> None:
+        """Hand a just-published event to whoever is watching; persistence is the durable copy."""
+        for subscriber in _ANALYSIS_SUBSCRIBERS.get(analysis_id, ()):
+            subscriber.put_nowait(event)
+
+    async def cancel_analysis(self, failure_id: str, analysis_id: str) -> dict[str, Any]:
+        """Stop an in-flight analysis; cancelling really terminates the work, not just the spinner."""
+        record = await self._history_get(analysis_id)
+        if record is None or record["failure_id"] != failure_id:
+            raise ValueError("Analysis record not found for this failure")
+        if record["status"] == "RUNNING":
+            task = _ANALYSIS_TASKS.get(analysis_id)
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(task), timeout=5)
+            else:
+                # The owner is gone (previous process, lost task): close the record ourselves.
+                await self._finalize_analysis(
+                    failure_id,
+                    analysis_id,
+                    status="CANCELLED",
+                    event_type="run.cancelled",
+                    message="分析已取消，未执行修复或复测",
+                )
+        return await self._history_get(analysis_id) or record
+
+    async def _history_get(self, analysis_id: str) -> dict[str, Any] | None:
+        async with self.repository_scope() as repositories:
+            return await repositories.failure_analyses.get(analysis_id)
+
+    async def _reconcile_orphaned_analyses(self) -> list[str]:
+        """Close analyses whose owner died so a reload never shows an eternal RUNNING analysis."""
+        async with self.repository_scope() as repositories:
+            stale = await repositories.failure_analyses.list_stale_running(
+                timeout_seconds=float(get_config().repair.analysis_timeout_seconds)
+            )
+        closed: list[str] = []
+        for analysis_id in stale:
+            record = await self._history_get(analysis_id)
+            if record is None:
+                continue
+            finalized = await self._finalize_analysis(
+                record["failure_id"],
+                analysis_id,
+                status="TIMEOUT",
+                event_type="run.timeout",
+                message="分析在执行中失去响应（进程中断或任务丢失），已按超时结束；可以重试。",
+            )
+            if finalized:
+                closed.append(analysis_id)
+                logger.warning("Reclaimed orphaned failure analysis analysis_id=%s", analysis_id)
+        return closed
+
+    async def recover_interrupted_analyses(self) -> list[str]:
+        """Startup: no analysis survives a process restart, so close every leftover RUNNING record."""
+        async with self.repository_scope() as repositories:
+            running = await repositories.failure_analyses.list_running_ids()
+        for analysis_id in running:
+            record = await self._history_get(analysis_id)
+            if record is None:
+                continue
+            await self._finalize_analysis(
+                record["failure_id"],
+                analysis_id,
+                status="INTERRUPTED",
+                event_type="run.interrupted",
+                message="分析在服务重启时中断；可以重试。",
+            )
+        return running
+
+    async def _analyze(
+        self,
+        failure_id: str,
+        analysis_id: str,
+        *,
+        response_language: str = "en",
+        auto_triggered: bool = False,
+    ) -> None:
+        """Produce the analysis of one failure. Only the runner decides how it terminates."""
+        failure = await self.failures.get_failure_state(failure_id)
+        if failure is None:
+            raise ValueError("Failure record not found")
+        repair = await self._ensure_locator_repair(failure_id, analysis_id)
         active_stage = "context"
         stage_started: dict[str, float] = {}
 
@@ -1095,7 +1362,7 @@ class FailureWorkflowService:
             event.metadata = {**event.metadata, "analysis_id": analysis_id}
             event = AITraceEvent.model_validate(SensitiveRedactor.redact_value(event.model_dump(mode="json")))
             await self._history_append(analysis_id, event, result=result)
-            await queue.put(event)
+            self._fan_out(analysis_id, event)
 
         async def step(
             key: str, status: str, message: str, *, _persisted_result: dict[str, Any] | None = None, **metadata
@@ -1614,26 +1881,6 @@ class FailureWorkflowService:
                     ),
                     result=result,
                 )
-            except asyncio.CancelledError:
-                cancelled_result = {
-                    "repair_state": "BLOCKED",
-                    "block_reason": "ANALYSIS_CANCELLED",
-                    "verified": False,
-                    "changes_applied": False,
-                }
-                await publish(
-                    make_trace_event(
-                        failure.run_id,
-                        "run.cancelled",
-                        stage=active_stage,
-                        title="分析已取消",
-                        status="CANCELLED",
-                        message="用户中止了分析，未执行修复或复测",
-                        metadata=cancelled_result,
-                    ),
-                    result=cancelled_result,
-                )
-                raise
             except Exception as error:
                 await step(active_stage, "FAILED", str(error)[:500])
                 failed_result = dict(result) if isinstance(locals().get("result"), dict) else {}
@@ -1677,18 +1924,9 @@ class FailureWorkflowService:
                     ),
                     result=failed_result,
                 )
-            finally:
-                await queue.put(None)
 
         locator_repair_token = bind_locator_repair(repair.id)
         try:
-            task = asyncio.create_task(analyze(), name=f"failure-workflow-{analysis_id}")
+            await analyze()
         finally:
             reset_locator_repair(locator_repair_token)
-        try:
-            while (event := await queue.get()) is not None:
-                yield event
-        finally:
-            if not task.done():
-                _ = task.cancel()
-            _ = await asyncio.gather(task, return_exceptions=True)

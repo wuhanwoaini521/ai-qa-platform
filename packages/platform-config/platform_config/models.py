@@ -93,6 +93,11 @@ class RepairSettings(ConfigSection):
     # Automatic repair cannot disable browser evidence verification.
     require_candidate_verification: Literal[True] = True
     locator_same_function_threshold: float = Field(default=0.7, ge=0, le=1)
+    # Total budget for one failure analysis. On expiry the analysis ends as TIMEOUT with a retry
+    # action instead of staying RUNNING while the operator waits without an answer. Progress events
+    # are written per stage and the AI call itself is bounded by ai.timeout_seconds, so this budget
+    # only bounds the whole run; it never has to paper over an unbounded provider call.
+    analysis_timeout_seconds: float = Field(default=300.0, gt=0, le=600)
     rerun_exact_nodeid: bool = True
     allowed_paths: list[str] = Field(default_factory=lambda: ["tests/**", "pages/**", "helpers/**"])
     denied_paths: list[str] = Field(

@@ -144,9 +144,14 @@ def get_golden_demo_service() -> GoldenDemoService:
 
 
 async def recover_failure_analyses() -> None:
-    async with get_repository_scope_factory()() as repositories:
-        await repositories.failure_analyses.recover_interrupted()
-        await repositories.commit()
+    """Close analyses a previous process left RUNNING, releasing their repair rows as well."""
+    async with async_session_factory() as session:
+        workflow = FailureWorkflowService(
+            get_failure_service(session),
+            run_service=build_run_service(session),
+            repository_scope=get_repository_scope_factory(),
+        )
+        await workflow.recover_interrupted_analyses()
 
 
 def get_job_queue_service():

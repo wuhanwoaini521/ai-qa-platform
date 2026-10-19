@@ -1701,7 +1701,8 @@ async def test_failed_model_is_redacted_and_persisted_without_success(client, te
 
 
 @pytest.mark.asyncio
-async def test_cancel_and_restart_preserve_incomplete_analysis(client, test_db_session):
+async def test_analysis_outlives_its_connection_and_stops_only_on_request(client, test_db_session):
+    """D1: reloading the page must not kill or lose an analysis, and CANCEL must really stop it."""
     _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
     entered = asyncio.Event()
     cancelled = asyncio.Event()
@@ -1723,18 +1724,143 @@ async def test_cancel_and_restart_preserve_incomplete_analysis(client, test_db_s
         while (await asyncio.wait_for(anext(stream), timeout=3)).type != "model.started":
             pass
         await asyncio.wait_for(entered.wait(), timeout=3)
+        analysis_id = (await workflow.list_history(failure_id))[0]["id"]
+
+        # Leaving the page (or losing the SSE connection) must not cancel the work.
         await stream.aclose()
-        assert cancelled.is_set()
-        records = await workflow.list_history(failure_id)
-        assert records[0]["status"] == "CANCELLED"
-        assert records[0]["events"][-1]["type"] == "run.cancelled"
+        await asyncio.sleep(0.2)
+        assert not cancelled.is_set()
+        assert (await workflow.list_history(failure_id))[0]["status"] == "RUNNING"
+
+        # Re-attaching — what a reload does — replays what already happened instead of restarting.
+        resumed = workflow.stream(failure_id)
+        replayed: list[str] = []
+        while "model.started" not in replayed:
+            replayed.append((await asyncio.wait_for(anext(resumed), timeout=3)).type)
+        await resumed.aclose()
+        assert replayed
+        assert not cancelled.is_set()
+
+        # An explicit cancel is the only thing that stops it, and it must actually stop it.
+        await workflow.cancel_analysis(failure_id, analysis_id)
+        await asyncio.wait_for(cancelled.wait(), timeout=3)
+        record = (await workflow.list_history(failure_id))[0]
+        assert record["status"] == "CANCELLED"
+        assert record["events"][-1]["type"] == "run.cancelled"
+        assert record["result"]["block_reason"] == "ANALYSIS_CANCELLED"
+        assert "START_ANALYSIS" in (await workflow.get_repair_workflow(failure_id)).allowed_actions
+
+        # A process restart must never leave an analysis RUNNING forever.
         async with workflow.repository_scope() as repositories:
             unfinished = await repositories.failure_analyses.create(failure_id)
             await repositories.commit()
-            await repositories.failure_analyses.recover_interrupted()
-            await repositories.commit()
+        assert unfinished in await workflow.recover_interrupted_analyses()
         records = await workflow.list_history(failure_id)
         assert next(record for record in records if record["id"] == unfinished)["status"] == "INTERRUPTED"
+
+
+@pytest.mark.asyncio
+async def test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error(client, test_db_session, monkeypatch):
+    """D2: a request that never reports back ends as TIMEOUT with a message, never as an open spinner."""
+    from app.services import failure_workflow_service as workflow_module
+    from app.settings import get_config
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    cancelled = asyncio.Event()
+
+    class HangingProvider(FakeAIProvider):
+        async def complete(self, request):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+    base = get_config()
+    monkeypatch.setattr(
+        workflow_module,
+        "get_config",
+        lambda: base.model_copy(update={"repair": base.repair.model_copy(update={"analysis_timeout_seconds": 0.5})}),
+    )
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        service.orchestrator = ProductionQAOrchestrator(ai_provider=HangingProvider())
+        workflow = FailureWorkflowService(service)
+        events = [event async for event in workflow.stream(failure_id)]
+        assert events[-1].type == "run.timeout"
+        assert "0.5" in events[-1].message
+        await asyncio.wait_for(cancelled.wait(), timeout=3)
+        record = (await workflow.list_history(failure_id))[0]
+        assert record["status"] == "TIMEOUT"
+        assert record["result"]["block_reason"] == "ANALYSIS_TIMEOUT"
+        assert "START_ANALYSIS" in (await workflow.get_repair_workflow(failure_id)).allowed_actions
+
+
+@pytest.mark.asyncio
+async def test_reload_reclaims_an_orphaned_analysis_instead_of_hanging(client, test_db_session):
+    """A worker that dies mid-analysis must not leave a RUNNING record behind for the next reload."""
+    from datetime import timedelta
+
+    from app.persistence.models import utc_now
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        service.orchestrator = ProductionQAOrchestrator(ai_provider=FakeAIProvider())
+        workflow = FailureWorkflowService(service)
+        async with workflow.repository_scope() as repositories:
+            orphan_id = await repositories.failure_analyses.create(failure_id)
+            row = await repositories.failure_analyses.session.get(FailureAnalysisORM, orphan_id)
+            row.created_at = utc_now() - timedelta(hours=1)
+            await repositories.commit()
+
+        # Re-attaching is what a reload does: it must converge to a terminal state, not to a spinner.
+        events = [event async for event in workflow.stream(failure_id)]
+        assert [event.type for event in events] == ["run.timeout"]
+        record = next(row for row in await workflow.list_history(failure_id) if row["id"] == orphan_id)
+        assert record["status"] == "TIMEOUT"
+        assert "START_ANALYSIS" in (await workflow.get_repair_workflow(failure_id)).allowed_actions
+
+
+@pytest.mark.asyncio
+async def test_cancel_endpoint_stops_a_running_analysis(client, test_db_session):
+    """The stop control is an API contract, not a front-end animation."""
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class WaitingProvider(FakeAIProvider):
+        async def complete(self, request):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        service = get_failure_service(session)
+        service.orchestrator = ProductionQAOrchestrator(ai_provider=WaitingProvider())
+        workflow = FailureWorkflowService(service)
+        stream = workflow.stream(failure_id)
+        while (await asyncio.wait_for(anext(stream), timeout=3)).type != "model.started":
+            pass
+        await asyncio.wait_for(entered.wait(), timeout=3)
+        analysis_id = (await workflow.list_history(failure_id))[0]["id"]
+        running = (await client.get(f"/api/failures/{failure_id}/repair-workflow")).json()
+        assert "CANCEL" in running["allowed_actions"]
+        app.dependency_overrides[get_failure_service] = lambda: service
+        try:
+            response = await client.post(f"/api/failures/{failure_id}/analyses/{analysis_id}/cancel")
+        finally:
+            app.dependency_overrides.pop(get_failure_service, None)
+        assert response.status_code == 200, response.text
+        assert response.json()["allowed_actions"] == ["START_ANALYSIS"]
+        await asyncio.wait_for(cancelled.wait(), timeout=3)
+        await stream.aclose()
+        assert (await workflow.list_history(failure_id))[0]["status"] == "CANCELLED"
+        missing = await client.post(f"/api/failures/{failure_id}/analyses/unknown/cancel")
+        assert missing.status_code == 422
 
 
 @pytest.mark.asyncio

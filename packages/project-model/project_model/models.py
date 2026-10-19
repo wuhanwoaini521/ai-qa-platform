@@ -584,6 +584,7 @@ class FailureRepairState(str, Enum):
 
 class FailureRepairAction(str, Enum):
     START_ANALYSIS = "START_ANALYSIS"
+    CANCEL = "CANCEL"
     APPLY = "APPLY"
     REJECT = "REJECT"
     VERIFY = "VERIFY"

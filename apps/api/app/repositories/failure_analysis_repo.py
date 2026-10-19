@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+from typing import Any
 from uuid import uuid4
 
 from qa_core.ai.trace import AITraceEvent
@@ -8,6 +10,9 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.persistence.models import FailureAnalysisORM, utc_now
+
+# Grace on top of the analysis budget before a RUNNING row is treated as ownerless.
+ORPHAN_GRACE_SECONDS = 60.0
 
 
 class FailureAnalysisRepository:
@@ -113,6 +118,81 @@ class FailureAnalysisRepository:
             update(FailureAnalysisORM)
             .where(FailureAnalysisORM.status == "RUNNING")
             .values(status="INTERRUPTED", finished_at=utc_now())
+        )
+
+    async def get(self, analysis_id: str) -> dict[str, Any] | None:
+        row = await self.session.get(FailureAnalysisORM, analysis_id)
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "failure_id": row.failure_id,
+            "status": row.status,
+            "events": row.events,
+            "result": row.result,
+            "created_at": row.created_at.isoformat(),
+            "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+        }
+
+    async def finalize(
+        self,
+        analysis_id: str,
+        *,
+        status: str,
+        event: AITraceEvent | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> bool:
+        """Close a RUNNING analysis exactly once; a lost race reports False instead of overwriting it."""
+        row = await self.session.get(FailureAnalysisORM, analysis_id)
+        if row is None:
+            return False
+        claimed = await self.session.execute(
+            update(FailureAnalysisORM)
+            .where(FailureAnalysisORM.id == analysis_id, FailureAnalysisORM.status == "RUNNING")
+            .values(status=status, finished_at=utc_now())
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            return False
+        await self.session.refresh(row)
+        if event is not None:
+            row.events = [*row.events, SensitiveRedactor.redact_value(event.model_dump(mode="json"))]
+        if result is not None:
+            row.result = SensitiveRedactor.redact_value(result)
+        await self.session.flush()
+        return True
+
+    async def list_running_ids(self) -> list[str]:
+        return list(
+            (
+                await self.session.execute(
+                    select(FailureAnalysisORM.id)
+                    .where(FailureAnalysisORM.status == "RUNNING")
+                    .order_by(FailureAnalysisORM.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    async def list_stale_running(self, *, timeout_seconds: float) -> list[str]:
+        """RUNNING rows past their own budget plus a grace period: their owner can no longer report back.
+
+        A live analysis is bounded by its own total budget, so a row this old has lost its owner
+        (crashed task, killed process) and must not stay RUNNING forever. Closing it belongs to the
+        service, which also records why it ended and releases the repair workflow.
+        """
+        cutoff = utc_now() - timedelta(seconds=timeout_seconds + ORPHAN_GRACE_SECONDS)
+        return list(
+            (
+                await self.session.execute(
+                    select(FailureAnalysisORM.id)
+                    .where(FailureAnalysisORM.status == "RUNNING", FailureAnalysisORM.created_at < cutoff)
+                    .order_by(FailureAnalysisORM.created_at)
+                )
+            )
+            .scalars()
+            .all()
         )
 
     async def attach_verification(self, analysis_id: str, failure_id: str, run_id: str) -> None:
