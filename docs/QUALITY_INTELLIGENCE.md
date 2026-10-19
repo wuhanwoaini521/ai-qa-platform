@@ -59,6 +59,28 @@ Automation Binding (Playwright / Pytest)
 GET /api/quality/coverage?project_id={project_id}
 ```
 
+### Single source of truth
+
+These three percentages are computed in exactly one place — `QualityIntelligenceService.coverage` in
+`apps/api/app/services/quality_intelligence_service.py` — and served by `GET /api/quality/coverage`.
+Every other surface must render those numbers instead of re-deriving them:
+
+- `/quality` (web) reads `requirement_coverage_pct`, `automation_coverage_pct`, `automated_cases`,
+  `total_test_cases` and the per-requirement `requirement_details[]` from that endpoint. It no longer
+  counts bindings itself.
+- The lifecycle coverage panel renders the project knowledge graph metrics
+  (`GET /api/projects/{project_id}/knowledge`) as the API reports them; it no longer re-derives
+  automation from binding status.
+
+Two adjacent taxonomies are deliberately **not** merged into these percentages, because they answer a
+different question:
+
+- the project knowledge graph's *criteria* metrics count test-design criteria that have a linked design,
+  case or automation binding (a criterion with no automated binding is still "covered" there);
+- the Quality Discovery coverage map is a categorical status per discovered feature
+  (`AUTOMATION_FAILING` / `VERIFIED` / `AUTOMATED` / `NOT_VERIFIED` / `COVERED` / `PARTIAL` /
+  `NOT_COVERED`) snapshotted into the discovery run result, not a percentage.
+
 **Response**:
 ```json
 {

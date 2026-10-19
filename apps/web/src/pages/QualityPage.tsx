@@ -26,7 +26,6 @@ import {
   TestCase,
 } from '../types';
 import { api } from '../api/client';
-import { summarizeAutomationCoverage } from '../features/quality/coverageModel';
 import { buildWorkspaceHref } from '../app/workspaceContext';
 import './QualityPage.css';
 
@@ -118,9 +117,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
     }
   };
 
-  const automationCoverage = useMemo(
-    () => testCases ? summarizeAutomationCoverage(testCases) : null,
-    [testCases],
+  const coveragePercentageByRequirement = useMemo(
+    () => new Map((coverage?.requirement_details ?? []).map((item) => [item.requirement_id, item.coverage_percentage])),
+    [coverage?.requirement_details],
   );
   const riskWorkspaceHref = (risk: QualityRiskMatrix['risks'][number]) => {
     const explicitCaseId = risk.id.startsWith('risk_p0_') ? risk.id.slice('risk_p0_'.length) : undefined;
@@ -169,7 +168,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       const matchesStatus = coverageStatus === 'ALL' || item.status === coverageStatus;
       return matchesQuery && matchesStatus;
     });
-    const percentageFor = (requirementId: string) => automationCoverage?.byRequirement.get(requirementId)?.percentage;
+    const percentageFor = (requirementId: string) => coveragePercentageByRequirement.get(requirementId);
     rows.sort((left, right) => {
       if (coverageSort === 'title') return left.title.localeCompare(right.title);
       const leftPercentage = percentageFor(left.requirement_id);
@@ -183,7 +182,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       return difference || left.title.localeCompare(right.title);
     });
     return rows;
-  }, [automationCoverage, coverage?.requirement_details, coverageQuery, coverageSort, coverageStatus]);
+  }, [coverage?.requirement_details, coveragePercentageByRequirement, coverageQuery, coverageSort, coverageStatus]);
   const coverageGroups = useMemo(() => {
     if (!groupCoverageByStatus) return [{ status: '', items: filteredCoverage }];
     const byStatus = new Map<string, typeof filteredCoverage>();
@@ -347,13 +346,13 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           <div className="stat-details">
             <div className="stat-title">{t('metricAutomationCoverage')}</div>
             <div className="stat-value">
-              {automationCoverage ? `${automationCoverage.percentage}%` : '--'}
+              {coverage ? `${coverage.automation_coverage_pct}%` : '--'}
             </div>
             <div className="stat-subtitle">
-              {automationCoverage
+              {coverage
                 ? t('casesAutomatedCount', {
-                    automated: automationCoverage.automated,
-                    total: automationCoverage.total,
+                    automated: coverage.automated_cases,
+                    total: coverage.total_test_cases,
                   })
                 : coverageSourceError
                   ? t('coverageSourceUnavailable')
@@ -470,7 +469,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 <tbody key={status || 'all'}>
                   {status && <tr className="quality-coverage-group-row"><th colSpan={7}>{status}</th></tr>}
                   {items.map((item) => {
-                    const requirementCoverage = automationCoverage?.byRequirement.get(item.requirement_id);
+                    const requirementCoverage = coveragePercentageByRequirement.get(item.requirement_id) ?? 0;
                     const linkedCases = testCasesByRequirement.get(item.requirement_id) ?? [];
                     const expanded = expandedCoverageId === item.requirement_id;
                     const detailId = `coverage-detail-${item.requirement_id}`;
@@ -501,28 +500,28 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                           </td>
                           <td><span className={`status-pill status-pill-${item.status.toLowerCase()}`}>{item.status}</span></td>
                           <td>{item.test_design_count}</td>
-                          <td>{requirementCoverage ? requirementCoverage.total : testCases ? 0 : '--'}</td>
-                          <td>{requirementCoverage ? requirementCoverage.automated : testCases ? 0 : '--'}</td>
+                          <td>{coverage ? item.test_case_count : '--'}</td>
+                          <td>{coverage ? item.automated_case_count : '--'}</td>
                           <td>
                             <div className="quality-coverage-meter">
                               <div className="quality-coverage-meter-track">
                                 <div
                                   className="quality-coverage-meter-value"
                                   style={{
-                                    width: `${testCases ? requirementCoverage?.percentage ?? 0 : 0}%`,
-                                    backgroundColor: (requirementCoverage?.percentage ?? 0) >= 70
+                                    width: `${coverage ? requirementCoverage : 0}%`,
+                                    backgroundColor: requirementCoverage >= 70
                                       ? 'var(--accent-green)'
-                                      : (requirementCoverage?.percentage ?? 0) >= 40
+                                      : requirementCoverage >= 40
                                         ? 'var(--accent-amber)'
                                         : 'var(--accent-red)',
                                   }}
                                 />
                               </div>
-                              <span>{testCases ? `${requirementCoverage?.percentage ?? 0}%` : '--'}</span>
+                              <span>{coverage ? `${requirementCoverage}%` : '--'}</span>
                             </div>
                           </td>
-                          <td>{testCases
-                            ? (requirementCoverage?.automated ?? 0) > 0
+                          <td>{coverage
+                            ? item.has_automation
                               ? <span className="status-pill status-pill-passed">{t('common:yes')}</span>
                               : <span className="status-pill status-pill-failed">{t('common:no')}</span>
                             : '--'}</td>

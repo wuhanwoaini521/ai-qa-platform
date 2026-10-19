@@ -1,23 +1,14 @@
-import type { CoverageMetric, KnowledgeNode } from './types';
+import type { CoverageMetric } from './types';
 
-export function presentCoverageMetrics(
-  coverage: CoverageMetric[],
-  nodes: KnowledgeNode[],
-  incomplete: boolean,
-): CoverageMetric[] {
-  const activeBoundCaseIds = new Set(
-    nodes
-      .filter((node) => node.kind === 'automation' && node.status === 'ACTIVE')
-      .filter((node) => typeof node.metadata.case_id === 'string' && typeof node.metadata.nodeid === 'string' && node.metadata.nodeid.trim())
-      .map((node) => node.metadata.case_id as string),
-  );
-
+/**
+ * The project knowledge graph is the authority on what is covered: every metric arrives from the API
+ * with its own `covered` verdict per item (see `ProjectKnowledgeService.metric`), so this presentation
+ * layer must not re-derive "automation" from bindings again. It only recomputes the ratio the panel
+ * displays and refuses to claim a percentage for a truncated graph.
+ */
+export function presentCoverageMetrics(coverage: CoverageMetric[], incomplete: boolean): CoverageMetric[] {
   return coverage.map((metric) => {
-    const items = metric.key === 'automation'
-      ? metric.items.map((item) => ({ ...item, covered: activeBoundCaseIds.has(item.id) }))
-      : metric.key === 'execution' || metric.key === 'passed'
-        ? metric.items.filter((item) => activeBoundCaseIds.has(item.id))
-        : metric.items;
+    const items = metric.items;
     const covered = items.filter((item) => item.covered).length;
 
     return {

@@ -30,8 +30,8 @@ export function CoveragePanel({ graph, onOpenKnowledge }: { graph: ProjectKnowle
   const [selected, setSelected] = useState('criteria');
   const incomplete = graph.truncated;
   const qualityMetrics = useMemo(
-    () => presentCoverageMetrics(graph.coverage, graph.nodes, incomplete),
-    [graph.coverage, graph.nodes, incomplete],
+    () => presentCoverageMetrics(graph.coverage, incomplete),
+    [graph.coverage, incomplete],
   );
   const metrics = useMemo(() => new Map(qualityMetrics.map((item) => [item.key, item])), [qualityMetrics]);
   const metric = metrics.get(selected);
