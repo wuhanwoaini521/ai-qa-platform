@@ -19,12 +19,18 @@ class _NoBrowser:
 
 
 class _CaptureTasks:
-    def __init__(self) -> None:
+    def __init__(self, status: str = "PENDING") -> None:
         self.created: list[tuple[object, str]] = []
+        self.status = status
 
     async def create(self, data, owner_id):
         self.created.append((data, owner_id))
-        return SimpleNamespace(id="task-discovery", status="PENDING")
+        return SimpleNamespace(id="task-discovery", status=self.status)
+
+    async def get(self, task_id):
+        if task_id != "task-discovery":
+            return None
+        return SimpleNamespace(id=task_id, status=self.status)
 
 
 async def _project(session_factory, project_id: str = "project_discovery_task") -> str:
@@ -104,6 +110,47 @@ async def test_a_completed_run_reports_its_progress_to_the_runtime(test_db_sessi
     assert result["status"] == DiscoveryStatus.COMPLETED.value
     assert set(result["progress"]) == {"states", "actions", "features"}
     assert run_id not in service._tasks
+
+
+@pytest.mark.asyncio
+async def test_a_queued_run_is_not_scheduled_twice_when_it_is_paused_and_resumed(test_db_session):
+    project_id = await _project(test_db_session)
+    tasks = _CaptureTasks()
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser(), task_commands=tasks)
+    run = await service.create(
+        DiscoveryRunCreate(project_id=project_id, start_url="https://example.test/shop"),
+        "owner-1",
+    )
+
+    # Pausing a still-queued run and resuming it must not schedule a second loop: both tasks would
+    # drive a browser against the same site and double every budget.
+    assert (await service.pause(run.id)).status == DiscoveryStatus.PAUSED.value
+    assert (await service.resume(run.id)).status == DiscoveryStatus.RUNNING.value
+    assert len(tasks.created) == 1
+
+    # A finished task no longer owns the run, so the next resume may schedule another attempt.
+    tasks.status = "COMPLETED"
+    await service.pause(run.id)
+    await service.resume(run.id)
+    assert len(tasks.created) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_pause_issued_while_queued_survives_the_loop_starting(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.PAUSED.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    seen: list[bool] = []
+
+    async def observe_pause(_run_id: str) -> None:
+        seen.append(service._resume_events[run_id].is_set())
+        await service._update(_run_id, status=DiscoveryStatus.COMPLETED.value)
+
+    service._execute = observe_pause
+
+    await service.execute_run(run_id)
+
+    assert seen == [False]
 
 
 @pytest.mark.asyncio

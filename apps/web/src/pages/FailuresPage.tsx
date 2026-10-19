@@ -534,7 +534,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
             controller.signal.aborted
           )
             return;
-          setDiagnosisEvents((previous) => [...previous, event]);
+          setDiagnosisEvents((previous) =>
+            previous.some((item) => item.event_id === event.event_id)
+              ? previous
+              : [...previous, event],
+          );
           if (typeof event.metadata?.analysis_id === 'string') {
             analysisId = event.metadata.analysis_id;
             setSelectedAnalysisId(analysisId);

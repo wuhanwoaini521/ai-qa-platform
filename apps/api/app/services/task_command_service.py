@@ -29,6 +29,18 @@ from app.services.workspace_service import WorkspaceService
 logger = logging.getLogger("app.task_runtime")
 
 
+#: Statuses after which a task can never produce another result; shared so that a domain service can tell
+#: whether a task it scheduled is still in flight without importing this class at runtime.
+TASK_TERMINAL_STATUSES = frozenset(
+    {
+        TaskStatus.COMPLETED.value,
+        TaskStatus.FAILED.value,
+        TaskStatus.BLOCKED.value,
+        TaskStatus.CANCELLED.value,
+    }
+)
+
+
 class TaskCommandService:
     """Own task creation, lifecycle commands, approval and goal refresh use cases."""
 
@@ -72,12 +84,7 @@ class TaskCommandService:
         "tests.verify",
     }
 
-    TERMINAL = {
-        TaskStatus.COMPLETED.value,
-        TaskStatus.FAILED.value,
-        TaskStatus.BLOCKED.value,
-        TaskStatus.CANCELLED.value,
-    }
+    TERMINAL = TASK_TERMINAL_STATUSES
 
     def __init__(
         self,

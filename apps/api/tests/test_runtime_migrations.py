@@ -1,5 +1,11 @@
-from app.persistence.migrations import downgrade_database, upgrade_database
+from alembic.script import ScriptDirectory
+from app.persistence.migrations import downgrade_database, migration_config, upgrade_database
 from sqlalchemy import create_engine, inspect, text
+
+
+def _head_revision() -> str:
+    """The migration head moves whenever a revision lands: assert the chain, not a remembered id."""
+    return ScriptDirectory.from_config(migration_config()).get_current_head()
 
 
 def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
@@ -15,7 +21,7 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         downgrade_database(connection, "base")
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
         assert {"decision_value", "locator_repair_id"} <= {
             column["name"] for column in inspect(connection).get_columns("ai_invocations")
         }
@@ -29,6 +35,19 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         assert {"run_id", "execution_id", "failure_id", "status"} <= {
             column["name"] for column in inspect(connection).get_columns("debug_sessions")
         }
+        # The two revisions after 0013 must also come back down on SQLite, not only up.
+        assert {"source_file", "source_line"} <= {
+            column["name"] for column in inspect(connection).get_columns("failure_records")
+        }
+        assert {"project_id", "created_by"} <= {
+            column["name"] for column in inspect(connection).get_columns("stored_artifacts")
+        }
+        downgrade_database(connection, "0013_project_ownership")
+        assert "source_line" not in {column["name"] for column in inspect(connection).get_columns("failure_records")}
+        assert "created_by" not in {column["name"] for column in inspect(connection).get_columns("stored_artifacts")}
+        upgrade_database(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
+        assert "project_id" in {column["name"] for column in inspect(connection).get_columns("stored_artifacts")}
     engine.dispose()
 
 
@@ -294,12 +313,12 @@ def test_project_ownership_migration_survives_a_previously_unaltered_column(tmp_
             text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL")
         )
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
         columns = {column["name"] for column in inspect(connection).get_columns("projects")}
         indexes = {index["name"] for index in inspect(connection).get_indexes("projects")}
         assert {"owner_id", "team_id"} <= columns
         assert {"ix_projects_owner_id", "ix_projects_team_id"} <= indexes
         # Re-running the head revision must stay a no-op rather than raising again.
         upgrade_database(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_project_ownership"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
     engine.dispose()

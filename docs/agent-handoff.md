@@ -5,7 +5,15 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 9 —— Release Candidate 与真实 QA 产品验收（用户任务 m01734，分支 `agent/ui-workspace-redesign`，验收绑定 SHA `3cbd2a8`）。** 结论 **PARTIAL**；完整报告见 `.ai-runs/rc-acceptance/RC-REPORT.md`（该目录未纳入版本库）。摘要：核心日常链路仅靠 UI 可完成、PostgreSQL/Worker/RBAC/契约/迁移门禁通过、Jev 现场决策为 LIVE、AI 规划 Provider 仍 BLOCKED（超时降级已真实验证）、发现并记录 D1/D2 两个高影响 UX 缺陷与 1 个高负载下的偶发 E2E 失败。进度见 §3.6。
+**当前活动轮次：Round 11 —— 核心工作流收敛与稳定性整改（用户任务 m00041，分支 `main`，本轮完整记录见 §3.8）。** 本轮目标不是堆砌新功能，而是让平台达到“日常可用、核心流程连续、错误可恢复、结果可验证”。已完成：D1/D2 统一分析生命周期（持久化状态为权威、可取消/可重试/有界超时/重启收敛）、高负载 `TargetClosedError` 根因修复、Recorder→Studio 数据级集成、运行/质量页上下文连续、失败文件:行号持久化、Discovery 接入 TaskRuntimeService、无页面对象引导、产物项目隔离、覆盖率口径统一、迁移往返与备份恢复/密钥轮换演练；其中 D1/D2 的分析结论已从“后端上下文即可复现”升级为 真实浏览器 + 真实 AI Provider 的实测证据（§3.8）。
+
+**结论与未完成项**：见 §9（最后执行的测试）与 §3.8“本轮未解决 / 边界”。
+
+**纠正历史漂移（重要）**：本文档 §3.4–§3.7、§7、§8 中大量“系统级 project ACL 未完成 / P0 ACL 缺失 / `ArtifactORM` 无 `project_id` / 覆盖率两套口径 / ArtifactORM 未隔离”的记载均为 **2026-10-19 之前的历史状态**，现已被：`b6bb5fc`（ACL 第一版 + 迁移 `0013_project_ownership`）、Round 7 的补齐（`test_design` 解析器、`resource_query_access`、git 路由、stream-ticket）以及本轮 `19f7e33`（制品级 `project_id`/`created_by` + 资源访问守卫，迁移 `0015_artifact_ownership`）与 `31450a3`（覆盖率唯一口径）**取代**。仍待产品/安全决策的只是 **legacy ownerless project 的认领规则**（当前策略：管理员可见，不静默分配 owner）。后续 Agent 请以本节与 §3.8 为准，不要把历史段落当成现状。
+
+Round 10（用户任务 m01913，质量发现“生成用例/需求/脚本”可用性修复）已交付，明细见 §3.7。
+
+Round 9（用户任务 m01734，Release Candidate 与真实 QA 产品验收）结论 **PARTIAL**，报告见 `docs/RC_ACCEPTANCE.md`（绑定 SHA `3cbd2a8`）；其中 D1–D6 与本轮的对应关系：D1/D2 已在 Round 11 修复（§3.8），D3（文件:行号）已修（`6a851ac`），D4（上下文丢失）已修（`c74789f`），D5（结果摘要薄）与 D6（Studio 无录制入口）属 UX 取向项，本轮只完成了 Recorder→Studio 的数据级集成，未重做摘要层。
 
 Round 8（用户任务 m01373，全平台 UI/UX 工作台改造）已交付为 `23e73ab`（分支 `agent/ui-workspace-redesign`，未合并 main），结论 PARTIAL，明细见 §3.5。
 
@@ -21,7 +29,16 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 
 | 项 | 值 |
 | --- | --- |
-| 基线提交（前任） | `d8a2eef` |
+| 本轮起点 | `d8a2eef`（= `origin/main`，fetch 后未变；本轮修订**全部未推送**） |
+| 当前 HEAD | `bf8aa31 fix(ops): let a restore target a scratch database and snapshot what it overwrites`（本轮代码冻结点，最终全量回归在此运行；此后仅文档提交） |
+| 本轮提交数 | 59（`git rev-list --count origin/main..HEAD`，含文档提交） |
+| 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据（保留、不暂存、不提交） |
+| 关键提交（按主题） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档 |
+| 迁移链 | `0013_project_ownership` → `0014_failure_source_location` → `0015_artifact_ownership`（本轮新增后两者，均连续、可升降） |
+| 远程 main | 未推送、未合并、未 force push |
+| CI | `.github/workflows/ci.yml` 存在；最近一次运行在 `d8a2eef` 上失败 4 条后端用例，那 4 条在当前 HEAD 本地重跑 **14 passed**；本轮修订从未在 CI 上运行（任务禁止推送）→ 记为 BLOCKED，改以本地等价门禁取证（见 `.ai-runs/governance/deploy-ci-evidence.json`） |
+
+历史轮次提交基线（Round 3–10）见 `git log` 与 §3.1–§3.7；上一轮验收绑定 SHA 为 `3cbd2a8`，Round 8 交付于 `23e73ab`，Round 7 位于 `b6bb5fc`→`d8b332d`。
 | 更早基准 | `02c5f3c` |
 | D5 实现提交 | `6b56261 feat(discovery): refresh coverage after test execution` |
 | Round-2 D5 final-report/handoff commit | `7cac0be`（历史基线；详见 `git log`） |
@@ -52,7 +69,9 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 
 ## 3. 当前开发阶段
 
-Round 6（2026-10-17，用户任务 m06679）：全系统独立验收、最后整改与最终交接，详见 §3.3；结论 **PARTIAL**（确定性回归全绿；真实 AI/Jev 链路单次跑通，其余 AI 依赖项因 provider 侧超时被按设计阻断；P0 project ACL 仍未实现）。
+Round 11（2026-10-19，用户任务 m00041）：核心工作流收敛与稳定性整改 —— P0（D1/D2 分析生命周期、高负载 `TargetClosedError`）、完整工作流贯通（Recorder→Studio、上下文连续、精确源定位、人工批准修复链路）、Discovery 接入 TaskRuntimeService 与观察体验、工程与安全治理（产物隔离、覆盖率口径、迁移往返、备份恢复/轮换演练）、最终产品级验收。**详细记录见 §3.8**（本轮不再有“待启动”的阶段）。
+
+Round 10（2026-10-19，用户任务 m01913）：质量发现“生成用例/需求/脚本”可用性修复，见 §3.7。
 
 Round 5（2026-10-17，用户任务 m05655）：企业级可靠性、PostgreSQL、Worker 与安全整改，详见 §3.2。
 
@@ -352,6 +371,71 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 ### 尚未处理
 
 - 生成自动化仍依赖工作区里存在对应页面对象/页面证据；模型无依据时不编造（这是 `ROADMAP` §0 的既定边界，不是缺陷），但工作区「无页面对象」的场景仍缺引导（例如从发现页面直接生成页面对象骨架）。
+
+## 3.8 Round 11（核心工作流收敛与稳定性整改，m00041）
+
+**本轮起点**：`origin/main` = `d8a2eef`，本地 `main` 在其之上新增 59 笔提交，**全部未推送**。**本轮结论**：见 §1 与 §9（最终全量回归在冻结的 `bf8aa31` 上重跑；此后只有文档提交，无代码变更）。
+
+### 第一阶段：P0 阻断修复（D1/D2 统一生命周期）
+
+**根因（不是两个孤立的 UI Bug）**：`apps/api/app/services/failure_workflow_service.py` 的 SSE 生成器自己 `asyncio.create_task(analyze())`，并在 `finally` 里 `task.cancel()` —— 换句话说，**分析任务的所有者是 HTTP 响应的生命周期**。前端 `WorkspaceRunResult.tsx` 在卸载或失败切换时 `abort()`，于是刷新/关页即杀死分析，数据库行永远停在 `RUNNING`、修复行停在 `ANALYZING`（其 `allowed_actions` 为空，界面上一个按钮都没有）；而重连分支 `if start_new_analysis is False:` 只回放历史就 `return`，从不等待在途分析。D2 是同一缺口的另一面：全链路没有任何总预算，也没有 `TIMEOUT` 这个终态。
+
+**修复后的契约**（提交 `5eb2376`、`7aac715`、`7b82832`、`32a5b19`）：
+
+- **服务端持久化状态是唯一权威**，SSE 只是跟随者：`stream()` 先 `_prepare_analysis` / `_schedule_analysis`，再回放持久化事件（按 `event_id` 去重）并轮询到终态，不再拥有任务。
+- 分析跑在服务自持的任务里（模块级 `_ANALYSIS_TASKS` / `_ANALYSIS_SUBSCRIBERS`，因为每个请求都会新建服务实例），`_run_analysis` 用 `asyncio.timeout(budget)` 强制总预算；超时 → `TIMEOUT` + `run.timeout`，取消 → `CANCELLED` + `run.cancelled`（shield 写终态后重新抛出），异常 → `FAILED`。
+- 终态写入走 `failure_analysis_repo.finalize()` 的 `UPDATE ... WHERE status='RUNNING'` 原子守卫，重复回调/幂等重放无法覆盖赢家；`ANALYSIS_TERMINAL_STATUSES = {COMPLETED, FAILED, CANCELLED, TIMEOUT, INTERRUPTED}`。
+- 新增 `POST /api/failures/{failure_id}/analyses/{analysis_id}/cancel`，且在 `ANALYZING/DECIDING/VERIFYING_CANDIDATE` 状态下 `allowed_actions` 含 `CANCEL` —— 取消真的停掉 Provider 调用，而不是只藏起转圈。
+- 重启恢复：`recover_interrupted_analyses()`（由 `container.recover_failure_analyses()` 委托，lifespan 调用）把遗留 `RUNNING` 收敛为 `INTERRUPTED`，同时把修复行从 `ANALYZING` 释放；孤儿行按**年龄**（`created_at < now - (budget + 60s)`）判定，不新增心跳列。
+- 预算 `repair.analysis_timeout_seconds` 默认 **300s**（`config/config.yaml`、`config.example.yaml`、`packages/platform-config`），并保留逐阶段进度事件（`model.progress` 每秒级）。
+
+**顺带发现并修掉的真缺陷**：`e460213`（SQLite 默认 rollback journal 下，长 SSE 读事务阻塞唯一写者 → `database is locked`）；连接钩子改为 `PRAGMA journal_mode=WAL`，并新增回归测试与备份脚本的在线快照分支。
+
+### 第一阶段：高负载浏览器竞态
+
+`TargetClosedError` 的根因不是压力本身，而是**运行时不处理“活动页被关闭”**：`browser_runtime` 没有注册 `close` 监听，`resources.page` 一直指向已死的标签页，`get_session()` 把“标签页关闭”误判成“整个会话崩溃”；执行器的观测路径又直接对本地 `page` 变量 `count()`，异常直接杀死整轮运行。修复（`ffa7ad2`）：活动页关闭时收养同上下文里仍存活的其他标签页，只有浏览器断开或一个可用标签页都不剩才判 `CRASHED`；执行器侧增加 `_adopt_open_page`，观测重试把 `has been closed / page crashed / target closed` 归类为可自愈而非致命。证据：`test_browser_runtime.py` 17 passed（含两个新回归）、`test_browser_agent.py` 25 passed、弹窗用例 3 passed；修复后 `apps/api/tests` 全量 **724 passed / 11 skipped / 442s**，浏览器用例无 TargetClosedError。
+
+### 第二阶段：完整工作流
+
+- **精确失败源定位（D3，`6a851ac`）**：迁移 `0014_failure_source_location` 给 `failure_records` 增加 `source_file`/`source_line`，由 `test_run_service` 里已经算好的 `last_user_code_frame` 一并持久化；前端 `failureWorkspaceModel.failureCodeFrames` 改为“服务端记录优先、正则/断点兜底”，Studio 打开位置也优先用记录行号。
+- **上下文连续性（D4，`c74789f`）**：`workspaceContext.buildScopedHref` + `navigation.pathForTab` + 侧边栏 + `RunsRoute`/`QualityRoute` 读 URL 上下文；此前 `RunsRoute` 的 `useParams()` 永远拿不到 `:runId`，深链从未生效。真实浏览器证据：`.ai-runs/context-continuity/`（含 `run_deep_link_selects_run=true`、`deep_link_project_wins=true`、控制台 0 报错）。
+- **Recorder → Studio 真实数据级集成（`507c59d`）**：`AutomationBinding` DTO 暴露裁剪后的 `recorder_steps`（步骤定位器 + 页面证据 id + URL），Studio 上下文栏渲染「录制步骤（N）」；同时修掉“同一路径二次保存必定 409”的死路（改用 PUT 覆盖）。真实验收：录制 → 保存 → Studio 打开（URL 带 `caseId`/`bindingId`/`nodeid`）→ 编辑 `Control+S` 落盘 → 「运行文件」产生真实 run；二次录制同一路径不再 409。证据 `.ai-runs/recorder-studio/`。
+- **人工批准 → 应用 → 精确验证链路**：真实浏览器跑 `failure → AI 分析 → 批准并应用补丁 → 回归验证`，验证结论来自真实 run（`.ai-runs/governance/repair-chain/`）。AI 只生成提案，源码写入仍需 `allowed_actions` 中的显式人工动作。
+- **AI 长生成超时**：`provider.complete/stream_complete` 原本 `timeout = min(self.timeout, request.timeout_seconds)`，请求侧只能改小不能改大；新增 `LONG_GENERATION_TIMEOUT_SECONDS = 90.0` 并让显式预算优先（`df4d709`）。同一 gap 动作从 **502 / 129.2s** 变为 **200 / 61.1s**，用例生成真实产出 5 条用例。
+
+### 第三阶段：Discovery
+
+- **接入 TaskRuntimeService（`e1f3fdb`）**：新增任务类型 `EXPLORE_PRODUCT` 与单步计划 `discovery.run`，`QualityDiscoveryService._start()` 在装配了 `task_commands` 时创建真实运行任务（任务 id 写入 `run.result["runtime_task_id"]`），`execute_run()` 把当前 asyncio 任务登记进 `_tasks` 以保持 pause/stop 语义；终态非 COMPLETED 时抛 `TaskBlocked`，于是任务中心显示 BLOCKED 而不是假装成功。启动恢复 `recover_interrupted_runs()` 把遗留 `RUNNING/QUEUED` 置 `PAUSED`（可用 `/resume` 继续）。`task_scheduler_service._execute_dag` 把“没有待执行步骤”的完成判定移到挂钟预算检查之前 —— 否则单个长步骤完成后会被 `max_duration_seconds` 追溯判失败。**已知权衡**：运行中的探索会占用调度器两个并发槽之一。
+- **无页面对象引导（`2d642e3`）**：草稿生成返回 `page_objects`（`pages/*.py`、`flows`、`components`，上限 50），为空时在 Studio 草稿预览处给出明确引导文案；模型无依据时不编造（ROADMAP §0 的既定边界）。
+- **真实浏览器观察体验（`edcde0a`）**：`state.observed` 事件 metadata 增加 url 与网络摘要，`DiscoveryLiveView` 新增网络请求面板；暂停 → 刷新 → 继续 → 停止与**重启恢复**都有真实证据（`.ai-runs/discovery-live/`），其中硬杀进程后 run 变 `PAUSED`、运行任务变 `BLOCKED`（`Interrupted by API restart...`）。
+
+### 第四阶段：工程与安全治理
+
+- **产物项目隔离与审计字段（`19f7e33`）**：迁移 `0015_artifact_ownership` 增加 `stored_artifacts.project_id`（FK `ON DELETE SET NULL`）与 `created_by`；全部写入方（run 制品、Discovery 截图/证据、任务证据）带上归属；`artifacts` 路由改为登录 + `enforce_resource_access(user, "artifact", id)`，上传可选 `project_id` 并校验归属，遗留无归属行仅管理员可取。
+- **覆盖率口径统一（`31450a3`、`2ab2874`）**：删除前端自算的 `coverageModel.ts`，`QualityPage` 与 `coveragePresentation` 只信任服务端 `coverage.*` 判定；`docs/QUALITY_INTELLIGENCE.md` 记录唯一口径。
+- **迁移往返**：见 §7 与 `.ai-runs/migrations/drill.log`（修了 0015 的 SQLite `create_foreign_key` 缺陷与线上库缺索引漂移）。
+- **运维演练**：备份/恢复逐表一致；密钥轮换为“重启生效”并验证了降级行为；**部署/回滚与 CI 在本环境明确 BLOCKED**（无容器运行时；本轮修订从未推送，故 CI 未运行），证据 `.ai-runs/governance/{backup-restore-drill.json,key-rotation-drill.json,deploy-ci-evidence.json}`。
+
+### 本轮证据索引（全部在未跟踪的 `.ai-runs/` 下）
+
+| 主题 | 位置 |
+| --- | --- |
+| D1/D2 生命周期（含真实 Before/After 同页对照） | `.ai-runs/d1-d2-lifecycle/{browser-acceptance.json,screenshots/}` |
+| Recorder → Studio | `.ai-runs/recorder-studio/` |
+| 上下文连续性（D4） | `.ai-runs/context-continuity/` |
+| 修复链路（人工批准→应用→验证） | `.ai-runs/governance/repair-chain/` |
+| Discovery 观察与恢复、崩溃恢复 | `.ai-runs/discovery-live/` |
+| Discovery 下游转换（需求/用例/自动化） | `.ai-runs/discovery-downstream/` |
+| 迁移 / 备份恢复 / 轮换 / CI-部署 | `.ai-runs/{migrations,governance}/` |
+| 最终走查（9 页 × 2 视口 + 连续旅程 + Before/After 对照表） | `.ai-runs/final-acceptance/` |
+
+### 本轮未解决 / 边界（下一轮优先级）
+
+1. Discovery 停止后运行任务落在 `BLOCKED` 而非 `CANCELLED`（`execute_run` 抛 `TaskBlocked`）——语义可用，但没有“用户主动取消”的独立终态。
+2. 多副本部署下，取消信号无法跨进程传递给持有任务的实例；当前实现只在同一进程有效，跨进程时靠孤儿收敛（预算 + grace）。这是单进程部署的既定边界，需要多副本时再引入租约/信号通道。
+3. 运行中的探索占用调度器两个并发槽之一；多用户场景需要提高并发或把探索移出该并发池。
+4. 部署/回滚演练与 CI 运行证据在本环境 BLOCKED；换到有容器运行时的环境后必须补做（脚本已就绪：`scripts/deploy.sh`、`.github/workflows/ci.yml`）。
+5. 历史遗留（与本轮无关但仍在 §7/§8）：`AIProviderRegistry` 未 `configure_runtime` 时回落 fake provider、`POST /api/jobs/{id}/result` 抢输一方仍返回成功、Monaco chunk 体积、暗色主题验收、worker lease 续租。
 
 ## 4. 环境基线（WSL / Linux）
 

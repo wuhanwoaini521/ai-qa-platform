@@ -46,6 +46,7 @@ from app.services.quality_discovery_models import (
     RequirementSignal,
 )
 from app.services.quality_discovery_projection import QualityDiscoveryProjectionMixin
+from app.services.task_command_service import TASK_TERMINAL_STATUSES
 from app.services.task_errors import TaskBlocked
 from app.settings import get_config
 
@@ -799,6 +800,10 @@ class QualityDiscoveryService(
         row = await self.get(run_id)
         if row is None or row.status in self.TERMINAL:
             return
+        if await self._runtime_task_in_flight(row):
+            # A task scheduled earlier (still queued or running) already owns this run; a second one
+            # would drive a second exploration loop against the same customer site.
+            return
         self._resume_events.setdefault(run_id, asyncio.Event()).set()
         self._stop_events.setdefault(run_id, asyncio.Event()).clear()
         task = await self.task_commands.create(
@@ -813,6 +818,14 @@ class QualityDiscoveryService(
         self._runtime_tasks[run_id] = task.id
         await self._change_result(run_id, lambda result: result.__setitem__("runtime_task_id", task.id))
 
+    async def _runtime_task_in_flight(self, row: QualityDiscoveryRunORM) -> bool:
+        """True when the run's recorded runtime task has not reached a terminal status yet."""
+        task_id = str((row.result or {}).get("runtime_task_id") or self._runtime_tasks.get(row.id, ""))
+        if not task_id or self.task_commands is None:
+            return False
+        task = await self.task_commands.get(task_id)
+        return task is not None and task.status not in TASK_TERMINAL_STATUSES
+
     async def execute_run(self, run_id: str) -> dict[str, Any]:
         """Run one bounded exploration pass for a runtime-owned task and report its outcome."""
         row = await self.get(run_id)
@@ -820,9 +833,16 @@ class QualityDiscoveryService(
             raise ValueError("Quality Discovery run not found.")
         if row.status in self.TERMINAL:
             raise TaskBlocked(f"The Quality Discovery run already finished {row.status}.")
-        self._resume_events.setdefault(run_id, asyncio.Event()).set()
-        self._stop_events.setdefault(run_id, asyncio.Event()).clear()
         current = asyncio.current_task()
+        owner = self._tasks.get(run_id)
+        if current is not None and owner is not None and owner is not current and not owner.done():
+            raise TaskBlocked("Another exploration loop is already driving this run.")
+        if row.status == DiscoveryStatus.PAUSED.value:
+            # Respect a pause issued before this task started instead of silently overriding it.
+            self._resume_events.setdefault(run_id, asyncio.Event()).clear()
+        else:
+            self._resume_events.setdefault(run_id, asyncio.Event()).set()
+        self._stop_events.setdefault(run_id, asyncio.Event()).clear()
         if current is not None:
             # Keeps pause/stop semantics identical to the in-process loop.
             self._tasks[run_id] = current

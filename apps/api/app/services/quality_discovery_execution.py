@@ -64,7 +64,9 @@ class QualityDiscoveryExecutionMixin:
                 ),
             )
             self._assert_runtime_ready(config)
-            await self._update(run_id, status=DiscoveryStatus.RUNNING.value, error=None)
+            if row.status != DiscoveryStatus.PAUSED.value:
+                # A run paused before its task was picked up stays paused until someone resumes it.
+                await self._update(run_id, status=DiscoveryStatus.RUNNING.value, error=None)
             await self._event(run_id, "run.started", "正在初始化产品探索。")
             requirement_input = await self._requirement_input(row)
             if requirement_input and not result.get("requirements"):
