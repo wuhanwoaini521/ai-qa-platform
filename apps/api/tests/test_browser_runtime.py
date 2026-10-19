@@ -25,14 +25,26 @@ def _fake_browser_runtime(monkeypatch, *, session_ttl_seconds=60, page_error=Non
     class FakePage:
         url = "about:blank"
 
+        def __init__(self):
+            self.closed = False
+            self.handlers: dict[str, list] = {}
+
         def set_default_timeout(self, _timeout):
             pass
 
         def set_default_navigation_timeout(self, _timeout):
             pass
 
-        def on(self, *_args):
-            pass
+        def on(self, event, *handlers):
+            self.handlers.setdefault(event, []).extend(handlers)
+
+        def is_closed(self):
+            return self.closed
+
+        async def close(self):
+            self.closed = True
+            for handler in list(self.handlers.get("close", [])):
+                handler(self)
 
     class FakeContext:
         def __init__(self):
@@ -64,6 +76,9 @@ def _fake_browser_runtime(monkeypatch, *, session_ttl_seconds=60, page_error=Non
 
         async def new_context(self, **_options):
             return self.context
+
+        def is_connected(self):
+            return not self.closed.is_set()
 
         async def close(self):
             self.close_calls += 1
@@ -534,6 +549,34 @@ async def test_browser_runtime_expires_idle_session_without_another_request(monk
     assert session.id not in runtime._sessions
     assert browsers[0].context.closed
     assert playwright.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_adopts_a_surviving_tab_when_the_active_page_closes(monkeypatch):
+    runtime, browsers, _playwright = _fake_browser_runtime(monkeypatch)
+    session = await runtime.create_session()
+    first_page = await runtime.get_page(session.id)
+    popup = await browsers[0].context.new_page()
+    runtime.set_active_page(session.id, popup)
+
+    await popup.close()
+
+    assert session.status == "READY"
+    assert await runtime.get_page(session.id) is first_page
+    assert await runtime.get_session(session.id) is session
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_retires_a_session_whose_last_tab_closed(monkeypatch):
+    runtime, browsers, _playwright = _fake_browser_runtime(monkeypatch)
+    session = await runtime.create_session()
+
+    await browsers[0].context.pages[0].close()
+
+    assert await runtime.get_session(session.id) is None
+    assert session.status == "CRASHED"
+    with pytest.raises(ValueError, match="invalid, expired or unavailable"):
+        await runtime.get_page(session.id)
 
 
 @pytest.mark.asyncio

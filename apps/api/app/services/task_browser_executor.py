@@ -198,6 +198,23 @@ class TaskBrowserExecutor:
         self.ai_service = ai_service
         self.decision_service = decision_service
 
+    @staticmethod
+    def _adopt_open_page(page: Any) -> Any:
+        """Continue in a surviving tab when the page the agent was observing has closed.
+
+        A popup can close itself and a renderer can die while the session is still alive; the
+        closed tab must not fail the run while another tab is open.
+        """
+        try:
+            if not page.is_closed():
+                return page
+            for candidate in page.context.pages:
+                if not candidate.is_closed():
+                    return candidate
+        except Exception:
+            pass
+        return page
+
     async def _observe_browser_page(
         self,
         page: Any,
@@ -205,6 +222,7 @@ class TaskBrowserExecutor:
         *,
         waited_loading_states: set[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
+        page = self._adopt_open_page(page)
         for attempt in range(3):
             try:
                 return await self._observe_browser_page_once(
@@ -214,6 +232,13 @@ class TaskBrowserExecutor:
                 )
             except Exception as error:
                 message = str(error).casefold()
+                page_closed = any(marker in message for marker in ("has been closed", "page crashed", "target closed"))
+                if page_closed:
+                    adopted = self._adopt_open_page(page)
+                    if adopted is not page:
+                        page = adopted
+                        continue
+                    raise
                 navigation_race = any(
                     marker in message
                     for marker in (

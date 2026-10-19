@@ -230,7 +230,8 @@ class PlaywrightBrowserRuntime:
             self._sessions.pop(session_id, None)
             return None
         try:
-            if not resources.browser.is_connected() or resources.page.is_closed():
+            # A tab that closed is not a dead session: adopt a surviving tab before declaring a crash.
+            if not resources.browser.is_connected() or self._live_page(session_id, resources) is None:
                 session.status = "CRASHED"
                 await self.close_session(session_id)
                 return None
@@ -246,7 +247,10 @@ class PlaywrightBrowserRuntime:
         session = await self.get_session(session_id)
         if session is None:
             raise ValueError("Browser session is invalid, expired or unavailable")
-        return self._resources[session_id].page
+        page = self._live_page(session_id, self._resources[session_id])
+        if page is None:
+            raise ValueError("Browser session has no open page")
+        return page
 
     async def get_pages(self, session_id: str) -> list[BrowserPage]:
         session = await self.get_session(session_id)
@@ -538,6 +542,7 @@ class PlaywrightBrowserRuntime:
         session = self._sessions.get(session_id)
         resources = self._resources.get(session_id)
         if session is not None and resources is not None:
+            self._watch_page_close(session_id, page)
             resources.page = page
             session.current_url = page.url
             page.on("console", lambda message: self._record_console(session, message))
@@ -587,6 +592,52 @@ class PlaywrightBrowserRuntime:
         except Exception:
             session.status = "CRASHED"
             return None
+
+    @staticmethod
+    def _is_page_open(page: Any) -> bool:
+        if page is None:
+            return False
+        is_closed = getattr(page, "is_closed", None)
+        if not callable(is_closed):
+            # Test doubles drive pages without the Playwright surface; treat them as open.
+            return True
+        try:
+            return not is_closed()
+        except Exception:
+            return False
+
+    def _watch_page_close(self, session_id: str, page: BrowserPage) -> None:
+        """Follow the session to a surviving tab when the tab it drives closes.
+
+        Popups close themselves, rejected popups are closed by the agent and a renderer can die.
+        Without this the session keeps handing out the dead page, and the next locator call fails
+        with `TargetClosedError` instead of the agent simply continuing in an open tab.
+        """
+        if getattr(page, "_qa_close_hook", False):
+            return
+        setattr(page, "_qa_close_hook", True)
+
+        def handle_closed(_page: Any) -> None:
+            resources = self._resources.get(session_id)
+            session = self._sessions.get(session_id)
+            if session is None or resources is None or resources.page is not page:
+                return
+            self._adopt_surviving_page(session_id, resources)
+
+        page.on("close", handle_closed)
+
+    def _adopt_surviving_page(self, session_id: str, resources: _PlaywrightResources) -> None:
+        for candidate in list(resources.context.pages):
+            if self._is_page_open(candidate):
+                self.set_active_page(session_id, candidate)
+                return
+
+    def _live_page(self, session_id: str, resources: _PlaywrightResources) -> Any | None:
+        """The page the session drives, moving off one that has closed; None when no tab survives."""
+        if self._is_page_open(resources.page):
+            return resources.page
+        self._adopt_surviving_page(session_id, resources)
+        return resources.page if self._is_page_open(resources.page) else None
 
     async def _require_session(self, session_id: str) -> BrowserRuntimeSession:
         session = await self.get_session(session_id)

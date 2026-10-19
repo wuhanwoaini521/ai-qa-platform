@@ -50,6 +50,26 @@ def test_browser_cart_intent_recognizes_common_chinese_request():
     assert not TaskBrowserExecutor._browser_cart_intent("Find black trousers")
 
 
+def test_browser_observation_follows_a_surviving_tab_when_the_observed_page_closed():
+    class Tab:
+        def __init__(self, *, closed: bool = False):
+            self.closed = closed
+            self.context = None
+
+        def is_closed(self):
+            return self.closed
+
+    open_tab = Tab()
+    open_tab.context = type("PageContext", (), {"pages": [open_tab]})()
+    closed_tab = Tab(closed=True)
+    closed_tab.context = open_tab.context
+
+    assert TaskBrowserExecutor._adopt_open_page(open_tab) is open_tab
+    assert TaskBrowserExecutor._adopt_open_page(closed_tab) is open_tab
+    assert TaskBrowserExecutor._adopt_open_page(Tab(closed=True)) is not None
+    assert TaskBrowserExecutor._adopt_open_page(object()) is not None
+
+
 def test_browser_history_compacts_old_actions_and_bounds_the_archive():
     state = {
         "history": [
