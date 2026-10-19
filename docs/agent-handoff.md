@@ -624,7 +624,7 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 8. 已知 Bug / 阻断
 
-- **Round 12 现状（以此条为准，下面都是历史快照）**：P0 无开放项；P1 无新开项。本轮修掉两处运行状态错误（用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`）与一处开发启动器端口缺陷（`TIME_WAIT` 被当成端口占用）。仍为 **BLOCKED** 的是：多实例一致性（无 lease/heartbeat，启动收敛是全量的）；部署/回滚/CI/PostgreSQL（无环境）。P2 观察：失败页内联分析与 `FIX_FAILURE` 任务两条修复面的显示不一致；等待审批无过期策略；Jev 评分通道 `FALLBACK`；`provider_connection` 探针假阴性。详见 §3.9 与 `.ai-runs/e2e-round12/audit-report.md`。
+- **Round 12 现状（以此条为准，下面都是历史快照）**：P0 无新开项（两处 P0 级运行状态错误已在本轮修复）；P1 无新开项。本轮修掉两处运行状态错误（用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`）与一处开发启动器端口缺陷（`TIME_WAIT` 被当成端口占用）。仍为 **BLOCKED** 的是：多实例一致性（无 lease/heartbeat，启动收敛是全量的）；部署/回滚/CI/PostgreSQL（无环境）。P2 观察：失败页内联分析与 `FIX_FAILURE` 任务两条修复面的显示不一致；等待审批无过期策略；Jev 评分通道 `FALLBACK`；`provider_connection` 探针假阴性。详见 §3.9 与 `.ai-runs/e2e-round12/audit-report.md`。
 
 - Round6 新增结论：
   - **已修**：四个前端「异步失败被静默」（RunsPage/FailuresPage/QualityPage/SecurityPage）；禁用 TestRail 时伪造 `SUCCESS` 审计；登录审计 IP 硬编码。
