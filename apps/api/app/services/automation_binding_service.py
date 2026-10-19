@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from project_model.models import (
     AutomationBinding,
     AutomationBindingCreate,
@@ -16,6 +18,29 @@ from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.ai_runtime import build_ai_orchestrator
 from app.services.operation_trace import trace_progress
 from app.services.workspace_service import WorkspaceService
+
+# Directories the AI context selector treats as reusable assets (page objects, flows, components).
+PAGE_OBJECT_DIRS = ("pages", "page_objects", "pageobjects", "flows", "components")
+MAX_PAGE_OBJECTS = 50
+# Appended whenever the model refuses to produce code, so the operator gets a next step instead of prose alone.
+EMPTY_DRAFT_GUIDANCE = (
+    "下一步：在自动化工作室中补齐可复用的页面对象（pages/*.py）与夹具，或重新生成并要求一份不依赖页面对象的独立脚本。"
+)
+
+
+def page_object_paths_in(root: Path) -> list[str]:
+    """Reusable page objects / flows an automation draft can build on, as workspace-relative paths."""
+    paths: list[str] = []
+    for directory in PAGE_OBJECT_DIRS:
+        base = root / directory
+        if not base.is_dir():
+            continue
+        paths.extend(
+            candidate.relative_to(root).as_posix()
+            for candidate in sorted(base.rglob("*.py"))
+            if candidate.is_file() and candidate.name != "__init__.py"
+        )
+    return sorted(paths)[:MAX_PAGE_OBJECTS]
 
 
 class AutomationBindingService:
@@ -102,6 +127,17 @@ class AutomationBindingService:
             )
         return success
 
+    async def page_object_paths(self, test_case_id: str) -> list[str]:
+        """The project's reusable page objects, so a caller can explain what a draft could reuse."""
+        test_case = await self.test_case_repo.get_by_id(test_case_id)
+        if not test_case:
+            raise ValueError(f"Test case not found: {test_case_id}")
+        try:
+            root = self.workspace_service.get_workspace_dir(test_case.project_id)
+        except Exception:
+            return []
+        return page_object_paths_in(root)
+
     async def generate_automation_draft(
         self, test_case_id: str, *, idempotency_key: str | None = None
     ) -> tuple[AutomationBinding, str]:
@@ -179,6 +215,7 @@ class AutomationBindingService:
                         if reason
                         else "模型未给出说明，请检查项目上下文（页面对象、工作区文件）后重试。"
                     )
+                    + EMPTY_DRAFT_GUIDANCE
                 )
             code_content = result.suggested_code
             if action_marker:

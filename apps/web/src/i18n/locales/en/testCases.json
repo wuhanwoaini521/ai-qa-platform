@@ -70,5 +70,7 @@
   "errorGeneration": "Generation error: {{message}}",
   "errorSaveDraftSuccess": "Automation scaffold saved to {{file}} and bound to test case.",
   "errorSaveDraftFailed": "Failed to save draft to workspace: {{message}}",
-  "errorBindingSaveFailed": "Binding save error: {{message}}"
+  "errorBindingSaveFailed": "Binding save error: {{message}}",
+  "pageObjectsUsed": "Reuses project assets: {{list}}",
+  "pageObjectsMissing": "This project has no reusable page objects yet (pages/*.py), so the draft carries its own locators. Create one in the Automation Studio to reuse it in later drafts."
 }

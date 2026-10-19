@@ -37,7 +37,7 @@ async def stream_automation_generation(case_id: str, service: AutomationBindingS
             "target_file": binding.file_path,
             "suggested_code": code,
             "grounded_knowledge": [],
-            "page_objects": [],
+            "page_objects": await service.page_object_paths(case_id),
         }
 
     return StreamingResponse(stream_operation(generate, "生成自动化草稿"), media_type="text/event-stream")
@@ -135,6 +135,7 @@ async def generate_automation(
             "status": "generated",
             "binding": binding,
             "code": code,
+            "page_objects": await service.page_object_paths(case_id),
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

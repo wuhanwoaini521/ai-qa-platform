@@ -70,5 +70,7 @@
   "errorGeneration": "生成失败：{{message}}",
   "errorSaveDraftSuccess": "自动化脚手架已保存至 {{file}}，并绑定到测试用例。",
   "errorSaveDraftFailed": "保存草稿到工作区失败：{{message}}",
-  "errorBindingSaveFailed": "绑定保存失败：{{message}}"
+  "errorBindingSaveFailed": "绑定保存失败：{{message}}",
+  "pageObjectsUsed": "复用项目中的页面对象/流程：{{list}}",
+  "pageObjectsMissing": "该项目还没有可复用的页面对象（pages/*.py）：草稿自带全部定位。可在自动化工作室中创建页面对象，让后续草稿复用它。"
 }

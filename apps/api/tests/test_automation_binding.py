@@ -87,3 +87,84 @@ async def test_automation_binding_and_generation(client: AsyncClient, monkeypatc
     tc_updated = await client.get(f"/api/test-cases/{tc_id}")
     assert tc_updated.status_code == 200
     assert tc_updated.json()["automation_status"] == "AUTOMATED"
+
+
+@pytest.mark.asyncio
+async def test_automation_draft_reports_and_guides_missing_page_objects(client: AsyncClient, monkeypatch):
+    from app.services.workspace_service import WorkspaceService
+    from qa_core.ai.models import AICompletionResponse
+    from qa_core.ai.registry import AIProviderRegistry
+
+    class ExplainingProvider:
+        async def complete(self, request):
+            return AICompletionResponse(
+                content="",
+                provider="contract-test",
+                model="test-model",
+                structured_data={
+                    "reply": "There is no page object for the cart page, so the draft would invent selectors.",
+                    "suggested_code": "",
+                    "target_file": "",
+                    "action_type": "generate_test",
+                    "suggestions": [],
+                },
+            )
+
+    class DraftProvider:
+        async def complete(self, request):
+            return AICompletionResponse(
+                content="",
+                provider="contract-test",
+                model="test-model",
+                structured_data={
+                    "reply": "Draft cart case",
+                    "suggested_code": (
+                        "from pages.cart_page import CartPage\n\n"
+                        "def test_cart_total(cart_page: CartPage):\n    assert cart_page.total() == 80\n"
+                    ),
+                    "target_file": "tests/test_cart.py",
+                    "action_type": "generate_test",
+                    "suggestions": [],
+                },
+            )
+
+    project_id = (
+        await client.post("/api/projects", json={"name": "Page Object Guidance", "bootstrap_workspace": True})
+    ).json()["id"]
+    case_id = (
+        await client.post(
+            "/api/test-cases",
+            json={
+                "project_id": project_id,
+                "title": "Cart total with coupons",
+                "preconditions": "Cart has items",
+                "steps": ["Apply coupon", "Read total"],
+                "expected_result": "Total is discounted",
+                "priority": "P1",
+                "automation_status": "MANUAL",
+            },
+        )
+    ).json()["id"]
+
+    # Without a page object the blocked draft names the concrete next step instead of only the model's prose.
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: ExplainingProvider())
+    blocked = await client.post(f"/api/test-cases/{case_id}/generate-automation")
+    assert blocked.status_code == 400
+    detail = blocked.json()["detail"]
+    assert "no page object for the cart page" in detail
+    assert "在自动化工作室中补齐可复用的页面对象" in detail
+
+    # A page object in the workspace is reported back, so the UI can show what a draft reuses.
+    await WorkspaceService().write_file(project_id, "pages/cart_page.py", "class CartPage:\n    pass\n")
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: DraftProvider())
+    generated = await client.post(
+        f"/api/test-cases/{case_id}/generate-automation/stream",
+        headers={"accept": "text/event-stream"},
+    )
+    assert generated.status_code == 200
+    import json
+
+    frames = [json.loads(line[len("data: ") :]) for line in generated.text.splitlines() if line.startswith("data: ")]
+    results = [json.loads(frame["content"]) for frame in frames if frame.get("type") == "operation.result"]
+    listed = results[-1]["page_objects"] if results else []
+    assert "pages/cart_page.py" in listed and "components/cart.py" in listed and "__init__.py" not in " ".join(listed)

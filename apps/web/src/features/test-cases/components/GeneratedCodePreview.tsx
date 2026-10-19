@@ -15,8 +15,14 @@ export const GeneratedCodePreview: React.FC<GeneratedCodePreviewProps> = ({
   onSaveDraftToWorkspace,
 }) => {
   const { t } = useTranslation('testCases');
+  const pageObjects = generatedDraft.page_objects ?? [];
   return (
     <div style={{ marginTop: '18px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+      <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '8px' }}>
+        {pageObjects.length > 0
+          ? t('pageObjectsUsed', { list: pageObjects.join(', ') })
+          : t('pageObjectsMissing')}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink-soft)' }}>
           {t('codeTitle', { file: generatedDraft.target_file })}

@@ -1549,15 +1549,34 @@
         ],
         "summary": "Upload Artifact",
         "operationId": "upload_artifact_api_artifacts_upload_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 36
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_upload_artifact_api_artifacts_upload_post"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {

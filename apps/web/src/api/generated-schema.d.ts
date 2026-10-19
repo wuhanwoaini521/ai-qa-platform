@@ -9948,7 +9948,9 @@ export interface operations {
     };
     upload_artifact_api_artifacts_upload_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
