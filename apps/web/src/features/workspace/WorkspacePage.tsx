@@ -33,6 +33,7 @@ import './workspace.css';
 
 const AutomationStudioPage = lazy(() => import('../automation-studio/AutomationStudioPage').then((module) => ({ default: module.AutomationStudioPage })));
 const RecorderPage = lazy(() => import('../../pages/RecorderPage').then((module) => ({ default: module.RecorderPage })));
+const WorkflowCanvasPanel = lazy(() => import('../canvas/WorkflowCanvasPanel').then((module) => ({ default: module.WorkflowCanvasPanel })));
 
 type MainWorkspaceStage = Exclude<WorkspaceStage, 'failure'>;
 type InspectorTab = 'context' | 'ai' | 'run';
@@ -90,6 +91,7 @@ const stageForView: Record<WorkspaceView, WorkspaceStage> = {
   browser: 'automation',
   debug: 'automation',
   results: 'result',
+  canvas: 'automation',
 };
 
 export function WorkspacePage() {
@@ -436,7 +438,7 @@ export function WorkspacePage() {
   );
   const selectedCase = cases.find((item) => item.id === context.testCaseId) ?? null;
   const automationFilePath = binding?.file_path ?? selectedCase?.binding?.file_path ?? null;
-  const automationSetup = view === 'code' && stage === 'automation'
+  const automationSetup = view === 'code' && stage === 'automation' && !context.file
     ? selectedCase ? automationFilePath ? null : 'unbound' : context.requirementId ? 'no-case' : null
     : null;
   const automationSetupKey = automationSetup === 'unbound' ? selectedCase?.id
@@ -582,6 +584,7 @@ export function WorkspacePage() {
   const taskContextStatus = runtime.snapshot?.kind === 'task' ? runtime.snapshot.status : task?.status;
   const journeyRun = currentRun ?? (!taskContext ? runs[0] : null);
   const activeStage = stage === 'failure' ? 'result' : stage;
+  const navStage = view === 'canvas' ? null : activeStage;
   const journeyFacts: Record<MainWorkspaceStage, string> = {
     requirement: !contextDataLoaded
       ? t('journeyFacts.loading')
@@ -967,10 +970,10 @@ export function WorkspacePage() {
         {workspaceStages.map((item, index) => <button
           key={item.stage}
           type="button"
-          aria-current={activeStage === item.stage ? 'step' : undefined}
+          aria-current={navStage === item.stage ? 'step' : undefined}
           aria-label={`${t(`journey.${item.stage}`)} · ${journeyFacts[item.stage]}`}
           title={journeyFacts[item.stage]}
-          className={`workspace-view-tab${activeStage === item.stage ? ' is-current' : ''}${item.stage === 'result' && resultFailed ? ' has-failure' : ''}`}
+          className={`workspace-view-tab${navStage === item.stage ? ' is-current' : ''}${item.stage === 'result' && resultFailed ? ' has-failure' : ''}`}
           onClick={() => {
             if (item.stage === 'result' && !activeRunId && runs[0]) {
               updateContext({ runId: runs[0].id, stage: 'result', view: 'results' });
@@ -986,6 +989,19 @@ export function WorkspacePage() {
           </span>
           {item.stage === 'result' && journeyRun && <span className={`workspace-tab-status is-${journeyRun.status.toLowerCase()}`} aria-hidden="true" />}
         </button>)}
+        <button
+          type="button"
+          aria-current={view === 'canvas' ? 'step' : undefined}
+          aria-label={t('canvas.openHint')}
+          title={t('canvas.openHint')}
+          className={`workspace-view-tab is-canvas${view === 'canvas' ? ' is-current' : ''}`}
+          onClick={() => setView('canvas')}
+        >
+          <span className="workspace-flow-label">
+            <strong>{t('canvas.title')}</strong>
+            <small>{t('canvas.subtitle')}</small>
+          </span>
+        </button>
       </nav>}
 
       {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
@@ -1186,6 +1202,10 @@ export function WorkspacePage() {
                 runConfig={runConfig}
                 onNavigateToRuns={onRunStarted}
                 onOpenRecordedCase={openRecordedCase}
+              /></Suspense>}
+              {view === 'canvas' && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('canvas.loading')}</div>}><WorkflowCanvasPanel
+                projectId={projectId}
+                requirementId={context.requirementId}
               /></Suspense>}
               {view === 'results' && stage !== 'failure' && <RunResultSurface
                 context={context}

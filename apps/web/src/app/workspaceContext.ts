@@ -6,7 +6,15 @@ export type WorkspaceStage =
   | 'result'
   | 'failure';
 
-export type WorkspaceView = 'requirement' | 'discover' | 'cases' | 'code' | 'browser' | 'debug' | 'results';
+export type WorkspaceView =
+  | 'requirement'
+  | 'discover'
+  | 'cases'
+  | 'code'
+  | 'browser'
+  | 'debug'
+  | 'results'
+  | 'canvas';
 
 /**
  * Shared cross-surface context. Entity IDs in the URL remain the source of truth;
@@ -110,7 +118,8 @@ export function readWorkspaceContext(
     view === 'code' ||
     view === 'browser' ||
     view === 'debug' ||
-    view === 'results'
+    view === 'results' ||
+    view === 'canvas'
   ) {
     context.view = view;
   } else if (context.stage) {

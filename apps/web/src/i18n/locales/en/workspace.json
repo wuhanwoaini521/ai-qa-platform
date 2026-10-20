@@ -4,6 +4,7 @@
   "projectWorkspace": "Project workspace",
   "subtitle": "Analyze requirements, shape cases, automate, run, and recover failures in one project context.",
   "pageHeadings": {
+    "canvas": "Workflow canvas",
     "requirement": "Requirement analysis",
     "discover": "Quality discovery",
     "cases": "Test case analysis",
@@ -22,6 +23,7 @@
     "browser": "Browser",
     "debug": "Debug",
     "results": "Results"
+    ,"canvas": "Workflow canvas"
   },
   "automationViews": {
     "label": "Automation tools",
@@ -585,5 +587,92 @@
     "viewFailure": "Open Failure",
     "downloadArtifact": "Download artifact",
     "stepActivity": "Execution activity"
+  },
+  "canvas": {
+    "title": "Workflow canvas",
+    "subtitle": "A pipeline of the records that exist",
+    "openHint": "See this project's discovery, recording, run and repair records on a read-only canvas",
+    "loading": "Loading the workflow canvas…",
+    "errorTitle": "The workflow canvas could not be loaded",
+    "retry": "Retry",
+    "emptyTitle": "Nothing to draw yet",
+    "emptyHint": "The canvas only shows what already happened: run an exploration or a test and its node appears here.",
+    "truncated": "Only the latest records are drawn; older history stays in Runs, Quality insight and Failures.",
+    "detail": {
+      "title": "Node details",
+      "close": "Close",
+      "status": "Status",
+      "entity": "Source record",
+      "task": "Runtime task",
+      "startedAt": "Started",
+      "finishedAt": "Finished",
+      "duration": "Duration",
+      "metrics": "Discovery metrics",
+      "inputs": "Inputs",
+      "outputs": "Outputs",
+      "evidenceIndex": "Collected evidence",
+      "evidence": "Evidence references",
+      "open": "Open in an existing page"
+    },
+    "metrics": {
+      "states": "Page states",
+      "actions": "Actions",
+      "features": "Features",
+      "requirements": "Requirements",
+      "testCases": "Test cases",
+      "gaps": "Coverage gaps",
+      "covered": "Covered",
+      "notCovered": "Not covered"
+    },
+    "collections": {
+      "page_state": "Page snapshot",
+      "screenshot": "Screenshot",
+      "network": "Network requests",
+      "console": "Console",
+      "action": "User action",
+      "locator": "Locator candidates",
+      "dom": "DOM",
+      "user_action": "User action",
+      "test_scenario": "Test scenario",
+      "coverage_gap": "Coverage gap"
+    },
+    "kinds": {
+      "DISCOVERY": "Discovery",
+      "RECORDER": "Recorder",
+      "STUDIO": "Studio edit",
+      "RUN": "Test run",
+      "FAILURE": "Failure",
+      "FAILURE_ANALYSIS": "Failure analysis",
+      "HUMAN_APPROVAL": "Human approval",
+      "EXACT_VERIFICATION": "Exact verification"
+    },
+    "links": {
+      "workspace": "Open in the workspace",
+      "debug": "Debug from the failure",
+      "failure": "Open the failure",
+      "run": "Open the run",
+      "task": "Open the task"
+    },
+    "stages": {
+      "discovery": "Discovery",
+      "recorder": "Recording",
+      "studio": "Editing",
+      "run": "Run",
+      "failure": "Failure",
+      "analysis": "Analysis",
+      "approval": "Approval",
+      "verification": "Verification"
+    },
+    "stageHints": {
+      "discovery": "Explore the app and collect evidence",
+      "recorder": "Capture real user actions",
+      "studio": "Edit and save the test script",
+      "run": "Execute the case and keep the result",
+      "failure": "Record the failure and its source line",
+      "analysis": "AI + Jev diagnose the root cause",
+      "approval": "A human approves the source change",
+      "verification": "Re-run the failed case to prove the fix"
+    }
   }
+
 }

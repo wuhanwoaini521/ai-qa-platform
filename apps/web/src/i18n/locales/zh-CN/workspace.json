@@ -4,6 +4,7 @@
   "projectWorkspace": "项目工作区",
   "subtitle": "在当前项目上下文中完成需求分析、用例、自动化、执行与失败恢复。",
   "pageHeadings": {
+    "canvas": "工作流画布",
     "requirement": "需求分析",
     "discover": "质量发现",
     "cases": "用例分析",
@@ -22,6 +23,7 @@
     "browser": "浏览器",
     "debug": "调试",
     "results": "结果"
+    ,"canvas": "工作流画布"
   },
   "automationViews": {
     "label": "自动化工具",
@@ -585,5 +587,92 @@
     "viewFailure": "查看 Failure",
     "downloadArtifact": "下载制品",
     "stepActivity": "执行活动"
+  },
+  "canvas": {
+    "title": "工作流画布",
+    "subtitle": "真实记录连成的流水线",
+    "openHint": "以只读画布查看本项目的发现、录制、运行与修复记录",
+    "loading": "正在加载工作流画布…",
+    "errorTitle": "无法加载工作流画布",
+    "retry": "重试",
+    "emptyTitle": "还没有可画的东西",
+    "emptyHint": "画布只展示已经发生的记录：先运行一次探索或测试，节点就会出现在这里。",
+    "truncated": "只展示最近的项目记录，更早的历史仍在运行、质量洞察和失败页面中。",
+    "detail": {
+      "title": "节点详情",
+      "close": "关闭",
+      "status": "状态",
+      "entity": "来源记录",
+      "task": "运行任务",
+      "startedAt": "开始时间",
+      "finishedAt": "结束时间",
+      "duration": "耗时",
+      "metrics": "探索指标",
+      "inputs": "输入",
+      "outputs": "输出",
+      "evidenceIndex": "采集证据",
+      "evidence": "证据引用",
+      "open": "在现有页面打开"
+    },
+    "metrics": {
+      "states": "页面状态",
+      "actions": "操作",
+      "features": "功能",
+      "requirements": "需求",
+      "testCases": "用例",
+      "gaps": "覆盖缺口",
+      "covered": "已覆盖",
+      "notCovered": "未覆盖"
+    },
+    "collections": {
+      "page_state": "页面快照",
+      "screenshot": "截图",
+      "network": "网络请求",
+      "console": "控制台",
+      "action": "用户操作",
+      "locator": "定位器候选",
+      "dom": "DOM 结构",
+      "user_action": "用户操作",
+      "test_scenario": "测试场景",
+      "coverage_gap": "覆盖缺口"
+    },
+    "kinds": {
+      "DISCOVERY": "探索",
+      "RECORDER": "录制",
+      "STUDIO": "工作台编辑",
+      "RUN": "测试运行",
+      "FAILURE": "失败",
+      "FAILURE_ANALYSIS": "失败分析",
+      "HUMAN_APPROVAL": "人工审批",
+      "EXACT_VERIFICATION": "精确验证"
+    },
+    "links": {
+      "workspace": "在工作台打开",
+      "debug": "从失败处调试",
+      "failure": "打开失败详情",
+      "run": "查看运行",
+      "task": "查看任务"
+    },
+    "stages": {
+      "discovery": "发现",
+      "recorder": "录制",
+      "studio": "编辑",
+      "run": "运行",
+      "failure": "失败",
+      "analysis": "分析",
+      "approval": "审批",
+      "verification": "验证"
+    },
+    "stageHints": {
+      "discovery": "探索产品并收集证据",
+      "recorder": "录制真实用户操作",
+      "studio": "编辑并保存测试脚本",
+      "run": "执行用例并留下结果",
+      "failure": "记录失败与源位置",
+      "analysis": "AI + Jev 诊断根因",
+      "approval": "人工批准源码改动",
+      "verification": "重跑失败用例证明修复"
+    }
   }
+
 }

@@ -113,6 +113,7 @@ import {
   Workspace,
   RecorderStep,
 } from '../types';
+import type { WorkflowCanvas } from '../types/workflowCanvas';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
@@ -872,6 +873,12 @@ export const api = {
     ),
   // Dashboard
   getDashboardStats: () => request<DashboardStats>('/dashboard/stats'),
+  getWorkflowCanvas: (projectId: string, requirementId?: string) =>
+    request<WorkflowCanvas>(
+      `/projects/${encodeURIComponent(projectId)}/workflow-canvas${
+        requirementId ? `?requirement_id=${encodeURIComponent(requirementId)}` : ''
+      }`,
+    ),
 
   // Projects
   getProjects: () => request<Project[]>('/projects'),
