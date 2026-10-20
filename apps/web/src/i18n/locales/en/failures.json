@@ -224,6 +224,39 @@
     "NOT_APPLICABLE": "Not applicable",
     "ROLLED_BACK": "Rolled back"
   },
+  "attemptStates": {
+    "RUNNING": "Analysis running",
+    "CANCELLED": "Analysis cancelled",
+    "TIMEOUT": "Analysis timed out",
+    "INTERRUPTED": "Analysis interrupted by a restart",
+    "FAILED": "Analysis failed"
+  },
+  "taskChain": {
+    "diagnosed": "Diagnosis complete",
+    "waitingApproval": "Waiting for human approval",
+    "approvalRejected": "Patch rejected",
+    "applied": "Patch applied",
+    "repairReady": "Patch ready",
+    "cancelled": "Repair task cancelled",
+    "blocked": "Repair task blocked",
+    "failed": "Repair task failed",
+    "verificationPassed": "Verification passed",
+    "verificationFailed": "Verification did not pass"
+  },
+  "repairTaskState": "Repair task: {{state}}",
+  "taskStates": {
+    "PENDING": "Pending",
+    "RUNNING": "Running",
+    "WAITING": "Waiting for approval",
+    "VERIFYING": "Verifying",
+    "PAUSED": "Paused",
+    "COMPLETED": "Completed",
+    "FAILED": "Failed",
+    "BLOCKED": "Blocked",
+    "CANCELLED": "Cancelled",
+    "RETRYING": "Retrying"
+  },
+  "startRepairTask": "Create analysis and repair task",
   "primaryAction": "Recommended next step",
   "primaryActions": {
     "RUN_DIAGNOSIS": "Run AI diagnosis and prepare repair proposal",

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  analysisAttemptLabelKey,
   availableEvidenceTabs,
   displayedFailureClassification,
   extractRelevantFrames,
@@ -12,6 +13,7 @@ import {
   observedRoleLocatorMismatch,
   primaryActionForWorkflow,
   relatedFailures,
+  repairTaskChain,
   summarizeFailureError,
   storedRepairProposal,
 } from '../src/features/failures/failureWorkspaceModel.ts';
@@ -164,4 +166,72 @@ test('Read-only grouping only joins failures with a specific shared launch signa
   assert.equal(failureFingerprint(first), 'browser-launch:spawn-eperm');
   assert.deepEqual(relatedFailures([first, second, unrelated], first).map((item) => item.id), ['f1', 'f2']);
   assert.deepEqual(relatedFailures([unrelated], unrelated), []);
+});
+
+const repairTask = (overrides = {}) => ({
+  id: 'task-1',
+  type: 'FIX_FAILURE',
+  goal: 'repair',
+  status: 'WAITING',
+  owner_id: 'admin',
+  inputs: { failure_id: 'f1' },
+  context: {},
+  verification: {},
+  retry_count: 0,
+  replan_count: 0,
+  max_steps: 12,
+  created_at: '2026-10-19T00:00:00Z',
+  updated_at: '2026-10-19T00:00:00Z',
+  plan: [
+    { id: '1', key: 'diagnose', name: 'Diagnose', tool: 'ai.diagnose', status: 'COMPLETED', outputs: {} },
+    { id: '2', key: 'approval', name: 'Approve', tool: 'task.request_approval', status: 'WAITING_FOR_APPROVAL', outputs: {} },
+    { id: '3', key: 'apply', name: 'Apply', tool: 'source.apply_repair', status: 'PENDING', outputs: {} },
+    { id: '4', key: 'target_run', name: 'Target run', tool: 'tests.run_target', status: 'PENDING', outputs: {} },
+    { id: '5', key: 'verify', name: 'Verify', tool: 'tests.verify', status: 'PENDING', outputs: {} },
+  ],
+  ...overrides,
+});
+
+test('A repair task chain reports the approval gate and the verified run it produced', () => {
+  assert.deepEqual(repairTaskChain(null), null);
+  const pending = repairTaskChain(repairTask());
+  assert.equal(pending.approvalPending, true);
+  assert.equal(pending.applied, false);
+  assert.equal(pending.verified, false);
+  assert.equal(pending.targetRunId, null);
+
+  const verifiedTask = repairTask({ status: 'COMPLETED' });
+  verifiedTask.plan = verifiedTask.plan.map((step) => {
+    if (step.key === 'approval') return { ...step, status: 'COMPLETED', outputs: { approved: true } };
+    if (step.key === 'apply') return { ...step, status: 'COMPLETED', outputs: { written: true } };
+    if (step.key === 'target_run') return { ...step, status: 'COMPLETED', outputs: { run_id: 'run_abc', status: 'PASSED' } };
+    if (step.key === 'verify') return { ...step, status: 'COMPLETED', outputs: { verified: true, run_id: 'run_abc', status: 'PASSED' } };
+    return step;
+  });
+  const verified = repairTaskChain(verifiedTask);
+  assert.equal(verified.approvalPending, false);
+  assert.equal(verified.applied, true);
+  assert.equal(verified.targetRunId, 'run_abc');
+  assert.equal(verified.targetRunStatus, 'PASSED');
+  assert.equal(verified.verified, true);
+  assert.equal(verified.verificationRunId, 'run_abc');
+});
+
+test('A stopped repair task is reported as stopped, not as a missing repair', () => {
+  assert.equal(repairTaskChain(repairTask({ status: 'CANCELLED' })).cancelled, true);
+  assert.equal(repairTaskChain(repairTask({ status: 'BLOCKED' })).blocked, true);
+  assert.equal(repairTaskChain(repairTask({ status: 'FAILED' })).failed, true);
+  const rejected = repairTask();
+  rejected.plan = rejected.plan.map((step) =>
+    step.key === 'approval' ? { ...step, status: 'SKIPPED', outputs: { approved: false } } : step,
+  );
+  assert.equal(repairTaskChain(rejected).approvalRejected, true);
+});
+
+test('A cancelled attempt is labelled by its own state instead of the blocked workflow', () => {
+  assert.equal(analysisAttemptLabelKey('CANCELLED'), 'attemptStates.CANCELLED');
+  assert.equal(analysisAttemptLabelKey('timeout'), 'attemptStates.TIMEOUT');
+  assert.equal(analysisAttemptLabelKey('INTERRUPTED'), 'attemptStates.INTERRUPTED');
+  assert.equal(analysisAttemptLabelKey('COMPLETED'), null);
+  assert.equal(analysisAttemptLabelKey(null), null);
 });

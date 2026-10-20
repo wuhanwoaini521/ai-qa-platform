@@ -1,4 +1,5 @@
 import type {
+  AgentTask,
   FailureRecord,
   FailureRepairAction,
   FailureRepairState,
@@ -203,6 +204,76 @@ export function relatedFailures(
   return failures.filter(
     (failure) => failureFingerprint(failure) === fingerprint,
   );
+}
+
+/**
+ * One repair workflow, two engines: the inline analysis writes locator patches, the FIX_FAILURE
+ * task writes approved source changes. The page shows whichever engine got furthest so a
+ * verified task never reads as "not verified" next to its own run.
+ */
+export type RepairTaskChain = {
+  taskId: string;
+  status: AgentTask['status'];
+  diagnosed: boolean;
+  approvalPending: boolean;
+  approvalRejected: boolean;
+  applied: boolean;
+  cancelled: boolean;
+  blocked: boolean;
+  failed: boolean;
+  targetRunId: string | null;
+  targetRunStatus: string | null;
+  verified: boolean;
+  verificationRunId: string | null;
+  verificationRunStatus: string | null;
+};
+
+function outputText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+export function repairTaskChain(task?: AgentTask | null): RepairTaskChain | null {
+  if (!task) return null;
+  const step = (key: string) => task.plan?.find((item) => item.key === key);
+  const approval = step('approval');
+  const diagnose = step('diagnose');
+  const apply = step('apply');
+  const targetRun = step('target_run');
+  const verify = step('verify');
+  return {
+    taskId: task.id,
+    status: task.status,
+    diagnosed: diagnose?.status === 'COMPLETED',
+    approvalPending: approval?.status === 'WAITING_FOR_APPROVAL',
+    approvalRejected: approval?.status === 'SKIPPED' && approval.outputs?.approved === false,
+    applied: apply?.status === 'COMPLETED',
+    cancelled: task.status === 'CANCELLED',
+    blocked: task.status === 'BLOCKED',
+    failed: task.status === 'FAILED',
+    targetRunId: outputText(targetRun?.outputs?.run_id),
+    targetRunStatus: outputText(targetRun?.outputs?.status),
+    verified: verify?.outputs?.verified === true,
+    verificationRunId: outputText(verify?.outputs?.run_id),
+    verificationRunStatus: outputText(verify?.outputs?.status),
+  };
+}
+
+/** A cancelled or timed-out attempt must not read as a blocked repair. */
+export function analysisAttemptLabelKey(status?: string | null): string | null {
+  switch ((status ?? '').trim().toUpperCase()) {
+    case 'CANCELLED':
+      return 'attemptStates.CANCELLED';
+    case 'TIMEOUT':
+      return 'attemptStates.TIMEOUT';
+    case 'INTERRUPTED':
+      return 'attemptStates.INTERRUPTED';
+    case 'FAILED':
+      return 'attemptStates.FAILED';
+    case 'RUNNING':
+      return 'attemptStates.RUNNING';
+    default:
+      return null;
+  }
 }
 
 export function primaryActionForWorkflow(

@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type {
+  AgentTask,
   AIFailureDiagnosisResponse,
   FailureRecord,
   TestRun,
@@ -18,6 +19,7 @@ import {
   displayedFailureClassification,
   failedLocatorFromFailure,
   failureErrorPreview,
+  repairTaskChain,
   summarizeFailureError,
   type DiagnosisState,
   type PrimaryAction,
@@ -77,6 +79,8 @@ export const FailureOverview: React.FC<{
   repairApplied: boolean;
   repairRejected: boolean;
   hasRepairTask?: boolean;
+  repairTask?: AgentTask | null;
+  attemptStateLabel?: string | null;
   rerunMessage?: string | null;
 }> = ({
   failure,
@@ -111,6 +115,8 @@ export const FailureOverview: React.FC<{
   repairApplied,
   repairRejected,
   hasRepairTask = false,
+  repairTask = null,
+  attemptStateLabel = null,
   rerunMessage,
 }) => {
   const { t, i18n } = useTranslation('failures');
@@ -151,7 +157,38 @@ export const FailureOverview: React.FC<{
     : repairProposed
       ? t('repairProposalAvailable')
       : t('repairPending');
-  const currentStage = workflowLoadError ? null :
+  const chain = repairTaskChain(repairTask);
+  const attemptText = attemptStateLabel ? t(attemptStateLabel) : null;
+  const diagnosisStateText = chain
+    ? chain.diagnosed
+      ? t('taskChain.diagnosed')
+      : t('repairTaskState', { state: t(`taskStates.${chain.status}`, { defaultValue: chain.status }) })
+    : attemptText ?? (hasRepairTask ? t('repairTaskExists') : t(`diagnosisStateLabels.${state}`));
+  const taskRepairLabel = chain
+    ? chain.cancelled
+      ? t('taskChain.cancelled')
+      : chain.blocked
+        ? t('taskChain.blocked')
+        : chain.failed
+          ? t('taskChain.failed')
+          : chain.approvalRejected
+            ? t('taskChain.approvalRejected')
+            : chain.approvalPending
+              ? t('taskChain.waitingApproval')
+              : chain.applied
+                ? t('taskChain.applied')
+                : t('taskChain.repairReady')
+    : null;
+  const chainRepairLabel = taskRepairLabel ?? repairLabel;
+  const currentStage = chain
+    ? chain.verified || chain.verificationRunId
+      ? 'verification'
+      : chain.targetRunId
+        ? 'retry'
+        : chain.applied || chain.approvalPending
+          ? 'repair'
+          : 'diagnosis'
+    : workflowLoadError ? null :
     primaryAction === 'CREATE_ISSUE_DRAFT'
       ? null
       : state === 'VERIFYING_FIX' || state === 'VERIFIED'
@@ -161,12 +198,22 @@ export const FailureOverview: React.FC<{
           : state === 'PATCH_READY' || primaryAction === 'REVIEW_REPAIR' || (state === 'NOT_APPLICABLE' && primaryAction === 'BLOCKED')
             ? 'repair'
             : 'diagnosis';
-  const retryRunLabel = verificationRun
+  const retryRunLabel = chain
+    ? chain.targetRunId
+      ? `#${chain.targetRunId.slice(0, 8)} · ${t(`verificationStatuses.${chain.targetRunStatus}`, { defaultValue: chain.targetRunStatus })}`
+      : t('notStarted')
+    : verificationRun
     ? `#${verificationRun.id.slice(0, 8)} · ${t(`verificationStatuses.${verificationRun.status}`, { defaultValue: verificationRun.status })}`
     : verificationRunId
       ? `#${verificationRunId.slice(0, 8)} · ${verificationLabel}`
       : t('notStarted');
-  const verificationResult = verificationRun
+  const verificationResult = chain
+    ? chain.verified
+      ? t('taskChain.verificationPassed')
+      : chain.verificationRunStatus
+        ? t(`verificationStatuses.${chain.verificationRunStatus}`, { defaultValue: chain.verificationRunStatus })
+        : t('notStarted')
+    : verificationRun
     ? t(`verificationStatuses.${verificationRun.status}`, { defaultValue: verificationRun.status })
     : linkedVerificationStatus
       ? t(`verificationStatuses.${linkedVerificationStatus}`, { defaultValue: linkedVerificationStatus })
@@ -225,7 +272,7 @@ export const FailureOverview: React.FC<{
           <div className="failure-decision-action">
             <div className="failure-state-line">
               <span className={`failure-state-dot is-${workflowLoadError ? 'unavailable' : state.toLowerCase().replaceAll('_', '-')}`} aria-hidden="true" />
-              <span>{t('diagnosisState')}: <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : hasRepairTask ? t('repairTaskExists') : t(`diagnosisStateLabels.${state}`)}</strong></span>
+              <span>{t('diagnosisState')}: <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : diagnosisStateText}</strong></span>
             </div>
             {workflowLoadError && <div className="failure-manual-next-step" role="status">
               <p>{t('workflow.statusUnavailableDetail')}</p>
@@ -280,12 +327,12 @@ export const FailureOverview: React.FC<{
             <li><span>{t('failureStep')}</span><strong>{failure.test_name || failure.test_nodeid.split('::').at(-1)}</strong></li>
             <li className={currentStage === 'diagnosis' ? 'is-current' : undefined} aria-current={currentStage === 'diagnosis' ? 'step' : undefined}>
               <span>{t('diagnosisStep')}</span>
-              <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : t(`diagnosisStateLabels.${state}`)}</strong>
+              <strong>{workflowLoading ? t('workflow.loadingAttempt') : workflowLoadError ? t('workflow.statusUnavailable') : diagnosisStateText}</strong>
               {currentStage === 'diagnosis' && <small>{t('currentStage')}</small>}
             </li>
             <li className={currentStage === 'repair' ? 'is-current' : undefined} aria-current={currentStage === 'repair' ? 'step' : undefined}>
               <span>{t('repairStep')}</span>
-              <strong>{repairLabel}</strong>
+              <strong>{chainRepairLabel}</strong>
               {currentStage === 'repair' && <small>{t('currentStage')}</small>}
             </li>
             <li className={currentStage === 'retry' ? 'is-current' : undefined} aria-current={currentStage === 'retry' ? 'step' : undefined}>

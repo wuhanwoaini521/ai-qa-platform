@@ -224,6 +224,39 @@
     "NOT_APPLICABLE": "不适用",
     "ROLLED_BACK": "已回滚"
   }
+  ,"attemptStates": {
+    "RUNNING": "正在分析",
+    "CANCELLED": "分析已取消",
+    "TIMEOUT": "分析超时",
+    "INTERRUPTED": "分析被服务重启中断",
+    "FAILED": "分析失败"
+  }
+  ,"taskChain": {
+    "diagnosed": "分析已完成",
+    "waitingApproval": "等待人工批准",
+    "approvalRejected": "补丁已被拒绝",
+    "applied": "补丁已应用",
+    "repairReady": "补丁已就绪",
+    "cancelled": "修复任务已取消",
+    "blocked": "修复任务受阻",
+    "failed": "修复任务失败",
+    "verificationPassed": "验证通过",
+    "verificationFailed": "验证未通过"
+  }
+  ,"repairTaskState": "修复任务：{{state}}"
+  ,"taskStates": {
+    "PENDING": "待执行",
+    "RUNNING": "执行中",
+    "WAITING": "等待审批",
+    "VERIFYING": "验证中",
+    "PAUSED": "已暂停",
+    "COMPLETED": "已完成",
+    "FAILED": "失败",
+    "BLOCKED": "受阻",
+    "CANCELLED": "已取消",
+    "RETRYING": "重试中"
+  }
+  ,"startRepairTask": "创建分析与修复任务"
   ,"primaryAction": "推荐下一步"
   ,"primaryActions": {
     "RUN_DIAGNOSIS": "运行 AI 诊断并准备修复提案",

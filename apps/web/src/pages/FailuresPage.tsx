@@ -22,6 +22,7 @@ import { FailureWorkflowPanel } from '../components/FailureWorkflowPanel';
 import { FailureEvidence } from '../features/failures/FailureEvidence';
 import { FailureOverview } from '../features/failures/FailureOverview';
 import {
+  analysisAttemptLabelKey,
   displayedFailureClassification,
   failedLocatorFromFailure,
   failureSourceLocation,
@@ -273,6 +274,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const [rejectingRepair, setRejectingRepair] = useState<boolean>(false);
   const [startingRepairTask, setStartingRepairTask] = useState<boolean>(false);
   const [repairTaskId, setRepairTaskId] = useState<string | null>(null);
+  const [repairTask, setRepairTask] = useState<AgentTask | null>(null);
   const [rollingBackRepair, setRollingBackRepair] = useState<boolean>(false);
   const repairApplied = repairWorkflow?.repair_proposal?.applied === true;
   const repairRejected = repairWorkflow?.block_reason === 'HUMAN_REJECTED';
@@ -319,8 +321,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const canStartRepairTaskAsPrimary = canStartRepairTask &&
     ['RUN_DIAGNOSIS', 'BLOCKED'].includes(workflowPrimaryAction);
   const primaryAction = canStartRepairTaskAsPrimary ? 'RUN_DIAGNOSIS' : workflowPrimaryAction;
-  const showReanalysis = !canStartRepairTaskAsPrimary && analysisHistory.length > 0 && (
-    workflowActions.includes('START_ANALYSIS') || diagnosing
+  const repairTaskStopped = Boolean(repairTask && ['BLOCKED', 'FAILED', 'CANCELLED', 'COMPLETED'].includes(repairTask.status));
+  const showReanalysis = analysisHistory.length > 0 && (
+    (!canStartRepairTaskAsPrimary && (workflowActions.includes('START_ANALYSIS') || diagnosing)) ||
+    repairTaskStopped
   );
   const reanalysisBlockedReason = diagnosisState === 'FAILED' && repairApplied
     ? t('rollbackBeforeReanalysis')
@@ -415,6 +419,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     const failureId = selectedFailure?.id;
     if (!currentProjectId || !failureId) {
       setRepairTaskId(null);
+      setRepairTask(null);
       return;
     }
     let active = true;
@@ -428,11 +433,34 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
         !['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED'].includes(task.status),
       ) ?? tasks.find(belongsToFailure);
       setRepairTaskId(existing?.id ?? null);
+      setRepairTask(existing ?? null);
     }).catch(() => {
-      if (active) setRepairTaskId(null);
+      if (active) {
+        setRepairTaskId(null);
+        setRepairTask(null);
+      }
     });
     return () => { active = false; };
   }, [currentProjectId, selectedFailure?.id]);
+
+  useEffect(() => {
+    if (!repairTaskId) {
+      setRepairTask(null);
+      return;
+    }
+    let active = true;
+    const load = () => {
+      void api.getTask(repairTaskId)
+        .then((task) => { if (active && task) setRepairTask(task); })
+        .catch(() => undefined);
+    };
+    load();
+    const timer = window.setInterval(load, 3000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [repairTaskId]);
 
   useEffect(() => {
     const verificationRunId = selectedAnalysis?.result.verification_run_id;
@@ -912,7 +940,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     ? t('preparingCodeRepair')
                     : repairTaskId
                       ? t('openCodeRepairTask')
-                      : t('primaryActions.RUN_DIAGNOSIS')
+                      : useLocatorDiagnosis
+                        ? t('primaryActions.RUN_DIAGNOSIS')
+                        : t('startRepairTask')
                   : undefined}
                 primaryDisabled={primaryActionDisabled}
                 showPrimaryAction={showFailurePrimaryAction && !repairWorkflowLoading && !repairWorkflowError}
@@ -938,6 +968,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 repairRejected={repairRejected}
                 rerunMessage={rerunMessage}
                 hasRepairTask={Boolean(repairTaskId)}
+                repairTask={repairTask}
+                attemptStateLabel={['BLOCKED', 'CREATED', 'NOT_APPLICABLE'].includes(diagnosisState)
+                  ? analysisAttemptLabelKey(selectedAnalysis?.status)
+                  : null}
               />
               {repairError && <div className="alert alert-error" role="alert">{repairError}</div>}
 
