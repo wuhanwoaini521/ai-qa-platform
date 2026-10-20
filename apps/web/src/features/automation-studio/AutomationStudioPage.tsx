@@ -224,6 +224,16 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   useEffect(()=>{if(showBrowser)browserDrawerRef.current?.focus();},[showBrowser]);
   const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
   const [recorderSteps,setRecorderSteps]=useState<RecorderStep[]>([]);
+  // A recorded case should show its recorded steps without hunting through the tools menu.
+  const contextAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    // A recorded case should show its recorded steps without hunting through the tools menu.
+    if (contextAutoOpenedRef.current || !embedded || recorderSteps.length === 0) return;
+    contextAutoOpenedRef.current = true;
+    setShowContext(true);
+  }, [embedded, recorderSteps.length]);
+
+
   const linkedCaseId = query.get('caseId');
   useEffect(() => {
     setRecorderSteps([]);
@@ -460,6 +470,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           <span>/ Studio</span>
           {returnHref && <Link className="btn btn-secondary btn-sm" to={returnHref}>{failureReturnHref ? lc('returnToFailureContext') : lc('returnToWorkspace')}</Link>}
         </div>}
+        {embedded && onStartRecording && <button type="button" className="btn btn-secondary btn-sm" onClick={onStartRecording}>{lc('record')}</button>}
         {embedded && <button type="button" className="btn btn-secondary btn-sm lc-studio-files-toggle" aria-pressed={showFiles} aria-controls="studio-workspace-files" onClick={() => setShowFiles((visible) => !visible)} title={lc('workspaceFiles')}>
           {showFiles ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
           <span>{lc('workspaceFiles')}</span>
@@ -491,7 +502,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         snapshot={studioRuntime.snapshot}
         onOpenDetails={run.activeRunId ? () => setShowBrowser(true) : undefined}
       />}
-      {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void openStudioFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void openStudioFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}{recorderSteps.length>0&&<details className="lc-recorder-steps"><summary>{lc('recordedSteps',{count:recorderSteps.length})}</summary><ol>{recorderSteps.map(step=><li key={step.step_id??step.evidence_id}><code>{step.action??'—'}</code> <code>{locatorLabel(step.locator)}</code>{step.evidence_id&&<span className="lc-caption"> · {lc('recordedStepEvidence',{id:step.evidence_id})}</span>}{step.url&&<span className="lc-caption"> · {step.url}</span>}</li>)}</ol></details>}</div>}
+      {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void openStudioFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void openStudioFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}{recorderSteps.length>0&&<div className="lc-recorder-steps"><span className="lc-caption">{lc('recordedSteps',{count:recorderSteps.length})}</span><ol>{recorderSteps.map(step=><li key={step.step_id??step.evidence_id}><code>{step.action??'—'}</code> <code>{locatorLabel(step.locator)}</code>{step.evidence_id&&<span className="lc-caption"> · {lc('recordedStepEvidence',{id:step.evidence_id})}</span>}{step.url&&<span className="lc-caption"> · {step.url}</span>}</li>)}</ol></div>}</div>}
       {showCommands&&<CommandPalette onClose={()=>setShowCommands(false)} commands={[{label:lc('runCurrent'),hint:'Ctrl+Enter',run:()=>{void saveAndRun();}},{label:lc('sourceDocument'),hint:'Ctrl+P',run:()=>setShowQuickOpen(true)},{label:lc('showBrowser'),run:()=>setShowBrowser(true)},{label:lc('showAssistant'),run:()=>setShowAssistant(true)},...(linkedCase?[{label:lc('inspectKnowledge'),run:()=>setShowKnowledge(true)}]:[])]}/>}
       {showKnowledge&&linkedCase&&<KnowledgeDrawer projectId={currentProjectId} entityId={linkedCase.id} onClose={()=>setShowKnowledge(false)}/>}
     <div className="studio-container" style={{flex:1,height:'auto',minHeight:0}}>

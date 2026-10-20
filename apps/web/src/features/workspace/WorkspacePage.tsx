@@ -593,12 +593,16 @@ export function WorkspacePage() {
       ? t('journeyFacts.loading')
       : relatedCases.length === 0
         ? t('journeyFacts.noCases')
-        : t('journeyFacts.caseCount', { count: relatedCases.length }),
+        : context.requirementId
+          ? t('journeyFacts.caseCountScoped', { count: relatedCases.length })
+          : t('journeyFacts.caseCount', { count: relatedCases.length }),
     automation: !contextDataLoaded
       ? t('journeyFacts.loading')
       : relatedCases.length === 0
         ? t('journeyFacts.noCases')
-        : t('journeyFacts.bindingCount', { bound: activeBoundCases, total: relatedCases.length }),
+        : context.requirementId
+          ? t('journeyFacts.bindingCountScoped', { bound: activeBoundCases, total: relatedCases.length })
+          : t('journeyFacts.bindingCount', { bound: activeBoundCases, total: relatedCases.length }),
     result: taskContext
       ? taskContextStatus
         ? t(`result.workflowStatus.${taskContextStatus}`, { defaultValue: taskContextStatus })
@@ -921,6 +925,7 @@ export function WorkspacePage() {
             {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
             <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
           </button>}
+          {projectId && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setView('browser')}>{t('automationViews.record')}</button>}
           {projectId && <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>}
           {projectId && view !== 'discover' && (!currentRun || stage !== 'result') && <WorkspaceRunDock
             caseLabel={workspaceRunCaseLabel(dockCase?.test_model?.display_id, dockCase?.id, stage === 'failure' ? failureDockName : undefined)}
@@ -1073,7 +1078,7 @@ export function WorkspacePage() {
             <div className="workspace-main-heading">
               <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{t(`tabs.${view}`)}</h2></div>
               {stage === 'automation' && <nav className="workspace-tool-nav" role="tablist" aria-label={t('automationViews.label')}>
-                {automationViews.map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`automationViews.${item}`)}</button>)}
+                {automationViews.map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`automationViews.${item === 'browser' ? 'record' : item}`)}</button>)}
               </nav>}
             </div>
             <div className="workspace-main-scroll">
