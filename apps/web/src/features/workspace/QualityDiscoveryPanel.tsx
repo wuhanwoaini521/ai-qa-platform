@@ -108,6 +108,8 @@ export function QualityDiscoveryPanel({
         setRuns(historyResult.value);
         const selected = historyResult.value.find((item) => !terminalStatuses.has(item.status)) ?? historyResult.value[0] ?? null;
         setRun(selected);
+        // Reuse the last explored entry point instead of asking for the same URL again.
+        setUrl((current) => (current.trim() ? current : selected?.start_url ?? ''));
         setHistoryStatus('ready');
       } else {
         setHistoryStatus('error');
@@ -314,7 +316,10 @@ export function QualityDiscoveryPanel({
 
   const selectRun = async (id: string) => {
     try {
-      setRun(await api.getQualityDiscoveryRun(id));
+      const next = await api.getQualityDiscoveryRun(id);
+      setRun(next);
+      setUrl(next.start_url);
+      setUrlTouched(false);
       setError('');
       setPollError('');
     } catch (reason) {
@@ -443,6 +448,7 @@ export function QualityDiscoveryPanel({
             <Play size={14} aria-hidden="true" />{busy ? t('starting') : t('start')}
           </button>
           {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)}>{runs.map((item) => <option key={item.id} value={item.id}>{item.start_url} · {item.mode} · {new Date(item.created_at).toLocaleString()} · {item.status}</option>)}</select></label>}
+          {active && <span className="qd-load-status" role="status">{t('activeRunHint')}</span>}
           {historyStatus === 'loading' && <span className="qd-load-status" role="status">{t('historyLoading')}</span>}
           {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
         </div>

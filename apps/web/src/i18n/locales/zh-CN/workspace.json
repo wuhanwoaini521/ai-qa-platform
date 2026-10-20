@@ -27,6 +27,7 @@
     "label": "自动化工具",
     "code": "代码",
     "browser": "浏览器",
+    "record": "浏览器录制",
     "debug": "调试"
   },
   "journey": { "requirement": "需求", "discover": "发现", "cases": "用例", "automation": "自动化", "result": "结果" },
@@ -39,7 +40,9 @@
     "analyzing": "分析中",
     "noCases": "尚无用例",
     "caseCount": "{{count}} 条用例",
+    "caseCountScoped": "当前需求 {{count}} 条用例",
     "bindingCount": "{{bound}}/{{total}} 已绑定",
+    "bindingCountScoped": "当前需求 {{bound}}/{{total}} 已绑定",
     "noRun": "尚无运行记录",
     "latestAnalysis": "最近 QA 分析：{{status}}",
     "analysisStatus": {

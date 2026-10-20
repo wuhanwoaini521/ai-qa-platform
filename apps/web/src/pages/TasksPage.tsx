@@ -18,7 +18,7 @@ const originPath = (task: AgentTask): string | null => {
   if (typeof id !== 'string') return null;
   switch (task.inputs.origin) {
     case 'recorder':
-      return '/recorder';
+      return task.project_id ? `/recorder?projectId=${encodeURIComponent(task.project_id)}` : '/recorder';
     case 'failure':
       return `/failures/${encodeURIComponent(id)}`;
     case 'test_case':

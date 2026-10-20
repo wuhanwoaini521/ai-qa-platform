@@ -50,8 +50,8 @@ export function LibraryPage() {
     { key: 'projects', label: t('projects'), count: projects.length, href: '/projects', icon: FolderGit2 },
     { key: 'requirements', label: t('requirements'), count: requirements.length, href: projectPath('/requirements'), icon: FileText },
     { key: 'cases', label: t('cases'), count: cases.length, href: projectPath('/test-cases'), icon: CheckSquare },
-    { key: 'runs', label: t('runs'), count: runs.length === 8 ? '8+' : runs.length, href: '/runs', icon: History },
-    { key: 'failures', label: t('failures'), count: failures.length === 8 ? '8+' : failures.length, href: '/failures', icon: Bug },
+    { key: 'runs', label: t('runs'), count: runs.length === 8 ? '8+' : runs.length, href: selectedProjectId ? `/runs?projectId=${selectedProjectId}` : '/runs', icon: History },
+    { key: 'failures', label: t('failures'), count: failures.length === 8 ? '8+' : failures.length, href: selectedProjectId ? `/failures?projectId=${selectedProjectId}` : '/failures', icon: Bug },
   ];
 
   return (

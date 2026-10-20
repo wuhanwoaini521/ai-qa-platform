@@ -237,5 +237,6 @@
   },
   "liveNetwork": "网络请求",
   "liveNoNetwork": "尚未捕获网络请求。",
-  "liveNetworkFailures": "失败"
+  "liveNetworkFailures": "失败",
+  "activeRunHint": "当前有一次探索在进行或已暂停：先在下方继续或停止它，再开始新的探索。"
 }

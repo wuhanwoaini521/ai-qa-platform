@@ -27,6 +27,7 @@
     "label": "Automation tools",
     "code": "Code",
     "browser": "Browser",
+    "record": "Browser recording",
     "debug": "Debug"
   },
   "journey": { "requirement": "Requirement", "discover": "Discover & audit", "cases": "Cases", "automation": "Automation", "result": "Results" },
@@ -39,7 +40,9 @@
     "analyzing": "Analysis running",
     "noCases": "No test cases",
     "caseCount": "{{count}} test cases",
+    "caseCountScoped": "{{count}} test cases in this requirement",
     "bindingCount": "{{bound}}/{{total}} bound",
+    "bindingCountScoped": "{{bound}}/{{total}} bound in this requirement",
     "noRun": "No run recorded",
     "latestAnalysis": "Latest QA analysis: {{status}}",
     "analysisStatus": {

@@ -142,8 +142,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       .slice(0, 3)
       .map((task) => ({
         key: `task:${task.id}`,
-        title: task.goal,
-        detail: task.failure_reason || task.plan.find((step) => step.status === 'RUNNING')?.name || taskT('currentStep'),
+        title: taskT(`type_${task.type}`),
+        detail: task.failure_reason || task.goal,
         status: task.status,
         Icon: Workflow,
         onClick: () => onOpenTask?.(task.id),

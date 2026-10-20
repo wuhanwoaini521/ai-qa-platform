@@ -237,5 +237,6 @@
   },
   "liveNetwork": "Network",
   "liveNoNetwork": "No network request captured yet.",
-  "liveNetworkFailures": "Failed"
+  "liveNetworkFailures": "Failed",
+  "activeRunHint": "An exploration is running or paused: resume or stop it below before starting a new one."
 }

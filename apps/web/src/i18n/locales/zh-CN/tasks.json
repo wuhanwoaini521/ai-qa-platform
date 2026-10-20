@@ -113,5 +113,7 @@
   "type_REVIEW_TEST": "审查测试代码",
   "type_ANALYZE_REQUIREMENT": "分析需求",
   "caseCopilot": "AI Copilot · 生成、审阅并验证此用例",
-  "caseCopilotShort": "AI Copilot"
+  "caseCopilotShort": "AI Copilot",
+  "type_QA_GOAL": "自然语言目标",
+  "type_EXPLORE_PRODUCT": "探索产品"
 }

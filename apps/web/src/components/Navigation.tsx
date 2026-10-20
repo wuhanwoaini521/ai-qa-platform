@@ -24,7 +24,7 @@ import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
 import { buildWorkspaceHref, buildScopedHref } from '../app/workspaceContext';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
-import { withProjectId } from '../app/projectPaths';
+import { rewriteProjectScope, withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
 
 export type NavTab =
@@ -77,7 +77,7 @@ export const Navigation: React.FC = () => {
   const { t } = useTranslation('nav');
   const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
   const projectDisplayNames = buildProjectDisplayNames(projects);
   const [query, setQuery] = useState('');
@@ -137,7 +137,7 @@ export const Navigation: React.FC = () => {
   const handleProjectChange = (projectId: string) => {
     const nextProjectId = projectId || null;
     // Navigate before updating selection so the outgoing route cannot restore stale scope.
-    navigate(withProjectId(pathname, nextProjectId));
+    navigate(`${withProjectId(pathname, nextProjectId)}${rewriteProjectScope(search, nextProjectId)}`);
     selectProject(nextProjectId);
   };
 

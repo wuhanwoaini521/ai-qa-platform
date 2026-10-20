@@ -113,5 +113,7 @@
   "type_REVIEW_TEST": "Review test code",
   "type_ANALYZE_REQUIREMENT": "Analyze requirement",
   "caseCopilot": "AI Copilot · generate, review and validate this case",
-  "caseCopilotShort": "AI Copilot"
+  "caseCopilotShort": "AI Copilot",
+  "type_QA_GOAL": "Natural-language goal",
+  "type_EXPLORE_PRODUCT": "Explore product"
 }
