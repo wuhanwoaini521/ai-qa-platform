@@ -5,7 +5,7 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 13 —— 产品体验与工作流统一优化（分支 `audit-remaining-blockers`，记录见 §3.10，Before/After 实测数据 `.ai-runs/e2e-round13/{before,after}/audit.json`）。** 本轮不新增产品能力、不重构既有闭环，只在已通过的闭环上修用户体验与一致性：同一个“完成”在不同页面表达一致（修复链统一）、录制器与录制步骤可从可见 UI 到达、跨页面上下文不丢、消除重复/矛盾信息。共 3 笔提交（`0cc6abd`、`800bc5d`、`99a2509`）。审计口径：同一个 Playwright 脚本 `.ai-runs/e2e-round13/audit.py` 在改动前后各跑一次（Before 1/5（4 项 FAIL）→ After 5/5 PASS，控制台错误 0）。
+**当前活动轮次：Round 13 —— 产品体验与工作流统一优化（分支 `audit-remaining-blockers`，记录见 §3.10，Before/After 实测数据 `.ai-runs/e2e-round13/{before,after}/audit.json`）。** 本轮不新增产品能力、不重构既有闭环，只在已通过的闭环上修用户体验与一致性：同一个“完成”在不同页面表达一致（修复链统一）、录制器与录制步骤可从可见 UI 到达、跨页面上下文不丢、消除重复/矛盾信息。共 4 笔提交（`0cc6abd`、`800bc5d`、`99a2509`、`32f22a3`）。审计口径：同一个 Playwright 脚本 `.ai-runs/e2e-round13/audit.py` 在改动前后各跑一次（Before 1/5（4 项 FAIL）→ After 6/6 PASS，控制台错误 0）。
 
 **Round 12（上一轮，分支 `audit-remaining-blockers`，记录见 §3.9，独立报告 `.ai-runs/e2e-round12/audit-report.md`）。** 本轮目标不是堆砌新功能：先逐项复核五项「声称已完成」的能力（D1/D2 分析生命周期、Recorder→Studio 真实数据、Discovery 进程内任务、真实 AI Provider 成功路径、密钥轮换恢复演练），再只修被证实的缺陷（3 笔提交：用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`、开发启动器被 `TIME_WAIT` 骗着换端口），最后在最终代码上用真实 Chromium + 真实 AI/Jev 跑通 `Discovery → Recorder → Studio → Save → Run → Debug → AI 分析 → 人工批准 → 精确验证`（旅程 A 16/16、B 17/17、C 10/10，控制台错误 0）。判定：核心用户路径 **PASS**；多实例一致性、部署/回滚、CI、PostgreSQL 仍为 **BLOCKED**（不计入 PASS）。
 
@@ -34,8 +34,8 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | 项 | 值 |
 | --- | --- |
 | 本轮起点 | `5849b5f docs(handoff): record the Round 11 final regression and its verdict`（= Round 11 收尾提交；本轮修订**全部未推送**） |
-| 当前 HEAD | `99a2509`（Round 13 的 3 笔改动 + 本文档提交） |
-| 本轮提交数 | 3（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性）+ 本文档提交；与 `origin/main` 累计 71 笔未推送 |
+| 当前 HEAD | `32f22a3`（Round 13 的 4 笔改动；本文档提交在其后） |
+| 本轮提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器）+ 本文档提交；与 `origin/main` 累计 73 笔未推送 |
 | 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
 | 本轮关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
 | Round 11 关键提交（历史） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
@@ -500,6 +500,7 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 | 不输入 URL 就能到达录制器 | FAIL（`view=browser` 不可达，可见入口 0） | PASS（1 次点击 `浏览器录制`） |
 | Studio 无需打开菜单就能看到录制步骤 | FAIL（默认隐藏，需 2 次点击） | PASS（`default=True`，0 次点击） |
 | 失败页不会把人堵死（能重新分析或有待批审批门） | FAIL（`reanalyze_visible=False`，主操作「打开分析与修复任务」） | PASS（`reanalyze_visible=True`；该检查在 After 版本改名为 `the failure page never leaves the user without a way forward`，同时接受「有审批门」） |
+| 从用例进入录制并保留用例上下文 | FAIL（无入口） | PASS（`录制此用例` → `view=browser` 且 URL 保留 `caseId/bindingId/nodeid/file`） |
 | 各视口无横向滚动 | PASS | PASS |
 
 ### 三笔改动
@@ -674,7 +675,7 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-- **Round 13（前端体验改动，`99a2509`）**：后端 0 改动（不重跑全量，基线沿用 Round 12 的 898 passed）；web `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **191 pass / 0 fail**（Round 12 为 188，本轮 +3 = `failure-workspace-model.test.mjs` 新增的修复链用例）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3114 keys**（+34）；真实浏览器 Before/After：`.ai-runs/e2e-round13/audit.py` Before **1/5（4 项 FAIL）** → After **5/5**，`console_errors: []`。
+- **Round 13（前端体验改动，`32f22a3`）**：后端 0 改动（不重跑全量，基线沿用 Round 12 的 898 passed）；web `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **191 pass / 0 fail**（Round 12 为 188，本轮 +3 = `failure-workspace-model.test.mjs` 新增的修复链用例）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3115 keys**（+35）；真实浏览器 Before/After：`.ai-runs/e2e-round13/audit.py` Before **1/5（4 项 FAIL）** → After **6/6**，`console_errors: []`。
 
 - **Round 12 最终回归（`2eb6901`，权威数字；单实例 SQLite + 真实 provider）**：后端全量 `uv run pytest -q` → **898 passed / 11 skipped / 60 warnings / 444.30s**（比 Round 11 多 6 例 = 本轮新增用例）；`uv run ruff check` → All checks passed；`ruff format --check` → 446 files already formatted；`scripts/export_openapi.py --check` → current；`scripts/i18n_check.py` → 25 namespaces / 3080 keys；web `tsc --noEmit` + `eslint .` 干净；`pnpm --filter @ai-qa/web test` → **188 pass / 0 fail**。真实浏览器（Playwright 1.62.0 + Chromium，真实 AI/Jev）：旅程 A（Discovery→Recorder→Studio→Run）**16/16**、旅程 B（失败→调试→分析取消/刷新→任务重试→人工批准→应用→精确验证）**17/17**、旅程 C（坏密钥/恢复密钥 + 轮换健康标准）**10/10**，三段 `console_errors` 均为 `[]`。DB 终态：`failure_analyses` RUNNING = 0、`ai_invocations` RUNNING = 0。报告：`.ai-runs/e2e-round12/audit-report.md`。
 
