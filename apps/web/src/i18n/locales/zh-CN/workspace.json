@@ -673,6 +673,32 @@
       "approval": "人工批准源码改动",
       "verification": "重跑失败用例证明修复"
     }
-  }
+  ,
+      "stageExpand": "展开", "stageCollapse": "收起",
+      
+        "evidenceUi": {
+          "title": "结构证据",
+          "raw": "原始元素 {{value}}",
+          "deduped": "去重后 {{value}}",
+          "associated": "请求关联 {{linked}}/{{total}}",
+          "noFiltered": "没有被过滤的采集",
+          "empty": "该类型还没有证据行",
+          "artifact": "产物 {{id}}",
+          "scenarios": "候选场景与覆盖",
+          "traced": "关联用例 {{count}}",
+          "kinds": {
+            "dom_element": "DOM 元素",
+            "network_request": "API 请求",
+            "locator_candidate": "定位候选",
+            "user_action": "用户操作",
+            "page_state": "页面状态"
+          },
+          "coverage": {
+            "COVERED": "已覆盖",
+            "CANDIDATE_GAP": "候选缺口",
+            "UNDETERMINED": "无法判定"
+          }
+        }
+      }
 
 }

@@ -275,3 +275,57 @@
     display: none;
   }
 }
+
+.lw-node-evidence {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lw-stage .lw-stage-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+.lw-stage.is-collapsed {
+  opacity: 0.72;
+}
+
+.lw-evidence-block h5 {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.lw-evidence-summary,
+.lw-evidence-note {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.lw-evidence-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.lw-evidence-kinds .is-active {
+  border-color: var(--line-strong);
+  background: var(--surface-inset);
+}
+
+.lw-evidence-empty {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.lw-evidence .is-ok { color: var(--accent-green); }
+.lw-evidence .is-bad { color: var(--accent-red); }
+.lw-evidence .is-attention { color: var(--ink-muted); }

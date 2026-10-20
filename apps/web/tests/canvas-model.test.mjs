@@ -5,6 +5,7 @@ import {
   CANVAS_ROW_HEIGHT,
   canvasIsLive,
   columnX,
+  discoveryEvidenceLine,
   flowEdges,
   flowNodes,
   stageSummary,
@@ -115,4 +116,76 @@ test('an empty project still gets its stage columns and no invented nodes', () =
   assert.equal(flow.filter((item) => item.type === 'stage').length, STAGES.length);
   assert.equal(stageSummary(canvas([])), '');
   assert.equal(stageSummary(canvas([node({}), node({ id: 'run:run_2' })])), '运行 2');
+});
+
+function discoveryNode(id, evidence) {
+  return node({
+    id: `discovery:${id}`,
+    kind: 'DISCOVERY',
+    stage: 'discovery',
+    title: id,
+    entity_type: 'discovery_run',
+    entity_id: id,
+    status: 'COMPLETED',
+    metrics: {
+      states: 5,
+      actions: 6,
+      features: 3,
+      requirements: 1,
+      gaps: 2,
+      covered: 1,
+      partial: 0,
+      not_covered: 1,
+      test_cases: 2,
+      evidence: evidence ? { captured: true, page_states: 0, locators: 0, locators_ambiguous: 0, scenarios: 0, candidate_gaps: 0, covered: 0, undetermined: 0, state_changes: 0, dom_elements: 0, dom_elements_deduped: 0, requests: 0, requests_associated: 0, actions: 0, ...evidence } : null,
+    },
+  });
+}
+
+test('collapsing a stage hides its rows and keeps the column header', () => {
+  const graph = canvas([
+    discoveryNode('qd_1', { dom_elements: 12, dom_elements_deduped: 9, requests: 2, requests_associated: 1 }),
+  ]);
+  const expanded = flowNodes(graph);
+  const collapsed = flowNodes(graph, { collapsed: new Set(['discovery']) });
+  assert.equal(expanded.filter((node) => node.type === 'workflow').length, 1);
+  assert.equal(collapsed.filter((node) => node.type === 'workflow').length, 0);
+  assert.equal(collapsed.filter((node) => node.type === 'stage').length, expanded.filter((node) => node.type === 'stage').length);
+  const header = collapsed.find((node) => node.id === 'stage:discovery');
+  assert.equal(header.data.collapsed, true);
+});
+
+test('a collapsed stage header reports its toggle', () => {
+  const graph = canvas([discoveryNode('qd_1', {})]);
+  const toggles = [];
+  const nodes = flowNodes(graph, { collapsed: new Set(), onToggle: (stage) => toggles.push(stage) });
+  nodes.find((node) => node.id === 'stage:run').data.onToggle();
+  assert.deepEqual(toggles, ['run']);
+});
+
+test('the discovery card carries the evidence line the server counted', () => {
+  const graph = canvas([
+    discoveryNode('qd_1', {
+      dom_elements: 12,
+      dom_elements_deduped: 9,
+      requests: 2,
+      requests_associated: 1,
+      page_states: 5,
+      locators_ambiguous: 2,
+      scenarios: 3,
+      candidate_gaps: 2,
+    }),
+  ]);
+  const card = flowNodes(graph).find((node) => node.id === 'discovery:qd_1');
+  assert.match(card.data.evidenceLine, /DOM 12→9/);
+  assert.match(card.data.evidenceLine, /关联 1/);
+  assert.match(card.data.evidenceLine, /歧义定位 2/);
+  assert.match(card.data.evidenceLine, /缺口 2/);
+});
+
+test('a run without captured evidence shows no evidence line', () => {
+  const graph = canvas([discoveryNode('qd_1', null)]);
+  const card = flowNodes(graph).find((node) => node.id === 'discovery:qd_1');
+  assert.equal(card.data.evidenceLine, '');
+  assert.equal(discoveryEvidenceLine(null), '');
 });

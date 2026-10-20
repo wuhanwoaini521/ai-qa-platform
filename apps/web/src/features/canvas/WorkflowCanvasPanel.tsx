@@ -16,8 +16,24 @@ import '@xyflow/react/dist/style.css';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
-import type { DiscoveryMetrics, WorkflowCanvas, WorkflowNode } from '../../types/workflowCanvas';
-import { CANVAS_COLUMN_WIDTH, CANVAS_ROW_HEIGHT, canvasIsLive, flowEdges, flowNodes, statusTone, type CanvasNodeData, type CanvasStageData } from './canvasModel';
+import type {
+  DiscoveryCollectionSummary,
+  DiscoveryEvidence,
+  DiscoveryMetrics,
+  DiscoveryScenario,
+  WorkflowCanvas,
+  WorkflowNode,
+} from '../../types/workflowCanvas';
+import {
+  CANVAS_COLUMN_WIDTH,
+  CANVAS_ROW_HEIGHT,
+  canvasIsLive,
+  flowEdges,
+  flowNodes,
+  statusTone,
+  type CanvasNodeData,
+  type CanvasStageData,
+} from './canvasModel';
 
 /** Below this the node labels stop being readable, so the canvas anchors on its first stage instead. */
 const READABLE_ZOOM = 0.62;
@@ -34,17 +50,29 @@ function WorkflowNodeCard({ data, selected }: NodeProps<Node<CanvasNodeData>>) {
       <strong className="lw-node-title">{data.label}</strong>
       {data.subtitle && <span className="lw-node-subtitle">{data.subtitle}</span>}
       <span className={`lw-node-status is-${data.tone}`}>{data.status}</span>
+      {data.evidenceLine ? <span className="lw-node-evidence">{data.evidenceLine}</span> : null}
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );
 }
 
 function StageHeader({ data }: NodeProps<Node<CanvasStageData>>) {
+  const { t } = useTranslation('workspace');
   return (
-    <div className="lw-stage">
+    <button
+      type="button"
+      className={`lw-stage${data.collapsed ? ' is-collapsed' : ''}`}
+      aria-expanded={!data.collapsed}
+      title={data.description}
+      onClick={(event) => {
+        event.stopPropagation();
+        data.onToggle();
+      }}
+    >
       <span className="lw-stage-title">{data.title}</span>
       <span className="lw-stage-count">{data.count}</span>
-    </div>
+      <span className="lw-stage-toggle">{data.collapsed ? t('canvas.stageExpand') : t('canvas.stageCollapse')}</span>
+    </button>
   );
 }
 
@@ -72,6 +100,150 @@ function MetricGrid({ metrics }: { metrics: DiscoveryMetrics }) {
       ))}
     </dl>
   );
+}
+
+function EvidenceSection({
+  node,
+  evidence,
+}: {
+  node: WorkflowNode;
+  evidence: NonNullable<DiscoveryMetrics['evidence']>;
+}) {
+  const { t } = useTranslation('workspace');
+  const [summary, setSummary] = useState<DiscoveryCollectionSummary | null>(null);
+  const [scenarios, setScenarios] = useState<DiscoveryScenario[]>([]);
+  const [kind, setKind] = useState<string | null>(null);
+  const [rows, setRows] = useState<DiscoveryEvidence[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const [nextSummary, nextScenarios] = await Promise.all([
+          api.getDiscoveryEvidenceSummary(node.entity_id),
+          api.getDiscoveryScenarios(node.entity_id),
+        ]);
+        if (!alive) return;
+        setSummary(nextSummary);
+        setScenarios(nextScenarios.scenarios);
+      } catch (caught) {
+        if (alive) setError(caught instanceof Error ? caught.message : String(caught));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [node.entity_id]);
+
+  useEffect(() => {
+    if (!kind) return;
+    let alive = true;
+    void api
+      .listDiscoveryEvidence(node.entity_id, kind, 50)
+      .then((next) => {
+        if (alive) setRows(next);
+      })
+      .catch((caught: unknown) => {
+        if (alive) setError(caught instanceof Error ? caught.message : String(caught));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [kind, node.entity_id]);
+
+  const counters: [string, number][] = [
+    ['dom_element', evidence.dom_elements_deduped],
+    ['network_request', evidence.requests],
+    ['locator_candidate', evidence.locators],
+    ['user_action', evidence.actions],
+    ['page_state', evidence.page_states],
+  ];
+
+  return (
+    <section className="lw-evidence-block">
+      <h4>{t('canvas.evidenceUi.title')}</h4>
+      <p className="lw-evidence-summary">
+        {t('canvas.evidenceUi.raw', { value: evidence.dom_elements })}
+        {' · '}
+        {t('canvas.evidenceUi.deduped', { value: evidence.dom_elements_deduped })}
+        {' · '}
+        {t('canvas.evidenceUi.associated', { linked: evidence.requests_associated, total: evidence.requests })}
+      </p>
+      {summary && (
+        <p className="lw-evidence-note">
+          {Object.entries(summary.analysis.filtered_breakdown ?? {})
+            .filter(([, value]) => value > 0)
+            .map(([key, value]) => `${key} ${value}`)
+            .join(' · ') || t('canvas.evidenceUi.noFiltered')}
+        </p>
+      )}
+      <div className="lw-evidence-kinds">
+        {counters.map(([key, value]) => (
+          <button
+            key={key}
+            type="button"
+            className={`btn btn-secondary btn-sm${kind === key ? ' is-active' : ''}`}
+            onClick={() => setKind(kind === key ? null : key)}
+          >
+            {t(`canvas.evidenceUi.kinds.${key}`)} {value}
+          </button>
+        ))}
+      </div>
+      {kind && (
+        <ul className="lw-evidence">
+          {rows.length === 0 && <li className="lw-evidence-empty">{t('canvas.evidenceUi.empty')}</li>}
+          {rows.map((row) => (
+            <li key={row.evidence_id}>
+              <code>{row.evidence_id}</code>
+              <small>{evidenceLabel(row)}</small>
+              {row.artifact_id && <small>{t('canvas.evidenceUi.artifact', { id: row.artifact_id.slice(0, 8) })}</small>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {scenarios.length > 0 && (
+        <>
+          <h5>{t('canvas.evidenceUi.scenarios')}</h5>
+          <ul className="lw-evidence">
+            {scenarios.map((scenario) => (
+              <li key={scenario.scenario_id}>
+                <span>{scenario.title}</span>
+                <small className={`is-${scenarioStatusTone(scenario.coverage_status)}`}>
+                  {t(`canvas.evidenceUi.coverage.${scenario.coverage_status}`)}
+                </small>
+                <small>{t('canvas.evidenceUi.traced', { count: scenario.test_case_ids.length })}</small>
+                {scenario.match_method && <code>{scenario.match_method}</code>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {error && <p className="lw-evidence-note" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+/** One readable line per evidence row; the payload itself stays in the API response. */
+function evidenceLabel(row: DiscoveryEvidence): string {
+  const payload = row.payload ?? {};
+  const pick = (key: string) => (typeof payload[key] === 'string' ? String(payload[key]) : '');
+  if (row.kind === 'network_request') {
+    return `${pick('method')} ${pick('url_template')} → ${String(payload['statuses'] ?? '')}`;
+  }
+  if (row.kind === 'dom_element') return [pick('tag'), pick('role'), pick('name')].filter(Boolean).join(' · ');
+  if (row.kind === 'locator_candidate') {
+    const count = payload['match_count'];
+    return `${pick('locator_value') || pick('kind')} · ${String(count ?? '')}`;
+  }
+  if (row.kind === 'user_action') return `${pick('action')} ${pick('target')} · ${pick('status')}`;
+  return pick('url_template') || pick('url') || row.dedupe_key;
+}
+
+function scenarioStatusTone(status: string): string {
+  if (status === 'COVERED') return 'ok';
+  if (status === 'CANDIDATE_GAP') return 'bad';
+  return 'attention';
 }
 
 function NodeDetail({ node, onClose }: { node: WorkflowNode; onClose: () => void }) {
@@ -139,6 +311,7 @@ function NodeDetail({ node, onClose }: { node: WorkflowNode; onClose: () => void
           ))}
         </ul>
       </section>}
+      {node.metrics?.evidence?.captured && <EvidenceSection node={node} evidence={node.metrics.evidence} />}
       {navigation.length > 0 && <section>
         <h4>{t('canvas.detail.open')}</h4>
         <div className="lw-detail-actions">
@@ -156,6 +329,7 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
   const [canvas, setCanvas] = useState<WorkflowCanvas | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const flowHostRef = useRef<HTMLDivElement>(null);
   const { fitView, setViewport } = useReactFlow();
 
@@ -180,7 +354,18 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
     return () => window.clearInterval(timer);
   }, [canvas, load]);
 
-  const nodes = useMemo(() => (canvas ? flowNodes(canvas) : []), [canvas]);
+  const toggleStage = useCallback((stage: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(stage)) next.delete(stage);
+      else next.add(stage);
+      return next;
+    });
+  }, []);
+  const nodes = useMemo(
+    () => (canvas ? flowNodes(canvas, { collapsed, onToggle: toggleStage }) : []),
+    [canvas, collapsed, toggleStage],
+  );
   const pipelineExtent = useMemo(() => {
     let right = 0;
     let bottom = 0;

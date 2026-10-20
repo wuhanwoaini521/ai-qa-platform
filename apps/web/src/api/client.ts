@@ -113,7 +113,12 @@ import {
   Workspace,
   RecorderStep,
 } from '../types';
-import type { WorkflowCanvas } from '../types/workflowCanvas';
+import type {
+  DiscoveryCollectionSummary,
+  DiscoveryEvidence,
+  DiscoveryScenarioCollection,
+  WorkflowCanvas,
+} from '../types/workflowCanvas';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
@@ -520,6 +525,17 @@ export const api = {
     request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
   stopQualityDiscoveryRun: (id: string) =>
     request<QualityDiscoveryRun>(`/discovery/runs/${encodeURIComponent(id)}/stop`, { method: 'POST' }),
+  // Structured evidence: the facts a run captured, and the candidate scenarios derived from them.
+  getDiscoveryEvidenceSummary: (runId: string) =>
+    request<DiscoveryCollectionSummary>(`/discovery/runs/${encodeURIComponent(runId)}/evidence/summary`),
+  listDiscoveryEvidence: (runId: string, kind?: string, limit = 200) =>
+    request<DiscoveryEvidence[]>(
+      `/discovery/runs/${encodeURIComponent(runId)}/evidence?limit=${limit}${
+        kind ? `&kind=${encodeURIComponent(kind)}` : ''
+      }`,
+    ),
+  getDiscoveryScenarios: (runId: string) =>
+    request<DiscoveryScenarioCollection>(`/discovery/runs/${encodeURIComponent(runId)}/scenarios`),
   getArtifactBlob: (id: string) => requestBlob(`/artifacts/${encodeURIComponent(id)}/download`),
 
   // Live Quality Discovery observation stream (run events + viewport frames).

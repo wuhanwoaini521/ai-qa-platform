@@ -673,6 +673,32 @@
       "approval": "A human approves the source change",
       "verification": "Re-run the failed case to prove the fix"
     }
-  }
+  ,
+      "stageExpand": "Expand", "stageCollapse": "Collapse",
+      
+        "evidenceUi": {
+          "title": "Structured evidence",
+          "raw": "{{value}} raw elements",
+          "deduped": "{{value}} after dedupe",
+          "associated": "Linked requests {{linked}}/{{total}}",
+          "noFiltered": "Nothing was filtered during capture",
+          "empty": "No evidence row of this kind",
+          "artifact": "Artifact {{id}}",
+          "scenarios": "Candidate scenarios and coverage",
+          "traced": "{{count}} linked cases",
+          "kinds": {
+            "dom_element": "DOM elements",
+            "network_request": "API requests",
+            "locator_candidate": "Locators",
+            "user_action": "User actions",
+            "page_state": "Page states"
+          },
+          "coverage": {
+            "COVERED": "Covered",
+            "CANDIDATE_GAP": "Candidate gap",
+            "UNDETERMINED": "Undetermined"
+          }
+        }
+      }
 
 }

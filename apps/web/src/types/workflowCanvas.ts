@@ -37,6 +37,23 @@ export interface DiscoveryEvidenceRef {
   summary: Record<string, unknown>;
 }
 
+export interface DiscoveryEvidenceMetrics {
+  dom_elements: number;
+  dom_elements_deduped: number;
+  page_states: number;
+  locators: number;
+  locators_ambiguous: number;
+  requests: number;
+  requests_associated: number;
+  actions: number;
+  state_changes: number;
+  scenarios: number;
+  covered: number;
+  candidate_gaps: number;
+  undetermined: number;
+  captured: boolean;
+}
+
 export interface DiscoveryMetrics {
   states: number;
   actions: number;
@@ -47,6 +64,74 @@ export interface DiscoveryMetrics {
   partial: number;
   not_covered: number;
   test_cases: number;
+  evidence?: DiscoveryEvidenceMetrics | null;
+}
+
+/** One structured fact captured by a discovery run (`/discovery/runs/{id}/evidence`). */
+export interface DiscoveryEvidence {
+  evidence_id: string;
+  kind: string;
+  state_id: string | null;
+  step_id: string | null;
+  artifact_id: string | null;
+  source: string;
+  redacted: boolean;
+  observed_at: string | null;
+  dedupe_key: string;
+  payload: Record<string, unknown>;
+}
+
+/** A candidate scenario and the coverage relation to existing test cases. */
+export interface DiscoveryScenario {
+  scenario_id: string;
+  title: string;
+  url_template: string | null;
+  evidence_ids: string[];
+  test_case_ids: string[];
+  coverage_status: string;
+  match_method: string | null;
+  note: string | null;
+}
+
+export interface DiscoveryScenarioCollection {
+  run_id: string;
+  project_id: string;
+  summary: Record<string, unknown>;
+  scenarios: DiscoveryScenario[];
+}
+
+export interface DiscoveryCollectionSummary {
+  run_id: string;
+  project_id: string;
+  capture_enabled: boolean;
+  counts: Record<string, number>;
+  analysis: {
+    dom_element: { raw: number; deduped: number; filtered: number; stored: number };
+    network_request: {
+      raw: number;
+      deduped: number;
+      filtered: number;
+      stored: number;
+      by_resource: Record<string, number>;
+      by_status: Record<string, number>;
+      associated: number;
+      unassociated: number;
+      association_methods: Record<string, number>;
+    };
+    locator_candidate: {
+      total: number;
+      unique: number;
+      verified: number;
+      ambiguous: number;
+      ambiguous_evidence_ids: string[];
+    };
+    user_action: { total: number; state_changed: number; no_state_change: number; with_requests: number };
+    page_state: { total: number; fingerprints: string[] };
+    screenshot: { total: number };
+    filtered_breakdown: Record<string, number>;
+    state_captures: number;
+    measures: Record<string, string>;
+  };
 }
 
 export interface WorkflowNode {

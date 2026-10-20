@@ -2081,6 +2081,46 @@
         }
       }
     },
+    "/api/demo-shop/discovery-fixture.html": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Demo Discovery Fixture",
+        "description": "A page whose element and request counts are known, so a discovery run can be checked against them.",
+        "operationId": "demo_discovery_fixture_api_demo_shop_discovery_fixture_html_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/demo-shop/discovery-fixture-b.html": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Demo Discovery Fixture B",
+        "description": "The same fixture with one more control and one more request, for the incremental comparison.",
+        "operationId": "demo_discovery_fixture_b_api_demo_shop_discovery_fixture_b_html_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/golden-demo/seed": {
       "post": {
         "tags": [
@@ -6482,6 +6522,322 @@
         ],
         "summary": "Stop Discovery Run",
         "operationId": "stop_discovery_run_api_discovery_runs__run_id__stop_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/evidence": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "List Discovery Evidence",
+        "description": "The structured facts this run captured, filterable by kind and state.",
+        "operationId": "list_discovery_evidence_api_discovery_runs__run_id__evidence_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 30
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "state_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/evidence/summary": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Get Discovery Evidence Summary",
+        "description": "Raw, deduped, filtered and associated counts — each with the rule that produced it.",
+        "operationId": "get_discovery_evidence_summary_api_discovery_runs__run_id__evidence_summary_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/evidence/diff": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Get Discovery Evidence Diff",
+        "description": "What changed between this run and an earlier run of the same start URL.",
+        "operationId": "get_discovery_evidence_diff_api_discovery_runs__run_id__evidence_diff_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "against",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 36
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Against"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/evidence/{evidence_id}": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Get Discovery Evidence",
+        "operationId": "get_discovery_evidence_api_discovery_runs__run_id__evidence__evidence_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/scenarios": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "List Discovery Scenarios",
+        "operationId": "list_discovery_scenarios_api_discovery_runs__run_id__scenarios_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/scenarios/refresh": {
+      "post": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Refresh Discovery Scenarios",
+        "description": "Re-derive candidate scenarios from evidence and match them to existing test cases.",
+        "operationId": "refresh_discovery_scenarios_api_discovery_runs__run_id__scenarios_refresh_post",
         "parameters": [
           {
             "name": "run_id",
@@ -13003,6 +13359,83 @@
         ],
         "title": "DetectionPreview"
       },
+      "DiscoveryEvidenceMetrics": {
+        "properties": {
+          "dom_elements": {
+            "type": "integer",
+            "title": "Dom Elements",
+            "default": 0
+          },
+          "dom_elements_deduped": {
+            "type": "integer",
+            "title": "Dom Elements Deduped",
+            "default": 0
+          },
+          "page_states": {
+            "type": "integer",
+            "title": "Page States",
+            "default": 0
+          },
+          "locators": {
+            "type": "integer",
+            "title": "Locators",
+            "default": 0
+          },
+          "locators_ambiguous": {
+            "type": "integer",
+            "title": "Locators Ambiguous",
+            "default": 0
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests",
+            "default": 0
+          },
+          "requests_associated": {
+            "type": "integer",
+            "title": "Requests Associated",
+            "default": 0
+          },
+          "actions": {
+            "type": "integer",
+            "title": "Actions",
+            "default": 0
+          },
+          "state_changes": {
+            "type": "integer",
+            "title": "State Changes",
+            "default": 0
+          },
+          "scenarios": {
+            "type": "integer",
+            "title": "Scenarios",
+            "default": 0
+          },
+          "covered": {
+            "type": "integer",
+            "title": "Covered",
+            "default": 0
+          },
+          "candidate_gaps": {
+            "type": "integer",
+            "title": "Candidate Gaps",
+            "default": 0
+          },
+          "undetermined": {
+            "type": "integer",
+            "title": "Undetermined",
+            "default": 0
+          },
+          "captured": {
+            "type": "boolean",
+            "title": "Captured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "DiscoveryEvidenceMetrics",
+        "description": "What the structured evidence index holds for this run, per kind.\n\nThese are the deterministic counts from the evidence analysis, not a second counting pass: the\ncanvas reads the same numbers the evidence API reports."
+      },
       "DiscoveryEvidenceRef": {
         "properties": {
           "id": {
@@ -13016,7 +13449,12 @@
               "screenshot",
               "network",
               "console",
-              "action"
+              "action",
+              "evidence_dom_element",
+              "evidence_network_request",
+              "evidence_locator_candidate",
+              "evidence_user_action",
+              "evidence_scenario"
             ],
             "title": "Collection"
           },
@@ -13123,6 +13561,16 @@
             "type": "integer",
             "title": "Test Cases",
             "default": 0
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscoveryEvidenceMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
