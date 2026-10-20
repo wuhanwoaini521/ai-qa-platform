@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 13 —— 产品体验与工作流统一优化（分支 `audit-remaining-blockers`，记录见 §3.10，Before/After 实测数据 `.ai-runs/e2e-round13/{before,after}/audit.json`）。** 本轮不新增产品能力、不重构既有闭环，只在已通过的闭环上修用户体验与一致性：同一个“完成”在不同页面表达一致（修复链统一）、录制器与录制步骤可从可见 UI 到达、跨页面上下文不丢、消除重复/矛盾信息。共 4 笔提交（`0cc6abd`、`800bc5d`、`99a2509`、`32f22a3`）。审计口径：同一个 Playwright 脚本 `.ai-runs/e2e-round13/audit.py` 在改动前后各跑一次（Before 1/5（4 项 FAIL）→ After 6/6 PASS，控制台错误 0）。
+**当前活动轮次：Round 14 —— 只读工作流画布 MVP（用户任务 m02243，分支 `audit-remaining-blockers`，记录见 §3.11，真实验收 `.ai-runs/e2e-round14/canvas-acceptance.json`）。** 本轮在既有 Workspace 内用 React Flow 把真实记录投影成一条只读流水线（发现 → 录制 → 编辑 → 运行 → 失败 → 分析 → 人工批准 → 精确验证），不新增执行能力、不改 Recorder/Studio/修复链。2 笔提交（`9fd04df` 后端投影层、`bf9b5c2` 前端画布）+ 本文档提交；真实浏览器 16/16、`console_errors: []`。
+
+**Round 13（上一轮，分支 `audit-remaining-blockers`，记录见 §3.10，Before/After 实测数据 `.ai-runs/e2e-round13/{before,after}/audit.json`）。** 本轮不新增产品能力、不重构既有闭环，只在已通过的闭环上修用户体验与一致性：同一个“完成”在不同页面表达一致（修复链统一）、录制器与录制步骤可从可见 UI 到达、跨页面上下文不丢、消除重复/矛盾信息。共 4 笔提交（`0cc6abd`、`800bc5d`、`99a2509`、`32f22a3`）。审计口径：同一个 Playwright 脚本 `.ai-runs/e2e-round13/audit.py` 在改动前后各跑一次（Before 1/5（4 项 FAIL）→ After 6/6 PASS，控制台错误 0）。
 
 **Round 12（上一轮，分支 `audit-remaining-blockers`，记录见 §3.9，独立报告 `.ai-runs/e2e-round12/audit-report.md`）。** 本轮目标不是堆砌新功能：先逐项复核五项「声称已完成」的能力（D1/D2 分析生命周期、Recorder→Studio 真实数据、Discovery 进程内任务、真实 AI Provider 成功路径、密钥轮换恢复演练），再只修被证实的缺陷（3 笔提交：用户停止探索落 `BLOCKED`、`ai_invocations` 永久 `RUNNING`、开发启动器被 `TIME_WAIT` 骗着换端口），最后在最终代码上用真实 Chromium + 真实 AI/Jev 跑通 `Discovery → Recorder → Studio → Save → Run → Debug → AI 分析 → 人工批准 → 精确验证`（旅程 A 16/16、B 17/17、C 10/10，控制台错误 0）。判定：核心用户路径 **PASS**；多实例一致性、部署/回滚、CI、PostgreSQL 仍为 **BLOCKED**（不计入 PASS）。
 
@@ -33,11 +35,15 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 
 | 项 | 值 |
 | --- | --- |
-| 本轮起点 | `5849b5f docs(handoff): record the Round 11 final regression and its verdict`（= Round 11 收尾提交；本轮修订**全部未推送**） |
-| 当前 HEAD | `32f22a3`（Round 13 的 4 笔改动；本文档提交在其后） |
-| 本轮提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器）+ 本文档提交；与 `origin/main` 累计 73 笔未推送 |
+| Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
+| 当前 HEAD | `bf9b5c2`（Round 14 的 2 笔代码改动；本文档提交在其后） |
+| Round 14 提交数 | 2（`9fd04df` 后端只读投影层、`bf9b5c2` 前端画布）+ 本文档提交 |
+| 历史起点（Round 12/13） | `5849b5f docs(handoff): record the Round 11 final regression and its verdict` |
+| Round 13 提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器） |
 | 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
-| 本轮关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
+| 迁移 | Round 14 无新迁移（画布是只读投影，不新增表） |
+| Round 14 关键提交 | `9fd04df` 只读投影层 + ACL + 截断；`bf9b5c2` 阶段列画布、节点详情与证据、窄视口从第一阶段起、URL 指定文件优先于未绑定空态 |
+| Round 12 关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
 | Round 11 关键提交（历史） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
 | 迁移链 | `0013_project_ownership` → `0014_failure_source_location` → `0015_artifact_ownership`（本轮新增后两者，均连续、可升降） |
 | 远程 main | 未推送、未合并、未 force push |
@@ -515,6 +521,45 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - 「最近任务」卡片与「待处理」条仍会同时出现同一任务：前者是历史、后者是待办，不去重（去重会隐藏上下文）。
 - 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
 
+## 3.11 Round 14（只读工作流画布 MVP，用户任务 m02243）
+
+用户任务 m02243：在既有 Workspace 内用 React Flow 建一块**只读**工作流画布，把真实记录投影成流水线，不新增执行能力、不重做 Recorder/Studio/修复链。起点 `c756994`。
+
+### 交付
+
+| 层 | 内容 |
+| --- | --- |
+| 契约 | `packages/project-model/project_model/workflow_canvas.py`：`WorkflowCanvas` / `WorkflowNode` / `WorkflowEdge` / `WorkflowStage` / `WorkflowEvidence` / `DiscoveryMetrics` / `DiscoveryEvidenceRef` |
+| 投影 | `apps/api/app/services/workflow_canvas_service.py`：把 discovery run → recorder session → studio 绑定 → run → failure → analysis → approval → verification 投影成 8 个阶段节点，业务节点 ID 与任务 ID 分开存放，全部字段来自真实行 |
+| 接口 | `GET /api/projects/{project_id}/workflow-canvas?requirement_id=&limit=`（`apps/api/app/api/workflow_canvas.py`，项目 ACL + 截断标记） |
+| 画布 | `apps/web/src/features/canvas/{canvasModel.ts,WorkflowCanvasPanel.tsx,canvas.css}`：每阶段一列、每记录一行、状态色调、节点选择与右侧详情、Controls、MiniMap、Background |
+| 入口 | Workspace 第 5 阶段 `stage=automation&view=canvas`（既有 5 阶段并存），i18n zh/en |
+| 测试 | `apps/api/tests/test_workflow_canvas.py`（9 例：投影、ACL、截断、任务/审批串链）、`apps/web/tests/canvas-model.test.mjs`（布局/色调/连线） |
+
+### 三笔提交
+
+1. `9fd04df` **后端投影层**：只读投影 + ACL + 截断；Discovery 指标与证据索引从 `discovery_runs.result` 与已落库的步骤/快照/网络记录投影，不采集、不调模型。
+2. `bf9b5c2` **前端画布**：阶段列 + 节点卡片（`data-entity-id` 便于定位与悬停看完整 ID）+ 详情面板（记录摘要、指标、证据索引、跳转到既有失败/调试/工作台）+ 3s 轮询（仅在存在活跃记录时）；画布不发任何写操作。
+3. 本文档提交。
+
+### 真实浏览器验收
+
+`.ai-runs/e2e-round14/canvas_acceptance.py`（Playwright 1.62.0 + Chromium）：**16/16 PASS，`failed: []`，`console_errors: []`**，证据 `.ai-runs/e2e-round14/canvas-acceptance.json` + `screenshots/a1..a7-{desktop,laptop,tablet,mobile}.png`。覆盖：真实 discovery 记录上画布、8 个阶段列齐全、选中节点显示真实指标（`{states:3, actions:3, features:4, requirements:1, gaps:11, covered:1, not_covered:3, test_cases:8}`）与 12 条证据、失败节点链到既有失败页与调试、真的跑一次（`run_ab9bf241bac2` PASSED）并出现在画布、刷新后 29 节点/16 边与状态不变、互动不创建任务、既有阶段仍并存、1560/1280/1024/390 四种视口均可选中节点且无横向溢出。
+
+### 过程中修掉的真实缺陷
+
+- **节点尺寸写法**：给节点写 `width/height` 会被 React Flow v12 当成固定尺寸，导致 MiniMap 空、连线偶发缺失；改 `initialWidth/initialHeight` 后两者正常。
+- **窄视口**：整条流水线 `fitView` 到 346px 会压成不可辨认的一团（约 0.11 缩放，首列还在视口外）。容器 < 700px 时改为从第一阶段起、`zoom 0.6`。
+- **URL 指定文件被空态挡住**：`?file=` 时若用例未绑定脚本，`WorkspacePage` 会在编辑器位置渲染「此用例尚未关联自动化脚本」空态，用户要求的文件根本打不开。现在显式 `file` 优先（`automationSetup` 加 `&& !context.file`）。
+
+### 本轮未做（有意）
+
+- 画布**不可编辑、不可拖动、不可连线**（MVP 只读）；节点位置只由记录顺序决定，不持久化用户布局。
+- 不做按需求/阶段过滤的图形化控件（沿用 URL 的 `requirement_id` 过滤），不改 Discovery 采集，不把画布做成第二个运行控制台。
+- 记录超过 `limit` 时画布只显示最近的并标注截断，历史仍在运行/质量洞察/失败页。
+- 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
+
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -674,6 +719,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+- **Round 14（只读画布，`bf9b5c2` + 本文档）**：后端全量 `uv run pytest -q` → **902 passed / 11 skipped / 60 warnings / 481.13s**（比 Round 12 多 4 例；唯一 FAIL 是 `test_openapi_contract.py` 因新端点导致契约快照过期，已用 `scripts/export_openapi.py` 重新导出，单跑该用例 **1 passed**）；`ruff check` → All checks passed，`ruff format --check` → 378 files already formatted，`scripts/export_openapi.py --check` → current；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3187 keys**（+72）；web `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **197 pass / 0 fail**（Round 13 为 191，+6 = canvas 模型与投影用例）；真实浏览器 `.ai-runs/e2e-round14/canvas_acceptance.py` → **16/16 PASS，`failed: []`，`console_errors: []`**。
 
 - **Round 13（前端体验改动，`32f22a3`）**：后端 0 改动（不重跑全量，基线沿用 Round 12 的 898 passed）；web `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **191 pass / 0 fail**（Round 12 为 188，本轮 +3 = `failure-workspace-model.test.mjs` 新增的修复链用例）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3115 keys**（+35）；真实浏览器 Before/After：`.ai-runs/e2e-round13/audit.py` Before **1/5（4 项 FAIL）** → After **6/6**，`console_errors: []`。
 

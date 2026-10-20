@@ -10089,6 +10089,66 @@
         }
       }
     },
+    "/api/projects/{project_id}/workflow-canvas": {
+      "get": {
+        "tags": [
+          "Workflow Canvas"
+        ],
+        "summary": "Get Workflow Canvas",
+        "description": "Read-only projection of this project's real records.\n\nNothing here executes: the canvas only reads, and every node keeps a link back to\nthe page that owns it.",
+        "operationId": "get_workflow_canvas_api_projects__project_id__workflow_canvas_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "requirement_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 36
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Requirement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCanvas"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Root",
@@ -12942,6 +13002,132 @@
           "detection"
         ],
         "title": "DetectionPreview"
+      },
+      "DiscoveryEvidenceRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "collection": {
+            "type": "string",
+            "enum": [
+              "page_state",
+              "screenshot",
+              "network",
+              "console",
+              "action"
+            ],
+            "title": "Collection"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "collection_method": {
+            "type": "string",
+            "enum": [
+              "browser_runtime",
+              "recorder",
+              "manual"
+            ],
+            "title": "Collection Method",
+            "default": "browser_runtime"
+          },
+          "artifact_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Ref"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "collection"
+        ],
+        "title": "DiscoveryEvidenceRef",
+        "description": "One captured exploration artefact, addressed per discovery node.\n\n``id`` is stable across polls so a later round can attach more collections to the\nsame node without renumbering anything."
+      },
+      "DiscoveryMetrics": {
+        "properties": {
+          "states": {
+            "type": "integer",
+            "title": "States",
+            "default": 0
+          },
+          "actions": {
+            "type": "integer",
+            "title": "Actions",
+            "default": 0
+          },
+          "features": {
+            "type": "integer",
+            "title": "Features",
+            "default": 0
+          },
+          "requirements": {
+            "type": "integer",
+            "title": "Requirements",
+            "default": 0
+          },
+          "gaps": {
+            "type": "integer",
+            "title": "Gaps",
+            "default": 0
+          },
+          "covered": {
+            "type": "integer",
+            "title": "Covered",
+            "default": 0
+          },
+          "partial": {
+            "type": "integer",
+            "title": "Partial",
+            "default": 0
+          },
+          "not_covered": {
+            "type": "integer",
+            "title": "Not Covered",
+            "default": 0
+          },
+          "test_cases": {
+            "type": "integer",
+            "title": "Test Cases",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "DiscoveryMetrics",
+        "description": "Counts a discovery run already knows; the canvas shows them instead of guessing."
       },
       "DiscoveryMode": {
         "type": "string",
@@ -23429,6 +23615,341 @@
           "LOST"
         ],
         "title": "WorkerStatus"
+      },
+      "WorkflowCanvas": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStage"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "generated_at",
+          "stages",
+          "nodes",
+          "edges"
+        ],
+        "title": "WorkflowCanvas"
+      },
+      "WorkflowEdge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target",
+          "kind"
+        ],
+        "title": "WorkflowEdge"
+      },
+      "WorkflowEvidenceRef": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "label"
+        ],
+        "title": "WorkflowEvidenceRef",
+        "description": "One addressable artefact behind a node: an artifact id, a file path or an API path."
+      },
+      "WorkflowNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DISCOVERY",
+              "RECORDER",
+              "STUDIO",
+              "RUN",
+              "FAILURE",
+              "FAILURE_ANALYSIS",
+              "HUMAN_APPROVAL",
+              "EXACT_VERIFICATION"
+            ],
+            "title": "Kind"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inputs"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Outputs"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEvidenceRef"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "links": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Links"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscoveryMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_index": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryEvidenceRef"
+            },
+            "type": "array",
+            "title": "Evidence Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "stage",
+          "title",
+          "status",
+          "entity_type",
+          "entity_id"
+        ],
+        "title": "WorkflowNode"
+      },
+      "WorkflowStage": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DISCOVERY",
+              "RECORDER",
+              "STUDIO",
+              "RUN",
+              "FAILURE",
+              "FAILURE_ANALYSIS",
+              "HUMAN_APPROVAL",
+              "EXACT_VERIFICATION"
+            ],
+            "title": "Kind"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "kind"
+        ],
+        "title": "WorkflowStage"
       },
       "Workspace": {
         "properties": {
