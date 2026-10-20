@@ -17,7 +17,11 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type { DiscoveryMetrics, WorkflowCanvas, WorkflowNode } from '../../types/workflowCanvas';
-import { canvasIsLive, flowEdges, flowNodes, statusTone, type CanvasNodeData, type CanvasStageData } from './canvasModel';
+import { CANVAS_COLUMN_WIDTH, CANVAS_ROW_HEIGHT, canvasIsLive, flowEdges, flowNodes, statusTone, type CanvasNodeData, type CanvasStageData } from './canvasModel';
+
+/** Below this the node labels stop being readable, so the canvas anchors on its first stage instead. */
+const READABLE_ZOOM = 0.62;
+const FITS_THE_WHOLE_PIPELINE = 0.45;
 import './canvas.css';
 
 const POLL_MS = 3000;
@@ -177,18 +181,29 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
   }, [canvas, load]);
 
   const nodes = useMemo(() => (canvas ? flowNodes(canvas) : []), [canvas]);
+  const pipelineExtent = useMemo(() => {
+    let right = 0;
+    let bottom = 0;
+    for (const node of nodes) {
+      right = Math.max(right, node.position.x + CANVAS_COLUMN_WIDTH);
+      bottom = Math.max(bottom, node.position.y + CANVAS_ROW_HEIGHT);
+    }
+    return { right, bottom };
+  }, [nodes]);
   const edges = useMemo(() => (canvas ? flowEdges(canvas) : []), [canvas]);
 
   useEffect(() => {
     if (nodes.length === 0) return;
-    const width = flowHostRef.current?.clientWidth ?? 0;
     const timer = window.setTimeout(() => {
-      // A narrow screen fits the pipeline only as an unreadable smear: start at its first stage instead.
-      if (width > 0 && width < 700) void setViewport({ x: 12, y: 12, zoom: 0.6 });
+      const host = flowHostRef.current;
+      if (!host) return;
+      // Show the whole pipeline only when it stays legible; otherwise start at its first stage and pan.
+      const zoom = Math.min(host.clientWidth / (pipelineExtent.right + 24), host.clientHeight / (pipelineExtent.bottom + 24));
+      if (zoom < FITS_THE_WHOLE_PIPELINE) void setViewport({ x: 12, y: 12, zoom: READABLE_ZOOM });
       else void fitView({ padding: 0.08 });
     }, 60);
     return () => window.clearTimeout(timer);
-  }, [fitView, nodes.length, setViewport]);
+  }, [fitView, nodes.length, pipelineExtent, setViewport]);
 
   const selected = canvas?.nodes.find((node) => node.id === selectedId) ?? null;
 

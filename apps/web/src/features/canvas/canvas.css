@@ -268,3 +268,10 @@
     min-height: 320px;
   }
 }
+
+/* A narrow canvas is panned, not overviewed: the minimap would sit on top of the cards it summarises. */
+@media (max-width: 1100px) {
+  .lw-canvas .react-flow__minimap {
+    display: none;
+  }
+}

@@ -549,7 +549,7 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 ### 过程中修掉的真实缺陷
 
 - **节点尺寸写法**：给节点写 `width/height` 会被 React Flow v12 当成固定尺寸，导致 MiniMap 空、连线偶发缺失；改 `initialWidth/initialHeight` 后两者正常。
-- **窄视口**：整条流水线 `fitView` 到 346px 会压成不可辨认的一团（约 0.11 缩放，首列还在视口外）。容器 < 700px 时改为从第一阶段起、`zoom 0.6`。
+- **窄视口**：整条流水线 `fitView` 到 346px 会压成不可辨认的一团（约 0.11 缩放，首列还在视口外）。现在按容器能给的缩放决定策略：`< 0.45` 时从第一阶段起、`zoom 0.62`（用户自己平移），否则整条 `fitView`；1024px 平板因此从「一片糊」变成可读，1560px 桌面仍是一眼全链。窄视口下小地图会盖住它本来要概括的卡片，`@media (max-width: 1100px)` 隐藏（`Controls` 仍有「适配视图」按钮）。
 - **URL 指定文件被空态挡住**：`?file=` 时若用例未绑定脚本，`WorkspacePage` 会在编辑器位置渲染「此用例尚未关联自动化脚本」空态，用户要求的文件根本打不开。现在显式 `file` 优先（`automationSetup` 加 `&& !context.file`）。
 
 ### 本轮未做（有意）
