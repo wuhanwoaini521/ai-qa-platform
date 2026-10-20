@@ -33,6 +33,8 @@ READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 PUBLIC_PATHS = (
     "/api/demo-shop/index.html",
     "/api/demo-shop/catalog.json",
+    "/api/demo-shop/discovery-fixture.html",
+    "/api/demo-shop/discovery-fixture-b.html",
     "/api/health",
     "/api/metrics",
     "/api/auth/login",

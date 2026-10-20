@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from project_model.workflow_canvas import (
+    DiscoveryEvidenceMetrics,
     DiscoveryEvidenceRef,
     DiscoveryMetrics,
     WorkflowCanvas,
@@ -19,8 +20,10 @@ from project_model.workflow_canvas import (
     WorkflowStage,
 )
 
+from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
 from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.services.automation_binding_service import AutomationBindingService
+from app.services.discovery_evidence_analysis import analyze_collection
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.task_command_service import TaskCommandService
@@ -70,12 +73,14 @@ class WorkflowCanvasService:
         failures: FailureService,
         workflow: FailureWorkflowService,
         discovery: QualityDiscoveryRepository,
+        evidence: DiscoveryEvidenceRepository,
         bindings: AutomationBindingService,
     ) -> None:
         self.runs = runs
         self.failures = failures
         self.workflow = workflow
         self.discovery = discovery
+        self.evidence = evidence
         self.bindings = bindings
 
     async def build(
@@ -115,7 +120,7 @@ class WorkflowCanvasService:
         discovery_ids: set[str] = set()
         for row in discovery_rows:
             result = _mapping(row.result)
-            metrics = self._discovery_metrics(result)
+            metrics = await self._discovery_metrics_async(row.id, result)
             node = WorkflowNode(
                 id=f"discovery:{row.id}",
                 kind="DISCOVERY",
@@ -141,10 +146,17 @@ class WorkflowCanvasService:
                 evidence=[
                     WorkflowEvidenceRef(kind="api", label="探索详情", ref=f"/api/discovery/runs/{row.id}"),
                     WorkflowEvidenceRef(kind="api", label="质量地图", ref=f"/api/discovery/runs/{row.id}/quality-map"),
+                    WorkflowEvidenceRef(kind="api", label="结构证据", ref=f"/api/discovery/runs/{row.id}/evidence"),
+                    WorkflowEvidenceRef(
+                        kind="api", label="候选场景与覆盖", ref=f"/api/discovery/runs/{row.id}/scenarios"
+                    ),
                 ],
                 links={
                     "workspace": f"/workspace/{project_id}?stage=discover&view=discover&projectId={project_id}",
                     "api": f"/api/discovery/runs/{row.id}",
+                    "evidence": f"/api/discovery/runs/{row.id}/evidence",
+                    "scenarios": f"/api/discovery/runs/{row.id}/scenarios",
+                    "diff": f"/api/discovery/runs/{row.id}/evidence/diff",
                 },
                 metrics=metrics,
                 evidence_index=self._discovery_evidence(row, result),
@@ -473,6 +485,35 @@ class WorkflowCanvasService:
             or len(discovery_rows) >= MAX_DISCOVERY_RUNS
             or len(binding_rows) >= MAX_RECORDER,
         )
+
+    async def _discovery_metrics_async(self, run_id: str, result: dict[str, Any]) -> DiscoveryMetrics:
+        """Run-row counts plus the structured evidence index, read from the one analysis."""
+        metrics = self._discovery_metrics(result)
+        rows = await self.evidence.list_by_run(run_id, limit=2000)
+        scenarios = await self.evidence.list_scenarios(run_id)
+        analysis = analyze_collection(rows, _sequence(result.get("states")))
+        elements = analysis["dom_element"]
+        locators = analysis["locator_candidate"]
+        requests = analysis["network_request"]
+        actions = analysis["user_action"]
+        statuses = [scenario.coverage_status for scenario in scenarios]
+        metrics.evidence = DiscoveryEvidenceMetrics(
+            dom_elements=elements["raw"],
+            dom_elements_deduped=elements["deduped"],
+            page_states=analysis["page_state"]["total"],
+            locators=locators["total"],
+            locators_ambiguous=locators["ambiguous"],
+            requests=requests["deduped"],
+            requests_associated=requests["associated"],
+            actions=actions["total"],
+            state_changes=actions["state_changed"],
+            scenarios=len(scenarios),
+            covered=statuses.count("COVERED"),
+            candidate_gaps=statuses.count("CANDIDATE_GAP"),
+            undetermined=statuses.count("UNDETERMINED"),
+            captured=bool(rows),
+        )
+        return metrics
 
     @staticmethod
     def _discovery_metrics(result: dict[str, Any]) -> DiscoveryMetrics:

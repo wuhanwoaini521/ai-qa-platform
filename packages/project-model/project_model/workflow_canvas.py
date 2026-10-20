@@ -23,15 +23,19 @@ WorkflowNodeKind = Literal[
     "EXACT_VERIFICATION",
 ]
 
-#: What a discovery artefact was collected from. Round 15 adds the collections the
-#: exploration loop does not record yet (dom_element, locator_candidate, network_request,
-#: user_action, test_scenario, coverage_gap).
+#: What a discovery artefact was collected from. The first five are projected from the run row;
+#: the ``evidence_*`` ones are the structured index added in Round 15.
 DiscoveryCollection = Literal[
     "page_state",
     "screenshot",
     "network",
     "console",
     "action",
+    "evidence_dom_element",
+    "evidence_network_request",
+    "evidence_locator_candidate",
+    "evidence_user_action",
+    "evidence_scenario",
 ]
 
 DiscoveryCollectionMethod = Literal["browser_runtime", "recorder", "manual"]
@@ -62,6 +66,29 @@ class DiscoveryEvidenceRef(BaseModel):
     summary: dict[str, Any] = Field(default_factory=dict)
 
 
+class DiscoveryEvidenceMetrics(BaseModel):
+    """What the structured evidence index holds for this run, per kind.
+
+    These are the deterministic counts from the evidence analysis, not a second counting pass: the
+    canvas reads the same numbers the evidence API reports.
+    """
+
+    dom_elements: int = 0
+    dom_elements_deduped: int = 0
+    page_states: int = 0
+    locators: int = 0
+    locators_ambiguous: int = 0
+    requests: int = 0
+    requests_associated: int = 0
+    actions: int = 0
+    state_changes: int = 0
+    scenarios: int = 0
+    covered: int = 0
+    candidate_gaps: int = 0
+    undetermined: int = 0
+    captured: bool = False
+
+
 class DiscoveryMetrics(BaseModel):
     """Counts a discovery run already knows; the canvas shows them instead of guessing."""
 
@@ -74,6 +101,7 @@ class DiscoveryMetrics(BaseModel):
     partial: int = 0
     not_covered: int = 0
     test_cases: int = 0
+    evidence: DiscoveryEvidenceMetrics | None = None
 
 
 class WorkflowNode(BaseModel):

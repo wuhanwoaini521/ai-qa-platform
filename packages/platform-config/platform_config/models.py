@@ -166,6 +166,12 @@ class DiscoverySettings(ConfigSection):
     max_screenshots: int = Field(default=20, ge=0, le=200)
     #: Frame cadence of the live discovery stream; frames are viewport-only and never persisted.
     live_frame_interval_ms: int = Field(default=1000, ge=100, le=10_000)
+    #: Structured evidence capture (dom_element / locator_candidate / network_request / user_action).
+    #: Every limit here is a resource budget: the run records how much it filtered, never silently drops.
+    capture_evidence: bool = True
+    max_evidence_records: int = Field(default=6000, ge=0, le=100_000)
+    max_network_evidence: int = Field(default=200, ge=0, le=2000)
+    max_payload_chars: int = Field(default=2000, ge=200, le=20_000)
 
 
 class FailureSettings(ConfigSection):

@@ -750,6 +750,69 @@ class ArtifactORM(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
+class DiscoveryEvidenceORM(Base):
+    """One structured fact captured during a discovery run, addressed by a stable evidence id.
+
+    The run row keeps the projection its consumers already read; this table is the queryable
+    evidence index (per kind, per state, per action) that analysis and the canvas detail read.
+    """
+
+    __tablename__ = "discovery_evidence"
+    __table_args__ = (
+        UniqueConstraint("run_id", "evidence_id", name="uq_discovery_evidence_run_evidence"),
+        Index("ix_discovery_evidence_run_kind", "run_id", "kind"),
+        Index("ix_discovery_evidence_run_dedupe", "run_id", "dedupe_key"),
+        Index("ix_discovery_evidence_project_kind", "project_id", "kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("quality_discovery_runs.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    evidence_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(600), nullable=False)
+    state_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    step_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    artifact_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source: Mapped[str] = mapped_column(String(40), default="browser_runtime")
+    redacted: Mapped[bool] = mapped_column(Boolean, default=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
+
+
+class DiscoveryScenarioORM(Base):
+    """A candidate scenario derived from evidence, with the test cases it was matched to.
+
+    Candidate gaps stay candidates: the row records how the match was made so a human (or a later
+    model-assisted round) can audit it, and never claims a business coverage number on its own.
+    """
+
+    __tablename__ = "discovery_scenarios"
+    __table_args__ = (
+        UniqueConstraint("run_id", "scenario_id", name="uq_discovery_scenarios_run_scenario"),
+        Index("ix_discovery_scenarios_run_status", "run_id", "coverage_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("quality_discovery_runs.id", ondelete="CASCADE"), index=True
+    )
+    scenario_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    url_template: Mapped[str] = mapped_column(String(600), default="")
+    evidence_ids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    test_case_ids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    coverage_status: Mapped[str] = mapped_column(String(30), default="UNDETERMINED", index=True)
+    match_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
 class TaskORM(Base):
     """Durable user goal. Test runs and worker jobs remain execution resources below a task."""
 

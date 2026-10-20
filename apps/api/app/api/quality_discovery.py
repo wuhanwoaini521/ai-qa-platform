@@ -11,7 +11,8 @@ from app.api.project_acl import (
     enforce_project_access,
     project_query_access,
 )
-from app.container import get_quality_discovery_service
+from app.container import get_discovery_evidence_service, get_quality_discovery_service
+from app.services.discovery_evidence_service import DiscoveryEvidenceNotFound, DiscoveryEvidenceService
 from app.services.quality_discovery_service import (
     DiscoveryRunCreate,
     QualityDiscoveryService,
@@ -287,3 +288,81 @@ async def stop_discovery_run(
     if run is None:
         raise HTTPException(status_code=409, detail="Discovery run cannot be stopped")
     return discovery_run_dict(run)
+
+
+@router.get("/runs/{run_id}/evidence")
+async def list_discovery_evidence(
+    run_id: str,
+    kind: str | None = Query(default=None, max_length=30),
+    state_id: str | None = Query(default=None, max_length=64),
+    limit: int = Query(default=200, ge=1, le=1000),
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    """The structured facts this run captured, filterable by kind and state."""
+    try:
+        return await service.list_evidence(run_id, kind=kind, state_id=state_id, limit=limit)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/evidence/summary")
+async def get_discovery_evidence_summary(
+    run_id: str,
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    """Raw, deduped, filtered and associated counts — each with the rule that produced it."""
+    try:
+        return await service.collection(run_id)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/evidence/diff")
+async def get_discovery_evidence_diff(
+    run_id: str,
+    against: str | None = Query(default=None, max_length=36),
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    """What changed between this run and an earlier run of the same start URL."""
+    try:
+        return await service.diff(run_id, against)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/evidence/{evidence_id}")
+async def get_discovery_evidence(
+    run_id: str,
+    evidence_id: str,
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    try:
+        return await service.evidence_detail(run_id, evidence_id)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/scenarios")
+async def list_discovery_scenarios(
+    run_id: str,
+    _user: User = Depends(get_current_user),
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    try:
+        return await service.scenarios(run_id)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/runs/{run_id}/scenarios/refresh")
+async def refresh_discovery_scenarios(
+    run_id: str,
+    user: User = Depends(get_current_user),
+    service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
+):
+    """Re-derive candidate scenarios from evidence and match them to existing test cases."""
+    await require_permission(Permission.RUN_EXECUTE)(user)
+    try:
+        return await service.refresh_scenarios(run_id)
+    except DiscoveryEvidenceNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error

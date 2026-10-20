@@ -33,6 +33,26 @@ async def demo_catalog():
     )
 
 
+@router.get("/demo-shop/discovery-fixture.html")
+async def demo_discovery_fixture():
+    """A page whose element and request counts are known, so a discovery run can be checked against them."""
+    return _fixture("discovery-fixture.html")
+
+
+@router.get("/demo-shop/discovery-fixture-b.html")
+async def demo_discovery_fixture_b():
+    """The same fixture with one more control and one more request, for the incremental comparison."""
+    return _fixture("discovery-fixture-b.html")
+
+
+def _fixture(name: str) -> FileResponse:
+    return FileResponse(
+        DEMO_SOURCE / "site" / name,
+        media_type="text/html",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @router.post("/projects/golden-demo/seed", dependencies=[Depends(require_permission(Permission.AUTOMATION_EDIT))])
 async def seed_demo(service: GoldenDemoService = Depends(get_golden_demo_service)):
     try:

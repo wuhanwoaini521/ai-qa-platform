@@ -99,6 +99,23 @@ async def test_a_discovery_run_becomes_one_node_with_its_real_counts_and_evidenc
         "partial": 0,
         "not_covered": 1,
         "test_cases": 1,
+        # No evidence rows exist for this run, and the canvas says so rather than inventing numbers.
+        "evidence": {
+            "dom_elements": 0,
+            "dom_elements_deduped": 0,
+            "page_states": 0,
+            "locators": 0,
+            "locators_ambiguous": 0,
+            "requests": 0,
+            "requests_associated": 0,
+            "actions": 0,
+            "state_changes": 0,
+            "scenarios": 0,
+            "covered": 0,
+            "candidate_gaps": 0,
+            "undetermined": 0,
+            "captured": False,
+        },
     }
     collections = {item["collection"] for item in node["evidence_index"]}
     assert collections == {"page_state", "screenshot", "network", "action"}
@@ -225,3 +242,85 @@ async def test_a_project_outside_the_users_scope_is_not_projected(client, role_c
         response = await engineer.get(f"/api/projects/{project_id}/workflow-canvas")
 
     assert response.status_code in {403, 404}, response.text
+
+
+async def test_the_discovery_node_shows_the_evidence_counts_the_evidence_api_reports(client, test_db_session):
+    from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
+    from app.services.discovery_evidence_capture import CaptureStats, build_action_records, build_state_records
+
+    project_id = await _project(client)
+    async with test_db_session() as session:
+        session.add(
+            QualityDiscoveryRunORM(
+                id="qd_evidence",
+                project_id=project_id,
+                requested_by="tester",
+                mode="VALIDATE",
+                start_url="http://127.0.0.1:8000/api/demo-shop/index.html",
+                status=DiscoveryStatus.COMPLETED.value,
+                result={"states": [{"state_id": "state_a", "url": "http://shop/", "fingerprint": "fp_a"}]},
+            )
+        )
+        await session.commit()
+    control = {
+        "index": 0,
+        "tag": "button",
+        "role": "button",
+        "name": "Add to cart",
+        "test_id": "",
+        "id": "",
+        "href": "",
+        "visible": True,
+        "enabled": True,
+        "in_viewport": True,
+        "value": "",
+    }
+    state = {"state_id": "state_a", "fingerprint": "fp_a", "url": "http://shop/", "title": "Shop", "depth": 0}
+    action = {
+        "from_state_id": "state_a",
+        "action_type": "click",
+        "target": "Add to cart",
+        "status": "EXECUTED",
+        "state_changed": True,
+        "to_fingerprint": "fp_b",
+    }
+    async with test_db_session() as session:
+        repository = DiscoveryEvidenceRepository(session)
+        await repository.record(
+            "qd_evidence",
+            project_id,
+            build_state_records(state, [control, dict(control, index=1)], CaptureStats(), url="http://shop/"),
+            max_records=6000,
+        )
+        await repository.record(
+            "qd_evidence",
+            project_id,
+            build_action_records(
+                action,
+                {"kind": "role", "value": "button", "name": "Add to cart"},
+                {"match_count": 2, "unique": False, "visible": True, "verified": True},
+                CaptureStats(),
+                url="http://shop/",
+                requests=[{"method": "POST", "url": "http://shop/api/cart", "status": 201}],
+                association="prefix",
+            ),
+            max_records=6000,
+        )
+        await session.commit()
+
+    node = (await _canvas(client, project_id))["nodes"][0]
+    evidence = node["metrics"]["evidence"]
+
+    assert evidence["captured"] is True
+    assert evidence["dom_elements_deduped"] == 1
+    assert evidence["locators"] == 1
+    assert evidence["locators_ambiguous"] == 1
+    assert evidence["requests"] == 1
+    assert evidence["requests_associated"] == 1
+    assert evidence["state_changes"] == 1
+    assert {link for link in node["links"]} >= {"evidence", "scenarios", "diff"}
+    summary = await client.get("/api/discovery/runs/qd_evidence/evidence/summary")
+    assert summary.json()["analysis"]["dom_element"]["deduped"] == evidence["dom_elements_deduped"]
+    assert node["metrics"]["evidence"]["requests_associated"] == summary.json()["analysis"]["network_request"][
+        "associated"
+    ]

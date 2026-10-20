@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Discovery Fixture</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; display: grid; gap: 12px; max-width: 520px; }
+      button, select, input { padding: 6px 10px; font: inherit; }
+      #probe-log { font-size: 12px; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1 id="probe-title">Discovery fixture</h1>
+    <p>The element and request counts of this page are the expected values a discovery run must report.</p>
+    <p><button id="probe-a" data-testid="probe-a" type="button">View health</button></p>
+    <p><button id="probe-b" data-testid="probe-b" type="button">View catalog</button></p>
+    <p><button id="probe-reveal" data-testid="probe-reveal" type="button">Expand another control</button></p>
+    <p><label for="probe-select">Size</label> <select id="probe-select"><option>standard</option><option>express</option></select></p>
+    <p><label for="probe-input">Search products</label> <input id="probe-input" type="text" value="SECRET-COUPON-VALUE" /></p>
+    <div id="probe-log" role="status">idle</div>
+    <script>
+      const log = (text) => {
+        document.getElementById('probe-log').textContent = text;
+      };
+      const call = async (url) => {
+        const response = await fetch(url, { headers: { 'X-Fixture-Token': 'fixture-secret-token' } });
+        log(`${url} -> ${response.status}`);
+      };
+      document.getElementById('probe-a').addEventListener('click', () => call('/api/health'));
+      document.getElementById('probe-b').addEventListener('click', () => call('/api/demo-shop/catalog.json'));
+      document.getElementById('probe-reveal').addEventListener('click', () => {
+        if (document.getElementById('probe-extra')) return;
+        const button = document.createElement('button');
+        button.id = 'probe-extra';
+        button.dataset.testid = 'probe-extra';
+        button.type = 'button';
+        button.textContent = 'View missing page';
+        button.addEventListener('click', () => call('/api/demo-shop/missing.json'));
+        document.getElementById('probe-log').before(button);
+        log('expanded');
+      });
+    </script>
+  </body>
+</html>

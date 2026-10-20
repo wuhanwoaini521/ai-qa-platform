@@ -31,3 +31,20 @@ def test_redact_text_scrubs_complete_authorization_header_values():
 def test_non_http_urls_do_not_persist_embedded_content_or_local_paths():
     assert SensitiveRedactor.redact_url("data:text/html,private-page-content") == "data:"
     assert SensitiveRedactor.redact_url("file:///home/qa/private/test.html") == "file:"
+
+
+def test_redact_text_scrubs_values_typed_into_form_fields():
+    tree = (
+        '- heading "Checkout" [level=1]\n'
+        '- textbox "Card number": 4111-1111-1111-1111\n'
+        '  - combobox "Size":\n'
+        '    - option "express" [selected]'
+    )
+
+    safe = SensitiveRedactor.redact_text(tree)
+
+    assert "4111-1111-1111-1111" not in safe
+    assert '- textbox "Card number": {filled}' in safe
+    # An empty combobox keeps its option list instead of swallowing the next line.
+    assert '- combobox "Size":' in safe
+    assert '- option "express" [selected]' in safe

@@ -31,11 +31,23 @@ class SensitiveRedactor:
         (re.compile(r"(?i)sk-[a-zA-Z0-9]{32,}", re.IGNORECASE), r"sk-***REDACTED***"),
     ]
 
+    # Accessibility snapshots print the typed value next to the field, e.g. `- textbox "Card number": 4111…`.
+    TYPED_VALUE_PATTERN = re.compile(
+        r'(?im)^(?P<prefix>\s*(?:-\s*)?(?:textbox|searchbox|combobox|spinbutton|slider)\s+"[^"]*"[ \t]*:)[ \t]*\S.*$'
+    )
+
+    @classmethod
+    def redact_typed_values(cls, text: str) -> str:
+        """Replace values typed into form fields, keeping the field label readable."""
+        if not text:
+            return ""
+        return cls.TYPED_VALUE_PATTERN.sub(r"\g<prefix> {filled}", text)
+
     @classmethod
     def redact_text(cls, text: str) -> str:
         if not text:
             return ""
-        result = text
+        result = cls.redact_typed_values(text)
         for pattern, replacement in cls.PATTERNS:
             result = pattern.sub(replacement, result)
         return cls.URL_PATTERN.sub(lambda match: cls.redact_url(match.group(0)), result)

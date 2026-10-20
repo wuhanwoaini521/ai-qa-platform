@@ -19,8 +19,15 @@ from qa_core.failure.redactor import SensitiveRedactor
 
 from app.persistence.models import QualityDiscoveryRunORM, utc_now
 from app.repositories.artifact_repo import ArtifactRepository
+from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.services.artifact_storage_service import ArtifactStorageService
+from app.services.discovery_evidence_capture import (
+    CaptureStats,
+    build_action_records,
+    build_state_records,
+    new_requests,
+)
 from app.services.quality_discovery_live import event_payload
 from app.services.quality_discovery_models import (
     DiscoveryBlocked,
@@ -141,6 +148,7 @@ class QualityDiscoveryExecutionMixin:
                     "() => ({y: Math.round(window.scrollY), height: document.documentElement.scrollHeight, viewport: window.innerHeight})"
                 )
                 state_id, fingerprint = self._state_fingerprint(snapshot, controls, scroll)
+                is_new_state = not self._find_state(current_result, fingerprint)
                 similar_state = self._find_similar_state(
                     current_result, snapshot, controls, config.state_similarity_threshold
                 )
@@ -149,32 +157,30 @@ class QualityDiscoveryExecutionMixin:
                     state["console_errors"] = []
                 if not config.capture_network:
                     state["network"] = {"responses": {}, "failures": 0, "sample_count": 0}
-                if similar_state and not self._find_state(current_result, fingerprint):
+                if similar_state and is_new_state:
                     state["similar_to_state_id"] = similar_state["state_id"]
                     state["similarity"] = similar_state["score"]
-                if (
-                    not self._find_state(current_result, fingerprint)
-                    and len(current_result.get("states") or []) >= config.max_states
-                ):
+                if is_new_state and len(current_result.get("states") or []) >= config.max_states:
                     await self._finish(run_id, DiscoveryStatus.BUDGET_EXHAUSTED.value, "已达到最大产品状态数量上限。")
                     return
                 screenshot_count = sum(
                     bool(item.get("screenshot_evidence_id")) for item in current_result.get("states", [])
                 )
-                if not self._find_state(current_result, fingerprint):
+                if is_new_state:
                     state["evidence_id"] = await self._save_state_evidence(
                         run_id, state_id, state, project_id=row.project_id, created_by=row.requested_by
                     )
-                if (
-                    snapshot.screenshot
-                    and screenshot_count < config.max_screenshots
-                    and not self._find_state(current_result, fingerprint)
-                ):
+                if snapshot.screenshot and screenshot_count < config.max_screenshots and is_new_state:
                     state["screenshot_evidence_id"] = await self._save_screenshot(
                         run_id, state_id, snapshot.screenshot, project_id=row.project_id, created_by=row.requested_by
                     )
                 result = await self._upsert_state(run_id, state)
                 state = self._find_state(result, fingerprint) or state
+                # A state first seen through action bookkeeping is not "new" on the next observation, so
+                # capture keys off the missing stamp instead of newness (the capture itself is idempotent).
+                await self._capture_state_evidence(
+                    run_id, row.project_id, state, url=snapshot.url, requests=snapshot.network
+                )
                 if row.mode == DiscoveryMode.VALIDATE.value and self._all_acceptance_criteria_passed(
                     result.get("requirements") or [],
                     result.get("states") or [],
@@ -490,7 +496,14 @@ class QualityDiscoveryExecutionMixin:
                         "fallback_used": decision.fallback_used,
                     },
                 )
-                await self._execute_candidate(run_id, session_id, state, selected, decision_id=decision_id)
+                await self._execute_candidate(
+                    run_id,
+                    session_id,
+                    state,
+                    selected,
+                    decision_id=decision_id,
+                    network_before=snapshot.network,
+                )
                 await self._wait_if_paused(run_id)
         except asyncio.CancelledError:
             await self._finish(run_id, DiscoveryStatus.STOPPED.value, "探索任务被中断。")
@@ -819,6 +832,7 @@ class QualityDiscoveryExecutionMixin:
         candidate: dict[str, Any],
         *,
         decision_id: str | None = None,
+        network_before: list[dict[str, Any]] | None = None,
     ) -> None:
         action_type = candidate["action_type"]
         locator = candidate.get("locator") or {"kind": "page", "value": ""}
@@ -930,6 +944,15 @@ class QualityDiscoveryExecutionMixin:
             action_record["state_changed"] = changed
             action_record["to_fingerprint"] = after_fingerprint
             await self._replace_action(run_id, action_record)
+            await self._capture_action_evidence(
+                run_id,
+                state,
+                action_record,
+                candidate,
+                verification,
+                network_before=network_before or [],
+                network_after=after.network,
+            )
             await self._link_feature_evidence(run_id, state, candidate, changed)
             await self._append_edge(run_id, state["state_id"], after_fingerprint, candidate)
             await self._event(
@@ -1863,6 +1886,119 @@ class QualityDiscoveryExecutionMixin:
         )
         return saved.artifact_id
 
+    async def _capture_state_evidence(
+        self,
+        run_id: str,
+        project_id: str,
+        state: dict[str, Any],
+        *,
+        url: str,
+        requests: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Index the structured facts of one observed state. Capture never fails a run."""
+        config = self._get_config().discovery
+        if not config.capture_evidence:
+            return
+        if state.get("capture"):
+            # The state already carries the counters of the capture that indexed it. Re-indexing on a
+            # revisit would double the raw side of the arithmetic without adding a single fact.
+            return
+        stats = CaptureStats()
+        try:
+            records = build_state_records(
+                state,
+                state.get("controls") or [],
+                stats,
+                url=url,
+                requests=requests or [],
+                screenshot_artifact_id=state.get("screenshot_evidence_id"),
+            )
+        except Exception as error:
+            await self._event(run_id, "capture.failed", "证据采集失败，探索继续。", {"error": self._safe_error(error)})
+            return
+        await self._store_evidence(run_id, project_id, records, stats, state_id=str(state.get("state_id") or ""))
+
+    async def _capture_action_evidence(
+        self,
+        run_id: str,
+        state: dict[str, Any],
+        action_record: dict[str, Any],
+        candidate: dict[str, Any],
+        verification: dict[str, Any] | None,
+        *,
+        network_before: list[dict[str, Any]],
+        network_after: list[dict[str, Any]],
+    ) -> None:
+        """Index one executed action, the locator it used and the requests it caused."""
+        config = self._get_config().discovery
+        if not config.capture_evidence:
+            return
+        stats = CaptureStats()
+        try:
+            requests, association = new_requests(network_before, network_after)
+            records = build_action_records(
+                action_record,
+                candidate,
+                verification,
+                stats,
+                url=str(state.get("url") or ""),
+                requests=requests[:8],
+                association=association,
+            )
+        except Exception as error:
+            await self._event(
+                run_id, "capture.failed", "动作证据采集失败，探索继续。", {"error": self._safe_error(error)}
+            )
+            return
+        await self._store_evidence(
+            run_id,
+            None,
+            records,
+            stats,
+            state_id=str(action_record.get("from_state_id") or ""),
+            action_evidence=True,
+        )
+
+    async def _store_evidence(
+        self,
+        run_id: str,
+        project_id: str | None,
+        records: list[Any],
+        stats: CaptureStats,
+        *,
+        state_id: str,
+        action_evidence: bool = False,
+    ) -> None:
+        config = self._get_config().discovery
+        try:
+            async with self.session_factory() as session:
+                run_row = await session.get(QualityDiscoveryRunORM, run_id)
+                if run_row is None:
+                    return
+                repository = DiscoveryEvidenceRepository(session)
+                written = await repository.record(
+                    run_id,
+                    project_id or run_row.project_id,
+                    records,
+                    max_records=config.max_evidence_records,
+                )
+                await session.commit()
+        except Exception as error:
+            await self._event(run_id, "capture.failed", "证据写入失败，探索继续。", {"error": self._safe_error(error)})
+            return
+        capture = {**stats.as_dict(), **{f"stored_{key}": value for key, value in written.items()}}
+        if action_evidence:
+            await self._event(run_id, "capture.action", "已记录动作证据。", {"state_id": state_id, "capture": capture})
+            return
+        await self._change_result(run_id, lambda current: _stamp_state_capture(current, state_id, capture))
+        await self._event(
+            run_id,
+            "capture.state",
+            "已记录结构证据："
+            + ", ".join(f"{kind} {count}" for kind, count in sorted(capture.get("kept", {}).items())),
+            {"state_id": state_id, "capture": capture},
+        )
+
     async def _save_state_evidence(
         self,
         run_id: str,
@@ -1901,3 +2037,11 @@ class QualityDiscoveryExecutionMixin:
 
 def tag_is_text(value: Any) -> bool:
     return value in {"button", "a", "span", "div", "label"}
+
+
+def _stamp_state_capture(result: dict[str, Any], state_id: str, capture: dict[str, Any]) -> None:
+    """Attach the capture counters to the state they describe, so the numbers travel with it."""
+    for state in result.get("states") or []:
+        if state.get("state_id") == state_id:
+            state["capture"] = capture
+            return

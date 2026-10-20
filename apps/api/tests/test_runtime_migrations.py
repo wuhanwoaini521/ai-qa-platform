@@ -9,10 +9,16 @@ def _head_revision() -> str:
 
 
 def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
+    from app.persistence.database import Base
+
     engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
     with engine.begin() as connection:
         upgrade_database(connection)
-        assert len(inspect(connection).get_table_names()) == 39
+        tables = set(inspect(connection).get_table_names())
+        # Derive the expected table set from the ORM instead of baking a number that every new
+        # revision would have to update: the only table alembic adds is its own bookkeeping one.
+        assert len(tables) == len(Base.metadata.tables) + 1
+        assert {"discovery_evidence", "discovery_scenarios"} <= tables
         connection.execute(
             text(
                 "INSERT INTO projects (id,name,description,framework_type,default_branch,created_at,updated_at) VALUES ('p','Retain','','playwright_python','main',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"
@@ -57,6 +63,12 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         assert {"project_id", "created_by"} <= {
             column["name"] for column in inspect(connection).get_columns("stored_artifacts")
         }
+        # The evidence index must come back down on SQLite too, not only up.
+        assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
+        downgrade_database(connection, "0015_artifact_ownership")
+        assert not {"discovery_evidence", "discovery_scenarios"} & set(inspect(connection).get_table_names())
+        upgrade_database(connection)
+        assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
     engine.dispose()
 
 
