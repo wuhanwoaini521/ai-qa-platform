@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.persistence.models import DiscoveryEvidenceORM, DiscoveryScenarioORM
+from app.persistence.models import DiscoveryEvidenceORM, DiscoveryScenarioORM, QualityDiscoveryRunORM
 
 
 class EvidenceItem(Protocol):
@@ -30,6 +30,11 @@ class DiscoveryEvidenceRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def run_project_id(self, run_id: str) -> str | None:
+        """The project a run belongs to, so a capture never has to open the run row itself."""
+        row = await self.session.get(QualityDiscoveryRunORM, run_id)
+        return row.project_id if row is not None else None
 
     async def record(
         self, run_id: str, project_id: str, records: Sequence[EvidenceItem], *, max_records: int

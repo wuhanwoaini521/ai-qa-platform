@@ -1978,13 +1978,13 @@ class QualityDiscoveryExecutionMixin:
         config = self._get_config().discovery
         try:
             async with self.session_factory() as session:
-                run_row = await session.get(QualityDiscoveryRunORM, run_id)
-                if run_row is None:
-                    return
                 repository = DiscoveryEvidenceRepository(session)
+                run_project = await repository.run_project_id(run_id)
+                if run_project is None:
+                    return
                 written = await repository.record(
                     run_id,
-                    project_id or run_row.project_id,
+                    project_id or run_project,
                     records,
                     max_records=config.max_evidence_records,
                 )
