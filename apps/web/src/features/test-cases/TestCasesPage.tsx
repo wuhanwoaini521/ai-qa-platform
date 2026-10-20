@@ -23,6 +23,7 @@ interface TestCasesPageProps {
   projects: Project[];
   selectedProjectId: string | null;
   onNavigateToStudio?: (filePath: string) => void;
+  onStartRecording?: () => void;
   onNavigateToRuns?: (runId?: string) => void;
   initialTestCaseId?: string | null;
   initialRequirementId?: string | null;
@@ -39,6 +40,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
   projects,
   selectedProjectId,
   onNavigateToStudio,
+  onStartRecording,
   onNavigateToRuns,
   initialTestCaseId,
   initialRequirementId,
@@ -156,6 +158,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
     hideRunAction={hideRunAction}
     runMessage={binding.runMessage}
     onNavigateToStudio={onNavigateToStudio}
+    onStartRecording={onStartRecording}
     onOpenBindingModal={binding.openBindingModal}
     onRunTestCase={binding.handleRunTestCase}
     onGenerateAutomation={binding.handleGenerateAutomation}

@@ -1154,6 +1154,7 @@ export function WorkspacePage() {
                 }}
                 onAutomationBindingChanged={handleBindingChanged}
                 onNavigateToStudio={(filePath) => openStudio(filePath)}
+                onStartRecording={() => setView('browser')}
                 onNavigateToRuns={onRunStarted}
                 onTaskStarted={onTaskStarted}
                 workspaceMode

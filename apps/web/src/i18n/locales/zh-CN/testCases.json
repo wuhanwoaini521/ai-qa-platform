@@ -72,5 +72,6 @@
   "errorSaveDraftFailed": "保存草稿到工作区失败：{{message}}",
   "errorBindingSaveFailed": "绑定保存失败：{{message}}",
   "pageObjectsUsed": "复用项目中的页面对象/流程：{{list}}",
-  "pageObjectsMissing": "该项目还没有可复用的页面对象（pages/*.py）：草稿自带全部定位。可在自动化工作室中创建页面对象，让后续草稿复用它。"
+  "pageObjectsMissing": "该项目还没有可复用的页面对象（pages/*.py）：草稿自带全部定位。可在自动化工作室中创建页面对象，让后续草稿复用它。",
+  "bindingRecord": "录制此用例"
 }

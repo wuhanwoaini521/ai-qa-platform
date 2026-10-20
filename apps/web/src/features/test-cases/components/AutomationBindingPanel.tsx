@@ -2,7 +2,7 @@ import React from 'react';
 import { AIExecutionTimeline } from '../../../components/AIExecutionTimeline';
 import type { AITraceEvent } from '../../../types';
 import { useTranslation } from 'react-i18next';
-import { Code2, Edit3, ExternalLink, Play, Sparkles } from 'lucide-react';
+import { CircleDot, Code2, Edit3, ExternalLink, Play, Sparkles } from 'lucide-react';
 import { AutomationBinding, GenerateAutomationResponse } from '../../../types';
 import { GeneratedCodePreview } from './GeneratedCodePreview';
 
@@ -17,6 +17,7 @@ interface AutomationBindingPanelProps {
   progressError: string;
   runMessage: string | null;
   onNavigateToStudio?: (filePath: string) => void;
+  onStartRecording?: () => void;
   onOpenBindingModal: () => void;
   onRunTestCase: () => void;
   onGenerateAutomation: () => void;
@@ -34,6 +35,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
   progressError,
   runMessage,
   onNavigateToStudio,
+  onStartRecording,
   onOpenBindingModal,
   onRunTestCase,
   onGenerateAutomation,
@@ -135,6 +137,9 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
               >
                 <ExternalLink size={13} /> {t('common:openInStudio')}
               </button>
+              {onStartRecording && <button className="btn btn-secondary btn-sm" onClick={onStartRecording}>
+                <CircleDot size={13} /> {t('bindingRecord')}
+              </button>}
               {!hideRunAction && <button
                 className="btn btn-primary btn-sm"
                 disabled={runningCase}
