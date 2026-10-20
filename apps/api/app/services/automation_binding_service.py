@@ -91,6 +91,14 @@ class AutomationBindingService:
             if isinstance(step, dict)
         ]
 
+    async def list_recorded(self, project_id: str) -> list[AutomationBinding]:
+        """Bindings that carry captured recorder steps."""
+        return [
+            self._to_dto(row)
+            for row in await self.binding_repo.list_by_project(project_id)
+            if self._recorder_steps(row.recorder_evidence_bundle)
+        ]
+
     async def get_binding(self, test_case_id: str) -> AutomationBinding | None:
         orm = await self.binding_repo.get_by_test_case_id(test_case_id)
         if not orm:

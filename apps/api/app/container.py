@@ -70,6 +70,7 @@ from app.services.test_case_service import TestCaseService
 from app.services.test_design_service import TestDesignService
 from app.services.test_run_service import TestRunService
 from app.services.testrail_service import TestRailService
+from app.services.workflow_canvas_service import WorkflowCanvasService
 from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import WorkspaceService
 from app.settings import get_config
@@ -409,6 +410,24 @@ def get_task_runtime_service() -> TaskRuntimeService:
             recorder_session_resolver=recorder_service.get,
         )
     return _task_runtime_service
+
+
+def get_workflow_canvas_service(
+    session: AsyncSession = Depends(get_db),
+    run_service: TestRunService = Depends(get_run_service),
+    failure_service: FailureService = Depends(get_failure_service),
+    workflow: FailureWorkflowService = Depends(get_failure_workflow_service),
+    bindings: AutomationBindingService = Depends(get_binding_service),
+) -> WorkflowCanvasService:
+    # Read discovery rows through the request session: the canvas must see exactly what the
+    # request sees, not a process-wide service holding its own session factory.
+    return WorkflowCanvasService(
+        runs=run_service,
+        failures=failure_service,
+        workflow=workflow,
+        discovery=QualityDiscoveryRepository(session),
+        bindings=bindings,
+    )
 
 
 def get_recorder_workflow_service(session: AsyncSession = Depends(get_db)) -> RecorderWorkflowService:
