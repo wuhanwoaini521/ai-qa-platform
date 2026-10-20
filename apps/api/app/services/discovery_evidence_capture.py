@@ -360,8 +360,13 @@ def build_action_records(
     url: str,
     requests: list[dict[str, Any]] | None = None,
     association: str = "none",
+    element_control: dict[str, Any] | None = None,
 ) -> list[EvidenceRecord]:
-    """User action, its locator candidate and the requests that arrived while it ran."""
+    """User action, its locator candidate and the requests that arrived while it ran.
+
+    ``element_control`` is the control the action targeted; the element evidence id is only
+    linked when that control was captured, so a reference never dangles.
+    """
     from_state = str(action.get("from_state_id") or "")
     locator_key_value = locator_key(candidate)
     action_key = "|".join(
@@ -377,7 +382,7 @@ def build_action_records(
 
     stats.seen(LOCATOR_CANDIDATE)
     payload = _locator_payload(candidate, verification, url)
-    payload["element_evidence_id"] = stable_identity("dom", element_key_for_candidate(candidate))
+    payload["element_evidence_id"] = stable_identity("dom", element_key(element_control)) if element_control else None
     records.append(
         EvidenceRecord(
             kind=LOCATOR_CANDIDATE,
@@ -450,18 +455,6 @@ def build_action_records(
             step_id=action_record.step_id,
         )
     return records
-
-
-def element_key_for_candidate(candidate: dict[str, Any]) -> str:
-    """A locator points at an element; without the DOM row the link stays empty rather than fake."""
-    name = str(candidate.get("name") or "")
-    locator = _locator_of(candidate)
-    kind = str(locator.get("kind") or "")
-    value = str(locator.get("value") or "")
-    role = value if kind == "role" else ""
-    test_id = value if kind == "test_id" else ""
-    tag = "button" if role in {"button", "link"} else ""
-    return "|".join([tag, role, name, test_id, "", ""])
 
 
 def _duration_ms(action: dict[str, Any]) -> float | None:

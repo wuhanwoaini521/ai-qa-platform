@@ -1934,6 +1934,11 @@ class QualityDiscoveryExecutionMixin:
         if not config.capture_evidence:
             return
         stats = CaptureStats()
+        target_id = str(action_record.get("target_id") or "")
+        element_control = next(
+            (control for control in (state.get("controls") or []) if f"el_{control.get('index')}" == target_id),
+            None,
+        )
         try:
             requests, association = new_requests(network_before, network_after)
             records = build_action_records(
@@ -1944,6 +1949,7 @@ class QualityDiscoveryExecutionMixin:
                 url=str(state.get("url") or ""),
                 requests=requests[:8],
                 association=association,
+                element_control=element_control,
             )
         except Exception as error:
             await self._event(

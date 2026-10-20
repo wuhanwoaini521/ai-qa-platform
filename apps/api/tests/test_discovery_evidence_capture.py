@@ -16,6 +16,7 @@ from app.services.discovery_evidence_capture import (
     CaptureStats,
     build_action_records,
     build_state_records,
+    element_key,
     new_requests,
     normalize_identity,
     normalize_url_template,
@@ -285,3 +286,28 @@ def test_a_discovery_candidate_carries_the_locator_it_nests():
     assert locator_record.payload["name"] == "View health"
     assert locator_record.payload["match_count"] == 1
     assert locator_record.payload["page"] == "http://shop.test/discovery-fixture.html"
+
+
+def test_the_locator_links_the_element_only_when_that_element_was_captured():
+    action = {"from_state_id": "state_a", "action_type": "click", "target": "View health"}
+    candidate = {"locator": {"kind": "role", "value": "button", "name": "View health", "exact": True}}
+    control = _control(name="View health", index=2)
+
+    without = next(
+        record
+        for record in build_action_records(action, candidate, None, CaptureStats(), url="http://shop.test/")
+        if record.kind == LOCATOR_CANDIDATE
+    )
+    with_control = next(
+        record
+        for record in build_action_records(
+            action, candidate, None, CaptureStats(), url="http://shop.test/", element_control=control
+        )
+        if record.kind == LOCATOR_CANDIDATE
+    )
+
+    assert without.payload["element_evidence_id"] is None
+    assert (
+        with_control.payload["element_evidence_id"]
+        == "dom_" + __import__("hashlib").sha256(element_key(control).encode()).hexdigest()[:16]
+    )

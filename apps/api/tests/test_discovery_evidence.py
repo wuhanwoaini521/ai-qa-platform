@@ -15,7 +15,6 @@ from app.persistence.models import QualityDiscoveryRunORM
 from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
 from app.services.discovery_evidence_capture import (
     DOM_ELEMENT,
-    NETWORK_REQUEST,
     USER_ACTION,
     CaptureStats,
     build_action_records,
@@ -277,7 +276,9 @@ async def test_the_diff_reports_real_changes_and_never_turns_missing_evidence_in
     await _run(test_db_session, project_id, "qd_old", created_at=earlier)
     await _capture_state(test_db_session, "qd_old", project_id, controls=[_control("Add to cart"), _control("Search")])
     await _run(test_db_session, project_id, "qd_new", created_at=earlier + timedelta(hours=1))
-    await _capture_state(test_db_session, "qd_new", project_id, controls=[_control("Add to cart"), _control("Checkout")])
+    await _capture_state(
+        test_db_session, "qd_new", project_id, controls=[_control("Add to cart"), _control("Checkout")]
+    )
 
     response = await client.get("/api/discovery/runs/qd_new/evidence/diff")
 
@@ -320,7 +321,7 @@ async def test_a_run_with_no_earlier_scope_says_so_instead_of_diffing_against_no
 
 
 async def test_another_projects_evidence_is_not_readable(client, role_client):
-    project_id = await _project(client)
+    await _project(client)
 
     async with role_client("QA_ENGINEER") as engineer:
         response = await engineer.get("/api/discovery/runs/qd_other/evidence")

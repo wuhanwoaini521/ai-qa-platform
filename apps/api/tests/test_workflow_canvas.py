@@ -321,6 +321,7 @@ async def test_the_discovery_node_shows_the_evidence_counts_the_evidence_api_rep
     assert {link for link in node["links"]} >= {"evidence", "scenarios", "diff"}
     summary = await client.get("/api/discovery/runs/qd_evidence/evidence/summary")
     assert summary.json()["analysis"]["dom_element"]["deduped"] == evidence["dom_elements_deduped"]
-    assert node["metrics"]["evidence"]["requests_associated"] == summary.json()["analysis"]["network_request"][
-        "associated"
-    ]
+    assert (
+        node["metrics"]["evidence"]["requests_associated"]
+        == summary.json()["analysis"]["network_request"]["associated"]
+    )
