@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 14 —— 只读工作流画布 MVP（用户任务 m02243，分支 `audit-remaining-blockers`，记录见 §3.11，真实验收 `.ai-runs/e2e-round14/canvas-acceptance.json`）。** 本轮在既有 Workspace 内用 React Flow 把真实记录投影成一条只读流水线（发现 → 录制 → 编辑 → 运行 → 失败 → 分析 → 人工批准 → 精确验证），不新增执行能力、不改 Recorder/Studio/修复链。2 笔提交（`9fd04df` 后端投影层、`bf9b5c2` 前端画布）+ 本文档提交；真实浏览器 16/16、`console_errors: []`。
+**当前活动轮次：Round 15 —— Structured Discovery & Evidence Intelligence（用户任务 m02941，分支 `audit-remaining-blockers`，记录见 §3.12，数据契约 `docs/DISCOVERY_EVIDENCE.md`，真实验收 `.ai-runs/e2e-round15/acceptance.json`）。** 本轮把 Discovery 从「探索并生成结果」升级为「采集结构化事实 → 确定性去重/关联 → 增量对比 → 证据到候选场景到用例的追踪」，并把指标接进既有画布节点详情；不新增执行能力、不做 AI 判定。3 笔代码提交 + 本文档提交；真实 Chromium 21/21、`console_errors: []`；前端 201 pass；后端全量见 §9。
+
+**Round 14（上一轮，用户任务 m02243，分支 `audit-remaining-blockers`，记录见 §3.11，真实验收 `.ai-runs/e2e-round14/canvas-acceptance.json`）。** 本轮在既有 Workspace 内用 React Flow 把真实记录投影成一条只读流水线（发现 → 录制 → 编辑 → 运行 → 失败 → 分析 → 人工批准 → 精确验证），不新增执行能力、不改 Recorder/Studio/修复链。2 笔提交（`9fd04df` 后端投影层、`bf9b5c2` 前端画布）+ 本文档提交；真实浏览器 16/16、`console_errors: []`。
 
 **Round 13（上一轮，分支 `audit-remaining-blockers`，记录见 §3.10，Before/After 实测数据 `.ai-runs/e2e-round13/{before,after}/audit.json`）。** 本轮不新增产品能力、不重构既有闭环，只在已通过的闭环上修用户体验与一致性：同一个“完成”在不同页面表达一致（修复链统一）、录制器与录制步骤可从可见 UI 到达、跨页面上下文不丢、消除重复/矛盾信息。共 4 笔提交（`0cc6abd`、`800bc5d`、`99a2509`、`32f22a3`）。审计口径：同一个 Playwright 脚本 `.ai-runs/e2e-round13/audit.py` 在改动前后各跑一次（Before 1/5（4 项 FAIL）→ After 6/6 PASS，控制台错误 0）。
 
@@ -36,7 +38,7 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | 项 | 值 |
 | --- | --- |
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
-| 当前 HEAD | `bf9b5c2`（Round 14 的 2 笔代码改动；本文档提交在其后） |
+| 当前 HEAD | `589e6ab`（Round 15 的 4 笔代码改动：`8fd6160` 证据层、`d2af796` 画布指标、`e9f2951` 元素链接修正、`589e6ab` 采集会话收进仓储；本文档提交在其后） |
 | Round 14 提交数 | 2（`9fd04df` 后端只读投影层、`bf9b5c2` 前端画布）+ 本文档提交 |
 | 历史起点（Round 12/13） | `5849b5f docs(handoff): record the Round 11 final regression and its verdict` |
 | Round 13 提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器） |
@@ -560,6 +562,64 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
 
 
+## 3.12 Round 15（Structured Discovery & Evidence Intelligence，用户任务 m02941）
+
+用户任务 m02941：把 Discovery 从「探索并生成结果」升级为「采集结构化事实、建立证据关系、分析增量变化、支持测试覆盖分析」。起点 `1b19ca1`。数据契约与审计表见 `docs/DISCOVERY_EVIDENCE.md`。
+
+### 交付
+
+| 层 | 内容 |
+| --- | --- |
+| 存储 | `discovery_evidence`（13 列 + 5 索引 + 唯一 `(run_id, evidence_id)`）与 `discovery_scenarios`（迁移 `0016_discovery_evidence`，`down_revision = 0015_artifact_ownership`，可逆） |
+| 预算 | `DiscoverySettings.capture_evidence` / `max_evidence_records 6000` / `max_network_evidence 200` / `max_payload_chars 2000`；每状态 60 元素、40 请求 |
+| 采集 | `apps/api/app/services/discovery_evidence_capture.py`：`dom_element` / `locator_candidate` / `network_request` / `page_state` / `user_action` / `screenshot`（只存 artifact_id）；纯函数、无 AI |
+| 写入 | `apps/api/app/repositories/discovery_evidence_repo.py`：按 run 去重、后到的「动作↔请求」关系统原地升级、超预算截断并计数 |
+| 分析 | `apps/api/app/services/discovery_evidence_analysis.py`：集合统计（raw/deduped/filtered/stored + `MEASURES` 口径）、候选场景合成、`COVERED/CANDIDATE_GAP/UNDETERMINED` 三级匹配、批次 diff（证据缺失 ≠ 元素消失） |
+| 接口 | `GET …/evidence`、`…/evidence/summary`、`…/evidence/diff?against=`、`…/evidence/{evidence_id}`、`…/scenarios`、`POST …/scenarios/refresh`（`apps/api/app/api/quality_discovery.py`） |
+| 接线 | `apps/api/app/services/quality_discovery_execution.py`：观察循环与动作路径两个 hook，采集失败只发 `capture.failed` 不中断探索；采集键「该状态是否已有 capture」而非「是否新状态」 |
+| 画布 | `apps/web/src/features/canvas/`：节点证据行（`DOM 10→5 · API 2（关联 1） · 状态 2`）、详情面板证据集合与候选场景、阶段折叠 + 可读缩放 |
+| 测试 | 后端 `test_discovery_evidence_capture.py`(16) / `test_discovery_evidence.py`(9) / `test_workflow_canvas.py`(6) / `test_runtime_migrations.py`（表数改为按元数据推导 + 降级往返）；前端 `apps/web/tests/canvas-model.test.mjs` |
+
+### 三笔提交
+
+1. `8fd6160` **证据层**：两表 + 迁移 + 预算 + 采集 + 分析 + 接口 + 接线 + 敏感值脱敏（`SensitiveRedactor.redact_typed_values`，accessibility 快照里的输入值写成 `{filled}`）。
+2. `d2af796` **画布指标**：`DiscoveryEvidenceMetrics` 由同一分析模块算出（不写第二套计数），节点证据行 + 详情面板 + 阶段折叠。
+3. `e9f2951` **元素链接修正**：动作→元素证据改为按「动作实际点击的控件」解析，没有控件就不写引用（此前靠 locator 反推会指向不存在的证据行）。
+4. `589e6ab` **采集会话收进仓储**：证据写入不再自己读 run 行（架构边界测试禁止服务层直接持久化），改由仓储回答「这个 run 属于哪个项目」。
+
+### 真实浏览器验收
+
+`.ai-runs/e2e-round15/acceptance.py`（Playwright 1.62.0 + Chromium，真实 UI 点击）：**21/21 PASS，`failed: []`，`console_errors: []`**，证据 `.ai-runs/e2e-round15/acceptance.json`，截图 `before-canvas.png`、`screenshots/{after-canvas-evidence,after-canvas-mobile,after-canvas-reloaded,before-canvas}.png`。受控页面 `examples/demo-shop/site/discovery-fixture{,-b}.html`（由 `apps/api/app/api/lifecycle.py` 提供并列入 `PUBLIC_PATHS`）：
+- 元素：首个状态 5 个控件，去重 5 条；脚本按同一 identity 规则独立重算，数字一致。
+- 每个被观察的状态都有自己的 capture（此前由动作记账先建出的状态会漏采，raw 被低估）。
+- 网络：2 条请求、状态 `[200]`，1 条以 `prefix` 关联到引发它的点击，另 1 条保持 `unassociated`。
+- 定位器：`role=button[name="View health"]` `match_count=1`，在真实页面重新计数同为 1。
+- 脱敏：`SECRET-COUPON-VALUE` 与请求头 `X-Fixture-Token` 在 run 行/证据/摘要/场景里都查不到。
+- 增量：B 版新增 1 控件、2 请求 → `added_keys` 精确指出；`comparable: true`。
+- 场景追踪：每个候选场景引用的证据 id 全部解析成功，状态取值在允许集合内。
+- 画布：节点指标与 `…/evidence/summary` 数字一致，卡片文本与详情面板可展开到证据行，刷新后仍在，390px 视口无横向溢出。
+- 回归：Studio（`?file=tests%2Ftest_known_locator.py`）与失败页仍可正常打开。
+
+真实数据追踪（`.ai-runs/e2e-round15/scenarios-trace.json`，AUDIT run `qd_d5b66d6e1f024f16`）：3 个候选场景全部 `COVERED`（`locator_value` / `target_wording`），引用证据 4/3/3 条全部解析，关联真实用例 4/4/16 条，`trace_complete: true`。
+
+### 过程中修掉的真实缺陷
+
+- **定位器证据为空**：`build_action_records` 读扁平 candidate 的 `kind/value`，而 discovery candidate 把 locator 嵌在 `candidate["locator"]` → 记录里 `kind=None`、`value=''`，匹配数无法复核、场景也无法按 locator 匹配。
+- **输入值泄漏**：accessibility 快照里 `textbox "Search products": SECRET-COUPON-VALUE` 会整行进入 run 行的 `landmarks`；`SensitiveRedactor` 新增 `redact_typed_values`，只保留标签。
+- **漏采状态**：只有 `is_new_state` 才采集，而由动作记账先建出的状态再被观察时「不新」→ 该状态永不采集；改为按「没有 capture 戳」触发（采集本身幂等）。
+- **悬空证据引用**：场景引用的元素证据 id 由 locator 反推得到，实际没有那行 → 改为按动作实际点击的控件解析，拿不到就不写。
+- **URL 模板丢端口**：`normalize_url_template` 用 `hostname` 会合并 `8000` 与 `5173`；保留端口。
+- **资源分类误判**：无扩展名的 `/api/cart` 被判成 `document`；改为按路径 `api` 段判定。
+- **迁移测试烘焙表数**：`test_runtime_migrations.py` 改为按 `Base.metadata` 推导，并新增降级往返断言。
+
+### 本轮未做（有意）
+
+- 不采集响应正文、请求头、Cookie、输入值、页面 HTML；不做字段级响应摘要（留 Round 16）。
+- 覆盖结论仍是行为级匹配，`measures` 随响应返回；不用它宣称业务覆盖率。
+- 不做 AI/Jev 语义复核、不做画布编辑/持久化布局、不建第二套 Discovery 存储。
+- 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
+
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -719,6 +779,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+- **Round 15（证据层，`e9f2951` + 本文档）**：前端 `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **201 pass / 0 fail**（Round 14 为 197，+4 = 折叠/证据行用例）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3206 keys**（+19）；`scripts/export_openapi.py --check` → current（本轮新增 6 个 `/api/discovery/runs/{run_id}/…` 端点已导出）；`ruff check apps/api packages` → All checks passed，`ruff format --check` 干净；新增后端套件 `test_discovery_evidence_capture.py`(16) + `test_discovery_evidence.py`(9) + `test_workflow_canvas.py`(6) + `test_runtime_migrations.py`(6) + `test_sensitive_redaction.py`(5) → **42 passed**；后端全量 `uv run pytest -q` → **932 passed / 11 skipped / 60 warnings / 517.63s**（Round 14 为 902 passed，本轮 +30 = 证据采集/接口/画布/迁移用例）。真实浏览器 `.ai-runs/e2e-round15/acceptance.py`（最终代码 `589e6ab`，runs `qd_7f6c62767dcf42b3` / `qd_df4cca7749ff4dc9`）→ **21/21 PASS，`failed: []`，`console_errors: []`**；真实数据追踪 `.ai-runs/e2e-round15/scenarios-trace.json` → `trace_complete: true`。
 
 - **Round 14（只读画布，`bf9b5c2` + 本文档）**：后端全量 `uv run pytest -q` → **902 passed / 11 skipped / 60 warnings / 481.13s**（比 Round 12 多 4 例；唯一 FAIL 是 `test_openapi_contract.py` 因新端点导致契约快照过期，已用 `scripts/export_openapi.py` 重新导出，单跑该用例 **1 passed**）；`ruff check` → All checks passed，`ruff format --check` → 378 files already formatted，`scripts/export_openapi.py --check` → current；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3187 keys**（+72）；web `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **197 pass / 0 fail**（Round 13 为 191，+6 = canvas 模型与投影用例）；真实浏览器 `.ai-runs/e2e-round14/canvas_acceptance.py` → **16/16 PASS，`failed: []`，`console_errors: []`**。
 
