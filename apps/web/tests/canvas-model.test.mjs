@@ -189,3 +189,51 @@ test('a run without captured evidence shows no evidence line', () => {
   assert.equal(card.data.evidenceLine, '');
   assert.equal(discoveryEvidenceLine(null), '');
 });
+
+test('the evidence line adds the reading counts without hiding the rule verdicts', () => {
+  const metrics = {
+    states: 1,
+    actions: 1,
+    features: 1,
+    requirements: 1,
+    gaps: 1,
+    covered: 0,
+    partial: 0,
+    not_covered: 1,
+    test_cases: 0,
+    evidence: {
+      dom_elements: 4,
+      dom_elements_deduped: 3,
+      page_states: 1,
+      locators: 2,
+      locators_ambiguous: 0,
+      requests: 1,
+      requests_associated: 1,
+      actions: 1,
+      state_changes: 1,
+      scenarios: 2,
+      covered: 0,
+      candidate_gaps: 2,
+      undetermined: 0,
+      captured: true,
+    },
+    intelligence: {
+      suggestions: 2,
+      pending_review: 1,
+      accepted: 1,
+      rejected: 0,
+      linked: 0,
+      created_cases: 0,
+      insufficient: 0,
+      ungrounded_rejected: 0,
+      failed: 0,
+      degraded: 0,
+      jev_graded: 1,
+      jev_fallback: 1,
+    },
+  };
+
+  assert.match(discoveryEvidenceLine(metrics), /场景 2（缺口 2）/);
+  assert.match(discoveryEvidenceLine(metrics), /AI 2（待审核 1）/);
+  assert.equal(discoveryEvidenceLine({ ...metrics, intelligence: undefined }), discoveryEvidenceLine(metrics).split(' · AI')[0]);
+});
