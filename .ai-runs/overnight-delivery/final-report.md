@@ -58,7 +58,7 @@ follows it in this same delivery (`fix(planner)`/`fix(canvas)` + docs). 31 commi
 | OpenAPI contract | current |
 | i18n | 25 namespaces, 2 languages, 3390 keys |
 | Alembic | `test_runtime_migrations.py` 6 passed (up/down to `0015`) |
-| PostgreSQL 16 | 34 passed (planner, migrations, evidence, lease) |
+| PostgreSQL 16 | **838 passed / 8 skipped / 1086.64 s** — the whole backend suite on a `postgres:16-alpine` container at Round 20 (log `.ai-runs/overnight-delivery/rounds/r20-postgres.txt`), plus a 34-test PG subset (planner, migrations, evidence, lease) re-run at the Round 22 code state |
 | Real Chromium E2E (Round 22) | **15/15 PASS**, `failed: []`, `console_errors: []` |
 
 ## 9. Real AI/Jev acceptance
