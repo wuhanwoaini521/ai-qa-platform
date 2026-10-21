@@ -207,9 +207,14 @@ class TaskDiscoveryIntelligenceService:
                 suggestion_id=suggestion_id,
                 input_hash=input_hash,
                 case_index=case_index,
+                task_id=task.id,
                 duration_ms=round((time.perf_counter() - start) * 1000, 2),
             )
             records.append(record)
+        # Every row keeps the task that produced it, so the execution tree can reach the reading
+        # from the task without guessing through the invocation.
+        for record in records:
+            record.setdefault("task_id", task.id)
         async with self.ports.repository_scope() as repositories:
             counts = await repositories.discovery_suggestions.upsert_many(run_id, project_id, records)
             await repositories.commit()
@@ -293,6 +298,7 @@ class TaskDiscoveryIntelligenceService:
         suggestion_id: str,
         input_hash: str,
         case_index: dict[str, dict[str, Any]],
+        task_id: str,
         duration_ms: float,
     ) -> dict[str, Any]:
         """Reject an answer that cites something the database does not hold."""
@@ -307,7 +313,7 @@ class TaskDiscoveryIntelligenceService:
             "output_tokens": response.output_tokens,
             "token_source": "provider" if response.output_tokens else "unknown",
             "invocation_id": response.invocation_id,
-            "task_id": None,
+            "task_id": task_id,
         }
         if response.fallback_used or response.provider in {"fake", "fallback"}:
             return {

@@ -47,6 +47,7 @@ from app.api import (
 )
 from app.api.authz import StreamTicketQuerySanitizer, authorize_request
 from app.api.errors import http_error, validation_error
+from app.api.execution_trace import router as execution_trace_router
 from app.api.language_service import router as language_service_router
 from app.api.lifecycle import router as lifecycle_router
 from app.api.runtime import router as runtime_router
@@ -236,6 +237,7 @@ app.include_router(qa_assistant_router, prefix="/api")
 app.include_router(language_service_router, prefix="/api")
 app.include_router(runtime_router, prefix="/api")
 app.include_router(workflow_canvas_router, prefix="/api")
+app.include_router(execution_trace_router, prefix="/api")
 
 
 @app.get("/")

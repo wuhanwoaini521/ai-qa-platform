@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Execution Trace Fixture</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; display: grid; gap: 12px; max-width: 520px; }
+      button, a, input, select { padding: 6px 10px; font: inherit; }
+      #probe-log { font-size: 12px; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1 id="probe-title">Warranty and support</h1>
+    <p>Each control below is worded differently from any test the suite already holds.</p>
+    <p><button id="probe-warranty" data-testid="probe-warranty" type="button">View warranty terms</button></p>
+    <p><button id="probe-support" data-testid="probe-support" type="button">Expand support options</button></p>
+    <p><button id="probe-loyalty" data-testid="probe-loyalty" type="button">View loyalty tiers</button></p>
+    <p>
+      <label for="probe-plan">Support plan</label>
+      <select id="probe-plan" data-testid="probe-plan">
+        <option value="basic">Basic</option>
+        <option value="premium">Premium</option>
+      </select>
+    </p>
+    <p>
+      <label for="probe-note">Order note</label>
+      <input id="probe-note" data-testid="probe-note" value="PRIVATE-NOTE-VALUE" />
+    </p>
+    <div id="probe-log" role="status">idle</div>
+    <script>
+      const log = (text) => {
+        document.getElementById('probe-log').textContent = text;
+      };
+      const call = async (url) => {
+        const response = await fetch(url, { headers: { 'X-Fixture-Token': 'fixture-secret-token' } });
+        log(`${url} -> ${response.status}`);
+      };
+      document.getElementById('probe-warranty').addEventListener('click', () =>
+        call('/api/demo-shop/catalog.json?warranty=1'),
+      );
+      document.getElementById('probe-support').addEventListener('click', () => call('/api/demo-shop/catalog.json?support=1'));
+      document.getElementById('probe-loyalty').addEventListener('click', () =>
+        call('/api/demo-shop/catalog.json?loyalty=1'),
+      );
+    </script>
+  </body>
+</html>

@@ -724,6 +724,7 @@ class AIProviderConnectionResult(BaseModel):
 class AIInvocationDTO(EntityBase):
     request_id: str | None = None
     task_id: str | None = None
+    step_id: str | None = None
     run_id: str | None = None
     id: str
     task: str

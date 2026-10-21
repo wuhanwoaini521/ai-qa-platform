@@ -91,6 +91,17 @@ class DiscoverySuggestionRepository:
         await self.session.flush()
         return counts
 
+    async def list_by_task_ids(self, task_ids: list[str], *, limit: int = 100) -> list[DiscoverySuggestionORM]:
+        if not task_ids:
+            return []
+        statement = (
+            select(DiscoverySuggestionORM)
+            .where(DiscoverySuggestionORM.task_id.in_(task_ids))
+            .order_by(DiscoverySuggestionORM.created_at)
+            .limit(limit)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
     async def list_by_run(
         self,
         run_id: str,

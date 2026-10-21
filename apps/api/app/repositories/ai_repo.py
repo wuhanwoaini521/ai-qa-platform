@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from project_model.models import AIInvocationDTO, AIUsageSummary
@@ -8,12 +9,14 @@ from sqlalchemy import case, desc, func, select, update
 
 from app.persistence import database
 from app.persistence.models import AIInvocationORM, utc_now
+from app.services.ai_step_context import current_ai_step_id
 from app.services.locator_repair_context import current_locator_repair_id
 
 
 class AIRepository:
-    def __init__(self, session_factory=None) -> None:
+    def __init__(self, session_factory=None, *, session=None) -> None:
         self._session_factory = session_factory
+        self._session = session
 
     @property
     def session_factory(self):
@@ -21,6 +24,15 @@ class AIRepository:
             return self._session_factory
 
         return database.get_session
+
+    @asynccontextmanager
+    async def _scope(self):
+        """Read through a provided request session, or open a short one of our own."""
+        if self._session is not None:
+            yield self._session
+            return
+        async with self.session_factory() as session:
+            yield session
 
     async def record_invocation(
         self,
@@ -42,6 +54,7 @@ class AIRepository:
         decision_value: float | None = None,
         request_id: str | None = None,
         task_id: str | None = None,
+        step_id: str | None = None,
         run_id: str | None = None,
         locator_repair_id: str | None = None,
     ) -> AIInvocationORM:
@@ -50,6 +63,7 @@ class AIRepository:
                 id=str(uuid.uuid4()),
                 request_id=request_id,
                 task_id=task_id,
+                step_id=step_id or current_ai_step_id(),
                 run_id=run_id,
                 locator_repair_id=locator_repair_id or current_locator_repair_id(),
                 task=task,
@@ -76,6 +90,18 @@ class AIRepository:
             await session.commit()
             await session.refresh(inv)
             return inv
+
+    async def list_by_task_ids(self, task_ids: list[str], *, limit: int = 400) -> list[AIInvocationORM]:
+        if not task_ids:
+            return []
+        statement = (
+            select(AIInvocationORM)
+            .where(AIInvocationORM.task_id.in_(task_ids))
+            .order_by(AIInvocationORM.started_at)
+            .limit(limit)
+        )
+        async with self._scope() as session:
+            return list((await session.execute(statement)).scalars().all())
 
     async def finish_invocation(
         self,

@@ -36,6 +36,7 @@ PUBLIC_PATHS = (
     "/api/demo-shop/discovery-fixture.html",
     "/api/demo-shop/discovery-fixture-b.html",
     "/api/demo-shop/discovery-fixture-c.html",
+    "/api/demo-shop/discovery-fixture-d.html",
     "/api/health",
     "/api/metrics",
     "/api/auth/login",

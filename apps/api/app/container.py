@@ -47,6 +47,7 @@ from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 from app.services.discovery_evidence_service import DiscoveryEvidenceService
 from app.services.discovery_intelligence_service import DiscoveryIntelligenceService
+from app.services.execution_trace_service import ExecutionTraceService
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.golden_demo_service import GoldenDemoService
@@ -452,6 +453,16 @@ def get_workflow_canvas_service(
         evidence=DiscoveryEvidenceRepository(session),
         suggestions=DiscoverySuggestionRepository(session),
         bindings=bindings,
+    )
+
+
+def get_execution_trace_service(session: AsyncSession = Depends(get_db)) -> ExecutionTraceService:
+    # Read through the request session so the tree sees exactly the rows this request can see.
+    return ExecutionTraceService(
+        tasks=TaskRepository(session),
+        invocations=AIRepository(session=session),
+        runs=TestRunRepository(session),
+        suggestions=DiscoverySuggestionRepository(session),
     )
 
 

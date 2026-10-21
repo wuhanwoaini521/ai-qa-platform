@@ -65,10 +65,14 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         }
         # The evidence index must come back down on SQLite too, not only up.
         assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
+        # An invocation names its step; the column is additive and goes away again on downgrade.
+        assert "step_id" in {column["name"] for column in inspect(connection).get_columns("ai_invocations")}
         downgrade_database(connection, "0015_artifact_ownership")
         assert not {"discovery_evidence", "discovery_scenarios"} & set(inspect(connection).get_table_names())
+        assert "step_id" not in {column["name"] for column in inspect(connection).get_columns("ai_invocations")}
         upgrade_database(connection)
         assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
+        assert "step_id" in {column["name"] for column in inspect(connection).get_columns("ai_invocations")}
     engine.dispose()
 
 

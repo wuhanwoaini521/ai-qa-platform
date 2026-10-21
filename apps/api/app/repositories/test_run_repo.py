@@ -45,6 +45,14 @@ class TestRunRepository:
         result = await self.session.execute(query.limit(limit))
         return list(result.scalars().all())
 
+    async def list_by_task_ids(self, task_ids: list[str], *, limit: int = 200) -> list[TestRunORM]:
+        if not task_ids:
+            return []
+        statement = (
+            select(TestRunORM).where(TestRunORM.task_id.in_(task_ids)).order_by(TestRunORM.created_at).limit(limit)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
     async def get_by_id(self, run_id: str) -> TestRunORM | None:
         result = await self.session.execute(
             select(TestRunORM)

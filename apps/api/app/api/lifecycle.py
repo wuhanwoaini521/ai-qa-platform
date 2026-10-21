@@ -51,6 +51,12 @@ async def demo_discovery_fixture_c():
     return _fixture("discovery-fixture-c.html")
 
 
+@router.get("/demo-shop/discovery-fixture-d.html")
+async def demo_discovery_fixture_d():
+    """Fresh wording plus a form field, so one analysis task really calls the model and Jev."""
+    return _fixture("discovery-fixture-d.html")
+
+
 def _fixture(name: str) -> FileResponse:
     return FileResponse(
         DEMO_SOURCE / "site" / name,

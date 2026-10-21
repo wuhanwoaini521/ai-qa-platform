@@ -19,6 +19,7 @@ from app.domain.task_records import TaskRecord as TaskExecutionRecord
 from app.persistence.models import utc_now
 from app.ports.browser_runtime import BrowserRuntime
 from app.ports.task_unit_of_work import TaskUnitOfWorkFactory
+from app.services.ai_step_context import ai_step_scope, reset_ai_step
 from app.services.task_ai_service import TaskAIService
 from app.services.task_browser_executor import TaskBrowserExecutor
 from app.services.task_code_generation_service import TaskCodeGenerationService
@@ -771,9 +772,11 @@ class TaskExecutionOrchestrator:
 
     async def _run_step_tool(self, task_id: str, step: TaskStep, *, deadline: float | None = None):
         token = active_runtime_step.set(step.id)
+        step_token = ai_step_scope(step.id)
         deadline_token = active_task_deadline.set(deadline)
         try:
             return await self._run_tool(task_id, step.key, step.tool)
         finally:
             active_task_deadline.reset(deadline_token)
+            reset_ai_step(step_token)
             active_runtime_step.reset(token)

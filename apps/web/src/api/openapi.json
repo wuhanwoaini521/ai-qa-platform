@@ -2141,6 +2141,26 @@
         }
       }
     },
+    "/api/demo-shop/discovery-fixture-d.html": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Demo Discovery Fixture D",
+        "description": "Fresh wording plus a form field, so one analysis task really calls the model and Jev.",
+        "operationId": "demo_discovery_fixture_d_api_demo_shop_discovery_fixture_d_html_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/golden-demo/seed": {
       "post": {
         "tags": [
@@ -10773,6 +10793,104 @@
         }
       }
     },
+    "/api/tasks/{task_id}/execution-trace": {
+      "get": {
+        "tags": [
+          "Execution Trace"
+        ],
+        "summary": "Get Task Execution Trace",
+        "description": "Read-only tree of what this task actually executed.\n\nEvery node is a stored row; facts the server cannot establish are reported as unknown rather\nthan filled in. Nothing here starts, retries or cancels anything.",
+        "operationId": "get_task_execution_trace_api_tasks__task_id__execution_trace_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionTrace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/execution-trace": {
+      "get": {
+        "tags": [
+          "Execution Trace"
+        ],
+        "summary": "Get Project Execution Trace",
+        "description": "The same projection for the most recent tasks of a project, several roots side by side.",
+        "operationId": "get_project_execution_trace_api_projects__project_id__execution_trace_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 6,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionTrace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Root",
@@ -10815,6 +10933,17 @@
               }
             ],
             "title": "Task Id"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
           },
           "run_id": {
             "anyOf": [
@@ -14189,6 +14318,87 @@
           "updated_at"
         ],
         "title": "ExecutionJob"
+      },
+      "ExecutionTrace": {
+        "properties": {
+          "root_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Task Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TraceNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/TraceEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/TraceCounts"
+          },
+          "unknown": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unknown"
+          },
+          "root_count": {
+            "type": "integer",
+            "title": "Root Count",
+            "default": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at"
+        ],
+        "title": "ExecutionTrace"
       },
       "ExternalArtifactReference": {
         "properties": {
@@ -23961,6 +24171,354 @@
         },
         "type": "object",
         "title": "TestTrend"
+      },
+      "TraceCounts": {
+        "properties": {
+          "task": {
+            "type": "integer",
+            "title": "Task",
+            "default": 0
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step",
+            "default": 0
+          },
+          "invocation": {
+            "type": "integer",
+            "title": "Invocation",
+            "default": 0
+          },
+          "evidence": {
+            "type": "integer",
+            "title": "Evidence",
+            "default": 0
+          },
+          "artifact": {
+            "type": "integer",
+            "title": "Artifact",
+            "default": 0
+          },
+          "run": {
+            "type": "integer",
+            "title": "Run",
+            "default": 0
+          },
+          "suggestion": {
+            "type": "integer",
+            "title": "Suggestion",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "TraceCounts"
+      },
+      "TraceEdge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "CHILD_OF",
+              "INVOKES",
+              "PRODUCES",
+              "DEPENDS_ON"
+            ],
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target",
+          "type"
+        ],
+        "title": "TraceEdge"
+      },
+      "TraceNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "task",
+              "step",
+              "invocation",
+              "evidence",
+              "artifact",
+              "run",
+              "suggestion"
+            ],
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "invocation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invocation Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceTokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Inputs"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Outputs"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "pricing": {
+            "type": "string",
+            "const": "unpriced",
+            "title": "Pricing",
+            "default": "unpriced"
+          },
+          "unknown": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unknown"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "fallback_used": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Used"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "links": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Links"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "label"
+        ],
+        "title": "TraceNode"
+      },
+      "TraceTokenUsage": {
+        "properties": {
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "source"
+        ],
+        "title": "TraceTokenUsage"
       },
       "User": {
         "properties": {

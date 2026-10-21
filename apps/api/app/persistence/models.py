@@ -510,6 +510,7 @@ class AIInvocationORM(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     locator_repair_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("locator_repairs.id", ondelete="SET NULL"), nullable=True, index=True
