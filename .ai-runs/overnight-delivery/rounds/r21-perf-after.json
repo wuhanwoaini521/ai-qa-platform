@@ -1,0 +1,226 @@
+{
+  "real": {
+    "pipeline": {
+      "w1560": {
+        "dom_nodes": 676,
+        "canvas_nodes": 38,
+        "zoom": 0.82,
+        "cards_below_9px": 0,
+        "smallest_text_px": 9,
+        "horizontal_overflow": 0,
+        "fcp_ms": 212,
+        "dom_ready_ms": 111,
+        "heap_mb": 43
+      },
+      "w1280": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.82,
+        "cards_below_9px": 0,
+        "smallest_text_px": 9,
+        "horizontal_overflow": 0,
+        "fcp_ms": 196,
+        "dom_ready_ms": 155,
+        "heap_mb": 43
+      },
+      "w1024": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.82,
+        "cards_below_9px": 0,
+        "smallest_text_px": 9,
+        "horizontal_overflow": 0,
+        "fcp_ms": 172,
+        "dom_ready_ms": 135,
+        "heap_mb": 43
+      },
+      "w390": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.72,
+        "cards_below_9px": 0,
+        "smallest_text_px": 7.9,
+        "horizontal_overflow": 0,
+        "fcp_ms": 244,
+        "dom_ready_ms": 182,
+        "heap_mb": 43
+      }
+    },
+    "execution": {
+      "w1560": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10.5,
+        "horizontal_overflow": 0,
+        "fcp_ms": 324,
+        "dom_ready_ms": 249,
+        "heap_mb": 43
+      },
+      "w1280": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 0.957,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10,
+        "horizontal_overflow": 0,
+        "fcp_ms": 196,
+        "dom_ready_ms": 149,
+        "heap_mb": 43
+      },
+      "w1024": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 0.876,
+        "cards_below_9px": 0,
+        "smallest_text_px": 9.2,
+        "horizontal_overflow": 0,
+        "fcp_ms": 220,
+        "dom_ready_ms": 182,
+        "heap_mb": 43
+      },
+      "w390": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10.5,
+        "horizontal_overflow": 0,
+        "fcp_ms": 216,
+        "dom_ready_ms": 164,
+        "heap_mb": 43
+      }
+    },
+    "editor": {
+      "w1560": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10.5,
+        "horizontal_overflow": 0,
+        "fcp_ms": 308,
+        "dom_ready_ms": 238,
+        "heap_mb": 43
+      },
+      "w1280": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10.5,
+        "horizontal_overflow": 0,
+        "fcp_ms": 284,
+        "dom_ready_ms": 212,
+        "heap_mb": 43
+      },
+      "w1024": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "smallest_text_px": 10.5,
+        "horizontal_overflow": 0,
+        "fcp_ms": 224,
+        "dom_ready_ms": 177,
+        "heap_mb": 43
+      },
+      "w390": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.724,
+        "cards_below_9px": 0,
+        "smallest_text_px": 8,
+        "horizontal_overflow": 0,
+        "fcp_ms": 284,
+        "dom_ready_ms": 211,
+        "heap_mb": 43
+      }
+    },
+    "dashboard": {
+      "dom_nodes": 563,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "smallest_text_px": null,
+      "horizontal_overflow": 0,
+      "fcp_ms": 220,
+      "dom_ready_ms": 169,
+      "heap_mb": 43,
+      "url": "http://127.0.0.1:5173/"
+    },
+    "runs": {
+      "dom_nodes": 1252,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "smallest_text_px": null,
+      "horizontal_overflow": 0,
+      "fcp_ms": 180,
+      "dom_ready_ms": 97,
+      "heap_mb": 43,
+      "url": "http://127.0.0.1:5173/runs?projectId=proj_golden_shop_v1"
+    },
+    "failures": {
+      "dom_nodes": 441,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "smallest_text_px": null,
+      "horizontal_overflow": 0,
+      "fcp_ms": 188,
+      "dom_ready_ms": 150,
+      "heap_mb": 43,
+      "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&requirementId=req_golden_shop_v1&testDesignId=des_golden_002&caseId=case_golden_002&bindingId=bind_golden_002&runId=run_2f8968d65830&failureId=fail_213ccea1cebd&nodeid=tests%2Ftest_shop.py%3A%3Atest_product_detail&stage=failure&view=results&file=tests%2Ftest_shop.py"
+    },
+    "trace_template_nodes": 33
+  },
+  "stress": {
+    "100": {
+      "nodes": 100,
+      "mount_ms": 853,
+      "pan_ms": 27.8,
+      "dom_nodes": 537,
+      "canvas_nodes": 6,
+      "zoom": 1,
+      "cards_below_9px": 0,
+      "smallest_text_px": 10.5,
+      "horizontal_overflow": 0,
+      "fcp_ms": 280,
+      "dom_ready_ms": 230,
+      "heap_mb": 43
+    },
+    "500": {
+      "nodes": 500,
+      "mount_ms": 944,
+      "pan_ms": 73.5,
+      "dom_nodes": 9314,
+      "canvas_nodes": 500,
+      "zoom": 0.7,
+      "cards_below_9px": 500,
+      "smallest_text_px": 7.7,
+      "horizontal_overflow": 0,
+      "fcp_ms": 260,
+      "dom_ready_ms": 221,
+      "heap_mb": 43
+    },
+    "1000": {
+      "nodes": 1000,
+      "mount_ms": 1107,
+      "pan_ms": 25.8,
+      "dom_nodes": 18410,
+      "canvas_nodes": 1000,
+      "zoom": 0.7,
+      "cards_below_9px": 1000,
+      "smallest_text_px": 7.7,
+      "horizontal_overflow": 0,
+      "fcp_ms": 308,
+      "dom_ready_ms": 244,
+      "heap_mb": 43
+    }
+  },
+  "console": [],
+  "phase": "after",
+  "finished_at": "2026-10-21T21:49:32"
+}

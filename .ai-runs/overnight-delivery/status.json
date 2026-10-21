@@ -16,15 +16,33 @@
       "note": "planner 15/15 with the real provider; DAG execution of a planned graph remains BLOCKED (inherits Round 17 C)"
     },
     "20": {
-      "state": "PENDING"
+      "state": "PASS",
+      "note": "CI command parity + PostgreSQL channel green (989 passed on SQLite, PG channel fix 5 real defects); deployment drill 12/12 on an isolated compose stack. CI as a service BLOCKED (no remote run), multi-host PostgreSQL BLOCKED."
     },
     "21": {
-      "state": "PENDING"
+      "state": "PASS",
+      "note": "canvas legibility floor 0.82 (pipeline no longer shrinks to 6px text), execution tree fits its host and becomes a stacked list on a phone, evidence paging, 1000-node stress measured. Acceptance 12/12.",
+      "verdicts": {
+        "canvas_legibility": "PASS",
+        "execution_tree_fit_and_mobile": "PASS",
+        "evidence_paging": "PASS",
+        "stress_1000_nodes": "PASS"
+      },
+      "acceptance": {
+        "checks": 12,
+        "passed": 12,
+        "evidence": ".ai-runs/overnight-delivery/rounds/r21-acceptance.json"
+      },
+      "perf": {
+        "before": ".ai-runs/overnight-delivery/rounds/r21-perf-before.json",
+        "after": ".ai-runs/overnight-delivery/rounds/r21-perf-after.json"
+      },
+      "finished_at": "2026-10-21T21:59:40"
     },
     "22": {
       "state": "PENDING"
     }
   },
-  "current_round": 18,
-  "updated_at": "2026-10-XX"
+  "current_round": 20,
+  "updated_at": "2026-10-21T20:48:30"
 }

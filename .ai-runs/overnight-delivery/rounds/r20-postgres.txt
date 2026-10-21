@@ -1,0 +1,255 @@
+........................................................................ [  8%]
+........................................................................ [ 17%]
+........................s.s.......................................s..... [ 25%]
+........................................................................ [ 34%]
+........................................................................ [ 42%]
+........................................................................ [ 51%]
+.............ssss....................................................... [ 59%]
+........................................................................ [ 68%]
+........................................................................ [ 76%]
+........................................................................ [ 85%]
+........................................................................ [ 93%]
+........s.............................................                   [100%]
+=============================== warnings summary ===============================
+packages/project-model/project_model/models.py:191
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:191: PytestCollectionWarning: cannot collect test class 'TestCaseCreate' because it has a __init__ constructor (from: apps/api/app/repositories/test_case_repo.py)
+    class TestCaseCreate(TestCaseBase):
+
+packages/project-model/project_model/models.py:195
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:195: PytestCollectionWarning: cannot collect test class 'TestCaseUpdate' because it has a __init__ constructor (from: apps/api/app/repositories/test_case_repo.py)
+    class TestCaseUpdate(EntityBase):
+
+apps/api/app/persistence/models.py:174
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:174: PytestCollectionWarning: cannot collect test class 'TestCaseORM' because it has a __init__ constructor (from: apps/api/app/repositories/test_case_repo.py)
+    class TestCaseORM(Base):
+
+apps/api/app/repositories/test_case_repo.py:13
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_case_repo.py:13: PytestCollectionWarning: cannot collect test class 'TestCaseRepository' because it has a __init__ constructor (from: apps/api/app/repositories/test_case_repo.py)
+    class TestCaseRepository:
+
+packages/project-model/project_model/models.py:154
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:154: PytestCollectionWarning: cannot collect test class 'TestDesignCreate' because it has a __init__ constructor (from: apps/api/app/repositories/test_design_repo.py)
+    class TestDesignCreate(TestDesignBase):
+
+packages/project-model/project_model/models.py:158
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:158: PytestCollectionWarning: cannot collect test class 'TestDesignUpdate' because it has a __init__ constructor (from: apps/api/app/repositories/test_design_repo.py)
+    class TestDesignUpdate(EntityBase):
+
+apps/api/app/persistence/models.py:155
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:155: PytestCollectionWarning: cannot collect test class 'TestDesignORM' because it has a __init__ constructor (from: apps/api/app/repositories/test_design_repo.py)
+    class TestDesignORM(Base):
+
+apps/api/app/repositories/test_design_repo.py:12
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_design_repo.py:12: PytestCollectionWarning: cannot collect test class 'TestDesignRepository' because it has a __init__ constructor (from: apps/api/app/repositories/test_design_repo.py)
+    class TestDesignRepository:
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/app/repositories/test_run_repo.py)
+    class TestRunCreate(BaseModel):
+
+apps/api/app/persistence/models.py:316
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:316: PytestCollectionWarning: cannot collect test class 'TestExecutionORM' because it has a __init__ constructor (from: apps/api/app/repositories/test_run_repo.py)
+    class TestExecutionORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/app/repositories/test_run_repo.py)
+    class TestRunORM(Base):
+
+packages/project-model/project_model/models.py:211
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:211: PytestCollectionWarning: cannot collect test class 'TestCase' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCase(TestCaseBase):
+
+packages/project-model/project_model/models.py:191
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:191: PytestCollectionWarning: cannot collect test class 'TestCaseCreate' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCaseCreate(TestCaseBase):
+
+packages/project-model/project_model/models.py:38
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:38: PytestCollectionWarning: cannot collect test class 'TestCasePriority' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCasePriority(str, Enum):
+
+packages/project-model/project_model/models.py:195
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:195: PytestCollectionWarning: cannot collect test class 'TestCaseUpdate' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCaseUpdate(EntityBase):
+
+apps/api/app/persistence/models.py:174
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:174: PytestCollectionWarning: cannot collect test class 'TestCaseORM' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCaseORM(Base):
+
+apps/api/app/repositories/test_case_repo.py:13
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_case_repo.py:13: PytestCollectionWarning: cannot collect test class 'TestCaseRepository' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCaseRepository:
+
+apps/api/app/repositories/test_design_repo.py:12
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_design_repo.py:12: PytestCollectionWarning: cannot collect test class 'TestDesignRepository' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestDesignRepository:
+
+apps/api/app/services/test_case_service.py:18
+  /home/hans/self-github/ai-qa-platform/apps/api/app/services/test_case_service.py:18: PytestCollectionWarning: cannot collect test class 'TestCaseService' because it has a __init__ constructor (from: apps/api/app/services/test_case_service.py)
+    class TestCaseService:
+
+packages/project-model/project_model/models.py:167
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:167: PytestCollectionWarning: cannot collect test class 'TestDesign' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesign(TestDesignBase):
+
+packages/project-model/project_model/models.py:29
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:29: PytestCollectionWarning: cannot collect test class 'TestDesignCategory' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignCategory(str, Enum):
+
+packages/project-model/project_model/models.py:154
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:154: PytestCollectionWarning: cannot collect test class 'TestDesignCreate' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignCreate(TestDesignBase):
+
+packages/project-model/project_model/models.py:158
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:158: PytestCollectionWarning: cannot collect test class 'TestDesignUpdate' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignUpdate(EntityBase):
+
+apps/api/app/persistence/models.py:155
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:155: PytestCollectionWarning: cannot collect test class 'TestDesignORM' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignORM(Base):
+
+apps/api/app/repositories/test_design_repo.py:12
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_design_repo.py:12: PytestCollectionWarning: cannot collect test class 'TestDesignRepository' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignRepository:
+
+apps/api/app/services/test_design_service.py:15
+  /home/hans/self-github/ai-qa-platform/apps/api/app/services/test_design_service.py:15: PytestCollectionWarning: cannot collect test class 'TestDesignService' because it has a __init__ constructor (from: apps/api/app/services/test_design_service.py)
+    class TestDesignService:
+
+packages/project-model/project_model/models.py:393
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:393: PytestCollectionWarning: cannot collect test class 'TestBrowserSession' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestBrowserSession(EntityBase):
+
+packages/project-model/project_model/models.py:379
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:379: PytestCollectionWarning: cannot collect test class 'TestExecution' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestExecution(EntityBase):
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestRunCreate(BaseModel):
+
+packages/qa-core/qa_core/execution/models.py:14
+  /home/hans/self-github/ai-qa-platform/packages/qa-core/qa_core/execution/models.py:14: PytestCollectionWarning: cannot collect test class 'TestExecutionStatus' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestExecutionStatus(str, Enum):
+
+apps/api/app/persistence/models.py:316
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:316: PytestCollectionWarning: cannot collect test class 'TestExecutionORM' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestExecutionORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestRunORM(Base):
+
+apps/api/app/services/test_run_service.py:75
+  /home/hans/self-github/ai-qa-platform/apps/api/app/services/test_run_service.py:75: PytestCollectionWarning: cannot collect test class 'TestRunEventBus' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestRunEventBus:
+
+apps/api/app/services/test_run_service.py:159
+  /home/hans/self-github/ai-qa-platform/apps/api/app/services/test_run_service.py:159: PytestCollectionWarning: cannot collect test class 'TestRunService' because it has a __init__ constructor (from: apps/api/app/services/test_run_service.py)
+    class TestRunService:
+
+apps/api/app/persistence/models.py:155
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:155: PytestCollectionWarning: cannot collect test class 'TestDesignORM' because it has a __init__ constructor (from: apps/api/tests/test_backend_parity.py)
+    class TestDesignORM(Base):
+
+apps/api/app/persistence/models.py:316
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:316: PytestCollectionWarning: cannot collect test class 'TestExecutionORM' because it has a __init__ constructor (from: apps/api/tests/test_backend_parity.py)
+    class TestExecutionORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_backend_parity.py)
+    class TestRunORM(Base):
+
+apps/api/app/persistence/models.py:316
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:316: PytestCollectionWarning: cannot collect test class 'TestExecutionORM' because it has a __init__ constructor (from: apps/api/tests/test_discovery_coverage_e2e.py)
+    class TestExecutionORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_discovery_coverage_e2e.py)
+    class TestRunORM(Base):
+
+apps/api/app/persistence/models.py:174
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:174: PytestCollectionWarning: cannot collect test class 'TestCaseORM' because it has a __init__ constructor (from: apps/api/tests/test_discovery_intelligence.py)
+    class TestCaseORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_execution_trace.py)
+    class TestRunORM(Base):
+
+apps/api/app/services/test_run_service.py:159
+  /home/hans/self-github/ai-qa-platform/apps/api/app/services/test_run_service.py:159: PytestCollectionWarning: cannot collect test class 'TestRunService' because it has a __init__ constructor (from: apps/api/tests/test_failure_diagnosis_stream.py)
+    class TestRunService:
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_failure_diagnosis_stream.py)
+    class TestRunCreate(BaseModel):
+
+packages/qa-core/qa_core/execution/models.py:14
+  /home/hans/self-github/ai-qa-platform/packages/qa-core/qa_core/execution/models.py:14: PytestCollectionWarning: cannot collect test class 'TestExecutionStatus' because it has a __init__ constructor (from: apps/api/tests/test_failure_diagnosis_stream.py)
+    class TestExecutionStatus(str, Enum):
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_failure_workflow.py)
+    class TestRunCreate(BaseModel):
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_jira_testrail_endpoints.py)
+    class TestRunCreate(BaseModel):
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_locator_repair_eligibility.py)
+    class TestRunCreate(BaseModel):
+
+apps/api/app/repositories/test_case_repo.py:13
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_case_repo.py:13: PytestCollectionWarning: cannot collect test class 'TestCaseRepository' because it has a __init__ constructor (from: apps/api/tests/test_postgres_integration.py)
+    class TestCaseRepository:
+
+apps/api/app/repositories/test_design_repo.py:12
+  /home/hans/self-github/ai-qa-platform/apps/api/app/repositories/test_design_repo.py:12: PytestCollectionWarning: cannot collect test class 'TestDesignRepository' because it has a __init__ constructor (from: apps/api/tests/test_postgres_integration.py)
+    class TestDesignRepository:
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_postgres_integration.py)
+    class TestRunCreate(BaseModel):
+
+apps/api/app/persistence/models.py:316
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:316: PytestCollectionWarning: cannot collect test class 'TestExecutionORM' because it has a __init__ constructor (from: apps/api/tests/test_runs_and_failures.py)
+    class TestExecutionORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_runs_and_failures.py)
+    class TestRunORM(Base):
+
+packages/project-model/project_model/models.py:483
+  /home/hans/self-github/ai-qa-platform/packages/project-model/project_model/models.py:483: PytestCollectionWarning: cannot collect test class 'TestRunCreate' because it has a __init__ constructor (from: apps/api/tests/test_runs_and_failures.py)
+    class TestRunCreate(BaseModel):
+
+packages/qa-core/qa_core/execution/models.py:14
+  /home/hans/self-github/ai-qa-platform/packages/qa-core/qa_core/execution/models.py:14: PytestCollectionWarning: cannot collect test class 'TestExecutionStatus' because it has a __init__ constructor (from: apps/api/tests/test_runs_and_failures.py)
+    class TestExecutionStatus(str, Enum):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_runtime_projection.py)
+    class TestRunORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_runtime_relationships.py)
+    class TestRunORM(Base):
+
+apps/api/app/persistence/models.py:265
+  /home/hans/self-github/ai-qa-platform/apps/api/app/persistence/models.py:265: PytestCollectionWarning: cannot collect test class 'TestRunORM' because it has a __init__ constructor (from: apps/api/tests/test_runtime_timing.py)
+    class TestRunORM(Base):
+
+apps/api/tests/test_postgres_migrations.py::test_migrations_apply_on_fresh_database_and_match_models
+  /home/hans/self-github/ai-qa-platform/apps/api/tests/test_postgres_migrations.py:51: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "failure_records, test_executions, test_runs", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
+    lambda sync_connection: compare_metadata(MigrationContext.configure(sync_connection), Base.metadata)
+
+apps/api/tests/test_runtime_migrations.py: 12 warnings
+  /home/hans/self-github/ai-qa-platform/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py:952: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+    cursor.execute(statement, parameters)
+
+apps/api/tests/test_workflow_definitions.py::test_an_invalid_draft_is_flagged_and_cannot_be_published
+  /home/hans/self-github/ai-qa-platform/.venv/lib/python3.13/site-packages/fastapi/routing.py:352: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+838 passed, 8 skipped, 71 warnings in 1086.64s (0:18:06)

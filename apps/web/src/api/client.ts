@@ -542,9 +542,9 @@ export const api = {
   // Structured evidence: the facts a run captured, and the candidate scenarios derived from them.
   getDiscoveryEvidenceSummary: (runId: string) =>
     request<DiscoveryCollectionSummary>(`/discovery/runs/${encodeURIComponent(runId)}/evidence/summary`),
-  listDiscoveryEvidence: (runId: string, kind?: string, limit = 200) =>
+  listDiscoveryEvidence: (runId: string, kind?: string, limit = 200, offset = 0) =>
     request<DiscoveryEvidence[]>(
-      `/discovery/runs/${encodeURIComponent(runId)}/evidence?limit=${limit}${
+      `/discovery/runs/${encodeURIComponent(runId)}/evidence?limit=${limit}&offset=${offset}${
         kind ? `&kind=${encodeURIComponent(kind)}` : ''
       }`,
     ),

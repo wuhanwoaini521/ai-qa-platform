@@ -1,0 +1,187 @@
+{
+  "real": {
+    "pipeline": {
+      "w1560": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.47,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 264,
+        "dom_ready_ms": 145,
+        "heap_mb": 38
+      },
+      "w1280": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.62,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 468,
+        "dom_ready_ms": 376,
+        "heap_mb": 38
+      },
+      "w1024": {
+        "dom_nodes": 788,
+        "canvas_nodes": 38,
+        "zoom": 0.62,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 252,
+        "dom_ready_ms": 199,
+        "heap_mb": 38
+      },
+      "w390": {
+        "dom_nodes": 676,
+        "canvas_nodes": 38,
+        "zoom": 0.62,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 296,
+        "dom_ready_ms": 234,
+        "heap_mb": 38
+      }
+    },
+    "execution": {
+      "w1560": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 260,
+        "dom_ready_ms": 201,
+        "heap_mb": 38
+      },
+      "w1280": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 308,
+        "dom_ready_ms": 217,
+        "heap_mb": 38
+      },
+      "w1024": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 192,
+        "dom_ready_ms": 147,
+        "heap_mb": 38
+      },
+      "w390": {
+        "dom_nodes": 537,
+        "canvas_nodes": 6,
+        "zoom": 1,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 300,
+        "dom_ready_ms": 238,
+        "heap_mb": 38
+      }
+    },
+    "editor": {
+      "w1560": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 404,
+        "dom_ready_ms": 350,
+        "heap_mb": 38
+      },
+      "w1280": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 368,
+        "dom_ready_ms": 323,
+        "heap_mb": 38
+      },
+      "w1024": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.95,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 252,
+        "dom_ready_ms": 195,
+        "heap_mb": 38
+      },
+      "w390": {
+        "dom_nodes": 602,
+        "canvas_nodes": 9,
+        "zoom": 0.724,
+        "cards_below_9px": 0,
+        "horizontal_overflow": 0,
+        "fcp_ms": 316,
+        "dom_ready_ms": 240,
+        "heap_mb": 38
+      }
+    },
+    "dashboard": {
+      "dom_nodes": 563,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "horizontal_overflow": 0,
+      "fcp_ms": 384,
+      "dom_ready_ms": 293,
+      "heap_mb": 38,
+      "url": "http://127.0.0.1:5173/"
+    },
+    "runs": {
+      "dom_nodes": 1252,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "horizontal_overflow": 0,
+      "fcp_ms": 180,
+      "dom_ready_ms": 107,
+      "heap_mb": 38,
+      "url": "http://127.0.0.1:5173/runs?projectId=proj_golden_shop_v1"
+    },
+    "failures": {
+      "dom_nodes": 441,
+      "canvas_nodes": 0,
+      "zoom": null,
+      "cards_below_9px": 0,
+      "horizontal_overflow": 0,
+      "fcp_ms": 220,
+      "dom_ready_ms": 160,
+      "heap_mb": 38,
+      "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&requirementId=req_golden_shop_v1&testDesignId=des_golden_002&caseId=case_golden_002&bindingId=bind_golden_002&runId=run_2f8968d65830&failureId=fail_213ccea1cebd&nodeid=tests%2Ftest_shop.py%3A%3Atest_product_detail&stage=failure&view=results&file=tests%2Ftest_shop.py"
+    }
+  },
+  "stress": {
+    "100": {
+      "nodes": 100,
+      "error": "TimeoutError: mount did not reach 100 nodes"
+    },
+    "500": {
+      "nodes": 500,
+      "error": "TimeoutError: mount did not reach 500 nodes"
+    },
+    "1000": {
+      "nodes": 1000,
+      "error": "TimeoutError: mount did not reach 1000 nodes"
+    }
+  },
+  "console": [
+    "%o\n\n%s\n\n%s\n TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) The above error occurred in the <TreeSurface> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.",
+    "Unhandled UI error TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) \n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:515:24)\n    at HandleConfigProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:7728:43)\n    at BatchProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:6993:36)\n    at ReactFlowProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:9243:44)\n    at ExecutionTreePanel (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:860:38)\n    at div (<anonymous>)\n    at WorkflowCanvasPanel (http://127.0.0.1:5173/src/features/canvas/WorkflowCanvasPanel.tsx?t=1792581877146:949:39)\n    at Suspense (<anonymous>)\n    at div (<anonymous>)\n    at section (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at WorkspacePage (http://127.0.0.1:5173/src/features/workspace/WorkspacePage.tsx?t=1792581877146:95:17)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7630:26)\n    at Suspense (<anonymous>)\n    at ErrorBoundary (http://127.0.0.1:5173/src/components/ErrorBoundary.tsx?t=1792581753411:6:8)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppLayout (http://127.0.0.1:5173/src/app/AppLayout.tsx?t=1792581753411:47:29)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Routes (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7700:3)\n    at AppRoutes (http://127.0.0.1:5173/src/app/routes.tsx?t=1792581877146:434:29)\n    at ProjectScopeProvider (http://127.0.0.1:5173/src/app/ProjectScope.tsx?t=1792581753411:23:40)\n    at PreferencesProvider (http://127.0.0.1:5173/src/app/Preferences.tsx?t=1792581753411:55:39)\n    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7639:13)\n    at BrowserRouter (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:10958:3)\n    at App (http://127.0.0.1:5173/src/App.tsx?t=1792581877146:27:45)",
+    "%o\n\n%s\n\n%s\n TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) The above error occurred in the <TreeSurface> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.",
+    "Unhandled UI error TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) \n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:515:24)\n    at HandleConfigProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:7728:43)\n    at BatchProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:6993:36)\n    at ReactFlowProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:9243:44)\n    at ExecutionTreePanel (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:860:38)\n    at div (<anonymous>)\n    at WorkflowCanvasPanel (http://127.0.0.1:5173/src/features/canvas/WorkflowCanvasPanel.tsx?t=1792581877146:949:39)\n    at Suspense (<anonymous>)\n    at div (<anonymous>)\n    at section (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at WorkspacePage (http://127.0.0.1:5173/src/features/workspace/WorkspacePage.tsx?t=1792581877146:95:17)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7630:26)\n    at Suspense (<anonymous>)\n    at ErrorBoundary (http://127.0.0.1:5173/src/components/ErrorBoundary.tsx?t=1792581753411:6:8)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppLayout (http://127.0.0.1:5173/src/app/AppLayout.tsx?t=1792581753411:47:29)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Routes (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7700:3)\n    at AppRoutes (http://127.0.0.1:5173/src/app/routes.tsx?t=1792581877146:434:29)\n    at ProjectScopeProvider (http://127.0.0.1:5173/src/app/ProjectScope.tsx?t=1792581753411:23:40)\n    at PreferencesProvider (http://127.0.0.1:5173/src/app/Preferences.tsx?t=1792581753411:55:39)\n    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7639:13)\n    at BrowserRouter (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:10958:3)\n    at App (http://127.0.0.1:5173/src/App.tsx?t=1792581877146:27:45)",
+    "%o\n\n%s\n\n%s\n TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) The above error occurred in the <TreeSurface> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.",
+    "Unhandled UI error TypeError: Cannot read properties of undefined (reading 'toLowerCase')\n    at http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:134:41\n    at Array.map (<anonymous>)\n    at treeEdges (http://127.0.0.1:5173/src/features/canvas/executionTreeModel.ts:126:93)\n    at http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:39\n    at updateMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:6819:21)\n    at Object.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20718:20)\n    at exports.useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-XORLU35F.js?v=c55195a9:972:36)\n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:600:17)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:20259:20)\n    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=c55195a9:5918:24) \n    at TreeSurface (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:515:24)\n    at HandleConfigProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:7728:43)\n    at BatchProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:6993:36)\n    at ReactFlowProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@xyflow_react.js?v=c55195a9:9243:44)\n    at ExecutionTreePanel (http://127.0.0.1:5173/src/features/canvas/ExecutionTreePanel.tsx?t=1792581708920:860:38)\n    at div (<anonymous>)\n    at WorkflowCanvasPanel (http://127.0.0.1:5173/src/features/canvas/WorkflowCanvasPanel.tsx?t=1792581877146:949:39)\n    at Suspense (<anonymous>)\n    at div (<anonymous>)\n    at section (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at WorkspacePage (http://127.0.0.1:5173/src/features/workspace/WorkspacePage.tsx?t=1792581877146:95:17)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7630:26)\n    at Suspense (<anonymous>)\n    at ErrorBoundary (http://127.0.0.1:5173/src/components/ErrorBoundary.tsx?t=1792581753411:6:8)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppLayout (http://127.0.0.1:5173/src/app/AppLayout.tsx?t=1792581753411:47:29)\n    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:6758:26)\n    at Routes (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7700:3)\n    at AppRoutes (http://127.0.0.1:5173/src/app/routes.tsx?t=1792581877146:434:29)\n    at ProjectScopeProvider (http://127.0.0.1:5173/src/app/ProjectScope.tsx?t=1792581753411:23:40)\n    at PreferencesProvider (http://127.0.0.1:5173/src/app/Preferences.tsx?t=1792581753411:55:39)\n    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:7639:13)\n    at BrowserRouter (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=c55195a9:10958:3)\n    at App (http://127.0.0.1:5173/src/App.tsx?t=1792581877146:27:45)"
+  ],
+  "phase": "before",
+  "finished_at": "2026-10-21T20:56:46"
+}

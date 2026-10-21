@@ -33,6 +33,8 @@ import './execution-tree.css';
 
 /** Below this zoom the card text stops being readable, so the tree anchors instead of shrinking. */
 const READABLE_ZOOM = 0.7;
+/** Below this the tree becomes a vertical list instead of four columns. */
+const NARROW_HOST = 720;
 const FITS_LEGIBLY = 0.5;
 const POLL_MS = 3000;
 
@@ -310,24 +312,53 @@ function TreeSurface({ projectId }: { projectId: string }) {
     });
   }, []);
 
-  const cards = useMemo(() => (trace ? treeNodes(trace, { collapsed, focusId }, toggle) : []), [collapsed, focusId, toggle, trace]);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    // The flow element only mounts once a trace exists, so this has to re-run with it.
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setNarrow(entry.contentRect.width < NARROW_HOST));
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [trace]);
+  const cards = useMemo(
+    () => (trace ? treeNodes(trace, { collapsed, focusId, stacked: narrow }, toggle) : []),
+    [collapsed, focusId, narrow, toggle, trace],
+  );
   const visibleIds = useMemo(() => new Set(cards.map((card) => card.id)), [cards]);
   const edges = useMemo(() => (trace ? treeEdges(trace, visibleIds) : []), [trace, visibleIds]);
   const extent = useMemo(() => traceExtent(cards), [cards]);
 
   useEffect(() => {
-    // Fit only once the cards have their measured size, otherwise the zoom is computed from zero.
-    if (cards.length === 0 || !nodesInitialized) return;
-    const timer = window.setTimeout(() => {
+    // Fit once the cards exist; the host can still be unmounted or hidden on the first tick, and a
+    // silently skipped fit left the tree at zoom 1 with its last column off-screen at 1024px.
+    if (cards.length === 0) return;
+    let cancelled = false;
+    let tries = 0;
+    let timer = 0;
+    const attempt = () => {
+      if (cancelled) return;
       const host = hostRef.current;
-      if (!host || host.clientWidth === 0) return;
+      if (!host || host.clientWidth === 0) {
+        if (tries++ < 20) timer = window.setTimeout(attempt, 120);
+        return;
+      }
+      // A stacked list is read top-to-bottom and panned, so only its width has to fit.
+      if (narrow) {
+        void setViewport({ x: 8, y: 8, zoom: Math.min(1, host.clientWidth / (extent.right + 16)) });
+        return;
+      }
       const zoom = Math.min(host.clientWidth / (extent.right + 28), host.clientHeight / (extent.bottom + 28));
       // A tree squeezed to unreadable text is worse than a tree you pan: anchor at the root instead.
       if (zoom < FITS_LEGIBLY) void setViewport({ x: 16, y: 16, zoom: READABLE_ZOOM });
-      else void fitView({ padding: 0.1 });
-    }, 60);
-    return () => window.clearTimeout(timer);
-  }, [cards.length, extent.bottom, extent.right, fitView, nodesInitialized, setViewport]);
+      else void fitView({ padding: 0.1, maxZoom: 1 });
+    };
+    timer = window.setTimeout(attempt, nodesInitialized ? 60 : 160);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cards.length, extent.bottom, extent.right, fitView, narrow, nodesInitialized, setViewport]);
 
   const selected = trace?.nodes.find((node) => node.id === selectedId) ?? null;
   const roots = trace?.nodes.filter((node) => node.type === 'task') ?? [];
@@ -392,7 +423,7 @@ function TreeSurface({ projectId }: { projectId: string }) {
       )}
 
       {trace && trace.nodes.length > 0 && (
-        <div className="let-body">
+        <div className={`let-body${narrow ? ' is-narrow' : ''}`}>
           <div className="let-flow" ref={hostRef}>
             <ReactFlow
               nodes={cards as unknown as Node[]}

@@ -104,6 +104,19 @@ test('parallel activities of one layer sit side by side in their own rows', () =
   assert.notEqual(stepCard.position.y, run.position.y);
 });
 
+test('a narrow host gets one vertical list with an indent per depth, never a squeezed column', () => {
+  const stacked = treeNodes(TRACE, { stacked: true });
+  const rows = stacked.map((card) => card.position.y);
+  // every card has its own row: nothing overlaps when four columns become a list
+  assert.equal(new Set(rows).size, stacked.length);
+  assert.deepEqual([...rows].sort((a, b) => a - b), rows);
+  // depth still reads from the indent, not from the order
+  const root = stacked.find((card) => card.position.x === 0);
+  const deeper = stacked.find((card) => card.position.x > 0);
+  assert.ok(root && deeper);
+  assert.equal(deeper.position.x, 12 * (nodeDepths(TRACE).get(deeper.id) ?? 0));
+});
+
 test('every edge lands on a rendered node, and a hidden node takes its edge with it', () => {
   const cards = treeNodes(TRACE);
   const visible = new Set(cards.map((card) => card.id));

@@ -198,6 +198,8 @@ async def test_the_trace_maps_every_real_row_to_one_node_with_valid_edges(client
 
     # Evidence and artifacts are produced by the step that stored them.
     assert _edge_types(trace, "evidence:ev_1") == {"PRODUCES"}
+    # The card shows the evidence type's value, not "EvidenceType.<NAME>".
+    assert "EvidenceType." not in next(node for node in _nodes(trace, "evidence"))["label"]
     assert _edge_types(trace, "artifact:art_1") == {"PRODUCES"}
     # A run the task asked for is produced by the task.
     assert _edge_types(trace, "run:run_trace") == {"PRODUCES"}

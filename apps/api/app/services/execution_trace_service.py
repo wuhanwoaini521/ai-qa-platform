@@ -49,6 +49,11 @@ def _summary_text(value: Any) -> str | None:
     return SensitiveRedactor.redact_text(str(value))[:MAX_SUMMARY_CHARS]
 
 
+
+def _type_value(value: object) -> str:
+    raw = str(getattr(value, "value", value))
+    return raw.rsplit(".", 1)[-1]
+
 def safe_summary(values: dict[str, Any] | None) -> dict[str, str]:
     """Keep scalars and short strings; drop sensitive keys and describe structures by shape."""
     summary: dict[str, str] = {}
@@ -188,7 +193,8 @@ class ExecutionTraceService:
                     TraceNode(
                         id=node_id,
                         type="evidence",
-                        label=f"{item.type} · {item.source}"[:120],
+                        # The enum stringifies as "EvidenceType.ANALYSIS"; the card shows the value only.
+                        label=f"{_type_value(item.type)} · {item.source}"[:120],
                         task_id=task.id,
                         parent_id=parent,
                         started_at=item.created_at,

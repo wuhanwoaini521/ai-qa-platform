@@ -126,6 +126,10 @@
 }
 
 /* --- cards --------------------------------------------------------------- */
+.let-body.is-narrow .react-flow__node {
+  width: 300px;
+}
+
 .let-node {
   position: relative;
   display: flex;
@@ -158,14 +162,14 @@
 }
 
 .let-node-kind {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--let-ink-muted);
 }
 
 .let-node-state {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--let-line-strong);
@@ -206,7 +210,7 @@
 
 .let-node-status {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.85;
 }
 
@@ -240,7 +244,7 @@
 
 .let-edge .react-flow__edge-text {
   fill: var(--let-ink-muted);
-  font-size: 9px;
+  font-size: 11px;
   font-family: var(--font-mono);
 }
 
@@ -452,7 +456,7 @@
 
 .let-node-fallback {
   padding: 0 5px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--let-attention);
   border: 1px solid rgba(210, 153, 34, 0.4);
   border-radius: 4px;

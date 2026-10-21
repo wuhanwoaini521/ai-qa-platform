@@ -310,11 +310,14 @@ async def list_discovery_evidence(
     kind: str | None = Query(default=None, max_length=30),
     state_id: str | None = Query(default=None, max_length=64),
     limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     service: DiscoveryEvidenceService = Depends(get_discovery_evidence_service),
 ):
     """The structured facts this run captured, filterable by kind and state."""
     try:
-        return await service.list_evidence(run_id, kind=kind, state_id=state_id, limit=limit)
+        return await service.list_evidence(
+            run_id, kind=kind, state_id=state_id, limit=limit, offset=offset
+        )
     except DiscoveryEvidenceNotFound as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

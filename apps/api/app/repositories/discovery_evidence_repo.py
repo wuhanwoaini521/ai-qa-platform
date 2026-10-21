@@ -101,14 +101,25 @@ class DiscoveryEvidenceRepository:
         return {"inserted": inserted, "updated": updated, "skipped": skipped, "capped": capped}
 
     async def list_by_run(
-        self, run_id: str, *, kind: str | None = None, state_id: str | None = None, limit: int = 500
+        self,
+        run_id: str,
+        *,
+        kind: str | None = None,
+        state_id: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
     ) -> list[DiscoveryEvidenceORM]:
         query = select(DiscoveryEvidenceORM).where(DiscoveryEvidenceORM.run_id == run_id)
         if kind:
             query = query.where(DiscoveryEvidenceORM.kind == kind)
         if state_id:
             query = query.where(DiscoveryEvidenceORM.state_id == state_id)
-        query = query.order_by(DiscoveryEvidenceORM.created_at, DiscoveryEvidenceORM.evidence_id).limit(limit)
+        # Ordered by (created_at, evidence_id) so an offset page never repeats or skips a row.
+        query = (
+            query.order_by(DiscoveryEvidenceORM.created_at, DiscoveryEvidenceORM.evidence_id)
+            .offset(offset)
+            .limit(limit)
+        )
         return list((await self.session.execute(query)).scalars().all())
 
     async def get(self, run_id: str, evidence_id: str) -> DiscoveryEvidenceORM | None:

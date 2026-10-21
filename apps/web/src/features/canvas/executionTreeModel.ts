@@ -11,8 +11,13 @@ export const TREE_COLUMN_WIDTH = 236;
 export const TREE_COLUMN_GAP = 76;
 export const TREE_ROW_HEIGHT = 104;
 export const TREE_NODE_HEIGHT = 84;
+/** Stacked cards take a fixed width so a long label cannot push the list past the screen edge. */
+export const TREE_STACK_WIDTH = 300;
 
 export type TreeTone = 'ok' | 'active' | 'attention' | 'bad' | 'idle';
+
+/** One row per depth on a phone: a left-to-right tree would be a 236px column in a 358px window. */
+export const TREE_STACK_GAP = 20;
 
 const OK = new Set(['COMPLETED', 'PASSED', 'SUCCESS', 'VERIFIED', 'APPROVED', 'READY']);
 const LIVE = new Set(['RUNNING', 'QUEUED', 'VERIFYING', 'STARTED', 'IN_PROGRESS']);
@@ -91,6 +96,8 @@ export function descendantsOf(trace: ExecutionTrace, nodeId: string): Set<string
 export interface TreeLayoutOptions {
   collapsed?: ReadonlySet<string>;
   focusId?: string | null;
+  /** Vertical layout for a host too narrow to read a left-to-right tree. */
+  stacked?: boolean;
 }
 
 export interface TreeCardData extends Record<string, unknown> {
@@ -153,6 +160,8 @@ export function treeNodes(
     children.set(node.parent_id, (children.get(node.parent_id) ?? 0) + 1);
   }
   const rows = new Map<number, number>();
+  const stacked = options.stacked === true;
+  let slot = 0;
   const ordered = [...visible].sort((a, b) => {
     const depthA = depths.get(a.id) ?? 0;
     const depthB = depths.get(b.id) ?? 0;
@@ -170,8 +179,11 @@ export function treeNodes(
     return {
       id: node.id,
       type: 'traceNode',
-      position: { x: columnX(depth), y: row * TREE_ROW_HEIGHT },
-      initialWidth: TREE_COLUMN_WIDTH,
+      // Narrow hosts get a vertical list with a small indent per depth: same parent links, readable text.
+      position: stacked
+        ? { x: depth * 12, y: slot++ * (TREE_NODE_HEIGHT + TREE_STACK_GAP) }
+        : { x: columnX(depth), y: row * TREE_ROW_HEIGHT },
+      initialWidth: stacked ? TREE_STACK_WIDTH : TREE_COLUMN_WIDTH,
       initialHeight: TREE_NODE_HEIGHT,
       data: {
         node,
@@ -196,7 +208,8 @@ export function treeEdges(trace: ExecutionTrace, visible: ReadonlySet<string>): 
       // Only a live hand-off animates; a finished trajectory stays still.
       animated: false,
       label: edge.type,
-      className: `let-edge is-${edge.type.toLowerCase()}`,
+      // A partial payload must not blank the canvas; an unknown hand-off renders like a plain edge.
+      className: `let-edge is-${(edge.type ?? 'UNKNOWN').toLowerCase()}`,
     }));
 }
 

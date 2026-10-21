@@ -1,0 +1,178 @@
+{
+  "started_at": "2026-10-21T21:46:10",
+  "finished_at": "2026-10-21T21:46:50",
+  "checks": 12,
+  "passed": 12,
+  "failed": [],
+  "results": [
+    {
+      "name": "the canvas offers the pipeline, tree and editor views",
+      "passed": true,
+      "detail": [
+        "代码",
+        "浏览器录制",
+        "调试",
+        "工作流",
+        "执行树"
+      ]
+    },
+    {
+      "name": "the pipeline starts legible with its first stage fully on screen at 1560/1280/1024",
+      "passed": true,
+      "detail": {
+        "1560": {
+          "nodes": 38,
+          "zoom": 0.82,
+          "outside": 14,
+          "first_column_outside": 0,
+          "smallest_px": 9,
+          "overflow": 0
+        },
+        "1280": {
+          "nodes": 38,
+          "zoom": 0.82,
+          "outside": 19,
+          "first_column_outside": 0,
+          "smallest_px": 9,
+          "overflow": 0
+        },
+        "1024": {
+          "nodes": 38,
+          "zoom": 0.82,
+          "outside": 29,
+          "first_column_outside": 0,
+          "smallest_px": 9,
+          "overflow": 0
+        }
+      }
+    },
+    {
+      "name": "the execution tree keeps every node inside its host at 1560/1280/1024",
+      "passed": true,
+      "detail": {
+        "1560": {
+          "nodes": 6,
+          "zoom": 1,
+          "outside": 0,
+          "first_column_outside": 0,
+          "smallest_px": 10.5,
+          "overflow": 0
+        },
+        "1280": {
+          "nodes": 6,
+          "zoom": 0.957,
+          "outside": 0,
+          "first_column_outside": 0,
+          "smallest_px": 10,
+          "overflow": 0
+        },
+        "1024": {
+          "nodes": 6,
+          "zoom": 0.876,
+          "outside": 0,
+          "first_column_outside": 0,
+          "smallest_px": 9.2,
+          "overflow": 0
+        }
+      }
+    },
+    {
+      "name": "the execution tree stays readable and inside the screen on a phone",
+      "passed": true,
+      "detail": {
+        "nodes": 6,
+        "zoom": 1,
+        "outside": 0,
+        "first_column_outside": 0,
+        "smallest_px": 10.5,
+        "overflow": 0
+      }
+    },
+    {
+      "name": "the editor stays legible and inside the screen at 1024 and 390",
+      "passed": true,
+      "detail": {
+        "1024": {
+          "nodes": 9,
+          "zoom": 0.95,
+          "outside": 0,
+          "first_column_outside": 0,
+          "smallest_px": 10.5,
+          "overflow": 0
+        },
+        "390": {
+          "nodes": 9,
+          "zoom": 0.724,
+          "outside": 0,
+          "first_column_outside": 0,
+          "smallest_px": 8,
+          "overflow": 0
+        }
+      }
+    },
+    {
+      "name": "a reload re-reads the same trace instead of inventing or duplicating nodes",
+      "passed": true,
+      "detail": {
+        "before": 33,
+        "after": 33,
+        "unique": 33
+      }
+    },
+    {
+      "name": "clicking a node opens its detail with the row it came from",
+      "passed": true,
+      "detail": {
+        "detail": {
+          "heading": "Analysis · requirement.lifecycle",
+          "ids": [
+            "5a3b8d0286534138b6770fb62401901f",
+            "c42b79f980d349938107767cfaa320f1"
+          ],
+          "links": []
+        },
+        "expected_evidence_ids": [
+          "c42b79f980d349938107767cfaa320f1"
+        ]
+      }
+    },
+    {
+      "name": "a large run pages its evidence instead of returning everything at once",
+      "passed": true,
+      "detail": "skipped: no run with more than 5 rows"
+    },
+    {
+      "name": "the failure page keeps a way forward into diagnosis and repair",
+      "passed": true,
+      "detail": {
+        "primary": "创建分析与修复任务",
+        "stages": [
+          "诊断",
+          "修复",
+          "重跑",
+          "验证"
+        ]
+      }
+    },
+    {
+      "name": "every link out of the failure page keeps its project context",
+      "passed": true,
+      "detail": [
+        "/workspace/proj_golden_shop_v1",
+        "/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&runId=run_2f8968d65830&failureId=fail_213ccea1cebd&stage=failure&view=results",
+        "/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&runId=run_6cd52dd1b7d8&failureId=fail_d5e4bf9022e1&stage=failure&view=results"
+      ]
+    },
+    {
+      "name": "the canvas flow logs no console error",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "the runs page still renders beside the new views",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "console_errors": []
+}

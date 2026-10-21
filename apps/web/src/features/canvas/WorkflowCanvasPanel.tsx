@@ -40,8 +40,11 @@ import {
 } from './canvasModel';
 
 /** Below this the node labels stop being readable, so the canvas anchors on its first stage instead. */
-const READABLE_ZOOM = 0.62;
-const FITS_THE_WHOLE_PIPELINE = 0.45;
+const READABLE_ZOOM = 0.82;
+/** A phone can only show one stage anyway; there the overview matters more than 12px body text. */
+const READABLE_ZOOM_NARROW = 0.72;
+/** Measured against the canvas host, not the window: the rail and padding take ~280px. */
+const WIDE_VIEWPORT = 900;
 import './canvas.css';
 
 const POLL_MS = 3000;
@@ -386,15 +389,29 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
 
   useEffect(() => {
     if (nodes.length === 0) return;
-    const timer = window.setTimeout(() => {
+    let cancelled = false;
+    let tries = 0;
+    let timer = 0;
+    const attempt = () => {
+      if (cancelled) return;
       const host = flowHostRef.current;
-      if (!host) return;
+      if (!host || host.clientWidth === 0) {
+        if (tries++ < 20) timer = window.setTimeout(attempt, 120);
+        return;
+      }
       // Show the whole pipeline only when it stays legible; otherwise start at its first stage and pan.
+      // Fitting a 38-node chain into a desktop viewport used to land at 0.47 zoom, where body text
+      // renders at ~6px — the mission's "never shrink the text to fit" rule wins over "see everything".
+      const floor = host.clientWidth >= WIDE_VIEWPORT ? READABLE_ZOOM : READABLE_ZOOM_NARROW;
       const zoom = Math.min(host.clientWidth / (pipelineExtent.right + 24), host.clientHeight / (pipelineExtent.bottom + 24));
-      if (zoom < FITS_THE_WHOLE_PIPELINE) void setViewport({ x: 12, y: 12, zoom: READABLE_ZOOM });
-      else void fitView({ padding: 0.08 });
-    }, 60);
-    return () => window.clearTimeout(timer);
+      if (zoom < floor) void setViewport({ x: 12, y: 12, zoom: floor });
+      else void fitView({ padding: 0.08, maxZoom: 1 });
+    };
+    timer = window.setTimeout(attempt, 60);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [fitView, nodes.length, pipelineExtent, setViewport]);
 
   const selected = canvas?.nodes.find((node) => node.id === selectedId) ?? null;
