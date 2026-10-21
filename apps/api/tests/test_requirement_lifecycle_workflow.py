@@ -1,11 +1,12 @@
 """Workflow tests use explicit fixtures; these are not Golden Demo invocation evidence."""
 
+import json
 import time
 from types import SimpleNamespace
 
 import pytest
 from app.container import get_task_runtime_service
-from app.persistence.models import RequirementORM, TaskORM
+from app.persistence.models import RequirementORM, TaskORM, utc_now
 from app.repositories.ai_repo import AIRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.task_repo import TaskRepository
@@ -429,9 +430,46 @@ async def test_analysis_handles_nullable_legacy_models_and_restart_recovery(clie
     workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), TestOrchestrator(), TestDecisions())
     stream = workflow.stream(requirement["id"])
     await anext(stream)
+    # A second replica may be waiting on the model right now: recovery only abandons an entry whose
+    # own start is older than the window, so backdate this one before asserting recovery.
+    from datetime import timedelta
+
+    async with test_db_session() as session:
+        row = await session.scalar(select(RequirementORM).where(RequirementORM.id == requirement["id"]))
+        history = list(row.qa_model["history"])
+        history[-1] = {**history[-1], "started_at": (utc_now() - timedelta(seconds=3600)).isoformat()}
+        await session.execute(
+            text("UPDATE requirements SET qa_model = :model WHERE id = :id"),
+            {"model": json.dumps({**row.qa_model, "history": history}), "id": requirement["id"]},
+        )
+        await session.commit()
     await RequirementLifecycleService(TaskRepositoryScopeFactory()).recover_interrupted()
     async with test_db_session() as session:
         row = await session.scalar(select(RequirementORM).where(RequirementORM.id == requirement["id"]))
         assert row.qa_model["history"][-1]["status"] == "FAILED"
         assert row.qa_model["criteria"][0]["id"] == "AC-001"
+    await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_running_analysis_survives_recovery(client, test_db_session):
+    """The mirror image: recovery must not mark a live replica's analysis failed."""
+    project = (await client.post("/api/projects", json={"name": "Recovery guard", "description": ""})).json()
+    requirement = (
+        await client.post(
+            "/api/requirements",
+            json={
+                "project_id": project["id"],
+                "title": "Fresh analysis",
+                "acceptance_criteria": "Search shows correct product",
+            },
+        )
+    ).json()
+    workflow = RequirementLifecycleService(TaskRepositoryScopeFactory(), TestOrchestrator(), TestDecisions())
+    stream = workflow.stream(requirement["id"])
+    await anext(stream)
+    await RequirementLifecycleService(TaskRepositoryScopeFactory()).recover_interrupted()
+    async with test_db_session() as session:
+        row = await session.scalar(select(RequirementORM).where(RequirementORM.id == requirement["id"]))
+        assert row.qa_model["history"][-1]["status"] == "RUNNING"
     await stream.aclose()

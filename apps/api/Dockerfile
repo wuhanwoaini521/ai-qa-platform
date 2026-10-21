@@ -72,7 +72,8 @@ USER aiqa
 
 EXPOSE 8000
 
+# `CMD-SHELL` is a Compose keyword; a Dockerfile healthcheck uses CMD with a shell command.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-  CMD-SHELL curl -f "http://127.0.0.1:${API_PORT:-8000}/api/health/live" || exit 1
+  CMD curl -f "http://127.0.0.1:${API_PORT:-8000}/api/health/live" || exit 1
 
 CMD ["python", "-m", "app"]

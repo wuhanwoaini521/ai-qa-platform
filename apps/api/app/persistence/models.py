@@ -507,10 +507,14 @@ class LocatorRepairORM(Base):
 class AIInvocationORM(Base):
     __tablename__ = "ai_invocations"
 
+    # The step index predates the model (migration 0018) and is named without the `_id` suffix
+    # SQLAlchemy would choose, so it is declared explicitly instead of with `index=True`.
+    __table_args__ = (Index("ix_ai_invocations_step", "step_id"),)
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    step_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     locator_repair_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("locator_repairs.id", ondelete="SET NULL"), nullable=True, index=True
@@ -747,7 +751,8 @@ class ArtifactORM(Base):
     project_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The same label the run records (an actor id or a "Recorder · case" style label), so 100 wide.
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 

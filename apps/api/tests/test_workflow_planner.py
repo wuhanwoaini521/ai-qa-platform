@@ -10,7 +10,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from app.services.workflow_planner_service import WorkflowPlanUnavailable, WorkflowPlannerService
+from app.services.workflow_planner_service import WorkflowPlannerService, WorkflowPlanUnavailable
 from qa_core.ai.registry import AIProviderRegistry
 
 pytestmark = pytest.mark.integration
@@ -172,9 +172,7 @@ async def test_planning_leaves_the_project_untouched(client, monkeypatch):
         },
     )
 
-    planned = await client.post(
-        f"/api/projects/{project_id}/workflows/plan", json={"prompt": "只生成用例，先不要写入"}
-    )
+    planned = await client.post(f"/api/projects/{project_id}/workflows/plan", json={"prompt": "只生成用例，先不要写入"})
     assert planned.status_code == 200, planned.text
     assert planned.json()["valid"] is True
     assert planned.json()["graph"]["nodes"][0]["key"] == "generate"

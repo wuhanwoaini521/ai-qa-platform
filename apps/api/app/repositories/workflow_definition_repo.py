@@ -8,14 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import WorkflowDefinitionORM, WorkflowDefinitionVersionORM, utc_now
-
-
-class WorkflowVersionConflict(RuntimeError):
-    """The draft changed since the client read it, so the save would overwrite someone else's edit."""
-
-
-class WorkflowVersionNotFound(LookupError):
-    pass
+from app.services.workflow_errors import WorkflowVersionConflict, WorkflowVersionNotFound
 
 
 def graph_checksum(graph: dict[str, Any]) -> str:

@@ -4,51 +4,27 @@
   "start_unpushed": 23,
   "rounds": {
     "17": {
-      "status": "PASS",
-      "verdicts": {
-        "A_definition": "PASS",
-        "B_editor": "PASS",
-        "C_dag_execution": "BLOCKED"
-      },
-      "acceptance": {
-        "checks": 20,
-        "passed": 20,
-        "console_errors": 0,
-        "evidence": ".ai-runs/overnight-delivery/rounds/r17-acceptance.json"
-      },
-      "commits": [
-        "553995a",
-        "10ff830"
-      ],
-      "finished_at": "2026-10-21T18:11:40"
+      "state": "PASS",
+      "note": "A Definition PASS, B Editor PASS (20/20), C DAG execution BLOCKED (no scheduler path)"
     },
     "18": {
-      "status": "PASS",
-      "verdicts": {
-        "multi_process_same_host": "PASS",
-        "multi_host": "BLOCKED",
-        "cancel_race_fenced": "FAIL"
-      },
-      "acceptance": {
-        "checks": 8,
-        "passed": 8,
-        "evidence": ".ai-runs/overnight-delivery/regression/r18-two-instances.json",
-        "tests": "apps/api/tests/test_task_lease.py, test_multi_instance_recovery.py"
-      },
-      "finished_at": "2026-10-21T11:20:00"
+      "state": "PASS",
+      "note": "task lease + fencing + heartbeat; two real API processes share no task (drill PASS); multi-host BLOCKED"
     },
     "19": {
-      "status": "PENDING"
+      "state": "PASS",
+      "note": "planner 15/15 with the real provider; DAG execution of a planned graph remains BLOCKED (inherits Round 17 C)"
     },
     "20": {
-      "status": "PENDING"
+      "state": "PENDING"
     },
     "21": {
-      "status": "PENDING"
+      "state": "PENDING"
     },
     "22": {
-      "status": "PENDING"
+      "state": "PENDING"
     }
   },
-  "current_round": 18
+  "current_round": 18,
+  "updated_at": "2026-10-XX"
 }

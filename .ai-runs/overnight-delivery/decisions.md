@@ -18,3 +18,19 @@
   approvals. Nothing in the new code starts work.
 - **Node kinds are a closed whitelist** with declared inputs; validation rejects unknown kinds, cycles,
   missing/unknown/invalid inputs, unknown edge endpoints and a write without an approval before it.
+
+## Round 19 — planner (2026)
+
+- **The model proposes, the server validates.** `validate_graph` from `project_model.workflow_definition`
+  is the single source of truth for `valid`; the model's own `"valid"` field is ignored. Reason: a model
+  that grades itself is not a gate.
+- **Planning writes nothing.** No definition, version, task or run is created by `POST /workflows/plan`;
+  saving and publishing stay the two human acts already in the editor. Evidence: by API and by test.
+- **An unsupported request degrades, it does not get silently rewritten.** Asking for a shell step
+  yields a plan that uses only catalogue kinds plus issues explaining the gap — the visible outcome is
+  "your workflow cannot include that", not a mystery.
+- **DAG execution stays BLOCKED.** A planned graph can be saved and published, but no endpoint starts a
+  task from a published version. Declaring Round 19 execution PASS would be false; it inherits
+  Round 17 C = BLOCKED.
+- **No new node kinds, no expression language, no per-node model choice.** The planner is a producer of
+  candidate graphs, not a second scheduler.

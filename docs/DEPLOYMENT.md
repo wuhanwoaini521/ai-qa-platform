@@ -98,3 +98,36 @@ When hosting behind an enterprise reverse proxy (e.g. Nginx, Traefik, Caddy, Clo
 ### Crucial Reverse Proxy Settings:
 - **Server-Sent Events (SSE)**: Ensure proxy buffering is explicitly disabled for `/api/runs/*/live` or `/api/` by setting `proxy_buffering off;` and `proxy_read_timeout 86400s;`.
 - **Large Artifact Uploads**: Set `client_max_body_size 100M;` to support Playwright trace files and DOM video recordings.
+
+## 5. Verifying a release candidate without pushing (Round 20)
+
+CI runs on push to `main` only, so a release candidate built overnight has no CI badge. The reproducible
+substitute is to run the exact CI commands plus the container drills below; the Round 20 evidence lives in
+`.ai-runs/overnight-delivery/rounds/r20_ci_parity.md` and `rounds/r20-deploy.json`.
+
+```bash
+# 1. The same commands CI runs (backend, then the PostgreSQL channel)
+uv run ruff check . && uv run ruff format --check .
+uv run python scripts/export_openapi.py --check
+uv run pytest -q
+docker run -d --name aiqa-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=aiqa_test -p 55432:5432 postgres:16-alpine
+AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test uv run pytest apps/api -q
+pnpm --filter @ai-qa/web test && pnpm --filter @ai-qa/web typecheck && pnpm --filter @ai-qa/web lint && pnpm --filter @ai-qa/web build
+
+# 2. Build and start an isolated stack on spare ports
+docker compose -p aiqa-drill --env-file drill.env up -d --build postgres api web
+curl -fsS http://127.0.0.1:8010/api/health/live && curl -fsS http://127.0.0.1:8010/api/health
+
+# 3. Fail-fast check: the API must refuse to start without a secret key
+docker run --rm -e DISABLE_APP_SECRET=1 <api-image> python -m app   # exits non-zero, says which setting is missing
+
+# 4. Migrations against the containerised database, then tear down
+docker compose -p aiqa-drill exec api alembic downgrade -1 && docker compose -p aiqa-drill exec api alembic upgrade head
+docker compose -p aiqa-drill down -v
+```
+
+Two defects this drill found in the shipped Dockerfiles, both fixed: the API image declared
+`HEALTHCHECK … CMD-SHELL`, which is a Compose keyword and made `docker build` fail with
+`Unknown type "CMD-SHELL"`, and `stored_artifacts.created_by` was too narrow for the labels the recorder
+stores (see `apps/api/alembic/versions/0021_artifact_actor_width.py`). PostgreSQL rejects that insert while
+SQLite silently accepted it, so the PostgreSQL CI job is the check that catches this class of defect.

@@ -1,0 +1,192 @@
+{
+  "round": 19,
+  "finished_at": "2026-10-21T19:30:02",
+  "checks": 15,
+  "passed": 15,
+  "failed": [],
+  "results": [
+    {
+      "name": "an empty definition is ready for planning",
+      "passed": true,
+      "detail": {
+        "name": "R19 验收 1792582146"
+      }
+    },
+    {
+      "name": "the real provider answers with a candidate",
+      "passed": true,
+      "detail": {
+        "seconds": 21.5,
+        "error": null
+      }
+    },
+    {
+      "name": "the candidate is validated by the server and reported as valid",
+      "passed": true,
+      "detail": {
+        "issues": [],
+        "nodes": [
+          "discovery.collect_gaps",
+          "discovery.analyze_gaps",
+          "discovery.grade_gaps",
+          "discovery.summarize_gaps",
+          "tests.generate",
+          "source.validate_generated",
+          "task.request_approval",
+          "source.write_generated",
+          "source.validate_workspace"
+        ]
+      }
+    },
+    {
+      "name": "every proposed node is a kind the platform actually runs",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          "discovery.analyze_gaps",
+          "discovery.collect_gaps",
+          "discovery.grade_gaps",
+          "discovery.summarize_gaps",
+          "source.validate_generated",
+          "source.validate_workspace",
+          "source.write_generated",
+          "task.request_approval",
+          "tests.generate"
+        ]
+      }
+    },
+    {
+      "name": "the model explains each step it planned",
+      "passed": true,
+      "detail": {
+        "rationales": [
+          "收集本次发现跑中仍未覆盖的场景，作为起草用例的依据。",
+          "让模型逐个读取未定场景并引用证据，说明差距所在。",
+          "评估引用的证据是否足以支撑测试用例的编写。",
+          "汇总仍需人工决策的内容，为起草用例和审批做准备。",
+          "根据目标和差距证据起草候选测试代码，此时尚不写入。",
+          "在人工批准前先检查生成的测试源码是否合格。",
+          "停下来等待人工批准即将写入的测试文件。",
+          "将已批准的生成测试写入工作区。",
+          "写入后校验工作区状态，确认测试文件正确落盘。"
+        ]
+      }
+    },
+    {
+      "name": "the plan reaches the page with its summary",
+      "passed": true,
+      "detail": {
+        "summary": "按要求从发现跑的质量差距出发：收集差距证据、逐条分析与评分并总结需人工决策的项，再生成候选测试代码、校验生成的源码，经人工批准后写入测试文件并验证工作区，最后执行新测试并确认通过；差距分析本身不产出代码，写入必须经过审批节点。"
+      }
+    },
+    {
+      "name": "planning created no second definition",
+      "passed": true,
+      "detail": {
+        "definitions": 20
+      }
+    },
+    {
+      "name": "a request for a shell step cannot produce one",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "kinds": [
+          "requirement.analyze",
+          "source.validate_generated",
+          "source.validate_workspace",
+          "source.write_generated",
+          "task.request_approval",
+          "tests.generate",
+          "tests.resolve",
+          "tests.run_target",
+          "tests.verify"
+        ],
+        "valid": true
+      }
+    },
+    {
+      "name": "the accepted candidate saves as a valid draft",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "issues": []
+      }
+    },
+    {
+      "name": "a human publishes the planned version",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "version": 1
+      }
+    },
+    {
+      "name": "a reload keeps the planned graph on the canvas",
+      "passed": true,
+      "detail": {
+        "canvas": [
+          "collect_gaps",
+          "analyze_gaps",
+          "grade_gaps",
+          "summarize_gaps",
+          "generate_tests",
+          "validate_generated",
+          "request_approval",
+          "write_generated",
+          "validate_workspace"
+        ],
+        "planned": [
+          "collect_gaps",
+          "analyze_gaps",
+          "grade_gaps",
+          "summarize_gaps",
+          "generate_tests",
+          "validate_generated",
+          "request_approval",
+          "write_generated",
+          "validate_workspace"
+        ]
+      }
+    },
+    {
+      "name": "the published version keeps the planned nodes",
+      "passed": true,
+      "detail": {
+        "published_nodes": [
+          "collect_gaps",
+          "analyze_gaps",
+          "grade_gaps",
+          "summarize_gaps",
+          "generate_tests",
+          "validate_generated",
+          "request_approval",
+          "write_generated",
+          "validate_workspace"
+        ]
+      }
+    },
+    {
+      "name": "a version a human published never changes afterwards",
+      "passed": true,
+      "detail": {
+        "republish_status": 200,
+        "checksum_before": "6d8bdc49df325473a3911702ee398ae2e2f13946d19143dec079d40d08720e76",
+        "checksum_after": "6d8bdc49df325473a3911702ee398ae2e2f13946d19143dec079d40d08720e76"
+      }
+    },
+    {
+      "name": "the plan panel does not overflow a phone viewport",
+      "passed": true,
+      "detail": {
+        "sw": 390,
+        "cw": 390
+      }
+    },
+    {
+      "name": "no console error during planning and publishing",
+      "passed": true,
+      "detail": []
+    }
+  ]
+}

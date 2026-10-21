@@ -26,10 +26,9 @@ from app.persistence.models import WorkflowDefinitionORM, WorkflowDefinitionVers
 from app.repositories.task_repo import TaskRepository
 from app.repositories.workflow_definition_repo import (
     WorkflowDefinitionRepository,
-    WorkflowVersionConflict,
-    WorkflowVersionNotFound,
     graph_checksum,
 )
+from app.services.workflow_errors import WorkflowVersionConflict, WorkflowVersionNotFound
 
 DRAFT = "DRAFT"
 PUBLISHED = "PUBLISHED"

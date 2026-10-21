@@ -55,19 +55,36 @@ async def test_shared_usage_records_reported_tokens_and_prompt_version(test_db_s
 
 @pytest.mark.asyncio
 async def test_a_dead_process_leaves_no_running_invocation_behind(test_db_session):
+    """Recovery is deadline-based: it closes calls a dead process left behind, never a live replica's."""
+    from datetime import timedelta
+
+    from app.persistence.models import utc_now
+    from sqlalchemy import update
+
     repo = AIRepository()
-    record = await repo.record_invocation(
+    stale = await repo.record_invocation(
         task="failure_diagnosis", provider="test-real", model="reported-model", status="RUNNING"
     )
+    live = await repo.record_invocation(
+        task="failure_diagnosis", provider="test-real", model="reported-model", status="RUNNING"
+    )
+    async with repo.session_factory() as session:
+        await session.execute(
+            update(AIInvocationORM)
+            .where(AIInvocationORM.id == stale.id)
+            .values(created_at=utc_now() - timedelta(seconds=repo.STALE_INVOCATION_SECONDS + 60))
+        )
+        await session.commit()
 
     recovered = await repo.recover_interrupted_invocations()
 
-    assert recovered >= 1
+    assert recovered == 1
     summary = await repo.get_usage_summary()
-    row = next(item for item in summary.invocations if item.id == record.id)
-    # A crashed call must not read as permanently running in the usage view.
-    assert row.status == "INTERRUPTED"
-    assert row.error_type == "process_interrupted"
+    rows = {item.id: item for item in summary.invocations}
+    assert rows[stale.id].status == "INTERRUPTED"
+    assert rows[stale.id].error_type == "process_interrupted"
+    # A call this young can belong to another replica that is still waiting for the model.
+    assert rows[live.id].status == "RUNNING"
 
 
 @pytest.mark.asyncio

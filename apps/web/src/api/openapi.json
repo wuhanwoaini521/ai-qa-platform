@@ -10889,6 +10889,61 @@
         }
       }
     },
+    "/api/projects/{project_id}/workflows/plan": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Plan Workflow",
+        "description": "Propose a candidate graph. Nothing is saved: the caller must accept it as a draft.",
+        "operationId": "plan_workflow_api_projects__project_id__workflows_plan_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowPlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Plan Workflow Api Projects  Project Id  Workflows Plan Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflows/{definition_id}": {
       "get": {
         "tags": [
@@ -25833,6 +25888,21 @@
           "entity_id"
         ],
         "title": "WorkflowNode"
+      },
+      "WorkflowPlanRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "WorkflowPlanRequest"
       },
       "WorkflowSave": {
         "properties": {

@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 from app.api.authz import get_current_user, require_permission
 from app.api.project_acl import enforce_project_access
 from app.container import get_workflow_definition_service, get_workflow_planner_service
-from app.repositories.workflow_definition_repo import WorkflowVersionConflict, WorkflowVersionNotFound
 from app.services.workflow_definition_service import WorkflowDefinitionService, WorkflowNameTaken
+from app.services.workflow_errors import WorkflowVersionConflict, WorkflowVersionNotFound
 from app.services.workflow_planner_service import WorkflowPlannerService, WorkflowPlanUnavailable
 
 router = APIRouter(tags=["workflows"])

@@ -707,6 +707,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/demo-shop/discovery-fixture.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Discovery Fixture
+         * @description A page whose element and request counts are known, so a discovery run can be checked against them.
+         */
+        get: operations["demo_discovery_fixture_api_demo_shop_discovery_fixture_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo-shop/discovery-fixture-b.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Discovery Fixture B
+         * @description The same fixture with one more control and one more request, for the incremental comparison.
+         */
+        get: operations["demo_discovery_fixture_b_api_demo_shop_discovery_fixture_b_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo-shop/discovery-fixture-c.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Discovery Fixture C
+         * @description Behaviours worded differently from any existing test, so the rules cannot settle their coverage.
+         */
+        get: operations["demo_discovery_fixture_c_api_demo_shop_discovery_fixture_c_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo-shop/discovery-fixture-d.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Discovery Fixture D
+         * @description Fresh wording plus a form field, so one analysis task really calls the model and Jev.
+         */
+        get: operations["demo_discovery_fixture_d_api_demo_shop_discovery_fixture_d_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/golden-demo/seed": {
         parameters: {
             query?: never;
@@ -2118,6 +2198,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/discovery/runs/{run_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Discovery Evidence
+         * @description The structured facts this run captured, filterable by kind and state.
+         */
+        get: operations["list_discovery_evidence_api_discovery_runs__run_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/evidence/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discovery Evidence Summary
+         * @description Raw, deduped, filtered and associated counts — each with the rule that produced it.
+         */
+        get: operations["get_discovery_evidence_summary_api_discovery_runs__run_id__evidence_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/evidence/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discovery Evidence Diff
+         * @description What changed between this run and an earlier run of the same start URL.
+         */
+        get: operations["get_discovery_evidence_diff_api_discovery_runs__run_id__evidence_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discovery Evidence */
+        get: operations["get_discovery_evidence_api_discovery_runs__run_id__evidence__evidence_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Discovery Scenarios */
+        get: operations["list_discovery_scenarios_api_discovery_runs__run_id__scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/scenarios/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Discovery Scenarios
+         * @description Re-derive candidate scenarios from evidence and match them to existing test cases.
+         */
+        post: operations["refresh_discovery_scenarios_api_discovery_runs__run_id__scenarios_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Discovery Suggestions
+         * @description Every model-assisted reading of this run, with the rule verdict it never replaces.
+         */
+        get: operations["list_discovery_suggestions_api_discovery_runs__run_id__suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/suggestions/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discovery Suggestion Summary */
+        get: operations["get_discovery_suggestion_summary_api_discovery_runs__run_id__suggestions_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/suggestions/{suggestion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discovery Suggestion */
+        get: operations["get_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/suggestions/{suggestion_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Discovery Suggestion
+         * @description Accept, reject, link or approve a case — the only path from a suggestion to a test case.
+         */
+        post: operations["review_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/discovery/runs/{run_id}/intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Discovery Intelligence
+         * @description Start (or reuse) the bounded analysis task; an identical request never starts a second one.
+         */
+        post: operations["request_discovery_intelligence_api_discovery_runs__run_id__intelligence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/releases": {
         parameters: {
             query?: never;
@@ -3365,6 +3653,229 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/workflow-canvas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Workflow Canvas
+         * @description Read-only projection of this project's real records.
+         *
+         *     Nothing here executes: the canvas only reads, and every node keeps a link back to
+         *     the page that owns it.
+         */
+        get: operations["get_workflow_canvas_api_projects__project_id__workflow_canvas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workflows */
+        get: operations["list_workflows_api_projects__project_id__workflows_get"];
+        put?: never;
+        /** Create Workflow */
+        post: operations["create_workflow_api_projects__project_id__workflows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/workflows/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Workflow
+         * @description Propose a candidate graph. Nothing is saved: the caller must accept it as a draft.
+         */
+        post: operations["plan_workflow_api_projects__project_id__workflows_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow */
+        get: operations["get_workflow_api_workflows__definition_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Draft */
+        put: operations["save_draft_api_workflows__definition_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Draft */
+        post: operations["validate_draft_api_workflows__definition_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Workflow */
+        post: operations["publish_workflow_api_workflows__definition_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Version */
+        post: operations["restore_version_api_workflows__definition_id__versions__version__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compare Versions */
+        get: operations["compare_versions_api_workflows__definition_id__compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{definition_id}/execution-diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Execution Diff */
+        get: operations["execution_diff_api_workflows__definition_id__execution_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/execution-trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Task Execution Trace
+         * @description Read-only tree of what this task actually executed.
+         *
+         *     Every node is a stored row; facts the server cannot establish are reported as unknown rather
+         *     than filled in. Nothing here starts, retries or cancels anything.
+         */
+        get: operations["get_task_execution_trace_api_tasks__task_id__execution_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/execution-trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Project Execution Trace
+         * @description The same projection for the most recent tasks of a project, several roots side by side.
+         */
+        get: operations["get_project_execution_trace_api_projects__project_id__execution_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -3392,6 +3903,8 @@ export interface components {
             request_id?: string | null;
             /** Task Id */
             task_id?: string | null;
+            /** Step Id */
+            step_id?: string | null;
             /** Run Id */
             run_id?: string | null;
             /** Id */
@@ -4560,6 +5073,255 @@ export interface components {
             detection: components["schemas"]["QAProjectDetection"];
         };
         /**
+         * DiscoveryEvidenceMetrics
+         * @description What the structured evidence index holds for this run, per kind.
+         *
+         *     These are the deterministic counts from the evidence analysis, not a second counting pass: the
+         *     canvas reads the same numbers the evidence API reports.
+         */
+        DiscoveryEvidenceMetrics: {
+            /**
+             * Dom Elements
+             * @default 0
+             */
+            dom_elements: number;
+            /**
+             * Dom Elements Deduped
+             * @default 0
+             */
+            dom_elements_deduped: number;
+            /**
+             * Page States
+             * @default 0
+             */
+            page_states: number;
+            /**
+             * Locators
+             * @default 0
+             */
+            locators: number;
+            /**
+             * Locators Ambiguous
+             * @default 0
+             */
+            locators_ambiguous: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Requests Associated
+             * @default 0
+             */
+            requests_associated: number;
+            /**
+             * Actions
+             * @default 0
+             */
+            actions: number;
+            /**
+             * State Changes
+             * @default 0
+             */
+            state_changes: number;
+            /**
+             * Scenarios
+             * @default 0
+             */
+            scenarios: number;
+            /**
+             * Covered
+             * @default 0
+             */
+            covered: number;
+            /**
+             * Candidate Gaps
+             * @default 0
+             */
+            candidate_gaps: number;
+            /**
+             * Undetermined
+             * @default 0
+             */
+            undetermined: number;
+            /**
+             * Captured
+             * @default false
+             */
+            captured: boolean;
+        };
+        /**
+         * DiscoveryEvidenceRef
+         * @description One captured exploration artefact, addressed per discovery node.
+         *
+         *     ``id`` is stable across polls so a later round can attach more collections to the
+         *     same node without renumbering anything.
+         */
+        DiscoveryEvidenceRef: {
+            /** Id */
+            id: string;
+            /**
+             * Collection
+             * @enum {string}
+             */
+            collection: "page_state" | "screenshot" | "network" | "console" | "action" | "evidence_dom_element" | "evidence_network_request" | "evidence_locator_candidate" | "evidence_user_action" | "evidence_scenario";
+            /** Page Url */
+            page_url?: string | null;
+            /** Captured At */
+            captured_at?: string | null;
+            /**
+             * Collection Method
+             * @default browser_runtime
+             * @enum {string}
+             */
+            collection_method: "browser_runtime" | "recorder" | "manual";
+            /** Artifact Ref */
+            artifact_ref?: string | null;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * DiscoveryIntelligenceMetrics
+         * @description What the model-assisted reading layer holds, counted once from the stored readings.
+         *
+         *     ``jev_graded`` counts readings Jev actually scored; a fallback is counted separately so no
+         *     consumer can mistake it for a Jev success.
+         */
+        DiscoveryIntelligenceMetrics: {
+            /**
+             * Suggestions
+             * @default 0
+             */
+            suggestions: number;
+            /**
+             * Pending Review
+             * @default 0
+             */
+            pending_review: number;
+            /**
+             * Accepted
+             * @default 0
+             */
+            accepted: number;
+            /**
+             * Rejected
+             * @default 0
+             */
+            rejected: number;
+            /**
+             * Linked
+             * @default 0
+             */
+            linked: number;
+            /**
+             * Created Cases
+             * @default 0
+             */
+            created_cases: number;
+            /**
+             * Insufficient
+             * @default 0
+             */
+            insufficient: number;
+            /**
+             * Ungrounded Rejected
+             * @default 0
+             */
+            ungrounded_rejected: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Degraded
+             * @default 0
+             */
+            degraded: number;
+            /**
+             * Jev Graded
+             * @default 0
+             */
+            jev_graded: number;
+            /**
+             * Jev Fallback
+             * @default 0
+             */
+            jev_fallback: number;
+        };
+        /**
+         * DiscoveryIntelligenceRequest
+         * @description A request to read the unsettled scenarios; the bound task owns the work.
+         */
+        DiscoveryIntelligenceRequest: {
+            /**
+             * Mode
+             * @default analyze
+             */
+            mode: string;
+            /**
+             * Scenario Ids
+             * @default []
+             */
+            scenario_ids: string[];
+        };
+        /**
+         * DiscoveryMetrics
+         * @description Counts a discovery run already knows; the canvas shows them instead of guessing.
+         */
+        DiscoveryMetrics: {
+            /**
+             * States
+             * @default 0
+             */
+            states: number;
+            /**
+             * Actions
+             * @default 0
+             */
+            actions: number;
+            /**
+             * Features
+             * @default 0
+             */
+            features: number;
+            /**
+             * Requirements
+             * @default 0
+             */
+            requirements: number;
+            /**
+             * Gaps
+             * @default 0
+             */
+            gaps: number;
+            /**
+             * Covered
+             * @default 0
+             */
+            covered: number;
+            /**
+             * Partial
+             * @default 0
+             */
+            partial: number;
+            /**
+             * Not Covered
+             * @default 0
+             */
+            not_covered: number;
+            /**
+             * Test Cases
+             * @default 0
+             */
+            test_cases: number;
+            evidence?: components["schemas"]["DiscoveryEvidenceMetrics"] | null;
+            intelligence?: components["schemas"]["DiscoveryIntelligenceMetrics"] | null;
+        };
+        /**
          * DiscoveryMode
          * @enum {string}
          */
@@ -4667,6 +5429,37 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ExecutionTrace */
+        ExecutionTrace: {
+            /** Root Task Id */
+            root_task_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Status */
+            status?: string | null;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Nodes */
+            nodes?: components["schemas"]["TraceNode"][];
+            /** Edges */
+            edges?: components["schemas"]["TraceEdge"][];
+            counts?: components["schemas"]["TraceCounts"];
+            /** Unknown */
+            unknown?: string[];
+            /**
+             * Root Count
+             * @default 0
+             */
+            root_count: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** ExternalArtifactReference */
         ExternalArtifactReference: {
@@ -7302,6 +8095,21 @@ export interface components {
             /** Resource Id */
             resource_id: string;
         };
+        /** SuggestionReviewRequest */
+        SuggestionReviewRequest: {
+            /** Decision */
+            decision: string;
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /**
+             * Case Ids
+             * @default []
+             */
+            case_ids: string[];
+        };
         /** SuiteExecutionResult */
         SuiteExecutionResult: {
             /** Exit Code */
@@ -7794,7 +8602,7 @@ export interface components {
          * TaskType
          * @enum {string}
          */
-        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "EXPLORE_PRODUCT" | "RUN_REGRESSION" | "REVIEW_TEST";
+        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "EXPLORE_PRODUCT" | "ANALYZE_DISCOVERY" | "RUN_REGRESSION" | "REVIEW_TEST";
         /** Team */
         Team: {
             /** Name */
@@ -8557,6 +9365,132 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** TraceCounts */
+        TraceCounts: {
+            /**
+             * Task
+             * @default 0
+             */
+            task: number;
+            /**
+             * Step
+             * @default 0
+             */
+            step: number;
+            /**
+             * Invocation
+             * @default 0
+             */
+            invocation: number;
+            /**
+             * Evidence
+             * @default 0
+             */
+            evidence: number;
+            /**
+             * Artifact
+             * @default 0
+             */
+            artifact: number;
+            /**
+             * Run
+             * @default 0
+             */
+            run: number;
+            /**
+             * Suggestion
+             * @default 0
+             */
+            suggestion: number;
+        };
+        /** TraceEdge */
+        TraceEdge: {
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "CHILD_OF" | "INVOKES" | "PRODUCES" | "DEPENDS_ON";
+        };
+        /** TraceNode */
+        TraceNode: {
+            /** Id */
+            id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "task" | "step" | "invocation" | "evidence" | "artifact" | "run" | "suggestion";
+            /** Label */
+            label: string;
+            /** Task Id */
+            task_id?: string | null;
+            /** Invocation Id */
+            invocation_id?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Tool */
+            tool?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+            token_usage?: components["schemas"]["TraceTokenUsage"] | null;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Inputs */
+            inputs?: {
+                [key: string]: string;
+            };
+            /** Outputs */
+            outputs?: {
+                [key: string]: string;
+            };
+            /** Error Code */
+            error_code?: string | null;
+            /** Cost */
+            cost?: number | null;
+            /**
+             * Pricing
+             * @default unpriced
+             * @constant
+             */
+            pricing: "unpriced";
+            /** Unknown */
+            unknown?: string[];
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Fallback Used */
+            fallback_used?: boolean | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Links */
+            links?: {
+                [key: string]: string;
+            };
+        };
+        /** TraceTokenUsage */
+        TraceTokenUsage: {
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Source */
+            source: string;
+        };
         /** User */
         User: {
             /** Email */
@@ -8780,6 +9714,163 @@ export interface components {
          * @enum {string}
          */
         WorkerStatus: "ONLINE" | "BUSY" | "OFFLINE" | "LOST";
+        /** WorkflowCanvas */
+        WorkflowCanvas: {
+            /** Project Id */
+            project_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Stages */
+            stages: components["schemas"]["WorkflowStage"][];
+            /** Nodes */
+            nodes: components["schemas"]["WorkflowNode"][];
+            /** Edges */
+            edges: components["schemas"]["WorkflowEdge"][];
+            /** Counts */
+            counts?: {
+                [key: string]: number;
+            };
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /** WorkflowCreate */
+        WorkflowCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
+        /** WorkflowEdge */
+        WorkflowEdge: {
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+        };
+        /**
+         * WorkflowEvidenceRef
+         * @description One addressable artefact behind a node: an artifact id, a file path or an API path.
+         */
+        WorkflowEvidenceRef: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Ref */
+            ref?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** WorkflowGraphPayload */
+        WorkflowGraphPayload: {
+            /** Nodes */
+            nodes?: {
+                [key: string]: unknown;
+            }[];
+            /** Edges */
+            edges?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** WorkflowNode */
+        WorkflowNode: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "DISCOVERY" | "RECORDER" | "STUDIO" | "RUN" | "FAILURE" | "FAILURE_ANALYSIS" | "HUMAN_APPROVAL" | "EXACT_VERIFICATION";
+            /** Stage */
+            stage: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Status */
+            status: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Entity Id */
+            entity_id: string;
+            /** Task Id */
+            task_id?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Outputs */
+            outputs?: {
+                [key: string]: unknown;
+            };
+            /** Evidence */
+            evidence?: components["schemas"]["WorkflowEvidenceRef"][];
+            /** Links */
+            links?: {
+                [key: string]: string;
+            };
+            metrics?: components["schemas"]["DiscoveryMetrics"] | null;
+            /** Evidence Index */
+            evidence_index?: components["schemas"]["DiscoveryEvidenceRef"][];
+        };
+        /** WorkflowPlanRequest */
+        WorkflowPlanRequest: {
+            /** Prompt */
+            prompt: string;
+        };
+        /** WorkflowSave */
+        WorkflowSave: {
+            /** Nodes */
+            nodes?: {
+                [key: string]: unknown;
+            }[];
+            /** Edges */
+            edges?: {
+                [key: string]: unknown;
+            }[];
+            /** Base Checksum */
+            base_checksum?: string | null;
+        };
+        /** WorkflowStage */
+        WorkflowStage: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "DISCOVERY" | "RECORDER" | "STUDIO" | "RUN" | "FAILURE" | "FAILURE_ANALYSIS" | "HUMAN_APPROVAL" | "EXACT_VERIFICATION";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
         /** Workspace */
         Workspace: {
             /** Project Id */
@@ -10353,6 +11444,86 @@ export interface operations {
         };
     };
     demo_catalog_api_demo_shop_catalog_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    demo_discovery_fixture_api_demo_shop_discovery_fixture_html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    demo_discovery_fixture_b_api_demo_shop_discovery_fixture_b_html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    demo_discovery_fixture_c_api_demo_shop_discovery_fixture_c_html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    demo_discovery_fixture_d_api_demo_shop_discovery_fixture_d_html_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13476,6 +14647,364 @@ export interface operations {
             };
         };
     };
+    list_discovery_evidence_api_discovery_runs__run_id__evidence_get: {
+        parameters: {
+            query?: {
+                kind?: string | null;
+                state_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discovery_evidence_summary_api_discovery_runs__run_id__evidence_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discovery_evidence_diff_api_discovery_runs__run_id__evidence_diff_get: {
+        parameters: {
+            query?: {
+                against?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discovery_evidence_api_discovery_runs__run_id__evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_discovery_scenarios_api_discovery_runs__run_id__scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_discovery_scenarios_api_discovery_runs__run_id__scenarios_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_discovery_suggestions_api_discovery_runs__run_id__suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discovery_suggestion_summary_api_discovery_runs__run_id__suggestions_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestionReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_discovery_intelligence_api_discovery_runs__run_id__intelligence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DiscoveryIntelligenceRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_releases_api_releases_get: {
         parameters: {
             query?: {
@@ -15932,6 +17461,456 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuntimeStepDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_canvas_api_projects__project_id__workflow_canvas_get: {
+        parameters: {
+            query?: {
+                requirement_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowCanvas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workflows_api_projects__project_id__workflows_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workflow_api_projects__project_id__workflows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_workflow_api_projects__project_id__workflows_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_api_workflows__definition_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_draft_api_workflows__definition_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_draft_api_workflows__definition_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowGraphPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_workflow_api_workflows__definition_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_version_api_workflows__definition_id__versions__version__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definition_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_versions_api_workflows__definition_id__compare_get: {
+        parameters: {
+            query: {
+                base: number;
+                head: number;
+            };
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execution_diff_api_workflows__definition_id__execution_diff_get: {
+        parameters: {
+            query: {
+                task_id: string;
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_execution_trace_api_tasks__task_id__execution_trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionTrace"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_execution_trace_api_projects__project_id__execution_trace_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionTrace"];
                 };
             };
             /** @description Validation Error */

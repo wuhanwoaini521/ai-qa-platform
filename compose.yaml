@@ -1,3 +1,0 @@
-# Docker Compose v2 specification mirror
-include:
-  - docker-compose.yml

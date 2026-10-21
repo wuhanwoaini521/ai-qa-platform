@@ -1,0 +1,113 @@
+{
+  "round": 20,
+  "finished_at": "2026-10-21T20:46:45",
+  "seconds": 26.4,
+  "checks": 12,
+  "passed": 12,
+  "failed": [],
+  "results": [
+    {
+      "name": "every service image is built and tagged",
+      "passed": true,
+      "detail": {
+        "images": [
+          "aiqa-r20-api:latest",
+          "aiqa-r20-web:latest"
+        ]
+      }
+    },
+    {
+      "name": "the API container starts and reports a healthy database",
+      "passed": true,
+      "detail": {
+        "health": {
+          "status": "healthy",
+          "service": "ai-qa-platform-api",
+          "version": "1.0.0",
+          "uptime_seconds": 1.06,
+          "checks": {
+            "database": "connected",
+            "artifact_storage": "writable"
+          }
+        },
+        "seconds": 12.6
+      }
+    },
+    {
+      "name": "the container's own healthcheck turns healthy",
+      "passed": true,
+      "detail": {
+        "docker_health": "healthy"
+      }
+    },
+    {
+      "name": "a migration downgrades and upgrades again on the containerised database",
+      "passed": true,
+      "detail": {
+        "before": "0021_artifact_actor_width (head)",
+        "after_downgrade": "0020_task_lease",
+        "after_upgrade": "0021_artifact_actor_width (head)"
+      }
+    },
+    {
+      "name": "the seeded administrator can log in inside the container",
+      "passed": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "the containerised API can write to PostgreSQL",
+      "passed": true,
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "a logical backup is produced",
+      "passed": true,
+      "detail": {
+        "bytes": 97679
+      }
+    },
+    {
+      "name": "the restored database holds the same rows and the same migration revision",
+      "passed": true,
+      "detail": {
+        "source": "1|1",
+        "restored": "1|1",
+        "restore_rc": 0
+      }
+    },
+    {
+      "name": "the API refuses to start when the config file hard-codes a secret, and says why",
+      "passed": true,
+      "detail": {
+        "exit": 1,
+        "tail": "   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/app/packages/platform-config/platform_config/loader.py\", line 127, in _validate_secret_references\n    raise ConfigLoadError(f\"Secret field {path} must be empty or an environment reference in {config_path}\")\nplatform_config.loader.ConfigLoadError: Secret field app.secret_key must be empty or an environment reference in /app/config/config.yaml\n"
+      }
+    },
+    {
+      "name": "the web image serves the built single-page app",
+      "passed": true,
+      "detail": {
+        "bytes": 1139
+      }
+    },
+    {
+      "name": "stopping the API is a graceful shutdown (no SIGKILL required)",
+      "passed": true,
+      "detail": {
+        "stop_rc": 0,
+        "exit_code": "0"
+      }
+    },
+    {
+      "name": "teardown removes the stack and its volumes",
+      "passed": true,
+      "detail": {
+        "remaining": []
+      }
+    }
+  ]
+}
