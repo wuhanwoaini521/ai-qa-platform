@@ -814,6 +814,55 @@ class DiscoveryScenarioORM(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
+class WorkflowDefinitionORM(Base):
+    """An authored QA workflow for one project, with pointers to its one draft and its published version.
+
+    The definition holds identity only; every graph lives in an immutable-once-published version row, so
+    a task that ran version 3 keeps meaning version 3 after the draft moves on.
+    """
+
+    __tablename__ = "workflow_definitions"
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_workflow_definitions_project_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    published_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    draft_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+    __mapper_args__ = {"version_id_col": version}
+
+
+class WorkflowDefinitionVersionORM(Base):
+    """One immutable published graph, or the single mutable draft of its definition."""
+
+    __tablename__ = "workflow_definition_versions"
+    __table_args__ = (
+        UniqueConstraint("definition_id", "version", name="uq_workflow_definition_versions_definition_version"),
+        Index("ix_workflow_definition_versions_project_state", "project_id", "state"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    definition_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workflow_definitions.id", ondelete="CASCADE"), index=True
+    )
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), default="DRAFT", index=True)
+    graph: Mapped[dict[str, Any]] = mapped_column(JsonDict, default=dict)
+    checksum: Mapped[str] = mapped_column(String(64), default="")
+    issues: Mapped[list[Any]] = mapped_column(JsonList, default=list)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    published_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class DiscoverySuggestionORM(Base):
     """A model-assisted reading of one uncovered scenario, kept away from the rule verdict.
 

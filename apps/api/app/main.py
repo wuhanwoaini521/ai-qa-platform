@@ -52,6 +52,7 @@ from app.api.language_service import router as language_service_router
 from app.api.lifecycle import router as lifecycle_router
 from app.api.runtime import router as runtime_router
 from app.api.workflow_canvas import router as workflow_canvas_router
+from app.api.workflow_definitions import router as workflow_definitions_router
 from app.persistence.database import engine, init_db
 from app.settings import config_manager, get_config
 
@@ -237,6 +238,7 @@ app.include_router(qa_assistant_router, prefix="/api")
 app.include_router(language_service_router, prefix="/api")
 app.include_router(runtime_router, prefix="/api")
 app.include_router(workflow_canvas_router, prefix="/api")
+app.include_router(workflow_definitions_router, prefix="/api")
 app.include_router(execution_trace_router, prefix="/api")
 
 

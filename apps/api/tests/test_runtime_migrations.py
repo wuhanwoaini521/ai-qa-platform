@@ -65,6 +65,16 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         }
         # The evidence index must come back down on SQLite too, not only up.
         assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
+        # Versioned workflow definitions: additive tables that must also go down on SQLite.
+        workflow_tables = {"workflow_definitions", "workflow_definition_versions"}
+        assert workflow_tables <= set(inspect(connection).get_table_names())
+        assert {"definition_id", "version", "state", "checksum", "graph"} <= {
+            column["name"] for column in inspect(connection).get_columns("workflow_definition_versions")
+        }
+        downgrade_database(connection, "0018_ai_invocation_step")
+        assert not workflow_tables & set(inspect(connection).get_table_names())
+        upgrade_database(connection)
+        assert workflow_tables <= set(inspect(connection).get_table_names())
         # An invocation names its step; the column is additive and goes away again on downgrade.
         assert "step_id" in {column["name"] for column in inspect(connection).get_columns("ai_invocations")}
         downgrade_database(connection, "0015_artifact_ownership")

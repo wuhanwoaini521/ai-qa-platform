@@ -30,6 +30,7 @@ from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskR
 from app.repositories.test_case_repo import TestCaseRepository
 from app.repositories.test_design_repo import TestDesignRepository
 from app.repositories.test_run_repo import TestRunRepository
+from app.repositories.workflow_definition_repo import WorkflowDefinitionRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.ai_service import AIService
 from app.services.ai_settings_service import AISettingsService
@@ -76,6 +77,7 @@ from app.services.test_design_service import TestDesignService
 from app.services.test_run_service import TestRunService
 from app.services.testrail_service import TestRailService
 from app.services.workflow_canvas_service import WorkflowCanvasService
+from app.services.workflow_definition_service import WorkflowDefinitionService
 from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import WorkspaceService
 from app.settings import get_config
@@ -454,6 +456,13 @@ def get_workflow_canvas_service(
         suggestions=DiscoverySuggestionRepository(session),
         bindings=bindings,
     )
+
+
+def get_workflow_definition_service(
+    session: AsyncSession = Depends(get_db),
+) -> WorkflowDefinitionService:
+    # Authoring reads and writes go through the request session so ACL and transaction stay one unit.
+    return WorkflowDefinitionService(definitions=WorkflowDefinitionRepository(session))
 
 
 def get_execution_trace_service(session: AsyncSession = Depends(get_db)) -> ExecutionTraceService:
