@@ -338,7 +338,9 @@ class TaskRepository:
         stmt = stmt.order_by(TaskORM.created_at.desc()).limit(limit)
         return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
-    async def list_by_project(self, project_id: str, *, task_type: str | None = None, limit: int = 50) -> list[TaskRecord]:
+    async def list_by_project(
+        self, project_id: str, *, task_type: str | None = None, limit: int = 50
+    ) -> list[TaskRecord]:
         """Project-wide tasks regardless of owner, for reuse checks the caller scopes itself."""
         stmt = select(TaskORM).where(TaskORM.project_id == project_id)
         if task_type:
