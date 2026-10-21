@@ -33,6 +33,7 @@ import type {
 import {
   addNode,
   applyEdit,
+  sameLayout,
   autoLayout,
   connect,
   describeInput,
@@ -195,7 +196,8 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
     }),
     [detail],
   );
-  const dirty = !sameGraph(history.present, savedState);
+  // A dragged card is a real change to save, even though it is not part of the graph's meaning.
+  const dirty = !sameGraph(history.present, savedState) || !sameLayout(history.present, savedState);
 
   const load = useCallback(
     async (definitionId?: string) => {

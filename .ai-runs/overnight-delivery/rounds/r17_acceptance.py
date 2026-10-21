@@ -158,6 +158,39 @@ async def main() -> None:
         })
         await page.screenshot(path=str(SHOTS / "after-r17-editor-draft.png"))
 
+        # --- Phase 3 item 1: a dragged card can actually be saved ---
+        positions_before = {
+            node["key"]: node.get("position") for node in (await api_call("GET", f"/api/workflows/{created['id']}"))[1]["draft"]["graph"]["nodes"]
+        }
+        card = page.locator(".wfe-node").first
+        box = await card.bounding_box()
+        await page.mouse.move(box["x"] + 40, box["y"] + 12)
+        await page.mouse.down()
+        await page.mouse.move(box["x"] + 150, box["y"] + 110, steps=10)
+        await page.mouse.up()
+        save_enabled_after_drag = await page.locator('button:has-text("保存草稿")').is_enabled()
+        if save_enabled_after_drag:
+            await page.click('button:has-text("保存草稿")')
+            await page.wait_for_selector(".wfe-message", timeout=30000)
+        positions_after = {
+            node["key"]: node.get("position") for node in (await api_call("GET", f"/api/workflows/{created['id']}"))[1]["draft"]["graph"]["nodes"]
+        }
+        moved_keys = [key for key, position in positions_after.items() if position != positions_before.get(key)]
+        await page.reload()
+        await page.wait_for_selector(".wfe-node", timeout=30000)
+        positions_reloaded = {
+            node["key"]: node.get("position") for node in (await api_call("GET", f"/api/workflows/{created['id']}"))[1]["draft"]["graph"]["nodes"]
+        }
+        check(
+            "a dragged card stays where it was put after a reload",
+            save_enabled_after_drag and bool(moved_keys) and positions_reloaded == positions_after,
+            {
+                "save_enabled_after_drag": save_enabled_after_drag,
+                "moved_keys": moved_keys,
+                "reloaded": positions_reloaded,
+            },
+        )
+
         # --- an impossible graph is rejected before it can be published ---
         bad = {
             "nodes": [
@@ -186,6 +219,31 @@ async def main() -> None:
             "status": publish_bad_status,
             "detail": str(publish_bad)[:200],
         })
+
+        # --- a cycle is refused at the publish gate, not just flagged ---
+        await api_call("PUT", f"/api/workflows/{created['id']}/draft", bad)
+        status_cycle_publish, cycle_publish = await api_call("POST", f"/api/workflows/{created['id']}/publish")
+        check(
+            "a cyclic draft is refused at publish, not merely flagged",
+            status_cycle_publish == 422 and "cycle" in str(cycle_publish).lower(),
+            {"status": status_cycle_publish, "detail": str(cycle_publish)[:160]},
+        )
+
+        # --- a write node without a human approval step is refused ---
+        unsigned = {"nodes": [{"key": "w", "kind": "source.write_generated"}], "edges": []}
+        status_unsigned, unsigned_body = await api_call("PUT", f"/api/workflows/{created['id']}/draft", unsigned)
+        unsigned_codes = [issue["code"] for issue in (unsigned_body.get("issues") or [])] if isinstance(unsigned_body, dict) else []
+        status_unsigned_publish, unsigned_publish = await api_call("POST", f"/api/workflows/{created['id']}/publish")
+        check(
+            "a workflow that would write without a human approval step cannot be published",
+            "WRITE_WITHOUT_APPROVAL" in unsigned_codes and status_unsigned_publish == 422,
+            {
+                "save_status": status_unsigned,
+                "codes": unsigned_codes,
+                "publish_status": status_unsigned_publish,
+                "detail": str(unsigned_publish)[:160],
+            },
+        )
         # restore the good draft so the publish below is meaningful
         await api_call("PUT", f"/api/workflows/{created['id']}/draft", detail["draft"]["graph"])
 
@@ -297,6 +355,24 @@ async def main() -> None:
 
         tasks_after = (await api_call("GET", f"/api/tasks?project_id={PROJECT}&limit=50"))[1]
         runs_after = (await api_call("GET", f"/api/runs?project_id={PROJECT}&limit=50"))[1]
+        # --- restoring an old version becomes a draft, never a rewrite of the published one ---
+        published_before_restore = (await api_call("GET", f"/api/workflows/{created['id']}"))[1]["published"]
+        status_restore, restored = await api_call("POST", f"/api/workflows/{created['id']}/versions/1/restore")
+        after_restore = (await api_call("GET", f"/api/workflows/{created['id']}"))[1]
+        restored_keys = sorted(node["key"] for node in ((restored or {}).get("draft") or {}).get("graph", {}).get("nodes", []))
+        check(
+            "restoring version 1 gives a draft with that graph and leaves the published version alone",
+            status_restore == 200
+            and len(restored_keys) == 3
+            and after_restore["published"]["checksum"] == published_before_restore["checksum"],
+            {
+                "status": status_restore,
+                "restored_keys": restored_keys,
+                "published_checksum_unchanged": after_restore["published"]["checksum"] == published_before_restore["checksum"],
+                "draft_version": after_restore["draft"]["version"],
+            },
+        )
+
         check("editing and publishing never starts an execution", len(tasks_after) == len(tasks_before) and len(runs_after) == len(runs_before), {
             "tasks_before": len(tasks_before),
             "tasks_after": len(tasks_after),

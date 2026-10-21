@@ -486,6 +486,7 @@ async def test_an_approved_suggestion_becomes_a_case_only_after_approval(client,
     assert case is not None
     assert case.title == ANALYSIS["suggested_title"]
     assert "ai-suggestion" in case.tags
+    assert f"suggestion:{row.suggestion_id}" in case.tags
 
     again = await client.post(
         f"/api/discovery/runs/{RUN}/suggestions/{row.suggestion_id}/review",

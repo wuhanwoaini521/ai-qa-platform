@@ -28,6 +28,12 @@ what was asked for. The execution diff joins the two by step `tool`, never by gu
 
 Every version stores `graph`, `issues` and a `checksum` of the graph content.
 
+Node `position` is stored in the graph and is **not** part of the graph's meaning: `sameGraph` ignores it
+(so a drag never shows up in a version diff) while `sameLayout` tracks it, and the editor counts either
+kind of change as unsaved work. Without that split a dragged arrangement could never be saved — the save
+button stayed disabled because the graph was "unchanged". Acceptance check *a dragged card stays where it
+was put after a reload* pins both halves.
+
 ## 3. The node catalogue
 
 `packages/project-model/project_model/workflow_definition.py` holds `CATALOGUE`: 25 node kinds, each
@@ -120,3 +126,32 @@ Evidence: `.ai-runs/overnight-delivery/rounds/r19-acceptance.json` — 15/15 wit
 (planning took 19 s, 9 nodes, each with a stated rationale, `valid: true`), the shell request produced no
 shell node, save→publish→reload kept the graph, the published checksum never changed afterwards, and the
 phone viewport had no overflow.
+
+## 11. Test-data governance (added in the Round 17 re-audit)
+
+Acceptance runs exercise the **real** approval path, so they leave real rows behind. There are two
+distinguishable kinds and neither is deleted automatically:
+
+- **Workflow definitions / versions / tasks.** A definition is only created by the acceptance when the
+  script names it (`qd_r17_acceptance`, `qd_r19_acceptance`, …). The edit-and-publish chain creates **no**
+  task and no run — asserted by the acceptance (`tasks_before == tasks_after`).
+- **Test cases created by an approved AI reading.** `DiscoveryIntelligenceService._create_case` stamps every
+  case it creates with `tags = ["discovery", "ai-suggestion", "candidate-gap", "suggestion:<suggestion_id>"]`.
+  The last tag names the exact reading that produced the case, so acceptance-created cases are findable
+  without guessing from the title:
+
+  ```bash
+  curl -s "$API/api/test-cases?project_id=proj_golden_shop_v1" -H "Authorization: Bearer $TOKEN" \
+    | jq '.items[] | select(.tags | index("ai-suggestion")) | {id, title, tags}'
+  ```
+
+  In the golden demo project the acceptance of Round 16 left `tc_fc72509f37fd` and `tc_e5cbf1e12f6b`.
+
+- **Cleanup is id-scoped, never tag-scoped.** Deleting by tag would remove real cases a person approved for
+  a real gap. The supported procedure is to read the ids above, confirm they are acceptance artifacts, and
+  delete exactly those (`DELETE /api/test-cases/{id}`) — the coverage number is computed from the remaining
+  cases, so nothing needs recomputing.
+- **Coverage does not special-case these rows.** An approved suggestion *is* coverage: a person read the
+  evidence and asked for a case. Excluding it from coverage would understate the product. What must not
+  happen is a **fixture** case entering coverage, which is why acceptance writes its fixtures into
+  `runtime/workspaces/<project>/…` files rather than into the case table.

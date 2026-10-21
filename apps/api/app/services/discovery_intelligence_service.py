@@ -251,7 +251,9 @@ class DiscoveryIntelligenceService:
                 or str(payload.get("uncertainty") or "")[:2000]
                 or "Confirm the expected result against the recorded evidence.",
                 priority=TestCasePriority.P2,
-                tags=["discovery", "ai-suggestion", "candidate-gap"],
+                # Provenance is explicit so acceptance data created by the real approval path can be
+                # singled out later without guessing from the title.
+                tags=["discovery", "ai-suggestion", "candidate-gap", f"suggestion:{row.suggestion_id}"],
             )
         )
         return case.id

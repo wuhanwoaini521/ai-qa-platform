@@ -5,7 +5,7 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 22 —— 最终发布候选审计（无人值守交付任务 m05387 的第 6 轮，记录见 §3.20）。**两轮交付：Round 21 用实测把三个 React Flow 画布从「缩到看不清也要塞下」改成「保住可读字号、允许平移」（流水线 0.47→0.82、执行树手机改单列 10.5px、证据分页），Round 22 做只读审计：两条真实业务链路（失败→修复→人工批准→精确验证；自然语言→候选工作流→草稿→发布→停在执行前）15/15 通过，并修掉 7 个由失败运行或独立 reviewer 证实的缺陷（planner 预算/超时/一次纠正/list 形状、非列表 500、视口回弹 P1、堆叠卡片宽度 P2）。判定分五级：核心产品 PASS、工作流 Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED（详见 §3.20 与 `.ai-runs/overnight-delivery/rounds/r22.md`）。
+**当前活动轮次：Round 17 复核审计（用户任务 m07420，记录见 §3.21）。**按 Round 17 原 prompt 的 7 个 Phase 逐条核实「已交付的版本化工作流 Studio」，只以代码与可重跑证据为准：Phase 1/2/5/6 实质完成（定义与执行分表、版本与乐观并发、执行 Diff 带 `unknown` 列表、任务级证据 9 条/11 步），Phase 4 执行仍 BLOCKED（`compile_plan` 有实现但无执行路由，未新建第二套调度器）。审计发现并修复 1 个真实 P1：拖拽布局永远无法保存（`dirty` 只比较图语义，保存按钮因此始终禁用）；真实验收从 20 项扩到 24 项全 PASS。判定：A 定义与编辑 PASS、B 执行 BLOCKED、C 任意 DAG BLOCKED。上一轮 Round 22 的发布候选审计结论见 §3.20（五级判定：核心产品 PASS、Studio PASS、DAG/多实例/发布候选 BLOCKED）。
 
 **Round 16（上一轮，用户任务 m03748，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
 
@@ -44,8 +44,8 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | Round 20 收尾 `8b1c07d` → Round 21 `6a865c3`（画布可读性/证据分页）→ Round 22 本轮提交（见 §3.20） |
-| 未推送提交 | `origin/main..HEAD` = 31 笔（本任务默认不 push；Round 21 +1、Round 22 +1） |
+| 当前 HEAD | `8b1c07d`（R20）→ `6a865c3`（R21 画布可读性/证据分页）→ `53b7276`（R22 发布候选）→ Round 17 复核审计提交（见 §3.21） |
+| 未推送提交 | `origin/main..HEAD` = 32 笔（本任务默认不 push；Round 21 +1、Round 22 +1、复核审计 +1） |
 | 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20，`stored_artifacts.created_by` 加宽到 100；SQLite 下 no-op） |
 | 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
 | Round 16.5 HEAD（历史） | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
@@ -924,7 +924,9 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-- **Round 22（发布候选审计，本轮）**：后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 677.08s**（Round 21 为 994 passed，+2 = planner 的一次纠正与「非列表返回不是 500」两个用例）；PostgreSQL 16 通道（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`）`test_workflow_planner test_runtime_migrations test_discovery_evidence test_task_lease` → **34 passed**；`ruff check .` / `ruff format --check .`（488 files）干净；`scripts/i18n_check.py` → 25 namespaces / 3390 keys；`scripts/export_openapi.py --check` → current；前端 `pnpm --filter @ai-qa/web test` → **225 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净。真实 Chromium + 真实 provider：`.ai-runs/overnight-delivery/rounds/r22_acceptance.py` → **15/15 PASS，`failed: []`，`console_errors: []`**（证据 `rounds/r22-acceptance.json`，说明 `rounds/r22.md`）。两条链路：失败→批准→精确验证（`run_1949eb638ae2`/`fail_00fd043c649c`/`7a5e3a6f…`/`run_01b4e1aebd12`）、自然语言→草稿→发布→停在执行前（planner `valid:true` 14 节点，`72b52b01-…`，`/execute` 404）。
+- **Round 17 复核审计（本轮，用户任务 m07420）**：按原 7 个 Phase 逐条核实已交付的 Studio，修复 1 个 P1（拖拽布局永远无法保存），补齐 4 条真实验收。后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 706.27s**；`ruff check .` / `ruff format --check .`（488 files）干净；前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**（+2 = `sameLayout` 的布局/亚像素用例），`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**（新增：循环草稿发布 422、无人工批准步骤的写节点发布 422、restore 只改草稿、拖拽后保存并在刷新后保持）；证据 `rounds/r17-acceptance.json`，说明 `rounds/r17-reaudit.md`。
+
+- **Round 22（发布候选审计，`53b7276`）**：后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 677.08s**（Round 21 为 994 passed，+2 = planner 的一次纠正与「非列表返回不是 500」两个用例）；PostgreSQL 16 通道（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`）`test_workflow_planner test_runtime_migrations test_discovery_evidence test_task_lease` → **34 passed**；`ruff check .` / `ruff format --check .`（488 files）干净；`scripts/i18n_check.py` → 25 namespaces / 3390 keys；`scripts/export_openapi.py --check` → current；前端 `pnpm --filter @ai-qa/web test` → **225 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净。真实 Chromium + 真实 provider：`.ai-runs/overnight-delivery/rounds/r22_acceptance.py` → **15/15 PASS，`failed: []`，`console_errors: []`**（证据 `rounds/r22-acceptance.json`，说明 `rounds/r22.md`）。两条链路：失败→批准→精确验证（`run_1949eb638ae2`/`fail_00fd043c649c`/`7a5e3a6f…`/`run_01b4e1aebd12`）、自然语言→草稿→发布→停在执行前（planner `valid:true` 14 节点，`72b52b01-…`，`/execute` 404）。
 
 - **Round 21（UX/性能/可观测性，`6a865c3`）**：前端 `pnpm --filter @ai-qa/web test` → **224 pass / 0 fail**（Round 20 为 223，+1 = 堆叠布局 extent 用例），`tsc`/`eslint` 干净；后端全量 994 passed / 11 skipped / 724.80s；`ruff`（488 files）、`i18n`（3390 keys）、`openapi --check` 均干净。真实浏览器 `.ai-runs/overnight-delivery/rounds/r21_acceptance.py` → **12/12 PASS，`failed: []`，`console_errors: []`**；性能实测 `rounds/r21-perf-{before,after}.json`（流水线缩放 0.47→0.82、最小字号 6.2→9px；执行树手机单列 10.5px；1000 节点挂载 1107ms / DOM 18410）；截图 `rounds/screenshots/r21-*`。
 
@@ -1121,3 +1123,20 @@ pnpm -r typecheck && pnpm -r lint
 **判定（五个等级分开给，不合并）**：`CORE_PRODUCT_PASS` = PASS；`WORKFLOW_STUDIO_PASS` = PASS；`DAG_EXECUTION_PASS` = **BLOCKED**（定义能编译成 plan、`task_scheduler_service` 也真的按 `depends_on` 调度，但没有经审批的端到端执行路径，`/execute` 是 404）；`MULTI_INSTANCE_PASS` = **BLOCKED**（Round 18 只证明同机双进程）；`RELEASE_CANDIDATE_PASS` = **BLOCKED**（CI 服务未在远端跑过、部署只做过 Round 20 的单机 compose 演练）。
 
 **诚实边界**：⑥ 的视口回弹**未能在浏览器中复现**（探针期间流水线没有任何运行中节点，轮询未触发，`/tmp/pan-probe.json` 记 `polls: 0`，视口保持不变），该修复只由代码阅读保证；planner 在本环境是模型依赖的（连续四次真实调用 3 次合法、1 次 122s 超时 503），验收脚本允许最多 3 次重试并记录 `attempts`（最终一次为 1）；reviewer 关于 `ExecutionTreePanel` 的 `nodesInitialized` 依赖项与证据 ACL 测试口径两条 P2 保留为债务。
+
+## 3.21 Round 17 复核审计（用户任务 m07420：按原 7 个 Phase 逐项核实已交付的 Studio）
+
+结论：Round 17 的交付范围与本轮 prompt 基本一致，但审计找出 4 个「只有描述、没有证据」的位置和 1 个真实缺陷；缺陷已修，证据已补。本轮不重做 Studio，不新增执行能力。
+
+**逐 Phase 核实（以代码与可重跑证据为准，不看文档措辞）**
+- Phase 1 设计 7 项：全部落在 `docs/WORKFLOW_STUDIO.md` §1–§6（定义/执行分表、版本与乐观并发、25 种节点 + 14 个校验码、权限划分、Diff、刻意不做）。代码侧 `workflow_definition.py:436-449` 是真实的 gate：任何 `writes` 节点必须有人工批准祖先节点，`APPROVAL_WITHOUT_WRITE` 反向兜底。
+- Phase 2 版本化：`POST /draft`（`base_checksum` 冲突 409）、`/publish`（不可变）、`/versions/{v}/restore`、`/compare` 均存在；本轮补上 restore 的真实验收（此前只有接口没有证据）。
+- Phase 3 编辑器：拖拽 / 增删 / 连线 / 参数 / 保存 / 自动布局 / 阶段折叠 / Undo-Redo / 校验 / 版本对比均在 `WorkflowEditorPanel.tsx` + `workflowEditorModel.ts`。**缺陷：布局不可保存**（见下）。
+- Phase 4 受限执行：`WorkflowDefinitionService.compile_plan`（`workflow_definition_service.py:226`）可把定义编译成 `TaskStepSpec`，但**没有任何执行路由**（`/execute` 404），因此 B/C 仍为 BLOCKED，与本轮 prompt 允许的降级一致。
+- Phase 5 Definition vs Execution Diff：`GET /workflows/{id}/execution-diff?task_id=` 按 step `tool` 匹配，返回 matched / not_executed / undeclared 三组 + `unknown` 列表（不比较 step inputs 与依赖边），真实验收 2 次通过。
+- Phase 6 证据与测试数据治理：任务级证据确实在写——R22 修复任务 `7a5e3a6f3462446183d245b6ccf56ad9` 的 11 个步骤共 9 条 `agent_task_evidence`（PytestTraceback / Analysis ×2 / SourceCode ×2 / GitDiff / TestResult ×2）。测试数据一侧新增 `suggestion:<suggestion_id>` 溯源标签（`discovery_intelligence_service.py`），治理流程写入 `docs/WORKFLOW_STUDIO.md` §11：按 id 清理、不按 tag 清理、批准生成的用例照常计入覆盖率。
+- Phase 7 真实验收：原 20 项 → **24 项全部 PASS**（`.ai-runs/overnight-delivery/rounds/r17-acceptance.json`，`failed: []`）。新增 4 项：循环连线在发布口被 422 拒绝（不只是"存下来标记 invalid"）、含写节点但无人工批准步骤的工作流不允许发布（`WRITE_WITHOUT_APPROVAL` + 422）、旧版本 restore 只改草稿且已发布 checksum 不变、拖拽后的布局保存并在刷新后保持。
+
+**本轮修复的真实缺陷（P1）**：`WorkflowEditorPanel.tsx:200` 的 `dirty` 只比较 `sameGraph`，而 `canonical()` 刻意排除 `position`，保存按钮又是 `disabled={… || !dirty}` → 拖动节点后「保存草稿」始终禁用，布局**永远无法持久化**。修法：`workflowEditorModel.ts` 新增 `sameLayout()`（按 key 排序比较取整后的坐标），`dirty = !sameGraph(...) || !sameLayout(...)`；图语义不变，版本 diff 仍不受布局影响。新增前端 2 个测试（布局算未保存、亚像素漂移不算变化）+ 1 条真实验收。
+
+**回归**：前端 227 pass（原 225）、`tsc`/`eslint` 干净；后端全量见 §9 本轮条目；`ruff check`/`format --check` 干净。

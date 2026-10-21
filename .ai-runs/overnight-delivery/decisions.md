@@ -96,3 +96,17 @@
 - **The release verdict is set in five separate levels.** CORE_PRODUCT / WORKFLOW_STUDIO / DAG_EXECUTION /
   MULTI_INSTANCE / RELEASE_CANDIDATE are reported independently, so a passing product path cannot silently
   upgrade an unverified execution or deployment claim.
+
+## Round 17 re-audit (user task m07420)
+
+- **Layout is a saveable change but not a graph change.** `sameGraph` keeps ignoring `position` so version
+  diffs stay about meaning; a new `sameLayout` makes a drag count as unsaved work. Alternative (including
+  positions in the checksum) was rejected: it would turn every drag into a "changed" version and bury the
+  real review signal.
+- **Invalid drafts stay saveable; the gate is publish.** The prompt says "非法连线被拒绝"; rejecting at
+  save would make the editor unable to hold work in progress. Kept the existing split (save with issues,
+  publish `422`) and proved it for CYCLE and WRITE_WITHOUT_APPROVAL instead of moving the gate.
+- **No execute route added.** `compile_plan` stays unexposed: exposing it would be DAG execution without
+  the fencing/lease story of Round 18, i.e. a second scheduler in disguise. B/C stay BLOCKED.
+- **Acceptance data is tagged, not deleted.** `suggestion:<id>` gives exact provenance; cleanup stays
+  id-scoped, since a tag-scoped delete would remove cases a person approved for a real gap.

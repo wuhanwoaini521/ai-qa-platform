@@ -15,6 +15,7 @@ import {
   redo,
   removeNode,
   sameGraph,
+  sameLayout,
   setInput,
   undo,
 } from '../src/features/canvas/workflowEditorModel.ts';
@@ -171,4 +172,35 @@ test('setting an empty input removes it instead of storing an empty string', () 
   assert.deepEqual(withValue.nodes[0].inputs, { discovery_run_id: { $input: 'discovery_run_id' } });
   const cleared = setInput(withValue, 'a', 'discovery_run_id', '');
   assert.deepEqual(cleared.nodes[0].inputs, {});
+});
+
+const placed = () =>
+  emptyEditor(
+    graph(
+      [
+        { key: 'a', kind: 'discovery.analyze_gaps', position: { x: 40, y: 80 } },
+        { key: 'b', kind: 'discovery.grade_gaps', position: { x: 320, y: 80 } },
+      ],
+      [],
+    ),
+  ).present;
+
+test('a dragged card counts as unsaved layout, not as an unsaved graph', () => {
+  const state = placed();
+  const moved = { ...state, nodes: state.nodes.map((node) => ({ ...node, position: { x: 420, y: 96 } })) };
+  assert.equal(sameGraph(state, moved), true);
+  assert.equal(sameLayout(state, moved), false);
+  assert.equal(sameLayout(moved, { ...moved }), true);
+});
+
+test('layout comparison ignores sub-pixel drift from React Flow', () => {
+  const state = placed();
+  const nudged = {
+    ...state,
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      position: { x: (node.position?.x ?? 0) + 0.4, y: node.position?.y ?? 0 },
+    })),
+  };
+  assert.equal(sameLayout(state, nudged), true);
 });

@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-10-21T18:06:28",
-  "checks": 20,
-  "passed": 20,
+  "generated_at": "2026-10-22T01:32:28",
+  "checks": 24,
+  "passed": 24,
   "failed": [],
   "results": [
     {
       "name": "the editor opens inside the workspace canvas",
       "passed": true,
       "detail": {
-        "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&stage=automation&view=canvas&canvas=editor"
+        "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?canvas=editor&projectId=proj_golden_shop_v1&requirementId=req_939eae8d76d4&testDesignId=des_2aa5850cfe48&caseId=tc_661a346ee4c6&stage=automation&view=canvas"
       }
     },
     {
@@ -65,6 +65,30 @@
       }
     },
     {
+      "name": "a dragged card stays where it was put after a reload",
+      "passed": true,
+      "detail": {
+        "save_enabled_after_drag": true,
+        "moved_keys": [
+          "run"
+        ],
+        "reloaded": {
+          "run": {
+            "x": 153.73214285714286,
+            "y": 141.0952380952381
+          },
+          "request_approval": {
+            "x": 308.0,
+            "y": 40.0
+          },
+          "write_generated": {
+            "x": 576.0,
+            "y": 40.0
+          }
+        }
+      }
+    },
+    {
       "name": "an invalid draft is saved with the reason it is invalid",
       "passed": true,
       "detail": {
@@ -85,6 +109,26 @@
       "detail": {
         "status": 422,
         "detail": "{'detail': \"A workflow with validation issues cannot be published: Node 'x' uses unknown kind 'shell.exec'.\", 'code': 'HTTP_422', 'message': \"A workflow with validation issues cannot be published: Nod"
+      }
+    },
+    {
+      "name": "a cyclic draft is refused at publish, not merely flagged",
+      "passed": true,
+      "detail": {
+        "status": 422,
+        "detail": "{'detail': 'A workflow with validation issues cannot be published: These nodes form a cycle and can never run: a, b.; This workflow asks for approval but never "
+      }
+    },
+    {
+      "name": "a workflow that would write without a human approval step cannot be published",
+      "passed": true,
+      "detail": {
+        "save_status": 200,
+        "codes": [
+          "WRITE_WITHOUT_APPROVAL"
+        ],
+        "publish_status": 422,
+        "detail": "{'detail': \"A workflow with validation issues cannot be published: Node 'w' writes to the workspace, so a 'Request human approval' node must run before it.\", 'c"
       }
     },
     {
@@ -133,14 +177,14 @@
       "name": "a real execution is compared node by node",
       "passed": true,
       "detail": {
-        "task": "4664643db605448da5e3f09b413cfb4b",
+        "task": "7a5e3a6f3462446183d245b6ccf56ad9",
         "status": "COMPLETED",
         "totals": {
           "definition_nodes": 4,
-          "ran_steps": 4,
-          "matched": 0,
-          "not_executed": 4,
-          "undeclared": 4
+          "ran_steps": 11,
+          "matched": 2,
+          "not_executed": 2,
+          "undeclared": 9
         },
         "unknown": [
           "step_inputs_are_not_compared",
@@ -153,15 +197,15 @@
       "name": "the diff is honest about what ran but was never declared",
       "passed": true,
       "detail": {
-        "undeclared": 4,
-        "matched": 0
+        "undeclared": 9,
+        "matched": 2
       }
     },
     {
       "name": "a definition that mirrors a real task matches its steps",
       "passed": true,
       "detail": {
-        "task": "4664643db605448da5e3f09b413cfb4b",
+        "task": "61e9ff21ab3945a4b955892d43383a09",
         "kinds": [
           "discovery.collect_gaps",
           "discovery.analyze_gaps",
@@ -182,6 +226,20 @@
           "not_executed": 0,
           "undeclared": 0
         }
+      }
+    },
+    {
+      "name": "restoring version 1 gives a draft with that graph and leaves the published version alone",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "restored_keys": [
+          "request_approval",
+          "run",
+          "write_generated"
+        ],
+        "published_checksum_unchanged": true,
+        "draft_version": 2
       }
     },
     {
@@ -218,7 +276,7 @@
       "detail": {
         "overflow": 0,
         "nodes": 4,
-        "font_px": 10
+        "font_px": 11
       }
     },
     {

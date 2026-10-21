@@ -63,6 +63,17 @@ function canonical(state: EditorState): unknown {
   };
 }
 
+/** Where the cards sit. Kept apart from `sameGraph` so a drag is saveable without looking like a graph edit. */
+export function sameLayout(left: EditorState, right: EditorState): boolean {
+  const positions = (state: EditorState) =>
+    JSON.stringify(
+      [...state.nodes]
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map((node) => [node.key, Math.round(node.position?.x ?? 0), Math.round(node.position?.y ?? 0)]),
+    );
+  return positions(left) === positions(right);
+}
+
 export function applyEdit(history: EditorHistory, next: EditorState): EditorHistory {
   if (sameGraph(history.present, next)) {
     return history;
