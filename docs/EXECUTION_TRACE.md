@@ -87,8 +87,8 @@ Events for the same task are a gapless cursor 839 → 851 (`task.created`, `step
 ```
 ExecutionTrace   { root_task_id, project_id, status, generated_at, nodes, edges, counts, unknown }
 ExecutionNode    { id, type, label, task_id, invocation_id, parent_id, started_at, finished_at,
-                   status, provider, model, token_usage, evidence_ids, inputs, outputs,
-                   error_code, cost, pricing, unknown }
+                   status, position, tool, provider, model, token_usage, evidence_ids, inputs,
+                   outputs, error_code, error_message, cost, pricing, unknown, fallback_used, links }
 ExecutionEdge    { id, source, target, type }
 ```
 
@@ -98,6 +98,8 @@ ExecutionEdge    { id, source, target, type }
 - `inputs`/`outputs` are **safe summaries**: scalars and short strings only (≤160 chars), keys matching the redactor's sensitive list dropped, nested structures replaced by a shape description (`{items: 3}`). The raw prompt and the raw model response are never sent.
 - `unknown` lists the fact names the server could not establish for that node — the UI shows 「未知」 for exactly these.
 - `cost` is `null` with `pricing: "unpriced"` unless a real price table exists; tokens are reported only when `token_source = "provider"`.
+- `links` holds routes back to the screens that already own the row (`/runs/{id}`, `/runs/tasks?taskId=`, the run's canvas view); the tree never becomes a second navigation system.
+- Node ids are `type:row-identity`. A suggestion is identified by its **row id**, not by `suggestion_id`, because the same scenario is re-proposed by every run and the project view merges several tasks.
 
 ## 6. API
 

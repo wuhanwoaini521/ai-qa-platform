@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 16 —— Evidence-Driven AI/Jev Intelligence（用户任务 m03748，分支 `audit-remaining-blockers`，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
+**当前活动轮次：Round 16.5 —— Agent Execution Tree（用户任务 m04571，分支 `audit-remaining-blockers`，记录见 §3.14，契约 `docs/EXECUTION_TRACE.md`，真实验收 `.ai-runs/e2e-round16.5/acceptance.json`）。** 本轮把已存在的执行行（`agent_tasks` / `agent_task_steps` / `ai_invocations` / `agent_task_evidence` / `agent_task_artifacts` / `test_runs` / `discovery_suggestions`）投影成只读执行树，画布内新增「执行树」视图；服务端是唯一状态权威，前端不模拟成功、不估算 token、不发明单价。真实 Chromium + 真实 provider（`mimo-v2.6-flash`）+ 真实 Jev（`jev-1.13.0`）13/13 PASS、`console_errors: []`；后端/前端全量见 §9。
+
+**Round 16（上一轮，用户任务 m03748，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
 
 **Round 15（上一轮，用户任务 m02941，分支 `audit-remaining-blockers`，记录见 §3.12，数据契约 `docs/DISCOVERY_EVIDENCE.md`，真实验收 `.ai-runs/e2e-round15/acceptance.json`）。** 本轮把 Discovery 从「探索并生成结果」升级为「采集结构化事实 → 确定性去重/关联 → 增量对比 → 证据到候选场景到用例的追踪」，并把指标接进既有画布节点详情；不新增执行能力、不做 AI 判定。5 笔代码提交 + 本文档提交；真实 Chromium 21/21、`console_errors: []`；前端 201 pass；后端全量见 §9。
 
@@ -41,14 +43,17 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | --- | --- |
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
-| 当前 HEAD | `c4075a1`（Round 16 的 7 笔：`b6d635a` 分析与分级、`8af0de4` 画布视图、`84b2163` 通用 locator 修正、`a7bbaf4` 设计文档、`7fb03d3` 画布测试、`582f5c9` OpenAPI 导出、`c4075a1` 仓储格式化；本文档提交在其后） |
+| Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
+| 当前 HEAD | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
+| Round 16.5 提交数 | 3（`23cdb71`、`4dba380`、`ec5bae8`）+ 本文档提交 |
+| Round 16 关键提交（历史） | `c4075a1` 及前 6 笔（`b6d635a` 分析与分级、`8af0de4` 画布视图、`84b2163` 通用 locator 修正、`a7bbaf4` 设计文档、`7fb03d3` 画布测试、`582f5c9` OpenAPI 导出） |
 | Round 16 提交数 | 6 代码/文档提交 + 本文档提交 |
 | Round 15 提交数 | 5（`8fd6160` 证据层、`d2af796` 画布指标、`e9f2951` 元素链接修正、`589e6ab` 采集会话收进仓储、`6e8709b` 文档） |
 | Round 14 提交数 | 2（`9fd04df` 后端只读投影层、`bf9b5c2` 前端画布）+ 本文档提交 |
 | 历史起点（Round 12/13） | `5849b5f docs(handoff): record the Round 11 final regression and its verdict` |
 | Round 13 提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器） |
 | 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
-| 迁移 | `0016_discovery_evidence`（Round 15）→ `0017_discovery_suggestions`（Round 16，只加一张表，可降级） |
+| 迁移 | `0016_discovery_evidence`（Round 15）→ `0017_discovery_suggestions`（Round 16）→ `0018_ai_invocation_step`（Round 16.5，只加 `ai_invocations.step_id` + 一个索引，可降级） |
 | Round 16 关键提交 | `b6d635a` AI 分析 + Jev 分级 + 审核 API（迁移 0017）；`8af0de4` 画布 Evidence Intelligence 视图；`84b2163` 通用 role locator 不再当作覆盖证据 |
 | Round 14 关键提交 | `9fd04df` 只读投影层 + ACL + 截断；`bf9b5c2` 阶段列画布、节点详情与证据、窄视口从第一阶段起、URL 指定文件优先于未绑定空态 |
 | Round 12 关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
@@ -676,6 +681,47 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
 
 
+## 3.14 Round 16.5（Agent Execution Tree，用户任务 m04571）
+
+用户任务 m04571：把真实执行轨迹以只读执行树呈现。起点 `254a41e`。契约与缺口文档 `docs/EXECUTION_TRACE.md`。四段：审计真实关系 → 轨迹契约 → 只读执行树 → 实时观测与节点详情 + 真实 Chromium 验收。
+
+### 交付
+
+| 层 | 位置 |
+| --- | --- |
+| 契约 | `packages/project-model/project_model/execution_trace.py`（`ExecutionTrace` / `TraceNode` / `TraceEdge` / `TraceCounts`，节点保留服务端状态原字符串，`cost` 恒 `None` + `pricing="unpriced"`，无法确证的事实进 `unknown`） |
+| 迁移 | `apps/api/alembic/versions/0018_ai_invocation_step.py`（`ai_invocations.step_id` + `ix_ai_invocations_step`，可降级） |
+| 写入方 | `apps/api/app/services/ai_step_context.py`（`ai_step_scope` / `current_ai_step_id`）+ `apps/api/app/services/task_execution_orchestrator.py`（步骤执行期间设置）+ `apps/api/app/repositories/ai_repo.py`（`record_invocation(step_id=...)` 默认取上下文） |
+| 投影 | `apps/api/app/services/execution_trace_service.py`（`for_task` / `for_project`，节点 id 前缀 `task:`/`step:`/`invocation:`/`evidence:`/`artifact:`/`run:`/`suggestion:`，边类型 `CHILD_OF`/`INVOKES`/`PRODUCES`/`DEPENDS_ON`） |
+| 接口 | `GET /api/tasks/{task_id}/execution-trace`、`GET /api/projects/{project_id}/execution-trace?limit=`（`apps/api/app/api/execution_trace.py`，只读、带项目 ACL） |
+| 前端 | `apps/web/src/features/canvas/ExecutionTreePanel.tsx` + `executionTreeModel.ts` + `execution-tree.css`（深色模式，仅作用于执行树）、`apps/web/src/types/executionTrace.ts`、`apps/web/src/api/client.ts` |
+| 入口 | 工作流画布内的「工作流 / 执行树」两个 tab（`view=canvas`）；任务选择器驱动，3s 轮询任务列表、SSE 事件只触发重新拉取 |
+| 测试 | `apps/api/tests/test_execution_trace.py`（8 例：真实行映射与边合法性、`DEPENDS_ON` 按 step key 解析、缺 step/缺 token 标 UNKNOWN、敏感键与截断、项目视图多根、空项目、ACL 且两次读取不改表、同一场景在两个任务下节点不冲突）；`apps/web/tests/execution-tree-model.test.mjs` |
+
+### 真实数据（dev DB）
+
+- 8 段投影来自真实行：`task` 1 / `step` 4 / `invocation` 2 / `suggestion` 1（一次 ANALYZE_DISCOVERY），边 `CHILD_OF` + `DEPENDS_ON`（按 step key）+ `INVOKES`（invocation→step）。
+- 缺失的父子任务关系、`ai_invocations.step_id`（历史行）、单价、以及 `token_source != provider` 的用量，一律由服务端标记 `unknown` 并在 UI 底部列出（`服务端无法确认: parent task id, cost, unit price`）。
+
+### 本轮修掉的真缺陷
+
+- **同一场景两次建议出现重复节点 id**：`discovery_suggestions` 以 `(run_id, suggestion_id)` 唯一，同一 `suggestion_id` 会在不同 run 出现两次 → 节点 id 改用行主键 `suggestion:{row.id}`（项目视图一次合并 6 个任务时暴露，真实浏览器控制台报 React duplicate key）。
+- **节点详情没有回到原页面的入口**：契约新增 `TraceNode.links`，task → `/runs/tasks?taskId=`、run → `/runs/{id}`、suggestion → 该 run 的画布视图。
+- **详情缺少场景可追溯字段**：suggestion 节点 `outputs` 增加 `scenario_id` / `run_id` / `cited_evidence`（真实列值），模型没有引用证据时点击节点仍能定位到该场景。
+- **未计量用量被显示成数字**：`token_usage` 仅在 `token_source == "provider"` 且两值非空时存在，否则 `unknown += ["token_usage"]`，UI 显示「未计量」，费用恒显示「未计价」。
+- **窄视口把流水线压到不可读**：执行树按宿主宽度决定缩放，390px 下首列可见、卡片文字可读（与流水线画布同一策略）。
+
+### 本轮未做（有意）
+
+- 不加 `parent_task_id`：`agent_tasks` 没有 parent 列，也没有真实的父子任务数据；本轮只把「同一任务内的阶段」和「任务 → 步骤 → 调用」投影出来，父子关系记为 `UNKNOWN`（Round 17 若要可编辑工作流需先有任务定义版本化，见 `docs/EXECUTION_TRACE.md` §9）。
+- 不做费用计算（无价格表）、不估算 token、不把 tool 当 agent、不新增第二套任务状态。
+- 不修改流水线画布的行为；执行树只是同一路由下的第二个视图。
+
+### 真实验收（`.ai-runs/e2e-round16.5/acceptance.json`，`console_errors: []`）
+
+真实 Chromium 1560×1000 + 真实 `mimo-v2.6-flash` + 真实 `jev-1.13.0`，受控页 `examples/demo-shop/site/discovery-fixture-d.html`：**13/13 PASS**——真实探索出证据 → 真实 ANALYZE_DISCOVERY 任务 → 运行中节点实时增加 → 任务节点状态与服务端一致 → 每个模型调用挂到本任务（经 step）→ Jev 的 provider/model/fallback 取自真实行 → 每个耗时等于服务端记录 → 未计量调用不显示数字也不发明费用 → 刷新重建同一轨迹 → 断线重同步不重复节点 → 节点详情可达证据/场景 → 流水线画布不受影响 → 手机视口可读且无裁切 → 无控制台错误。截图 `screenshots/before-pipeline-canvas.png`、`after-execution-tree.png`、`after-node-detail.png`、`after-execution-tree-reloaded.png`、`after-execution-tree-mobile.png`。
+
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -835,6 +881,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+- **Round 16.5（Agent Execution Tree，`ec5bae8` + 本文档）**：后端全量 `uv run pytest -q` → **960 passed / 11 skipped / 62 warnings / 1262.12s**（Round 16 为 952 passed，本轮 +8 = `test_execution_trace.py`）；`ruff check apps/api packages` → All checks passed，`ruff format --check` → 293 files already formatted；`scripts/export_openapi.py --check` → current（两个只读端点已导出）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3303 keys**（+63）；web `npx tsc --noEmit` 与 `npx eslint src --max-warnings=0` 无输出，`pnpm --filter @ai-qa/web test` → **213 pass / 0 fail**（Round 16 为 202，+11 = `execution-tree-model.test.mjs`）；迁移 `0018_ai_invocation_step` 有升降级往返用例。真实浏览器 `.ai-runs/e2e-round16.5/execution_tree_acceptance.py`（真实 `mimo-v2.6-flash` + `jev-1.13.0`，受控页 `discovery-fixture-d.html`）→ **13/13 PASS，`failed: []`，`console_errors: []`**；证据 `.ai-runs/e2e-round16.5/acceptance.json`，截图 `screenshots/{before-pipeline-canvas,after-execution-tree,after-node-detail,after-execution-tree-reloaded,after-execution-tree-mobile}.png`。
 
 - **Round 16（证据智能层，`c4075a1` + 本文档）**：后端全量 `uv run pytest -q` → **952 passed / 11 skipped / 61 warnings / 1417.83s**（Round 15 为 932 passed，本轮 +20 = `test_discovery_intelligence.py` 17 例 + Jev 归一化/分级用例）；`ruff check apps/api packages scripts` → All checks passed，`ruff format --check` → **464 files already formatted**；`scripts/export_openapi.py --check` → current（新增受控页路由已导出）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3240 keys**；web `npx tsc --noEmit` 与 `npx eslint src --max-warnings=0` 无输出，`pnpm --filter @ai-qa/web test` → **202 pass / 0 fail**；新增/更新后端套件 `test_discovery_intelligence.py`(17) + `test_decision_layer.py`(32) + `test_workflow_canvas.py`(7)。真实浏览器 `.ai-runs/e2e-round16/intelligence_acceptance.py`（最终代码，真实 `mimo-v2.6-flash` + 真实 `jev-1.13.0`）→ **28/28 PASS，`failed: []`，`console_errors: []`**；证据 `.ai-runs/e2e-round16/acceptance.json`，截图 `screenshots/after-canvas-intelligence.png`（AI 建议 + Jev 分级 + 审核按钮）、`after-canvas-approved.png`（批准后进入既有用例链）、`after-canvas-mobile.png`（390px 无横向溢出）。真实 Jev 打分 `score 0.505 / confidence 0.90`（归一化前一律 `invalid_request`）。
 
