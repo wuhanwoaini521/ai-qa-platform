@@ -1,0 +1,117 @@
+{
+  "generated_at": "2026-10-21T07:44:52+00:00",
+  "task_id": "4664643db605448da5e3f09b413cfb4b",
+  "discovery_run_id": "qd_242dd892ddab4b1a",
+  "checks": [
+    {
+      "name": "a real discovery run finished so the analysis has evidence",
+      "passed": true,
+      "detail": "COMPLETED"
+    },
+    {
+      "name": "the tree adds a node while the task is still running",
+      "passed": true,
+      "detail": {
+        "first": 6
+      }
+    },
+    {
+      "name": "the tree shows the real task node with its stored status",
+      "passed": true,
+      "detail": {
+        "api": "COMPLETED",
+        "rendered": 1
+      }
+    },
+    {
+      "name": "every model call is attached to this task (through its step when the row knows it)",
+      "passed": true,
+      "detail": {
+        "invocations": 2,
+        "rows": 2
+      }
+    },
+    {
+      "name": "a Jev call shows its provider, model and whether it fell back",
+      "passed": true,
+      "detail": {
+        "rows": [
+          [
+            "503f9b1d-d213-4322-8b23-244ab7351d67",
+            "SUCCESS",
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "every duration equals the stored duration",
+      "passed": true,
+      "detail": {
+        "steps": 4
+      }
+    },
+    {
+      "name": "a call without metered tokens shows no number and no invented cost",
+      "passed": true,
+      "detail": {
+        "unmetered": 0,
+        "priced": 0
+      }
+    },
+    {
+      "name": "a reload rebuilds the same trajectory from the server",
+      "passed": true,
+      "detail": {
+        "nodes": 8
+      }
+    },
+    {
+      "name": "a re-sync adds no duplicate node",
+      "passed": true,
+      "detail": {
+        "first": 8,
+        "second": 8
+      }
+    },
+    {
+      "name": "a node's detail leads to the evidence the server stored",
+      "passed": true,
+      "detail": {
+        "path": "cited",
+        "node": "suggestion:d0fbd369-1ade-4363-9cf0-41b47d3c9a55",
+        "shown": [
+          "act_692847b3c3fe4767",
+          "dom_6ac182abe9dc55f3"
+        ]
+      }
+    },
+    {
+      "name": "the pipeline canvas is unchanged",
+      "passed": true,
+      "detail": {
+        "before": 30,
+        "after": 30
+      }
+    },
+    {
+      "name": "on a phone the cards stay legible and nothing is cut off",
+      "passed": true,
+      "detail": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "fontSize": 12.5,
+        "cardWidth": 346,
+        "scale": 1.4661016949152543
+      }
+    },
+    {
+      "name": "the execution tree logs no console error",
+      "passed": true,
+      "detail": []
+    }
+  ],
+  "total": 13,
+  "passed": 13,
+  "failed": []
+}
