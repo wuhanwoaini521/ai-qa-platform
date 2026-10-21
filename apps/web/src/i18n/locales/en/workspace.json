@@ -698,6 +698,46 @@
             "CANDIDATE_GAP": "Candidate gap",
             "UNDETERMINED": "Undetermined"
           }
+        },
+        "intelligence": {
+          "title": "AI advice layer",
+          "counts": "{{total}} suggestions ({{pending}} pending · {{accepted}} accepted · {{rejected}} rejected)",
+          "none": "No model advice for this run yet",
+          "jev": "Jev graded {{graded}} · fallback {{fallback}}",
+          "request": "Ask the model",
+          "refresh": "Refresh advice",
+          "empty": "Nothing to analyse and nothing to review.",
+          "ruleVerdict": "Rule verdict: {{state}}",
+          "reviewState": "Review: {{state}}",
+          "citations": "{{count}} cited evidence rows",
+          "viewEvidence": "Show cited evidence",
+          "accept": "Accept",
+          "reject": "Reject",
+          "approveCase": "Approve as a case",
+          "reanalyze": "Analyse again",
+          "reason": "Review reason (required to reject)",
+          "evidenceTitle": "Cited evidence and related cases",
+          "noCitation": "This reading cited no evidence.",
+          "linkCases": "Link these cases",
+          "requested": "Analysis task {{id}} created",
+          "reused": "An analysis is already running, reusing {{id}}",
+          "reviewed": "Review recorded: {{state}}",
+          "caseCreated": "Test case {{id}} created",
+          "analysis": {
+            "COMPLETED": "Analysis completed",
+            "FAILED": "Analysis failed",
+            "REJECTED": "Cited a missing reference, rejected",
+            "DEGRADED": "Provider fell back, not used",
+            "INSUFFICIENT_EVIDENCE": "Not enough evidence"
+          },
+          "jevStatus": {
+            "JEV_GRADED": "Jev graded",
+            "JEV_LOW_CONFIDENCE": "Jev not confident enough, graded by rules",
+            "JEV_TIMEOUT": "Jev timed out, graded by rules",
+            "JEV_FALLBACK": "Jev unavailable, graded by rules",
+            "JEV_UNAVAILABLE": "Jev did not answer, graded by rules",
+            "NOT_GRADED": "Not graded"
+          }
         }
       }
 

@@ -12,6 +12,7 @@ from typing import Any
 from project_model.workflow_canvas import (
     DiscoveryEvidenceMetrics,
     DiscoveryEvidenceRef,
+    DiscoveryIntelligenceMetrics,
     DiscoveryMetrics,
     WorkflowCanvas,
     WorkflowEdge,
@@ -21,9 +22,11 @@ from project_model.workflow_canvas import (
 )
 
 from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
+from app.repositories.discovery_suggestion_repo import DiscoverySuggestionRepository
 from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.services.automation_binding_service import AutomationBindingService
 from app.services.discovery_evidence_analysis import analyze_collection
+from app.services.discovery_intelligence_service import suggestion_summary
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.task_command_service import TaskCommandService
@@ -74,6 +77,7 @@ class WorkflowCanvasService:
         workflow: FailureWorkflowService,
         discovery: QualityDiscoveryRepository,
         evidence: DiscoveryEvidenceRepository,
+        suggestions: DiscoverySuggestionRepository,
         bindings: AutomationBindingService,
     ) -> None:
         self.runs = runs
@@ -81,6 +85,7 @@ class WorkflowCanvasService:
         self.workflow = workflow
         self.discovery = discovery
         self.evidence = evidence
+        self.suggestions = suggestions
         self.bindings = bindings
 
     async def build(
@@ -497,6 +502,23 @@ class WorkflowCanvasService:
         requests = analysis["network_request"]
         actions = analysis["user_action"]
         statuses = [scenario.coverage_status for scenario in scenarios]
+        suggestions = await self.suggestions.list_by_run(run_id, limit=500)
+        reading = suggestion_summary(suggestions)
+        if suggestions:
+            metrics.intelligence = DiscoveryIntelligenceMetrics(
+                suggestions=reading["total"],
+                pending_review=reading["pending_review"],
+                accepted=reading["accepted"],
+                rejected=reading["rejected"],
+                linked=reading["linked"],
+                created_cases=reading["created_cases"],
+                insufficient=reading["by_analysis_status"].get("INSUFFICIENT_EVIDENCE", 0),
+                ungrounded_rejected=reading["by_analysis_status"].get("REJECTED", 0),
+                failed=reading["by_analysis_status"].get("FAILED", 0),
+                degraded=reading["by_analysis_status"].get("DEGRADED", 0),
+                jev_graded=reading["jev_graded"],
+                jev_fallback=reading["jev_fallback"],
+            )
         metrics.evidence = DiscoveryEvidenceMetrics(
             dom_elements=elements["raw"],
             dom_elements_deduped=elements["deduped"],

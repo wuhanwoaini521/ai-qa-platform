@@ -116,6 +116,8 @@ async def test_a_discovery_run_becomes_one_node_with_its_real_counts_and_evidenc
             "undetermined": 0,
             "captured": False,
         },
+        # No readings exist either, so nothing is attributed to the model layer.
+        "intelligence": None,
     }
     collections = {item["collection"] for item in node["evidence_index"]}
     assert collections == {"page_state", "screenshot", "network", "action"}
@@ -325,3 +327,56 @@ async def test_the_discovery_node_shows_the_evidence_counts_the_evidence_api_rep
         node["metrics"]["evidence"]["requests_associated"]
         == summary.json()["analysis"]["network_request"]["associated"]
     )
+
+
+async def test_the_discovery_node_counts_the_readings_the_suggestion_api_reports(client, test_db_session):
+    from app.repositories.discovery_suggestion_repo import DiscoverySuggestionRepository
+
+    project_id = await _project(client)
+    async with test_db_session() as session:
+        session.add(
+            QualityDiscoveryRunORM(
+                id="qd_readings",
+                project_id=project_id,
+                requested_by="tester",
+                mode="VALIDATE",
+                start_url="http://127.0.0.1:8000/api/demo-shop/index.html",
+                status=DiscoveryStatus.COMPLETED.value,
+                result={"states": []},
+            )
+        )
+        await session.commit()
+    async with test_db_session() as session:
+        await DiscoverySuggestionRepository(session).upsert_many(
+            "qd_readings",
+            project_id,
+            [
+                {
+                    "suggestion_id": "sugg_a",
+                    "scenario_id": "scen_a",
+                    "analysis_status": "COMPLETED",
+                    "input_hash": "hash_a",
+                    "evidence_ids": ["dom_a"],
+                    "jev": {"status": "JEV_GRADED", "source": "jev", "grade": "sufficient"},
+                },
+                {
+                    "suggestion_id": "sugg_b",
+                    "scenario_id": "scen_b",
+                    "analysis_status": "INSUFFICIENT_EVIDENCE",
+                    "input_hash": "hash_b",
+                    "evidence_ids": [],
+                    "jev": {"status": "JEV_FALLBACK", "source": "rules", "grade": "thin"},
+                },
+            ],
+        )
+        await session.commit()
+
+    node = (await _canvas(client, project_id))["nodes"][0]
+    intelligence = node["metrics"]["intelligence"]
+    summary = (await client.get("/api/discovery/runs/qd_readings/suggestions/summary")).json()
+
+    assert intelligence["suggestions"] == summary["total"] == 2
+    assert intelligence["pending_review"] == summary["pending_review"] == 2
+    assert intelligence["insufficient"] == 1
+    assert intelligence["jev_graded"] == 1
+    assert intelligence["jev_fallback"] == 1

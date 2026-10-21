@@ -156,5 +156,9 @@ export function discoveryEvidenceLine(metrics: DiscoveryMetrics | null | undefin
   ];
   if (evidence.locators_ambiguous > 0) parts.push(`歧义定位 ${evidence.locators_ambiguous}`);
   if (evidence.scenarios > 0) parts.push(`场景 ${evidence.scenarios}（缺口 ${evidence.candidate_gaps}）`);
+  const intelligence = metrics?.intelligence;
+  if (intelligence && intelligence.suggestions > 0) {
+    parts.push(`AI ${intelligence.suggestions}（待审核 ${intelligence.pending_review}）`);
+  }
   return parts.join(' · ');
 }

@@ -89,6 +89,27 @@ class DiscoveryEvidenceMetrics(BaseModel):
     captured: bool = False
 
 
+class DiscoveryIntelligenceMetrics(BaseModel):
+    """What the model-assisted reading layer holds, counted once from the stored readings.
+
+    ``jev_graded`` counts readings Jev actually scored; a fallback is counted separately so no
+    consumer can mistake it for a Jev success.
+    """
+
+    suggestions: int = 0
+    pending_review: int = 0
+    accepted: int = 0
+    rejected: int = 0
+    linked: int = 0
+    created_cases: int = 0
+    insufficient: int = 0
+    ungrounded_rejected: int = 0
+    failed: int = 0
+    degraded: int = 0
+    jev_graded: int = 0
+    jev_fallback: int = 0
+
+
 class DiscoveryMetrics(BaseModel):
     """Counts a discovery run already knows; the canvas shows them instead of guessing."""
 
@@ -102,6 +123,7 @@ class DiscoveryMetrics(BaseModel):
     not_covered: int = 0
     test_cases: int = 0
     evidence: DiscoveryEvidenceMetrics | None = None
+    intelligence: DiscoveryIntelligenceMetrics | None = None
 
 
 class WorkflowNode(BaseModel):

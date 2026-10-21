@@ -115,6 +115,9 @@ import {
 } from '../types';
 import type {
   DiscoveryCollectionSummary,
+  DiscoverySuggestion,
+  DiscoverySuggestionDetail,
+  DiscoverySuggestionSummary,
   DiscoveryEvidence,
   DiscoveryScenarioCollection,
   WorkflowCanvas,
@@ -536,6 +539,29 @@ export const api = {
     ),
   getDiscoveryScenarios: (runId: string) =>
     request<DiscoveryScenarioCollection>(`/discovery/runs/${encodeURIComponent(runId)}/scenarios`),
+  // Model-assisted readings: suggestions never replace the rule verdict stored on the scenario.
+  listDiscoverySuggestions: (runId: string) =>
+    request<{ suggestions: DiscoverySuggestion[]; summary: DiscoverySuggestionSummary }>(
+      `/discovery/runs/${encodeURIComponent(runId)}/suggestions`,
+    ),
+  getDiscoverySuggestion: (runId: string, suggestionId: string) =>
+    request<DiscoverySuggestionDetail>(
+      `/discovery/runs/${encodeURIComponent(runId)}/suggestions/${encodeURIComponent(suggestionId)}`,
+    ),
+  requestDiscoveryIntelligence: (runId: string, body: { mode?: string; scenario_ids?: string[] } = {}) =>
+    request<{ task_id: string; status: string; reused: boolean }>(
+      `/discovery/runs/${encodeURIComponent(runId)}/intelligence`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  reviewDiscoverySuggestion: (
+    runId: string,
+    suggestionId: string,
+    body: { decision: string; comment?: string; case_ids?: string[] },
+  ) =>
+    request<{ suggestion: DiscoverySuggestion; created_case_id: string | null }>(
+      `/discovery/runs/${encodeURIComponent(runId)}/suggestions/${encodeURIComponent(suggestionId)}/review`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   getArtifactBlob: (id: string) => requestBlob(`/artifacts/${encodeURIComponent(id)}/download`),
 
   // Live Quality Discovery observation stream (run events + viewport frames).

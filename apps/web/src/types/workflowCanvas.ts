@@ -65,6 +65,89 @@ export interface DiscoveryMetrics {
   not_covered: number;
   test_cases: number;
   evidence?: DiscoveryEvidenceMetrics | null;
+  intelligence?: DiscoveryIntelligenceMetrics | null;
+}
+
+/** What the model-assisted reading layer holds; a Jev fallback is never counted as graded. */
+export interface DiscoveryIntelligenceMetrics {
+  suggestions: number;
+  pending_review: number;
+  accepted: number;
+  rejected: number;
+  linked: number;
+  created_cases: number;
+  insufficient: number;
+  ungrounded_rejected: number;
+  failed: number;
+  degraded: number;
+  jev_graded: number;
+  jev_fallback: number;
+}
+
+/** One stored reading: the model's advice plus the rule verdict it never replaces. */
+export interface DiscoverySuggestion {
+  suggestion_id: string;
+  scenario_id: string;
+  source: string;
+  provider: string;
+  model: string;
+  analysis_status: string;
+  review_status: string;
+  input_hash: string;
+  attempts: number;
+  task_id: string | null;
+  invocation_id: string | null;
+  evidence_ids: string[];
+  related_case_ids: string[];
+  is_gap: boolean | null;
+  summary: string;
+  reasoning: string;
+  grounded: boolean;
+  suggested_title: string;
+  suggested_steps: { action?: string; target?: string; expectation?: string }[];
+  uncertainty: string;
+  needs_human_review: boolean | null;
+  risk: string;
+  coverage_status: string | null;
+  match_method: string | null;
+  scenario_title: string;
+  url_template: string;
+  evidence_kinds: string[];
+  rule_grade: string | null;
+  grade: string | null;
+  grade_source: string;
+  jev: Record<string, unknown>;
+  review: Record<string, unknown>;
+  reason: string;
+  unknown_evidence_ids: string[];
+  unknown_test_case_ids: string[];
+  error_type: string | null;
+  duration_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  token_source: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DiscoverySuggestionDetail extends DiscoverySuggestion {
+  evidence: DiscoveryEvidence[];
+  related_cases: { id: string; title: string; file_path: string | null }[];
+}
+
+export interface DiscoverySuggestionSummary {
+  total: number;
+  pending_review: number;
+  accepted: number;
+  rejected: number;
+  linked: number;
+  created_cases: number;
+  by_analysis_status: Record<string, number>;
+  by_review_status: Record<string, number>;
+  jev_graded: number;
+  jev_fallback: number;
+  jev_statuses: Record<string, number>;
+  grade_sources: Record<string, number>;
 }
 
 /** One structured fact captured by a discovery run (`/discovery/runs/{id}/evidence`). */

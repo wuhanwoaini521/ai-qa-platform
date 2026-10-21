@@ -698,6 +698,46 @@
             "CANDIDATE_GAP": "候选缺口",
             "UNDETERMINED": "无法判定"
           }
+        },
+        "intelligence": {
+          "title": "AI 建议层",
+          "counts": "建议 {{total}} 条（待审核 {{pending}} · 已接受 {{accepted}} · 已拒绝 {{rejected}}）",
+          "none": "本轮还没有模型建议",
+          "jev": "Jev 已评分 {{graded}} · 降级 {{fallback}}",
+          "request": "请求 AI 分析",
+          "refresh": "刷新建议",
+          "empty": "没有待分析或待审核的建议。",
+          "ruleVerdict": "规则判定：{{state}}",
+          "reviewState": "审核：{{state}}",
+          "citations": "引用证据 {{count}} 条",
+          "viewEvidence": "查看引用证据",
+          "accept": "接受建议",
+          "reject": "拒绝建议",
+          "approveCase": "批准生成用例",
+          "reanalyze": "重新分析",
+          "reason": "审核原因（拒绝时必填）",
+          "evidenceTitle": "引用证据与关联用例",
+          "noCitation": "这次分析没有引用任何证据。",
+          "linkCases": "关联这些用例",
+          "requested": "已创建分析任务 {{id}}",
+          "reused": "已有分析任务在运行，复用 {{id}}",
+          "reviewed": "审核已记录：{{state}}",
+          "caseCreated": "已生成用例 {{id}}",
+          "analysis": {
+            "COMPLETED": "分析完成",
+            "FAILED": "分析失败",
+            "REJECTED": "引用不存在，已拒绝",
+            "DEGRADED": "Provider 降级，未采纳",
+            "INSUFFICIENT_EVIDENCE": "证据不足"
+          },
+          "jevStatus": {
+            "JEV_GRADED": "Jev 已评分",
+            "JEV_LOW_CONFIDENCE": "Jev 置信度不足，按规则分级",
+            "JEV_TIMEOUT": "Jev 超时，按规则分级",
+            "JEV_FALLBACK": "Jev 不可用，按规则分级",
+            "JEV_UNAVAILABLE": "Jev 未响应，按规则分级",
+            "NOT_GRADED": "未分级"
+          }
         }
       }
 

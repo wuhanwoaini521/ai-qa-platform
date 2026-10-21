@@ -14,6 +14,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Link } from 'react-router-dom';
+
+import { IntelligenceSection } from './IntelligenceSection';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import type {
@@ -312,6 +314,9 @@ function NodeDetail({ node, onClose }: { node: WorkflowNode; onClose: () => void
         </ul>
       </section>}
       {node.metrics?.evidence?.captured && <EvidenceSection node={node} evidence={node.metrics.evidence} />}
+      {node.kind === 'DISCOVERY' && (
+        <IntelligenceSection runId={node.entity_id} metrics={node.metrics?.intelligence} />
+      )}
       {navigation.length > 0 && <section>
         <h4>{t('canvas.detail.open')}</h4>
         <div className="lw-detail-actions">
