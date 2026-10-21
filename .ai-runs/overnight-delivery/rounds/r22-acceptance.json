@@ -1,0 +1,22 @@
+{
+  "checks": 15,
+  "passed": 15,
+  "failed": [],
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "chain": {
+    "run_id": "run_1949eb638ae2",
+    "failure_id": "fail_00fd043c649c",
+    "repair_task_id": "7a5e3a6f3462446183d245b6ccf56ad9",
+    "source_before_approval": true,
+    "verification_run_id": "run_01b4e1aebd12",
+    "plan": {
+      "valid": true,
+      "nodes": 14,
+      "attempts": 1,
+      "invocation_id": "ffbaf78f-4998-4b17-a880-1c479e622b7d"
+    },
+    "definition_id": "72b52b01-ec41-4185-aba6-00168d146036"
+  }
+}

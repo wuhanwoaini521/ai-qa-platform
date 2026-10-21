@@ -17,12 +17,12 @@ Repo: `/home/hans/self-github/ai-qa-platform`.
 
 | Round | Theme | Time budget | Status |
 |---|---|---|---|
-| 17 | Versioned QA Workflow Studio | 3h | RUNNING |
-| 18 | Runtime reliability (multi-instance) | 3h | PENDING |
-| 19 | AI workflow planner | 3h | PENDING |
-| 20 | CI / PostgreSQL / deployment | 3h | PENDING |
-| 21 | UX / performance / observability | 2h | PENDING |
-| 22 | Release candidate audit | 3h | PENDING |
+| 17 | Versioned QA Workflow Studio | 3h | PASS (A/B PASS, C BLOCKED) |
+| 18 | Runtime reliability (multi-instance) | 3h | PASS (same host; multi-host BLOCKED) |
+| 19 | AI workflow planner | 3h | PASS (execution BLOCKED) |
+| 20 | CI / PostgreSQL / deployment | 3h | PASS (CI service BLOCKED) |
+| 21 | UX / performance / observability | 2h | PASS |
+| 22 | Release candidate audit | 3h | PASS (RC level BLOCKED) |
 
 ## Per-round protocol
 

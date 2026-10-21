@@ -153,10 +153,29 @@ async def test_a_provider_outage_is_an_error_not_an_empty_plan(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_text_that_is_not_a_plan_is_an_error_not_a_crash(monkeypatch):
-    _use(monkeypatch, "I cannot help with that.")
+    provider = _use(monkeypatch, "I cannot help with that.")
 
     with pytest.raises(WorkflowPlanUnavailable, match="did not return a workflow plan"):
         await WorkflowPlannerService().plan("随便", project_id="proj", actor="u1")
+    # exactly one bounded correction, not an open retry loop
+    assert len(provider.requests) == 2
+    assert provider.requests[1].prompt.endswith("Reply with the JSON object only. No prose, no markdown fence.")
+
+
+@pytest.mark.asyncio
+async def test_prose_around_the_plan_is_recovered_by_the_single_correction(monkeypatch):
+    provider = _use(monkeypatch, 'Here is the plan: {"summary": "s", "nodes": [], "edges": []} — enjoy!')
+    plan = await WorkflowPlannerService().plan("随便", project_id="proj", actor="u1")
+    assert plan["graph"] == {"nodes": [], "edges": []}
+    assert len(provider.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_scalar_where_the_graph_belongs_is_an_error_not_a_500(monkeypatch):
+    _use(monkeypatch, {"summary": "s", "nodes": 3, "edges": "nope"})
+    plan = await WorkflowPlannerService().plan("随便", project_id="proj", actor="u1")
+    assert plan["graph"] == {"nodes": [], "edges": []}
+    assert plan["valid"] is False
 
 
 @pytest.mark.asyncio
@@ -191,3 +210,31 @@ async def test_an_unavailable_provider_is_a_503_with_a_reason(client, monkeypatc
     planned = await client.post(f"/api/projects/{project_id}/workflows/plan", json={"prompt": "任何流程"})
     assert planned.status_code == 503
     assert "could not plan" in planned.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_declared_list_input_accepts_the_single_value_the_model_often_sends(monkeypatch):
+    """Shape, not claim: one nodeid written as a string becomes the list the catalogue declares."""
+    _use(
+        monkeypatch,
+        {
+            "summary": "跑一次回归范围。",
+            "nodes": [
+                {
+                    "key": "regress",
+                    "kind": "tests.run_regression",
+                    "inputs": {"nodeids": "tests/test_cart.py::test_total"},
+                    "rationale": "只跑要求的范围。",
+                }
+            ],
+            "edges": [],
+        },
+    )
+    service = _service()
+    plan = await service.plan("run the cart regression", project_id="proj", actor="user-1")
+    assert plan["valid"] is True
+    assert plan["graph"]["nodes"][0]["inputs"]["nodeids"] == ["tests/test_cart.py::test_total"]
+
+
+def _service() -> WorkflowPlannerService:
+    return WorkflowPlannerService.__new__(WorkflowPlannerService)

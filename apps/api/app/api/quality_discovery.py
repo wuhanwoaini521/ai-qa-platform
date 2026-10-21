@@ -315,9 +315,7 @@ async def list_discovery_evidence(
 ):
     """The structured facts this run captured, filterable by kind and state."""
     try:
-        return await service.list_evidence(
-            run_id, kind=kind, state_id=state_id, limit=limit, offset=offset
-        )
+        return await service.list_evidence(run_id, kind=kind, state_id=state_id, limit=limit, offset=offset)
     except DiscoveryEvidenceNotFound as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

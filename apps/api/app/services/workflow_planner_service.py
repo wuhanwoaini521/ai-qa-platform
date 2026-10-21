@@ -9,6 +9,7 @@ a candidate is a response body the user has to accept.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from project_model.workflow_definition import (
@@ -28,6 +29,7 @@ from app.services.workflow_definition_service import issues_payload
 
 MAX_PROMPT_CHARS = 2000
 PLANNER_PROMPT_ID = "workflow_planner"
+logger = logging.getLogger(__name__)
 
 SYSTEM_INSTRUCTION = (
     "You plan QA workflows for a quality platform. You may only use the node kinds listed in the "
@@ -36,7 +38,8 @@ SYSTEM_INSTRUCTION = (
     '"inputs": {"<declared input>": "<value>"}, "rationale": "<why this step, in the user\'s language>"}], '
     '"edges": [{"source": "<node key>", "target": "<node key>"}]}\n'
     "Rules: every kind must appear in the catalogue; every required input must be present; the graph must "
-    "be acyclic; keys must be unique lower_snake_case; declare no more than 30 nodes; never write code, "
+    "be acyclic; keys must be unique lower_snake_case; plan the shortest workflow that covers the request, "
+    "at most 14 nodes; never write code, "
     "never invent an input, never add a step whose only purpose is to run a shell command or a script. "
     "If the request needs a step the catalogue does not offer, plan the closest supported workflow and say "
     "so in the summary."
@@ -51,14 +54,20 @@ def _text(value: Any, limit: int) -> str:
     return str(value)[:limit] if value is not None else ""
 
 
-def _inputs(value: Any) -> dict[str, Any]:
+def _inputs(value: Any, declared: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
+    declared = declared or {}
     cleaned: dict[str, Any] = {}
     for name, raw in value.items():
         if not isinstance(name, str):
             continue
         if isinstance(raw, (str, int, float, bool)):
+            spec = declared.get(name)
+            if getattr(spec, "kind", None) == "list" and isinstance(raw, str) and raw.strip():
+                # The model often answers a declared list with one string; that is a shape, not a claim.
+                cleaned[name] = [raw[:200]]
+                continue
             cleaned[name] = raw if not isinstance(raw, str) else raw[:MAX_INPUT_CHARS]
         elif isinstance(raw, list):
             cleaned[name] = [str(item)[:200] for item in raw[:50] if isinstance(item, (str, int, float))]
@@ -92,34 +101,51 @@ class WorkflowPlannerService:
             prompt_id=PLANNER_PROMPT_ID,
             prompt_version="1",
             temperature=0.1,
-            max_tokens=2400,
-            timeout_seconds=60,
+            max_tokens=6000,
+            timeout_seconds=120,
             max_retries=1,
         )
-        try:
-            response = await provider.complete(request)
-        except Exception as error:  # the provider is allowed to be down; the caller gets a clear reason
-            raise WorkflowPlanUnavailable(f"The AI provider could not plan this workflow: {error}") from error
-
-        try:
-            raw = json.loads(clean_json_text(response.content))
-        except (TypeError, ValueError) as error:
-            raise WorkflowPlanUnavailable("The AI provider did not return a workflow plan.") from error
-        if not isinstance(raw, dict):
+        # One bounded correction, not a loop: the provider occasionally wraps the object in prose, and a
+        # single "JSON only" reminder fixes it far more often than it costs.
+        raw: dict[str, Any] | None = None
+        for attempt in range(2):
+            try:
+                response = await provider.complete(request)
+            except Exception as error:  # the provider is allowed to be down; the caller gets a clear reason
+                raise WorkflowPlanUnavailable(f"The AI provider could not plan this workflow: {error}") from error
+            try:
+                parsed = json.loads(clean_json_text(response.content))
+            except (TypeError, ValueError) as error:
+                logger.info(
+                    "planner reply %d was not JSON (%s): %s", attempt + 1, error, (response.content or "")[:160]
+                )
+                request = request.model_copy(
+                    update={
+                        "prompt": f"{request.prompt}\n\nReply with the JSON object only. No prose, no markdown fence.",
+                        "prompt_version": "1-retry",
+                    }
+                )
+                continue
+            if isinstance(parsed, dict):
+                raw = parsed
+                break
+            logger.info("planner reply %d was not an object: %s", attempt + 1, str(parsed)[:160])
+        if raw is None:
             raise WorkflowPlanUnavailable("The AI provider did not return a workflow plan.")
 
         nodes: list[dict[str, Any]] = []
         rationales: dict[str, str] = {}
-        for item in raw.get("nodes") or []:
+        for item in raw.get("nodes") if isinstance(raw.get("nodes"), list) else []:
             if not isinstance(item, dict):
                 continue
             key = _text(item.get("key"), 60)
             kind = _text(item.get("kind"), 80)
-            nodes.append({"key": key, "kind": kind, "inputs": _inputs(item.get("inputs"))})
+            spec = NODE_KINDS.get(kind)
+            nodes.append({"key": key, "kind": kind, "inputs": _inputs(item.get("inputs"), spec.inputs if spec else {})})
             rationales[key] = _text(item.get("rationale"), 400)
         edges = [
             {"source": _text(item.get("source"), 60), "target": _text(item.get("target"), 60)}
-            for item in raw.get("edges") or []
+            for item in (raw.get("edges") if isinstance(raw.get("edges"), list) else [])
             if isinstance(item, dict)
         ]
 

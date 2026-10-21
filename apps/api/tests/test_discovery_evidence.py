@@ -220,14 +220,12 @@ async def test_evidence_is_filterable_and_an_unknown_id_is_404(client, test_db_s
     assert (await client.get("/api/discovery/runs/qd_unknown/evidence")).status_code == 404
 
 
-
 async def test_a_large_run_is_paged_without_repeating_or_skipping_a_row(client, test_db_session):
     """A capture can store thousands of rows; the API must page them, not return the whole run."""
     project_id = await _project(client)
     await _run(test_db_session, project_id, "qd_paged")
     controls = [
-        {"role": "button", "name": f"button {index}", "test_id": f"b{index}", "visible": True}
-        for index in range(12)
+        {"role": "button", "name": f"button {index}", "test_id": f"b{index}", "visible": True} for index in range(12)
     ]
     await _capture_state(test_db_session, "qd_paged", project_id, controls=controls)
 
@@ -246,6 +244,7 @@ async def test_a_large_run_is_paged_without_repeating_or_skipping_a_row(client, 
     assert [row["evidence_id"] for row in paged] == [row["evidence_id"] for row in everything]
     assert len({row["evidence_id"] for row in paged}) == len(paged)
     assert (await client.get("/api/discovery/runs/qd_paged/evidence?offset=-1")).status_code == 422
+
 
 async def test_a_candidate_scenario_matches_an_existing_case_and_the_rest_stay_candidates(client, test_db_session):
     project_id = await _project(client)

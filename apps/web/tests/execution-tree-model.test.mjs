@@ -181,6 +181,14 @@ test('the extent covers every card so the viewport can be decided from it', () =
   assert.ok(extent.bottom > 0);
 });
 
+test('the extent measures a stacked card by its real width, so nothing is clipped on a phone', () => {
+  const cards = treeNodes(TRACE, { stacked: true });
+  const extent = traceExtent(cards);
+  const widest = Math.max(...cards.map((card) => card.position.x + card.initialWidth));
+  assert.equal(extent.right, widest);
+  assert.ok(extent.right > Math.max(...cards.map((card) => card.position.x + 236)));
+});
+
 test('a card carries the fields the detail panel reads, including the unknown list', () => {
   const inv = treeNodes(trace([node('invocation:inv_1', { unknown: ['step_id'] })], []))[0];
   assert.equal(inv.data.node.unknown[0], 'step_id');

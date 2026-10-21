@@ -93,9 +93,7 @@ class DiscoveryEvidenceService:
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         await self._run(run_id)
-        rows = await self.evidence.list_by_run(
-            run_id, kind=kind, state_id=state_id, limit=limit, offset=offset
-        )
+        rows = await self.evidence.list_by_run(run_id, kind=kind, state_id=state_id, limit=limit, offset=offset)
         return [evidence_dict(row) for row in rows]
 
     async def evidence_detail(self, run_id: str, evidence_id: str) -> dict[str, Any]:

@@ -412,7 +412,9 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [fitView, nodes.length, pipelineExtent, setViewport]);
+  // Primitives, not the extent object: a live poll rebuilds nodes every few seconds, and re-running
+  // the fit would yank a user who panned away from stage 1 back to the start of the pipeline.
+  }, [fitView, nodes.length, pipelineExtent.right, pipelineExtent.bottom, setViewport]);
 
   const selected = canvas?.nodes.find((node) => node.id === selectedId) ?? null;
 

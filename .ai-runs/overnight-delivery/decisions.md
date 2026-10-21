@@ -68,3 +68,31 @@
   `edge.type` guard was found. The 100-node sample raced the panel's 3 s poll and is recorded as unreliable.
 - **Evidence paging is `offset` on the existing endpoint**, with a test that pages a 13-row run in chunks and
   compares to the single-page result. No new UI: nothing in the product lists raw evidence rows yet.
+
+## Round 22 — Release candidate audit
+
+- **The planner's budget is a product decision, not a tuning knob.** `max_tokens=2400` made a real plan fail
+  with `output_limit`; `timeout_seconds=60` made another fail at 122 s. The model needs room for a structured
+  answer (~2 000 output tokens, 40–110 s). Settled at 6000 tokens / 120 s (the request contract's hard cap),
+  plus an instruction to plan the shortest workflow (≤ 14 nodes), which brought a real plan to ~50 s.
+- **One malformed reply gets exactly one correction.** Re-prompting with "Reply with the JSON object only"
+  recovers the common prose-wrapped answer; a second failure is a 503 with a reason. An open retry loop would
+  turn a flaky model into a slow, expensive endpoint. Both branches are pinned by tests on the provider's
+  recorded requests.
+- **A scalar where a declared list belongs is a shape correction, not a claim.** `_inputs` wraps a non-empty
+  scalar into a one-item list only when the catalogue declares that input as a list. It never invents a value
+  and never guesses a node's meaning.
+- **The pipeline fit depends on geometry primitives, not on the extent object.** The reviewer's P1: every 3 s
+  live poll rebuilt `pipelineExtent`, re-ran the fit and pulled a panned user back to stage 1. Depending on
+  `.right` / `.bottom` keeps the fit when the pipeline actually changes and leaves the viewport alone when it
+  does not. The regression could not be reproduced in the browser (no node was ever live during the probe),
+  so this one is verified by reading, and `r22.md` says so.
+- **`traceExtent` measures a card by its real width.** Stacked cards are 300 px, columns are 236 px; using one
+  constant over-estimated the zoom and clipped deep cards on a phone. `initialWidth` is carried by the node
+  and is the only width the model trusts.
+- **Two 500-classes stay out of the planner endpoint.** A non-list `nodes`/`edges` and a provider reply that is
+  a bare string now produce `valid: false` (or a 503 with a reason) instead of an unhandled exception; the
+  endpoint only translates `WorkflowPlanUnavailable`.
+- **The release verdict is set in five separate levels.** CORE_PRODUCT / WORKFLOW_STUDIO / DAG_EXECUTION /
+  MULTI_INSTANCE / RELEASE_CANDIDATE are reported independently, so a passing product path cannot silently
+  upgrade an unverified execution or deployment claim.

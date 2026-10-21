@@ -217,7 +217,7 @@ export function traceExtent(cards: TreeCard[]): { right: number; bottom: number 
   let right = 0;
   let bottom = 0;
   for (const card of cards) {
-    right = Math.max(right, card.position.x + TREE_COLUMN_WIDTH);
+    right = Math.max(right, card.position.x + (card.initialWidth ?? TREE_COLUMN_WIDTH));
     bottom = Math.max(bottom, card.position.y + TREE_NODE_HEIGHT);
   }
   return { right, bottom };

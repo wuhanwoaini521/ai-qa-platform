@@ -5,7 +5,7 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 16.5 —— Agent Execution Tree（用户任务 m04571，分支 `audit-remaining-blockers`，记录见 §3.14，契约 `docs/EXECUTION_TRACE.md`，真实验收 `.ai-runs/e2e-round16.5/acceptance.json`）。** 本轮把已存在的执行行（`agent_tasks` / `agent_task_steps` / `ai_invocations` / `agent_task_evidence` / `agent_task_artifacts` / `test_runs` / `discovery_suggestions`）投影成只读执行树，画布内新增「执行树」视图；服务端是唯一状态权威，前端不模拟成功、不估算 token、不发明单价。真实 Chromium + 真实 provider（`mimo-v2.6-flash`）+ 真实 Jev（`jev-1.13.0`）13/13 PASS、`console_errors: []`；后端/前端全量见 §9。
+**当前活动轮次：Round 22 —— 最终发布候选审计（无人值守交付任务 m05387 的第 6 轮，记录见 §3.20）。**两轮交付：Round 21 用实测把三个 React Flow 画布从「缩到看不清也要塞下」改成「保住可读字号、允许平移」（流水线 0.47→0.82、执行树手机改单列 10.5px、证据分页），Round 22 做只读审计：两条真实业务链路（失败→修复→人工批准→精确验证；自然语言→候选工作流→草稿→发布→停在执行前）15/15 通过，并修掉 7 个由失败运行或独立 reviewer 证实的缺陷（planner 预算/超时/一次纠正/list 形状、非列表 500、视口回弹 P1、堆叠卡片宽度 P2）。判定分五级：核心产品 PASS、工作流 Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED（详见 §3.20 与 `.ai-runs/overnight-delivery/rounds/r22.md`）。
 
 **Round 16（上一轮，用户任务 m03748，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
 
@@ -44,7 +44,11 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
+| 当前 HEAD | Round 20 收尾 `8b1c07d` → Round 21 `6a865c3`（画布可读性/证据分页）→ Round 22 本轮提交（见 §3.20） |
+| 未推送提交 | `origin/main..HEAD` = 31 笔（本任务默认不 push；Round 21 +1、Round 22 +1） |
+| 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20，`stored_artifacts.created_by` 加宽到 100；SQLite 下 no-op） |
+| 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
+| Round 16.5 HEAD（历史） | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
 | Round 16.5 提交数 | 3（`23cdb71`、`4dba380`、`ec5bae8`）+ 本文档提交 |
 | Round 16 关键提交（历史） | `c4075a1` 及前 6 笔（`b6d635a` 分析与分级、`8af0de4` 画布视图、`84b2163` 通用 locator 修正、`a7bbaf4` 设计文档、`7fb03d3` 画布测试、`582f5c9` OpenAPI 导出） |
 | Round 16 提交数 | 6 代码/文档提交 + 本文档提交 |
@@ -52,7 +56,7 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 提交数 | 2（`9fd04df` 后端只读投影层、`bf9b5c2` 前端画布）+ 本文档提交 |
 | 历史起点（Round 12/13） | `5849b5f docs(handoff): record the Round 11 final regression and its verdict` |
 | Round 13 提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器） |
-| 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
+| 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交；`.ai-runs/overnight-delivery/` 例外，作为本任务交付证据入库） |
 | 迁移 | `0016_discovery_evidence`（Round 15）→ `0017_discovery_suggestions`（Round 16）→ `0018_ai_invocation_step`（Round 16.5，只加 `ai_invocations.step_id` + 一个索引，可降级） |
 | Round 16 关键提交 | `b6d635a` AI 分析 + Jev 分级 + 审核 API（迁移 0017）；`8af0de4` 画布 Evidence Intelligence 视图；`84b2163` 通用 role locator 不再当作覆盖证据 |
 | Round 14 关键提交 | `9fd04df` 只读投影层 + ACL + 截断；`bf9b5c2` 阶段列画布、节点详情与证据、窄视口从第一阶段起、URL 指定文件优先于未绑定空态 |
@@ -880,7 +884,51 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - Round4 巡检环境限制：本机无法访问 `fonts.googleapis.com`，`document.fonts.ready` 永不完成会让 Playwright 全页截图卡在 `waiting for fonts to load`；harness 阻断该域名并同图重试 3 次。应用字体回退正常，但「离线/内网首屏字体」未做产品级自托管，属已知限制，不作为 UI 缺陷处理。
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
+## 3.15 Round 17（版本化工作流 Studio，任务 m05387 第 1 轮）
+
+**目标**：在既有 React Flow 画布上做「可编辑、版本化、可审核」的工作流定义，并把定义与执行轨迹彻底分开（定义≠运行状态，不建第二套执行器）。
+
+**交付**：`packages/project-model/project_model/workflow_definition.py`（24 节点白名单 `CATALOGUE`，含 risk/writes/inputs 元数据；`validate_graph` 校验未知类型、缺输入、悬空边、环；`execution_order` 拓扑排序）；迁移 `0019_workflow_definitions`（`workflow_definitions` + `workflow_definition_versions`，cheksum 不可变）；`WorkflowDefinitionRepository`（乐观并发 `base_checksum`）、`WorkflowDefinitionService`（`compile_plan` 编译成既有 `TaskStepSpec`、`compare_graphs`、`execution_diff`）；9 个端点（草稿 CRUD、校验、发布、版本列表/详情、对比、执行对比）；前端 `apps/web/src/features/canvas/{workflowEditorModel.ts,WorkflowEditorPanel.tsx,workflow-editor.css}`，入口 `?canvas=editor`（服务端仍是唯一权威，刷新可恢复）。
+
+**真缺陷修复**：① 保存后 `dirty` 不清空，因为 `sameGraph` 把节点坐标算进相等性（布局是视图状态，已排除）；② 模式切换标签渲染出原始 i18n key；③ 重名工作流把 `sqlite3.IntegrityError` 冒到界面（改为 `WorkflowNameTaken` → 409）；④ 慢加载覆盖刚创建的草稿（`loadSeq` 守卫）。
+
+**判定**：A Definition **PASS**（白名单 + 校验 + 不可变发布）；B Editor **PASS**（真实浏览器 20/20：创建/编辑/连线/撤销/自动布局/校验/保存/刷新/发布/权限/版本对比）；C **DAG Execution BLOCKED** —— 定义能编译成既有运行时的计划，但没有任何经批准的端到端执行路径被验证过，按任务要求不另建调度器。
+
+## 3.16 Round 18（运行时一致性：任务租约与 fencing）
+
+**审计结论**：任务认领本来就是原子的（`claim_for_execution` 条件 UPDATE），但四处启动收敛把「未完成」当成「已放弃」，且终态写入没有所有权校验 —— 滚动重启会误停别的实例正在跑的任务。
+
+**交付**：迁移 `0020_task_lease`（`lease_owner`/`lease_token`/`lease_expires_at`）；`claim_for_execution(task_id, owner, lease_seconds)` 返回 fencing token；每任务心跳（`LEASE_SECONDS=90`、`HEARTBEAT_SECONDS=20`）；`TaskExecutionOrchestrator._finish` 经 `holds_lease` 校验（失租记录 `task.lease_lost` 事件、不写终态）；优雅退出时释放租约；四处收敛改为「按年龄判定过期」。文档 `docs/TASK_LEASE.md`。
+
+**验证**：`apps/api/tests/test_task_lease.py`、`apps/api/tests/test_multi_instance_recovery.py`（新鲜行在同伴启动后存活、过期行仍被回收），两处旧测试因写死「新鲜行也会被回收」而更新；真实双进程演练 `.ai-runs/overnight-delivery/rounds/r18_two_instances.py` → **8/8**（`.ai-runs/overnight-delivery/regression/r18-two-instances.json`）。
+
+**判定**：单主机多进程 **PASS**；多主机 `MULTI_INSTANCE_PASS` **BLOCKED**（无 PostgreSQL 与第二主机）；跨副本的 cancel 未做 fencing，已记录为缺口。
+
+## 3.17 Round 19（自然语言 → 候选工作流）
+
+**交付**：`WorkflowPlannerService.plan()` —— 一句话 → 候选 DAG，只允许 Round 17 白名单类型，服务端校验（未知类型、环、缺输入、悬空边），AI 只能提议、不能保存；`POST /api/projects/{id}/workflow-plan`（503 表示 provider 不可用，不落库）；前端 `WorkflowPlannerPanel.tsx`（`?canvas=planner`），人工确认后才写草稿。
+
+**关键边界**：模型输出里的节点类型必须在 `CATALOGUE` 内，否则逐条报错；计划不写任何 definition 行；provider 未配置时返回 503 而不是伪造计划。
+
+**判定**：Planner **PASS**（真实验收 15/15，真实 provider）；由计划直接执行仍是 `DAG_EXECUTION BLOCKED`（继承 R17 C）。
+
+## 3.18 Round 20（CI / PostgreSQL / 部署演练）
+
+**CI**：`.github/workflows/ci.yml` 只在 push 到 `main` 时触发，本任务禁止 push → **CI 服务 BLOCKED**；改为逐条复跑 CI 命令，证据 `.ai-runs/overnight-delivery/rounds/r20_ci_parity.md`。因此发现 CI 的 `pytest apps/api` 命令一直是红的（`app/api/test_designs.py` 是路由模块却被收集 → `apps/api/conftest.py` 加 `collect_ignore_glob`），而根目录 `pytest` 因 `testpaths` 不包含它而一直绿。
+
+**PostgreSQL 16 通道**（`postgres:16-alpine`，端口 55432）一次跑出 5 个缺陷：① `stored_artifacts.created_by` 是 VARCHAR(36)，但录制器写入的是标签（`Recorder · <case>`），PG 直接 `StringDataRightTruncationError` 让发现→覆盖 E2E 运行 `ERROR`（迁移 `0021_artifact_actor_width` 加宽到 100，对齐 `test_runs.requested_by`）；② `ai_invocations.step_id` 的索引在迁移里叫 `ix_ai_invocations_step`、模型生成 `ix_ai_invocations_step_id`，`compare_metadata` 永远报漂移（在 `__table_args__` 显式命名）；③ 上述 pytest 收集问题；④⑤ 两处过时测试（Round 18 之后回收改为按年龄判定，测试仍按「新鲜行也回收」断言）。
+
+**部署演练**（`.ai-runs/overnight-delivery/rounds/r20_deploy_drill.py`，隔离 compose 项目 `aiqa-r20`、独立 env 文件、备用端口）→ **12/12**：镜像构建、API 启动 + DB 健康、容器自带 healthcheck 变 healthy、Alembic 在 PG 上降一级再升回 head、种子管理员可登录、容器内可写 PG、逻辑备份 97 KB、**恢复到第二个库后行数与迁移版本一致**、硬编码密钥的配置 fail-fast（exit 1 + 明确原因）、Web 镜像独立启动并返回 SPA、`docker compose stop api` 为优雅停机（exit 0）、`down -v` 不留残骸。演练前必须先修两个镜像级缺陷：API Dockerfile 的 `HEALTHCHECK … CMD-SHELL`（compose 关键字，`docker build` 直接失败）与 Web 镜像的字面 upstream `api`（无兄弟容器时 nginx 启动即崩）。另移除三个服务的硬编码 `container_name`（使 `-p` 生效、允许同机第二套栈）并补资源上限，删除仅作 include 的 `compose.yaml`（否则每次 compose 调用都告警「两个配置文件」）。
+
+**判定**：CI 命令对等 **PASS**；PostgreSQL 通道 **PASS**；单机部署演练 **PASS**；CI 服务、多主机 PostgreSQL、Windows 宿主 **BLOCKED**。
+
 ## 9. 最后执行的测试
+
+- **Round 22（发布候选审计，本轮）**：后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 677.08s**（Round 21 为 994 passed，+2 = planner 的一次纠正与「非列表返回不是 500」两个用例）；PostgreSQL 16 通道（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`）`test_workflow_planner test_runtime_migrations test_discovery_evidence test_task_lease` → **34 passed**；`ruff check .` / `ruff format --check .`（488 files）干净；`scripts/i18n_check.py` → 25 namespaces / 3390 keys；`scripts/export_openapi.py --check` → current；前端 `pnpm --filter @ai-qa/web test` → **225 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净。真实 Chromium + 真实 provider：`.ai-runs/overnight-delivery/rounds/r22_acceptance.py` → **15/15 PASS，`failed: []`，`console_errors: []`**（证据 `rounds/r22-acceptance.json`，说明 `rounds/r22.md`）。两条链路：失败→批准→精确验证（`run_1949eb638ae2`/`fail_00fd043c649c`/`7a5e3a6f…`/`run_01b4e1aebd12`）、自然语言→草稿→发布→停在执行前（planner `valid:true` 14 节点，`72b52b01-…`，`/execute` 404）。
+
+- **Round 21（UX/性能/可观测性，`6a865c3`）**：前端 `pnpm --filter @ai-qa/web test` → **224 pass / 0 fail**（Round 20 为 223，+1 = 堆叠布局 extent 用例），`tsc`/`eslint` 干净；后端全量 994 passed / 11 skipped / 724.80s；`ruff`（488 files）、`i18n`（3390 keys）、`openapi --check` 均干净。真实浏览器 `.ai-runs/overnight-delivery/rounds/r21_acceptance.py` → **12/12 PASS，`failed: []`，`console_errors: []`**；性能实测 `rounds/r21-perf-{before,after}.json`（流水线缩放 0.47→0.82、最小字号 6.2→9px；执行树手机单列 10.5px；1000 节点挂载 1107ms / DOM 18410）；截图 `rounds/screenshots/r21-*`。
+
+- **Round 20（CI/PG/部署，`8b1c07d` + 本文档）**：后端 SQLite 全量 `uv run pytest -q` → **989 passed / 11 skipped / 63 warnings / 1049.87s**（Round 19 为 960+）；PostgreSQL 16 通道（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://…`，`pytest apps/api`）修复后全绿，日志 `.ai-runs/overnight-delivery/rounds/r20-postgres.txt`；`ruff check .` / `ruff format --check .`（488 files）干净；`python scripts/export_openapi.py --check` → current；前端 `pnpm --filter @ai-qa/web test` → **223 pass / 0 fail**，`typecheck`/`lint` 干净，`build` 52.5s；`scripts/i18n_check.py` → 25 namespaces / 2 languages / 3390 keys；部署演练 `.ai-runs/overnight-delivery/rounds/r20_deploy_drill.py` → **12/12**（证据 `rounds/r20-deploy.json`）。
 
 - **Round 16.5（Agent Execution Tree，`ec5bae8` + 本文档）**：后端全量 `uv run pytest -q` → **960 passed / 11 skipped / 62 warnings / 1262.12s**（Round 16 为 952 passed，本轮 +8 = `test_execution_trace.py`）；`ruff check apps/api packages` → All checks passed，`ruff format --check` → 293 files already formatted；`scripts/export_openapi.py --check` → current（两个只读端点已导出）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3303 keys**（+63）；web `npx tsc --noEmit` 与 `npx eslint src --max-warnings=0` 无输出，`pnpm --filter @ai-qa/web test` → **213 pass / 0 fail**（Round 16 为 202，+11 = `execution-tree-model.test.mjs`）；迁移 `0018_ai_invocation_step` 有升降级往返用例。真实浏览器 `.ai-runs/e2e-round16.5/execution_tree_acceptance.py`（真实 `mimo-v2.6-flash` + `jev-1.13.0`，受控页 `discovery-fixture-d.html`）→ **13/13 PASS，`failed: []`，`console_errors: []`**；证据 `.ai-runs/e2e-round16.5/acceptance.json`，截图 `screenshots/{before-pipeline-canvas,after-execution-tree,after-node-detail,after-execution-tree-reloaded,after-execution-tree-mobile}.png`。
 
@@ -1050,3 +1098,26 @@ pnpm -r typecheck && pnpm -r lint
 5. Round2 AI/Jev repair matrix 尚缺远程 outage、持久化前 interruption、verification worker restart、PostgreSQL并发；仅在具备环境时继续，保留明确 blocked 状态。
 
 旧 `/tmp` Studio scripts 不存在；真实 debugpy opt-in test 位于 `apps/api/tests/test_studio_debug_ui_live.py`，通过 `AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1` 启动。
+
+## 3.19 Round 21（UX / 性能 / 可观测性）
+
+**测量先于修改**：`.ai-runs/overnight-delivery/rounds/r21_perf.py` 在四个宽度（1560/1280/1024/390）量三个画布视图（流水线 / 执行树 / 编辑工作流）+ 总览/运行/失败三页的 FCP、DOM 节点数、节点数、缩放、**最小可读字号**（font-size × zoom）、横向溢出、拖动延迟。Before：流水线在 1560 用 0.47 缩放把整条链塞进视口 → 正文 ≈6px，1280/1024 只有 0.62；执行树永远 zoom 1（最后一列被裁）；编辑工作流 0.95 / 手机 0.724（8px）。
+
+**修的五处**（都在前端渲染层，不改数据）：① `WorkflowCanvasPanel` 的适配阈值从「塞下整条链」改为**可读下限**（桌面 0.82 / 窄屏 0.72，断点按画布宿主的 900px 判定），装不下就允许平移，MiniMap 缩到 148×92 作为总览；② 三个画布的 10px 以及 workflow-editor/执行树的 9–10px 字号统一抬到 11px（标题 14px）；③ 执行树的适配 effect 原在宿主未挂载时静默返回（`.let-flow` 只在有节点时渲染，`deps: []` 永远观察不到），改为有界重试 + `fitView({padding:0.1,maxZoom:1})`；④ 宿主 < 720px 时执行树改为**单列纵向列表**（每层缩进 12px、卡片固定 300px），手机可读 10.5px；⑤ 证据分页 `offset`（`list_by_run(limit=500, offset=0)` → `list_evidence(offset)` → `GET …/evidence?offset=`）+ 一个「翻页不重不漏」用例，并把证据标签从 `EvidenceType.ANALYSIS` 这类枚举原值改成 `ANALYSIS · 来源`。
+
+**实测 After**：流水线 0.82/0.82/0.82/0.72（最小字 9/9/9/7.9px，此前 1280/1024 有 30 个 <9px 的卡片）；执行树 1/0.957/0.876/**1（手机单列、0 卡超出）**；编辑 0.95（10.5px）/ 8px 手机。压力测试（真实组件、按真实 trace 克隆 100/500/1000 节点）：挂载 853/944/1107ms，拖动 27.8/73.5/25.8ms，DOM 537/9314/18410，1000 节点在 0.7 缩放（7.7px）。总览/运行/失败页 FCP 220/180/188ms。**必须承认的边界**：`MAX_NODES=30` 与「项目 trace 汇总 6 个任务」意味着 100/500/1000 节点在真实产品路径上到不了，压力样本是真实 trace 的等比副本；100 节点那一档会与面板 3s 轮询竞争，读数不可靠；证据分页目前没有 UI 消费者。
+
+**验收**：`r21_acceptance.py` **12/12 PASS，`failed: []`，`console_errors: []`**（`.ai-runs/overnight-delivery/rounds/r21-acceptance.json`）：五个视图可达、流水线首列完整在屏、执行树三档宽度无节点越界、手机单列 10.5px、编辑工作流 10.5/8px、刷新后 33 个节点且 id 全一致、点节点能看到引用的 evidence id、失败页主操作为「创建分析与修复任务」且阶段链（诊断/修复/重跑/验证）齐全、失败页外链保留 projectId、无控制台错误、运行页正常渲染。截图 `rounds/screenshots/r21-{before,after}-{pipeline,execution,editor,failure,dashboard,failures,runs}-w{1560,1280,1024,390}.png`。提交 `6a865c3`。
+
+## 3.20 Round 22（最终发布候选审计）
+
+**只读审计，再修被证明的问题**。两项业务链路都真实跑通（真实 Chromium + 真实 `mimo-v2.6-flash` + 真实 `jev-1.13.0`）：`r22_acceptance.py` **15/15 PASS，`failed: []`，`console_errors: []`**（`rounds/r22-acceptance.json`）。
+
+- 链路一（失败 → 修复 → 人工批准 → 精确验证）：把退役定位器写回 `tests/test_known_locator.py` → 运行 `run_1949eb638ae2` FAILED → 失败记录 `fail_00fd043c649c` 落在 `pages/shop.py:35` → FIX_FAILURE 任务 `7a5e3a6f3462446183d245b6ccf56ad9` 停在 `approval=WAITING_FOR_APPROVAL`、`apply=PENDING`（此时源码仍是旧调用）→ 人工批准后写入源码 → 验证运行 `run_01b4e1aebd12` PASSED 且 nodeids 精确等于 `tests/test_known_locator.py::test_known_locator_change`。
+- 链路二（自然语言 → 候选工作流 → 草稿 → 发布 → 停在执行前）：planner 一次成功产出 14 节点合法计划（invocation `ffbaf78f-4998-4b17-a880-1c479e622b7d`），存草稿 v1（`72b52b01-ec41-4185-aba6-00168d146036`）→ 发布 → 再编辑只产生 v2 草稿、**已发布 v1 的 checksum 不变** → `POST /workflows/{id}/execute` 返回 404。
+
+**审计修掉的 7 个缺陷**（4 个后端、3 个前端；均由失败运行或独立 reviewer 发现）：① planner `max_tokens=2400` → 真实 `output_limit` 503，改 6000；② `timeout_seconds=60` → 真实 122s 超时，改 120（契约上限）；③ 非 JSON 回复直接 503，改为**一次**有界纠正（第二次仍失败才 503，两分支都有测试）；④ 目录声明为 list 的输入被模型写成单值时整份计划判无效，改为形状纠正；⑤ `{"nodes": 3}` 这类非列表返回 `TypeError` → 500，加 `isinstance` 守卫（`valid:false`）；⑥ reviewer P1：流水线适配 effect 依赖 `pipelineExtent` 对象，每次 3s 轮询都会把平移过的视口拽回起点，改为依赖 `.right/.bottom` 原语；⑦ reviewer P2：`traceExtent` 用列宽 236 量 300px 的堆叠卡片，手机端裁掉约 22px，改用 `initialWidth`。
+
+**判定（五个等级分开给，不合并）**：`CORE_PRODUCT_PASS` = PASS；`WORKFLOW_STUDIO_PASS` = PASS；`DAG_EXECUTION_PASS` = **BLOCKED**（定义能编译成 plan、`task_scheduler_service` 也真的按 `depends_on` 调度，但没有经审批的端到端执行路径，`/execute` 是 404）；`MULTI_INSTANCE_PASS` = **BLOCKED**（Round 18 只证明同机双进程）；`RELEASE_CANDIDATE_PASS` = **BLOCKED**（CI 服务未在远端跑过、部署只做过 Round 20 的单机 compose 演练）。
+
+**诚实边界**：⑥ 的视口回弹**未能在浏览器中复现**（探针期间流水线没有任何运行中节点，轮询未触发，`/tmp/pan-probe.json` 记 `polls: 0`，视口保持不变），该修复只由代码阅读保证；planner 在本环境是模型依赖的（连续四次真实调用 3 次合法、1 次 122s 超时 503），验收脚本允许最多 3 次重试并记录 `attempts`（最终一次为 1）；reviewer 关于 `ExecutionTreePanel` 的 `nodesInitialized` 依赖项与证据 ACL 测试口径两条 P2 保留为债务。

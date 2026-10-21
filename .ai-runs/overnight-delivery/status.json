@@ -40,9 +40,24 @@
       "finished_at": "2026-10-21T21:59:40"
     },
     "22": {
-      "state": "PENDING"
+      "state": "PASS",
+      "started_at": "2026-10-21T15:30:00+00:00",
+      "verdicts": {
+        "core_product": "PASS",
+        "workflow_studio": "PASS",
+        "dag_execution": "BLOCKED",
+        "multi_instance": "BLOCKED",
+        "release_candidate": "BLOCKED"
+      },
+      "evidence": [
+        ".ai-runs/overnight-delivery/rounds/r22-acceptance.json",
+        ".ai-runs/overnight-delivery/rounds/r22.md"
+      ],
+      "finished_at": "2026-10-21T17:20:00+00:00",
+      "backend": "996 passed / 11 skipped / 677.08s",
+      "frontend": "225 pass / 0 fail"
     }
   },
-  "current_round": 20,
+  "current_round": 22,
   "updated_at": "2026-10-21T20:48:30"
 }
