@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Discovery Suggestion Fixture</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; display: grid; gap: 12px; max-width: 520px; }
+      button, a { padding: 6px 10px; font: inherit; }
+      #probe-log { font-size: 12px; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1 id="probe-title">Delivery options</h1>
+    <p>Every behaviour on this page is worded differently from any test our suite already has.</p>
+    <p><button id="probe-shipping" data-testid="probe-shipping" type="button">View shipping estimate</button></p>
+    <p><button id="probe-bag" data-testid="probe-bag" type="button">View shopping bag</button></p>
+    <p><button id="probe-window" data-testid="probe-window" type="button">View delivery window</button></p>
+    <p><a id="probe-short" data-testid="probe-short" href="/api/demo-shop/catalog.json">Go</a></p>
+    <div id="probe-log" role="status">idle</div>
+    <script>
+      const log = (text) => {
+        document.getElementById('probe-log').textContent = text;
+      };
+      const call = async (url) => {
+        const response = await fetch(url, { headers: { 'X-Fixture-Token': 'fixture-secret-token' } });
+        log(`${url} -> ${response.status}`);
+      };
+      document.getElementById('probe-shipping').addEventListener('click', () =>
+        call('/api/demo-shop/catalog.json?estimate=express'),
+      );
+      document.getElementById('probe-bag').addEventListener('click', () => call('/api/demo-shop/catalog.json?bag=1'));
+      document.getElementById('probe-window').addEventListener('click', () =>
+        call('/api/demo-shop/catalog.json?window=1'),
+      );
+    </script>
+  </body>
+</html>

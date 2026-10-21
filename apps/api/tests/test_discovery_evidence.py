@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from app.persistence.models import QualityDiscoveryRunORM
 from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
+from app.services.discovery_evidence_analysis import CANDIDATE_GAP
 from app.services.discovery_evidence_capture import (
     DOM_ELEMENT,
     USER_ACTION,
@@ -266,6 +267,28 @@ async def test_a_candidate_scenario_matches_an_existing_case_and_the_rest_stay_c
         item["scenario_id"] for item in body["scenarios"]
     )
     assert len(again["scenarios"]) == len(body["scenarios"])
+
+
+async def test_a_role_locator_value_alone_never_counts_as_coverage(client, test_db_session):
+    """`button` appears in almost every case; only the accessible name can settle a coverage question."""
+    project_id = await _project(client)
+    await _run(test_db_session, project_id, "qd_generic")
+    await _capture_action(test_db_session, "qd_generic", project_id, target="View shipping estimate")
+    await client.post(
+        "/api/test-cases",
+        json={
+            "project_id": project_id,
+            "title": "Checkout button asks for a shipping address",
+            "priority": "P1",
+            "steps": ["Click the button for the shipping form"],
+        },
+    )
+
+    body = (await client.post("/api/discovery/runs/qd_generic/scenarios/refresh")).json()
+
+    scenario = body["scenarios"][0]
+    assert scenario["coverage_status"] == CANDIDATE_GAP
+    assert scenario["test_case_ids"] == []
 
 
 async def test_the_diff_reports_real_changes_and_never_turns_missing_evidence_into_a_disappearance(

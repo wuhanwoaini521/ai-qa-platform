@@ -45,6 +45,12 @@ async def demo_discovery_fixture_b():
     return _fixture("discovery-fixture-b.html")
 
 
+@router.get("/demo-shop/discovery-fixture-c.html")
+async def demo_discovery_fixture_c():
+    """Behaviours worded differently from any existing test, so the rules cannot settle their coverage."""
+    return _fixture("discovery-fixture-c.html")
+
+
 def _fixture(name: str) -> FileResponse:
     return FileResponse(
         DEMO_SOURCE / "site" / name,

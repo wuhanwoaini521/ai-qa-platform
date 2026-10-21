@@ -30,7 +30,64 @@ UNDETERMINED = "UNDETERMINED"
 
 #: A target shorter than this cannot prove coverage on its own: "Add" appears in half a suite.
 MIN_TARGET_CHARS = 4
+
+#: Locator values that name a control kind rather than a control. They match everything.
+GENERIC_LOCATOR_VALUES = frozenset(
+    {
+        "a",
+        "button",
+        "checkbox",
+        "combobox",
+        "div",
+        "input",
+        "link",
+        "listbox",
+        "menuitem",
+        "radio",
+        "searchbox",
+        "select",
+        "slider",
+        "span",
+        "spinbutton",
+        "tab",
+        "textbox",
+        "textarea",
+    }
+)
 _WORD = re.compile(r"[a-z0-9\u4e00-\u9fff]{2,}", re.I)
+
+
+def evidence_kind_facts(kind: str, payload: dict[str, Any]) -> str:
+    """One plain-language line about a captured fact, shared by the prompt and the API."""
+    if kind == "dom_element":
+        return (
+            f"tag={payload.get('tag')} role={payload.get('role') or '-'} "
+            f"name={payload.get('name')!r} count_in_state={payload.get('count_in_state')} "
+            f"enabled={payload.get('enabled')}"
+        )
+    if kind == "locator_candidate":
+        return (
+            f"locator={payload.get('locator_value')!r} kind={payload.get('kind')} "
+            f"match_count={payload.get('match_count')} unique={payload.get('unique')} verified={payload.get('verified')}"
+        )
+    if kind == "network_request":
+        return (
+            f"{payload.get('method')} {payload.get('url_template')} statuses={payload.get('statuses')} "
+            f"resource={payload.get('resource')}"
+        )
+    if kind == "user_action":
+        return (
+            f"{payload.get('action')} target={payload.get('target')!r} status={payload.get('status')} "
+            f"state_changed={payload.get('state_changed')} requests={payload.get('network_evidence_ids')}"
+        )
+    if kind == "page_state":
+        return (
+            f"url_template={payload.get('url_template')} visible_controls={payload.get('visible_controls')} "
+            f"fingerprint={payload.get('fingerprint')}"
+        )
+    if kind == "screenshot":
+        return f"artifact={payload.get('artifact_id')} url_template={payload.get('url_template')}"
+    return str(payload)
 
 
 def _row_payload(row: DiscoveryEvidenceORM) -> dict[str, Any]:
@@ -234,7 +291,13 @@ def _locator_value(rows: Sequence[DiscoveryEvidenceORM], action_payload: dict[st
         return ""
     for row in rows:
         if row.kind == LOCATOR_CANDIDATE and row.evidence_id == locator_id:
-            return str(_row_payload(row).get("value") or "")
+            payload = _row_payload(row)
+            value = str(payload.get("value") or "")
+            # A role locator's value is just the element kind (`button`), which appears in almost every
+            # test case and would fake coverage; the accessible name is what identifies the element.
+            if value.lower() in GENERIC_LOCATOR_VALUES:
+                return str(payload.get("name") or "")
+            return value
     return ""
 
 
