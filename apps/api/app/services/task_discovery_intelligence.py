@@ -218,6 +218,7 @@ class TaskDiscoveryIntelligenceService:
         async with self.ports.repository_scope() as repositories:
             counts = await repositories.discovery_suggestions.upsert_many(run_id, project_id, records)
             await repositories.commit()
+        cited = [row for row in records if row.get("evidence_ids")]
         return {
             "analyzed": len(records),
             "completed": len([row for row in records if row["analysis_status"] == "COMPLETED"]),
@@ -234,6 +235,24 @@ class TaskDiscoveryIntelligenceService:
                 }
                 for row in records
             ],
+            # Task-level reference: the trace can point at the discovery evidence this step read.
+            "_evidence": [
+                {
+                    "type": "RuntimeMetadata",
+                    "source": f"discovery_evidence:{run_id}",
+                    "summary": f"{len(cited)} readings cited {sum(len(row['evidence_ids']) for row in cited)} evidence rows",
+                    "content": json.dumps(
+                        [
+                            {"suggestion_id": row["suggestion_id"], "evidence_ids": row["evidence_ids"]}
+                            for row in cited
+                        ],
+                        ensure_ascii=False,
+                    ),
+                    "metadata": {"run_id": run_id, "readings": len(records), "cited": len(cited)},
+                }
+            ]
+            if cited
+            else [],
         }
 
     async def _grade_suggestions(self, task: TaskExecutionRecord, outputs: dict[str, Any]) -> dict[str, Any]:

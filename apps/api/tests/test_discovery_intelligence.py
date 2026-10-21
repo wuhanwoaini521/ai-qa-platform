@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 from app.container import get_task_runtime_service
-from app.persistence.models import ProjectORM, TestCaseORM
+from app.persistence.models import ProjectORM, TaskEvidenceORM, TestCaseORM
 from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
 from app.repositories.discovery_suggestion_repo import DiscoverySuggestionRepository
 from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
@@ -14,6 +15,7 @@ from project_model.models import DecisionResult
 from qa_core.ai.models import AICompletionResponse
 from qa_core.ai.provider import AIProviderError
 from qa_core.ai.registry import AIProviderRegistry
+from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
 
@@ -544,3 +546,26 @@ async def test_an_analysis_of_a_run_that_does_not_exist_is_refused(client, test_
 
     assert created.status_code == 404
     assert listed.status_code in {403, 404}
+
+
+async def test_a_reading_leaves_a_task_level_evidence_reference(client, test_db_session, monkeypatch):
+    """The execution trace has to find the discovery evidence a reading read, on the task itself."""
+    await _seed(
+        test_db_session,
+        scenarios=[_scenario("scen_candidate", "CANDIDATE_GAP", ["dom_a", "net_a", "act_a"])],
+        evidence=[_element(), _network(), _action()],
+    )
+    _install(monkeypatch, _Provider(ANALYSIS))
+
+    task_id = await _run_task(client, test_db_session)
+
+    async with test_db_session() as session:
+        rows = (
+            (await session.execute(select(TaskEvidenceORM).where(TaskEvidenceORM.task_id == task_id))).scalars().all()
+        )
+    assert rows, "the analysis step left no task-level evidence"
+    [row] = rows
+    assert row.type == "RuntimeMetadata"
+    assert row.source == f"discovery_evidence:{RUN}"
+    assert "3 evidence rows" in row.summary
+    assert json.loads(row.content)[0]["evidence_ids"] == ["dom_a", "net_a", "act_a"]
