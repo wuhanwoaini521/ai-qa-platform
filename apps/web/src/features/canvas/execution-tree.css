@@ -1,0 +1,459 @@
+/*
+ * Dark execution-tree surface.
+ *
+ * Scoped to the tree: the rest of the platform keeps its light design system. The dark palette
+ * exists so a trajectory of running and failed activities reads at a glance in a dense graph.
+ */
+.let-panel {
+  --let-bg: #0b0f14;
+  --let-surface: #141a22;
+  --let-surface-raised: #1a212b;
+  --let-line: #232c39;
+  --let-line-strong: #334155;
+  --let-ink: #e6edf3;
+  --let-ink-soft: #b6c2d1;
+  --let-ink-muted: #8695a8;
+  --let-blue: #3b82f6;
+  --let-ok: #3fb950;
+  --let-active: #58a6ff;
+  --let-attention: #d29922;
+  --let-bad: #f85149;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+  height: 100%;
+  background: var(--let-bg);
+  color: var(--let-ink);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+.let-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 10px 14px;
+  background: var(--let-surface);
+  border-bottom: 1px solid var(--let-line);
+}
+
+.let-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--let-ink-muted);
+  min-width: 0;
+}
+
+.let-picker select {
+  max-width: 420px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--let-ink);
+  background: var(--let-surface-raised);
+  border: 1px solid var(--let-line-strong);
+  border-radius: 6px;
+}
+
+.let-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--let-ink-muted);
+}
+
+.let-meta .btn {
+  background: var(--let-surface-raised);
+  border-color: var(--let-line-strong);
+  color: var(--let-ink-soft);
+}
+
+.let-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--let-active);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.let-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--let-active);
+}
+
+.let-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.let-flow {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 440px;
+}
+
+.let-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 28px;
+  color: var(--let-ink-soft);
+}
+
+.let-state h2 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--let-ink);
+}
+
+.let-state p {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* --- cards --------------------------------------------------------------- */
+.let-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px 8px 12px;
+  font-family: var(--font-sans);
+  background: var(--let-surface);
+  border: 1px solid var(--let-line);
+  border-left: 3px solid var(--let-line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.let-node.is-ok { border-left-color: var(--let-ok); }
+.let-node.is-active { border-left-color: var(--let-active); box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.35); }
+.let-node.is-attention { border-left-color: var(--let-attention); }
+.let-node.is-bad { border-left-color: var(--let-bad); border-color: rgba(248, 81, 73, 0.5); }
+.let-node.is-selected { border-color: var(--let-blue); box-shadow: 0 0 0 1px var(--let-blue); }
+
+.let-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.let-node-kind {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--let-ink-muted);
+}
+
+.let-node-state {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--let-line-strong);
+  color: var(--let-ink-soft);
+  white-space: nowrap;
+}
+
+.let-node-state.is-done { color: var(--let-ok); border-color: rgba(63, 185, 80, 0.45); }
+.let-node-state.is-running { color: var(--let-active); border-color: rgba(88, 166, 255, 0.45); }
+.let-node-state.is-waiting { color: var(--let-attention); border-color: rgba(210, 153, 34, 0.45); }
+.let-node-state.is-failed { color: var(--let-bad); border-color: rgba(248, 81, 73, 0.45); }
+
+.let-node-title {
+  font-size: 12.5px;
+  line-height: 1.25;
+  color: var(--let-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.let-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--let-ink-muted);
+}
+
+.let-node-model {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+.let-node-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.let-node-fold {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--let-ink-soft);
+  background: var(--let-surface-raised);
+  border: 1px solid var(--let-line-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* --- edges --------------------------------------------------------------- */
+.let-edge .react-flow__edge-path {
+  stroke: var(--let-blue);
+  stroke-width: 1.4;
+  opacity: 0.75;
+}
+
+.let-edge.is-depends_on .react-flow__edge-path {
+  stroke-dasharray: 4 3;
+  stroke: var(--let-ink-muted);
+}
+
+.let-edge .react-flow__edge-text {
+  fill: var(--let-ink-muted);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
+.let-edge .react-flow__edge-textbg {
+  fill: var(--let-bg);
+}
+
+.let-panel .react-flow__controls {
+  background: var(--let-surface);
+  border: 1px solid var(--let-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.let-panel .react-flow__controls-button {
+  background: var(--let-surface);
+  border-bottom: 1px solid var(--let-line);
+  color: var(--let-ink-soft);
+  fill: var(--let-ink-soft);
+}
+
+.let-panel .react-flow__minimap {
+  background: var(--let-surface);
+  border: 1px solid var(--let-line);
+  border-radius: 6px;
+}
+
+/* --- detail -------------------------------------------------------------- */
+.let-detail {
+  flex: 0 0 340px;
+  max-width: 42%;
+  padding: 12px 14px;
+  overflow: auto;
+  font-size: 12px;
+  color: var(--let-ink-soft);
+  background: var(--let-surface);
+  border-left: 1px solid var(--let-line);
+}
+
+.let-detail header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.let-detail h3 {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--let-ink);
+}
+
+.let-detail-subtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--let-ink-muted);
+}
+
+.let-detail h4 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--let-ink-muted);
+}
+
+.let-detail .btn {
+  background: var(--let-surface-raised);
+  border-color: var(--let-line-strong);
+  color: var(--let-ink-soft);
+}
+
+.let-detail-grid,
+.let-kv {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.let-detail-grid > div,
+.let-kv > div {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px;
+}
+
+.let-detail-grid dt,
+.let-kv dt {
+  margin: 0;
+  font-size: 11px;
+  color: var(--let-ink-muted);
+}
+
+.let-detail-grid dd,
+.let-kv dd {
+  margin: 0;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--let-ink);
+}
+
+.let-detail-grid dd.is-ok { color: var(--let-ok); }
+.let-detail-grid dd.is-active { color: var(--let-active); }
+.let-detail-grid dd.is-attention { color: var(--let-attention); }
+.let-detail-grid dd.is-bad { color: var(--let-bad); }
+
+.let-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--let-bad);
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-radius: 6px;
+}
+
+.let-evidence {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.let-evidence code {
+  padding: 2px 6px;
+  font-size: 10.5px;
+  color: var(--let-ink);
+  background: var(--let-surface-raised);
+  border: 1px solid var(--let-line);
+  border-radius: 4px;
+}
+
+.let-detail-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--let-attention);
+}
+
+.let-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* --- footer -------------------------------------------------------------- */
+.let-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  font-size: 11px;
+  color: var(--let-ink-muted);
+  background: var(--let-surface);
+  border-top: 1px solid var(--let-line);
+}
+
+.let-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.let-legend-item i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--let-line-strong);
+}
+
+.let-legend-item.is-done i { background: var(--let-ok); }
+.let-legend-item.is-running i { background: var(--let-active); }
+.let-legend-item.is-waiting i { background: var(--let-attention); }
+.let-legend-item.is-failed i { background: var(--let-bad); }
+
+.let-legend-note {
+  color: var(--let-attention);
+}
+
+.let-legend-note.is-quiet {
+  margin-left: auto;
+  color: var(--let-ink-muted);
+}
+
+@media (max-width: 1100px) {
+  .let-body {
+    flex-direction: column;
+  }
+
+  .let-detail {
+    flex: 1 1 auto;
+    max-width: none;
+    max-height: 46%;
+    border-left: none;
+    border-top: 1px solid var(--let-line);
+  }
+
+  .let-panel .react-flow__minimap {
+    display: none;
+  }
+}
+
+.let-node-fallback {
+  padding: 0 5px;
+  font-size: 10px;
+  color: var(--let-attention);
+  border: 1px solid rgba(210, 153, 34, 0.4);
+  border-radius: 4px;
+}

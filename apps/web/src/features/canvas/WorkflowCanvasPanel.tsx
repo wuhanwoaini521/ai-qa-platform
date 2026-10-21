@@ -13,8 +13,9 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExecutionTreePanel } from './ExecutionTreePanel';
 import { IntelligenceSection } from './IntelligenceSection';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
@@ -453,11 +454,50 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
   );
 }
 
-/** Read-only projection of the project's real pipeline records. It never starts anything. */
+/**
+ * Read-only projection of the project's real pipeline records. It never starts anything.
+ *
+ * Two views of the same truth: the pipeline (what the project produced, stage by stage) and the
+ * execution tree (what one task actually ran). Both read the server; neither can trigger work.
+ */
 export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: string; requirementId?: string }) {
+  const { t } = useTranslation('workspace');
+  // The chosen view lives in the URL so a reload (or a shared link) lands on the same one.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode = searchParams.get('canvas') === 'execution' ? 'execution' : 'pipeline';
+  const setMode = (next: 'pipeline' | 'execution') => {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.set('canvas', next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
   return (
-    <ReactFlowProvider>
-      <CanvasSurface projectId={projectId} requirementId={requirementId} />
-    </ReactFlowProvider>
+    <div className="lw-canvas-host">
+      <div className="lw-canvas-modes" role="tablist" aria-label={t('canvas.title')}>
+        {(['pipeline', 'execution'] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={mode === key}
+            className={`lw-canvas-mode${mode === key ? ' is-active' : ''}`}
+            onClick={() => setMode(key)}
+          >
+            {key === 'pipeline' ? t('canvasModes.viewPipeline') : t('canvasModes.viewExecution')}
+          </button>
+        ))}
+      </div>
+      {mode === 'pipeline' ? (
+        <ReactFlowProvider>
+          <CanvasSurface projectId={projectId} requirementId={requirementId} />
+        </ReactFlowProvider>
+      ) : (
+        <ExecutionTreePanel projectId={projectId} />
+      )}
+    </div>
   );
 }

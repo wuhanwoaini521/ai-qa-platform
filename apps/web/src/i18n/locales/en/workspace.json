@@ -739,6 +739,82 @@
             "NOT_GRADED": "Not graded"
           }
         }
-      }
-
+      },
+  "executionTree": {
+  "title": "Execution tree",
+  "task": "Task",
+  "allTasks": "All tasks (each one its own tree)",
+  "live": "Live",
+  "summary": "{{nodes}} nodes · {{roots}} root tasks · {{invocations}} model calls",
+  "refresh": "Refresh",
+  "clearFocus": "Clear focus",
+  "hint": "Click a node for its details, double-click to keep only that branch",
+  "emptyTitle": "No execution trajectory yet",
+  "emptyHint": "Run a task and its real steps, model calls and evidence appear here.",
+  "errorTitle": "The execution trajectory could not be loaded",
+  "retry": "Retry",
+  "unknownHint": "The server cannot confirm: {{fields}}",
+  "parallelHint": "Cards in one column are parallel activities of the same layer",
+  "fallback": "Jev fallback",
+  "unknownValue": "Unknown",
+  "states": {
+    "done": "Done",
+    "running": "Running",
+    "waiting": "Waiting",
+    "failed": "Failed"
+  },
+  "kinds": {
+    "task": "Task",
+    "step": "Step",
+    "invocation": "Model call",
+    "evidence": "Evidence",
+    "artifact": "Artifact",
+    "run": "Run",
+    "suggestion": "Reading"
+  },
+  "links": {
+    "task": "Open task",
+    "run": "Open run",
+    "failure": "Open failure",
+    "approval": "Open approval",
+    "workspace": "Open workspace"
+  },
+  "taskTypes": {
+    "ANALYZE_DISCOVERY": "Discovery intelligence",
+    "FIX_FAILURE": "Failure repair",
+    "EXPLORE_PRODUCT": "Product exploration",
+    "GENERATE_TESTS": "Generate cases",
+    "QA_GOAL": "Quality goal"
+  },
+  "detail": {
+    "title": "Node detail",
+    "close": "Close",
+    "status": "Status",
+    "duration": "Actual duration",
+    "startedAt": "Started",
+    "finishedAt": "Finished",
+    "provider": "Provider",
+    "noProvider": "No model was called",
+    "tokens": "Tokens",
+    "inputTokens": "in {{value}}",
+    "outputTokens": "out {{value}}",
+    "noTokens": "Not metered (the server recorded none)",
+    "cost": "Cost",
+    "unpriced": "Unpriced (no reliable unit price)",
+    "noCost": "Unpriced",
+    "task": "Task",
+    "invocation": "Invocation",
+    "error": "Error",
+    "inputs": "Inputs (redacted)",
+    "outputs": "Outputs (redacted)",
+    "evidence": "Linked evidence",
+    "unknown": "Missing information",
+    "unknownHint": "These fields are absent from the server's record: {{fields}}",
+    "open": "Existing entry points"
+  }
+},
+  "canvasModes": {
+  "viewPipeline": "Workflow",
+  "viewExecution": "Execution tree"
+}
 }

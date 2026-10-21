@@ -122,6 +122,7 @@ import type {
   DiscoveryScenarioCollection,
   WorkflowCanvas,
 } from '../types/workflowCanvas';
+import type { ExecutionTrace } from '../types/executionTrace';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
@@ -920,6 +921,15 @@ export const api = {
       `/projects/${encodeURIComponent(projectId)}/workflow-canvas${
         requirementId ? `?requirement_id=${encodeURIComponent(requirementId)}` : ''
       }`,
+    ),
+
+  /** Read-only execution trajectory of one task: steps, model calls, evidence, artifacts, runs. */
+  getTaskExecutionTrace: (taskId: string) =>
+    request<ExecutionTrace>(`/tasks/${encodeURIComponent(taskId)}/execution-trace`),
+  /** The same projection for the project's most recent tasks, each as its own root. */
+  getProjectExecutionTrace: (projectId: string, limit = 6) =>
+    request<ExecutionTrace>(
+      `/projects/${encodeURIComponent(projectId)}/execution-trace?limit=${limit}`,
     ),
 
   // Projects

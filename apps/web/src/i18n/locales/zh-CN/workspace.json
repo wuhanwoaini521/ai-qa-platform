@@ -739,6 +739,82 @@
             "NOT_GRADED": "未分级"
           }
         }
-      }
-
+      },
+  "executionTree": {
+  "title": "执行树",
+  "task": "任务",
+  "allTasks": "全部任务（每个任务各成一棵树）",
+  "live": "实时",
+  "summary": "节点 {{nodes}} · 顶层任务 {{roots}} · 模型调用 {{invocations}}",
+  "refresh": "刷新",
+  "clearFocus": "取消聚焦",
+  "hint": "单击节点查看详情，双击只保留这一支",
+  "emptyTitle": "还没有可展示的执行轨迹",
+  "emptyHint": "运行一个任务后，这里会按服务端记录展开它的执行步骤、模型调用与证据。",
+  "errorTitle": "执行轨迹加载失败",
+  "retry": "重试",
+  "unknownHint": "服务端无法确认：{{fields}}",
+  "parallelHint": "同一列的卡片是同一层的并行活动",
+  "fallback": "Jev 回退",
+  "unknownValue": "未知",
+  "states": {
+    "done": "已完成",
+    "running": "运行中",
+    "waiting": "等待",
+    "failed": "失败"
+  },
+  "kinds": {
+    "task": "任务",
+    "step": "步骤",
+    "invocation": "模型调用",
+    "evidence": "证据",
+    "artifact": "产物",
+    "run": "运行",
+    "suggestion": "建议"
+  },
+  "links": {
+    "task": "打开任务",
+    "run": "打开运行",
+    "failure": "打开失败记录",
+    "approval": "打开审批",
+    "workspace": "打开工作区"
+  },
+  "taskTypes": {
+    "ANALYZE_DISCOVERY": "Discovery 智能分析",
+    "FIX_FAILURE": "失败修复",
+    "EXPLORE_PRODUCT": "产品探索",
+    "GENERATE_TESTS": "生成用例",
+    "QA_GOAL": "质量目标"
+  },
+  "detail": {
+    "title": "节点详情",
+    "close": "关闭",
+    "status": "状态",
+    "duration": "实际耗时",
+    "startedAt": "开始时间",
+    "finishedAt": "结束时间",
+    "provider": "Provider",
+    "noProvider": "未调用模型",
+    "tokens": "Token",
+    "inputTokens": "输入 {{value}}",
+    "outputTokens": "输出 {{value}}",
+    "noTokens": "未计量（服务端没有记录）",
+    "cost": "费用",
+    "unpriced": "未计价（没有可靠的单价数据）",
+    "noCost": "未计价",
+    "task": "任务",
+    "invocation": "调用",
+    "error": "错误",
+    "inputs": "输入（已脱敏）",
+    "outputs": "输出（已脱敏）",
+    "evidence": "关联证据",
+    "unknown": "缺失信息",
+    "unknownHint": "这些字段在服务端记录里不存在：{{fields}}",
+    "open": "原有入口"
+  }
+},
+  "canvasModes": {
+  "viewPipeline": "工作流",
+  "viewExecution": "执行树"
+}
 }
