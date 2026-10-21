@@ -35,6 +35,17 @@ class TaskDecisionService:
             reserve_task_call=reserve_task_call,
         )
 
+    async def ask_score(self, request, *, task_id: str, run_id: str):
+        async def reserve_task_call() -> bool:
+            return await self.reserve_ai_call(task_id)
+
+        return await DecisionService(repository_scope=self.repository_scope).ask_score(
+            request,
+            task_id=task_id,
+            run_id=run_id,
+            reserve_task_call=reserve_task_call,
+        )
+
     def locator_provider(self, *, budget_available: bool):
         return (
             DecisionService(repository_scope=self.repository_scope)

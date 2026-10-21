@@ -9,10 +9,11 @@ from qa_core.ai.models import (
     AICompletionRequest,
     BrowserAgentPlan,
     CodeAssistantResponse,
+    DiscoveryScenarioAnalysis,
 )
 from qa_core.ai.registry import AIProviderRegistry
 from qa_core.failure.redactor import SensitiveRedactor
-from qa_core.prompts import TASK_CODE_PROMPT
+from qa_core.prompts import DISCOVERY_SUGGESTION_PROMPT, TASK_CODE_PROMPT
 
 from app.domain.task_records import TaskRecord as TaskExecutionRecord
 from app.services.task_errors import TaskBlocked
@@ -171,6 +172,43 @@ class TaskAIService:
                 }
             ],
         }
+
+    async def analyze_discovery_scenario(self, task: TaskExecutionRecord, prompt: str):
+        """One bounded reading of one uncovered scenario; the caller decides what a failure means."""
+        if not await self.reserve_ai_call(task.id):
+            raise TaskBlocked("Task AI-call budget exhausted.")
+        provider = AIProviderRegistry.get_provider()
+        response = await provider.complete(
+            AICompletionRequest(
+                task_id=task.id,
+                run_id=self.context.input(task, "discovery_run_id", None),
+                prompt=prompt,
+                system_instruction=DISCOVERY_SUGGESTION_PROMPT.system_instruction,
+                response_schema=DiscoveryScenarioAnalysis,
+                prompt_id=DISCOVERY_SUGGESTION_PROMPT.prompt_id,
+                prompt_version=DISCOVERY_SUGGESTION_PROMPT.version,
+                timeout_seconds=LONG_GENERATION_TIMEOUT_SECONDS,
+            )
+        )
+        async with self.context.repository_scope() as repositories:
+            fresh = await repositories.tasks.get(task.id)
+            if fresh:
+                await repositories.tasks.add_event(
+                    task.id,
+                    "step.progress",
+                    {
+                        "type": "ai.call",
+                        "ai_run_id": response.invocation_id,
+                        "provider": response.provider,
+                        "model": response.model,
+                        "fallback_used": response.fallback_used,
+                        "duration_ms": response.duration_ms,
+                        "input_tokens": response.input_tokens,
+                        "output_tokens": response.output_tokens,
+                    },
+                )
+                await repositories.commit()
+        return response
 
     async def call_code_ai(self, task: TaskExecutionRecord, prompt: str) -> CodeAssistantResponse:
         if not await self.reserve_ai_call(task.id):

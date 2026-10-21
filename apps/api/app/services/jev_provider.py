@@ -16,6 +16,15 @@ class DecisionProviderError(Exception):
         super().__init__(code)
 
 
+#: Jev rejects a `score` question that carries no scale with a 422, which used to surface as
+#: `invalid_request` and a silent fallback. Every score question declares this scale.
+SCORE_SCALE = [
+    {"value": 0.0, "description": "the lowest possible value"},
+    {"value": 0.5, "description": "a middling value"},
+    {"value": 1.0, "description": "the highest possible value"},
+]
+
+
 class JevDecisionProvider:
     name = "jev"
 
@@ -135,22 +144,25 @@ class JevDecisionProvider:
         return await self._ask_scalar(request, signal_type="score")
 
     async def _ask_scalar(self, request: DecisionSignalRequest, *, signal_type: str) -> DecisionResult:
+        question: dict[str, Any] = {"type": signal_type, "instructions": request.instructions}
+        if signal_type == "score":
+            question["criteria"] = SCORE_SCALE
         body = await self._post(
             {
                 "model": self._model,
                 "state": request.state,
-                "questions": {
-                    request.name: {
-                        "type": signal_type,
-                        "instructions": request.instructions,
-                    }
-                },
+                "questions": {request.name: question},
             }
         )
         try:
             answer = self._answer(body, request.name, signal_type)
             value_keys = ("probability", "noul", "value") if signal_type == "noul" else ("score", "value")
-            value = next((self._unit_interval(answer.get(key)) for key in value_keys if key in answer), None)
+            raw = next((answer.get(key) for key in value_keys if key in answer), None)
+            if signal_type == "score":
+                # Jev answers a score as the expected *index* on the scale it was given, so a 3-point
+                # scale returns 0..2 (observed 1.17). Normalise it back onto 0..1.
+                raw = self._rescale(raw, len(SCORE_SCALE))
+            value = self._unit_interval(raw)
             if value is None:
                 raise ValueError("missing signal value")
             return DecisionResult(
@@ -171,6 +183,19 @@ class JevDecisionProvider:
         if not isinstance(answer, dict) or answer.get("type") != expected_type:
             raise ValueError("missing answer")
         return answer
+
+    @staticmethod
+    def _rescale(value: Any, points: int) -> float | None:
+        """Map an expected index on a `points`-long scale onto 0..1."""
+        if isinstance(value, bool) or value is None or points < 2:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed):
+            return None
+        return min(1.0, max(0.0, parsed / (points - 1)))
 
     @staticmethod
     def _unit_interval(value: Any) -> float | None:

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from project_model.models import Permission, User, UserRole
-from project_model.task_models import Task
+from project_model.task_models import Task, TaskCreate, TaskType
+from pydantic import BaseModel
 
 from app.api.authz import get_current_user, require_permission
 from app.api.project_acl import (
@@ -11,13 +14,24 @@ from app.api.project_acl import (
     enforce_project_access,
     project_query_access,
 )
-from app.container import get_discovery_evidence_service, get_quality_discovery_service
+from app.api.tasks import get_task_command_service
+from app.container import (
+    get_discovery_evidence_service,
+    get_discovery_intelligence_service,
+    get_quality_discovery_service,
+)
 from app.services.discovery_evidence_service import DiscoveryEvidenceNotFound, DiscoveryEvidenceService
+from app.services.discovery_intelligence_service import (
+    DiscoveryIntelligenceService,
+    DiscoverySuggestionError,
+    DiscoverySuggestionNotFound,
+)
 from app.services.quality_discovery_service import (
     DiscoveryRunCreate,
     QualityDiscoveryService,
     discovery_run_dict,
 )
+from app.services.task_command_service import TaskCommandService
 
 router = APIRouter(
     prefix="/discovery",
@@ -366,3 +380,113 @@ async def refresh_discovery_scenarios(
         return await service.refresh_scenarios(run_id)
     except DiscoveryEvidenceNotFound as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+class DiscoveryIntelligenceRequest(BaseModel):
+    """A request to read the unsettled scenarios; the bound task owns the work."""
+
+    mode: str = "analyze"
+    scenario_ids: list[str] = []
+
+
+@router.get("/runs/{run_id}/suggestions")
+async def list_discovery_suggestions(
+    run_id: str,
+    _user: User = Depends(get_current_user),
+    service: DiscoveryIntelligenceService = Depends(get_discovery_intelligence_service),
+):
+    """Every model-assisted reading of this run, with the rule verdict it never replaces."""
+    try:
+        return await service.suggestions_for(run_id)
+    except DiscoverySuggestionNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/suggestions/summary")
+async def get_discovery_suggestion_summary(
+    run_id: str,
+    _user: User = Depends(get_current_user),
+    service: DiscoveryIntelligenceService = Depends(get_discovery_intelligence_service),
+):
+    try:
+        return await service.summary(run_id)
+    except DiscoverySuggestionNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/runs/{run_id}/suggestions/{suggestion_id}")
+async def get_discovery_suggestion(
+    run_id: str,
+    suggestion_id: str,
+    _user: User = Depends(get_current_user),
+    service: DiscoveryIntelligenceService = Depends(get_discovery_intelligence_service),
+):
+    try:
+        return await service.detail(run_id, suggestion_id)
+    except DiscoverySuggestionNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+class SuggestionReviewRequest(BaseModel):
+    decision: str
+    comment: str = ""
+    case_ids: list[str] = []
+
+
+@router.post("/runs/{run_id}/suggestions/{suggestion_id}/review")
+async def review_discovery_suggestion(
+    run_id: str,
+    suggestion_id: str,
+    data: SuggestionReviewRequest,
+    user: User = Depends(get_current_user),
+    service: DiscoveryIntelligenceService = Depends(get_discovery_intelligence_service),
+):
+    """Accept, reject, link or approve a case — the only path from a suggestion to a test case."""
+    await require_permission(Permission.RUN_EXECUTE)(user)
+    try:
+        return await service.review(
+            run_id,
+            suggestion_id,
+            decision=data.decision,
+            actor_id=str(user.id),
+            comment=data.comment,
+            case_ids=data.case_ids,
+        )
+    except DiscoverySuggestionNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DiscoverySuggestionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/runs/{run_id}/intelligence", status_code=status.HTTP_202_ACCEPTED)
+async def request_discovery_intelligence(
+    run_id: str,
+    data: DiscoveryIntelligenceRequest | None = None,
+    user: User = Depends(get_current_user),
+    service: DiscoveryIntelligenceService = Depends(get_discovery_intelligence_service),
+    commands: TaskCommandService = Depends(get_task_command_service),
+):
+    """Start (or reuse) the bounded analysis task; an identical request never starts a second one."""
+    await require_permission(Permission.RUN_EXECUTE)(user)
+    run = await service.discovery.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Discovery run not found")
+    reused = await service.live_task(run.project_id, run_id)
+    if reused:
+        return reused
+    rerun = bool(data and data.mode == "reanalyze")
+    scenario_ids = list(data.scenario_ids if data else [])[:5]
+    task = await commands.create(
+        TaskCreate(
+            type=TaskType.ANALYZE_DISCOVERY,
+            goal=f"Read the unsettled scenarios of {run_id} and propose what a human should review.",
+            project_id=run.project_id,
+            inputs={
+                "discovery_run_id": run_id,
+                "scenario_ids": scenario_ids,
+                **({"reanalyze_token": uuid4().hex} if rerun else {}),
+            },
+        ),
+        str(user.id),
+    )
+    return {"task_id": task.id, "status": task.status, "reused": False}

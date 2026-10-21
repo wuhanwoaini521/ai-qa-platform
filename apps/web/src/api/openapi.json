@@ -6871,6 +6871,254 @@
         }
       }
     },
+    "/api/discovery/runs/{run_id}/suggestions": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "List Discovery Suggestions",
+        "description": "Every model-assisted reading of this run, with the rule verdict it never replaces.",
+        "operationId": "list_discovery_suggestions_api_discovery_runs__run_id__suggestions_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/suggestions/summary": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Get Discovery Suggestion Summary",
+        "operationId": "get_discovery_suggestion_summary_api_discovery_runs__run_id__suggestions_summary_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/suggestions/{suggestion_id}": {
+      "get": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Get Discovery Suggestion",
+        "operationId": "get_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Suggestion Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/suggestions/{suggestion_id}/review": {
+      "post": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Review Discovery Suggestion",
+        "description": "Accept, reject, link or approve a case — the only path from a suggestion to a test case.",
+        "operationId": "review_discovery_suggestion_api_discovery_runs__run_id__suggestions__suggestion_id__review_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Suggestion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestionReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery/runs/{run_id}/intelligence": {
+      "post": {
+        "tags": [
+          "Quality Discovery"
+        ],
+        "summary": "Request Discovery Intelligence",
+        "description": "Start (or reuse) the bounded analysis task; an identical request never starts a second one.",
+        "operationId": "request_discovery_intelligence_api_discovery_runs__run_id__intelligence_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DiscoveryIntelligenceRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/releases": {
       "get": {
         "tags": [
@@ -13515,6 +13763,93 @@
         "title": "DiscoveryEvidenceRef",
         "description": "One captured exploration artefact, addressed per discovery node.\n\n``id`` is stable across polls so a later round can attach more collections to the\nsame node without renumbering anything."
       },
+      "DiscoveryIntelligenceMetrics": {
+        "properties": {
+          "suggestions": {
+            "type": "integer",
+            "title": "Suggestions",
+            "default": 0
+          },
+          "pending_review": {
+            "type": "integer",
+            "title": "Pending Review",
+            "default": 0
+          },
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted",
+            "default": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected",
+            "default": 0
+          },
+          "linked": {
+            "type": "integer",
+            "title": "Linked",
+            "default": 0
+          },
+          "created_cases": {
+            "type": "integer",
+            "title": "Created Cases",
+            "default": 0
+          },
+          "insufficient": {
+            "type": "integer",
+            "title": "Insufficient",
+            "default": 0
+          },
+          "ungrounded_rejected": {
+            "type": "integer",
+            "title": "Ungrounded Rejected",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "degraded": {
+            "type": "integer",
+            "title": "Degraded",
+            "default": 0
+          },
+          "jev_graded": {
+            "type": "integer",
+            "title": "Jev Graded",
+            "default": 0
+          },
+          "jev_fallback": {
+            "type": "integer",
+            "title": "Jev Fallback",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "DiscoveryIntelligenceMetrics",
+        "description": "What the model-assisted reading layer holds, counted once from the stored readings.\n\n``jev_graded`` counts readings Jev actually scored; a fallback is counted separately so no\nconsumer can mistake it for a Jev success."
+      },
+      "DiscoveryIntelligenceRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "analyze"
+          },
+          "scenario_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scenario Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "DiscoveryIntelligenceRequest",
+        "description": "A request to read the unsettled scenarios; the bound task owns the work."
+      },
       "DiscoveryMetrics": {
         "properties": {
           "states": {
@@ -13566,6 +13901,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DiscoveryEvidenceMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "intelligence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscoveryIntelligenceMetrics"
               },
               {
                 "type": "null"
@@ -20625,6 +20970,32 @@
         ],
         "title": "StreamTicketRequest"
       },
+      "SuggestionReviewRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "default": ""
+          },
+          "case_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Case Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "SuggestionReviewRequest"
+      },
       "SuiteExecutionResult": {
         "properties": {
           "exit_code": {
@@ -21696,6 +22067,7 @@
           "OPTIMIZE_TEST",
           "EXPLORE_PAGE",
           "EXPLORE_PRODUCT",
+          "ANALYZE_DISCOVERY",
           "RUN_REGRESSION",
           "REVIEW_TEST"
         ],

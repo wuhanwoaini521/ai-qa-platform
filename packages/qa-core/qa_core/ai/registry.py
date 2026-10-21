@@ -37,17 +37,24 @@ class AIProviderRegistry:
         provider = cls._build_provider(name, api_key)
         return cls._middleware(provider) if cls._middleware else provider
 
+    DEFAULT_CONFIG: dict[str, str] = {
+        "enabled": "true",
+        "provider": "fake",
+        "api_key": "",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "timeout": "30.0",
+        "max_retries": "3",
+    }
+
+    @classmethod
+    def runtime_values(cls) -> dict[str, str]:
+        """The effective provider values in force, for display and cache keys."""
+        return dict(cls._runtime_config or cls.DEFAULT_CONFIG)
+
     @classmethod
     def _build_provider(cls, name: str | None = None, api_key: str | None = None) -> AIProvider:
-        config = cls._runtime_config or {
-            "enabled": "true",
-            "provider": "fake",
-            "api_key": "",
-            "base_url": "https://api.openai.com/v1",
-            "model": "gpt-4o-mini",
-            "timeout": "30.0",
-            "max_retries": "3",
-        }
+        config = cls.runtime_values()
         if config.get("enabled", "true").lower() != "true":
             raise RuntimeError("AI provider is disabled by the effective AppConfig")
         provider_name = (name or config.get("provider", "fake")).lower()

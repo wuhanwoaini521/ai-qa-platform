@@ -813,6 +813,51 @@ class DiscoveryScenarioORM(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
+class DiscoverySuggestionORM(Base):
+    """A model-assisted reading of one uncovered scenario, kept away from the rule verdict.
+
+    The deterministic scenario row stays the truth about coverage; a suggestion only adds reasoning,
+    the evidence it read and a review verdict, so nothing here can overwrite what the rules decided.
+    """
+
+    __tablename__ = "discovery_suggestions"
+    __table_args__ = (
+        UniqueConstraint("run_id", "scenario_id", "input_hash", name="uq_discovery_suggestions_input"),
+        Index("ix_discovery_suggestions_run_review", "run_id", "review_status"),
+        Index("ix_discovery_suggestions_run_status", "run_id", "analysis_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("quality_discovery_runs.id", ondelete="CASCADE"), index=True
+    )
+    suggestion_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    scenario_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(20), default="ai")
+    provider: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    analysis_status: Mapped[str] = mapped_column(String(30), default="COMPLETED", index=True)
+    review_status: Mapped[str] = mapped_column(String(30), default="PENDING", index=True)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    invocation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    evidence_ids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    related_case_ids: Mapped[list[str]] = mapped_column(JsonList, default=list)
+    payload: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    jev: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    review: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    token_source: Mapped[str] = mapped_column(String(20), default="unknown")
+    error_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
 class TaskORM(Base):
     """Durable user goal. Test runs and worker jobs remain execution resources below a task."""
 

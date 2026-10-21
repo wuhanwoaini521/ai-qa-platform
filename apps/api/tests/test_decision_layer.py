@@ -91,13 +91,15 @@ async def test_jev_provider_sends_dynamic_choice_request_and_normalizes_response
 
 
 @pytest.mark.parametrize(
-    ("signal_type", "answer", "value_field"),
+    ("signal_type", "answer", "value_field", "expected"),
     [
-        ("noul", {"type": "noul", "probability": 0.87, "confidence": 0.93}, "probability"),
-        ("score", {"type": "score", "score": 0.74, "confidence": 0.91}, "score"),
+        ("noul", {"type": "noul", "probability": 0.87, "confidence": 0.93}, "probability", 0.87),
+        # Jev reports a score as the expected index on the scale it was given (0..2 for three points),
+        # so an answer of 1.5 is the middle of the scale and must arrive as 0.75.
+        ("score", {"type": "score", "score": 1.5, "confidence": 0.91}, "score", 0.75),
     ],
 )
-async def test_jev_provider_asks_scalar_signal_question(monkeypatch, signal_type, answer, value_field):
+async def test_jev_provider_asks_scalar_signal_question(monkeypatch, signal_type, answer, value_field, expected):
     stub = StubClient(
         StubResponse(
             200,
@@ -113,12 +115,20 @@ async def test_jev_provider_asks_scalar_signal_question(monkeypatch, signal_type
     result = await (provider.ask_probability(request) if signal_type == "noul" else provider.ask_score(request))
 
     _url, args = stub.request_args
+    question = {"type": signal_type, "instructions": "Score it"}
+    if signal_type == "score":
+        # Jev answers 422 to a score question without a scale, so the request must carry one.
+        question["criteria"] = [
+            {"value": 0.0, "description": "the lowest possible value"},
+            {"value": 0.5, "description": "a middling value"},
+            {"value": 1.0, "description": "the highest possible value"},
+        ]
     assert args["json"] == {
         "model": "jev-1.13.0",
         "state": {"candidate": "observed"},
-        "questions": {"signal": {"type": signal_type, "instructions": "Score it"}},
+        "questions": {"signal": question},
     }
-    assert getattr(result, value_field) == answer[value_field]
+    assert getattr(result, value_field) == expected
     assert result.confidence == answer["confidence"]
     assert result.usage == {"input_tokens": 9, "output_tokens": 2}
 

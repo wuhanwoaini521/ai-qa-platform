@@ -166,6 +166,33 @@ class CodeAssistantResponse(BaseModel):
     fallback_used: bool = False
 
 
+class DiscoverySuggestionStep(BaseModel):
+    """One step a human may adopt; the server never turns it into a case without approval."""
+
+    action: str = Field(default="", max_length=60)
+    target: str = Field(default="", max_length=200)
+    expectation: str = Field(default="", max_length=300)
+
+
+class DiscoveryScenarioAnalysis(BaseModel):
+    """What the model may say about one uncovered scenario, checked field by field by the server.
+
+    Every `evidence_ids` entry must already exist for the run and every `related_test_case_ids`
+    entry must exist in the project; a reference the server cannot resolve rejects the whole answer.
+    """
+
+    is_gap: bool = True
+    summary: str = Field(default="", max_length=400)
+    reasoning: str = Field(default="", max_length=1200)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    related_test_case_ids: list[str] = Field(default_factory=list, max_length=10)
+    suggested_title: str = Field(default="", max_length=200)
+    suggested_steps: list[DiscoverySuggestionStep] = Field(default_factory=list, max_length=10)
+    uncertainty: str = Field(default="", max_length=400)
+    needs_human_review: bool = True
+    risk: Literal["low", "medium", "high"] = "medium"
+
+
 class BrowserActionCandidate(BaseModel):
     """One proposed action tied to a control in the current browser observation."""
 

@@ -23,6 +23,7 @@ from app.services.task_ai_service import TaskAIService
 from app.services.task_browser_executor import TaskBrowserExecutor
 from app.services.task_code_generation_service import TaskCodeGenerationService
 from app.services.task_decision_service import TaskDecisionService
+from app.services.task_discovery_intelligence import TaskDiscoveryIntelligenceService
 from app.services.task_errors import ApprovalRequired, TaskBlocked, TaskCancelled
 from app.services.task_evidence_service import TaskEvidenceService
 from app.services.task_execution_ports import TaskExecutionPorts
@@ -144,6 +145,9 @@ class TaskExecutionOrchestrator:
         self.evidence_service = TaskEvidenceService(self.execution_ports)
         self.code_generation = TaskCodeGenerationService(self.execution_ports)
         self.goal_service = TaskGoalService(self.execution_ports)
+        self.discovery_intelligence = TaskDiscoveryIntelligenceService(
+            self.execution_ports, ai_service=self.ai_service, decision_service=self.decision_service
+        )
 
     async def _load(self, task_id: str) -> tuple[TaskExecutionRecord | None, list[TaskStep]]:
         async with self.repository_scope() as repositories:
@@ -531,6 +535,10 @@ class TaskExecutionOrchestrator:
             "browser.agent": self.browser_executor._browser_agent,
             "browser.verify": self.browser_executor._browser_verify,
             "discovery.run": self._run_discovery_loop,
+            "discovery.collect_gaps": self.discovery_intelligence._collect_gaps,
+            "discovery.analyze_gaps": self.discovery_intelligence._analyze_gaps,
+            "discovery.grade_gaps": self.discovery_intelligence._grade_suggestions,
+            "discovery.summarize_gaps": self.discovery_intelligence._summarize_task,
             "decision.select_candidate": self.browser_executor._decision_select,
             "tests.generate": self.code_generation._generate_test,
             "source.validate_generated": self.code_generation._validate_generated,

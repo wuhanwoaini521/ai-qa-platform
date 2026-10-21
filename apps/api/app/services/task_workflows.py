@@ -70,6 +70,12 @@ def build_plan(task_type: TaskType) -> list[TaskStepSpec]:
         TaskType.EXPLORE_PRODUCT: [
             ("explore", "运行有界的产品探索循环并持久化证据", "discovery.run", (), {}),
         ],
+        TaskType.ANALYZE_DISCOVERY: [
+            ("collect", "Collect the unsettled scenarios and the evidence they cite", "discovery.collect_gaps", (), {}),
+            ("analyze", "Ask the model to read each unsettled scenario", "discovery.analyze_gaps", ("collect",), {}),
+            ("grade", "Grade evidence sufficiency and record its source", "discovery.grade_gaps", ("analyze",), {}),
+            ("finalize", "Summarise what needs a human decision", "discovery.summarize_gaps", ("grade",), {}),
+        ],
         TaskType.RUN_REGRESSION: [
             ("resolve", "Resolve requested regression cases", "tests.resolve", (), {}),
             ("run", "Execute regression scope", "tests.run_regression", ("resolve",), {}),

@@ -15,6 +15,7 @@ from app.repositories.ai_repo import AIRepository
 from app.repositories.api_key_repo import ApiKeyRepository
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
+from app.repositories.discovery_suggestion_repo import DiscoverySuggestionRepository
 from app.repositories.failure_repo import FailureRepository
 from app.repositories.integration_audit_repo import IntegrationAuditRepository
 from app.repositories.project_access_repo import ProjectAccessRepository
@@ -45,6 +46,7 @@ from app.services.debug_session_service import debug_session_service
 from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 from app.services.discovery_evidence_service import DiscoveryEvidenceService
+from app.services.discovery_intelligence_service import DiscoveryIntelligenceService
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
 from app.services.golden_demo_service import GoldenDemoService
@@ -183,6 +185,16 @@ def get_discovery_evidence_service(session: AsyncSession = Depends(get_db)) -> D
         evidence=DiscoveryEvidenceRepository(session),
         discovery=QualityDiscoveryRepository(session),
         cases=TestCaseRepository(session),
+    )
+
+
+def get_discovery_intelligence_service(session: AsyncSession = Depends(get_db)) -> DiscoveryIntelligenceService:
+    return DiscoveryIntelligenceService(
+        discovery=QualityDiscoveryRepository(session),
+        evidence=DiscoveryEvidenceRepository(session),
+        suggestions=DiscoverySuggestionRepository(session),
+        tasks=TaskRepository(session),
+        test_cases=TestCaseRepository(session),
     )
 
 
@@ -438,6 +450,7 @@ def get_workflow_canvas_service(
         workflow=workflow,
         discovery=QualityDiscoveryRepository(session),
         evidence=DiscoveryEvidenceRepository(session),
+        suggestions=DiscoverySuggestionRepository(session),
         bindings=bindings,
     )
 

@@ -29,6 +29,9 @@ class RepositoryScope(Protocol):
     runner_profiles: Any
     workers: Any
     golden_demo: Any
+    discovery: Any
+    discovery_evidence: Any
+    discovery_suggestions: Any
 
     async def commit(self) -> None: ...
 

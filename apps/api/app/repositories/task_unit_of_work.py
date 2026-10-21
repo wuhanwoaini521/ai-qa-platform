@@ -11,6 +11,8 @@ from app.repositories.ai_provider_settings_repo import AIProviderSettingsReposit
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.breakpoint_repo import BreakpointRepository
 from app.repositories.browser_session_repo import BrowserSessionRepository
+from app.repositories.discovery_evidence_repo import DiscoveryEvidenceRepository
+from app.repositories.discovery_suggestion_repo import DiscoverySuggestionRepository
 from app.repositories.failure_analysis_repo import FailureAnalysisRepository
 from app.repositories.failure_repo import FailureRepository
 from app.repositories.golden_demo_repo import GoldenDemoRepository
@@ -18,6 +20,7 @@ from app.repositories.job_repo import JobRepository
 from app.repositories.locator_history_repo import LocatorHistoryRepository
 from app.repositories.locator_repair_repo import LocatorRepairRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.task_evidence_repo import TaskEvidenceRepository
@@ -55,6 +58,9 @@ class TaskRepositoryUnitOfWork:
         self.runner_profiles = RunnerProfileRepository(lambda: session)
         self.workers = WorkerRepository(session)
         self.golden_demo = GoldenDemoRepository(session)
+        self.discovery = QualityDiscoveryRepository(session)
+        self.discovery_evidence = DiscoveryEvidenceRepository(session)
+        self.discovery_suggestions = DiscoverySuggestionRepository(session)
         self._session = session
 
     async def commit(self) -> None:
