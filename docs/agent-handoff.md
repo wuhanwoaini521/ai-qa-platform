@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 15 —— Structured Discovery & Evidence Intelligence（用户任务 m02941，分支 `audit-remaining-blockers`，记录见 §3.12，数据契约 `docs/DISCOVERY_EVIDENCE.md`，真实验收 `.ai-runs/e2e-round15/acceptance.json`）。** 本轮把 Discovery 从「探索并生成结果」升级为「采集结构化事实 → 确定性去重/关联 → 增量对比 → 证据到候选场景到用例的追踪」，并把指标接进既有画布节点详情；不新增执行能力、不做 AI 判定。3 笔代码提交 + 本文档提交；真实 Chromium 21/21、`console_errors: []`；前端 201 pass；后端全量见 §9。
+**当前活动轮次：Round 16 —— Evidence-Driven AI/Jev Intelligence（用户任务 m03748，分支 `audit-remaining-blockers`，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
+
+**Round 15（上一轮，用户任务 m02941，分支 `audit-remaining-blockers`，记录见 §3.12，数据契约 `docs/DISCOVERY_EVIDENCE.md`，真实验收 `.ai-runs/e2e-round15/acceptance.json`）。** 本轮把 Discovery 从「探索并生成结果」升级为「采集结构化事实 → 确定性去重/关联 → 增量对比 → 证据到候选场景到用例的追踪」，并把指标接进既有画布节点详情；不新增执行能力、不做 AI 判定。5 笔代码提交 + 本文档提交；真实 Chromium 21/21、`console_errors: []`；前端 201 pass；后端全量见 §9。
 
 **Round 14（上一轮，用户任务 m02243，分支 `audit-remaining-blockers`，记录见 §3.11，真实验收 `.ai-runs/e2e-round14/canvas-acceptance.json`）。** 本轮在既有 Workspace 内用 React Flow 把真实记录投影成一条只读流水线（发现 → 录制 → 编辑 → 运行 → 失败 → 分析 → 人工批准 → 精确验证），不新增执行能力、不改 Recorder/Studio/修复链。2 笔提交（`9fd04df` 后端投影层、`bf9b5c2` 前端画布）+ 本文档提交；真实浏览器 16/16、`console_errors: []`。
 
@@ -38,12 +40,16 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | 项 | 值 |
 | --- | --- |
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
-| 当前 HEAD | `589e6ab`（Round 15 的 4 笔代码改动：`8fd6160` 证据层、`d2af796` 画布指标、`e9f2951` 元素链接修正、`589e6ab` 采集会话收进仓储；本文档提交在其后） |
+| Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
+| 当前 HEAD | `c4075a1`（Round 16 的 7 笔：`b6d635a` 分析与分级、`8af0de4` 画布视图、`84b2163` 通用 locator 修正、`a7bbaf4` 设计文档、`7fb03d3` 画布测试、`582f5c9` OpenAPI 导出、`c4075a1` 仓储格式化；本文档提交在其后） |
+| Round 16 提交数 | 6 代码/文档提交 + 本文档提交 |
+| Round 15 提交数 | 5（`8fd6160` 证据层、`d2af796` 画布指标、`e9f2951` 元素链接修正、`589e6ab` 采集会话收进仓储、`6e8709b` 文档） |
 | Round 14 提交数 | 2（`9fd04df` 后端只读投影层、`bf9b5c2` 前端画布）+ 本文档提交 |
 | 历史起点（Round 12/13） | `5849b5f docs(handoff): record the Round 11 final regression and its verdict` |
 | Round 13 提交数 | 4（`0cc6abd` 统一修复链、`800bc5d` 录制入口与录制步骤、`99a2509` 上下文与文案一致性、`32f22a3` 用例把上下文交给录制器） |
 | 工作树 | 干净；仅未跟踪的 `.ai-runs/**` 验收证据与 `runtime/backups/`（保留、不暂存、不提交） |
-| 迁移 | Round 14 无新迁移（画布是只读投影，不新增表） |
+| 迁移 | `0016_discovery_evidence`（Round 15）→ `0017_discovery_suggestions`（Round 16，只加一张表，可降级） |
+| Round 16 关键提交 | `b6d635a` AI 分析 + Jev 分级 + 审核 API（迁移 0017）；`8af0de4` 画布 Evidence Intelligence 视图；`84b2163` 通用 role locator 不再当作覆盖证据 |
 | Round 14 关键提交 | `9fd04df` 只读投影层 + ACL + 截断；`bf9b5c2` 阶段列画布、节点详情与证据、窄视口从第一阶段起、URL 指定文件优先于未绑定空态 |
 | Round 12 关键提交 | `860f4f2` 用户停止探索 → `CANCELLED`（原 `BLOCKED`）；`abe6a2a` 启动时回收死进程留下的 `RUNNING` AI 调用；`2eb6901` 启动器不再把 `TIME_WAIT` 当端口占用（新增 `test_dev_launcher_ports.py`） |
 | Round 11 关键提交（历史） | `5eb2376` 分析收敛到持久化终态；`7aac715` 失败页恢复/取消/说明；`e460213` SQLite WAL（长 SSE 不再阻塞写者）；`7b82832` 工作台跟随/取消分析；`32a5b19` 生命周期回归测试；`ffa7ad2` 浏览器会话在标签页关闭后存活；`6a851ac` 失败源文件:行号（迁移 0014）；`c74789f` 工作台外上下文连续；`507c59d` 录制步骤进入 Studio；`e1f3fdb` Discovery 接入 TaskRuntimeService；`2d642e3` 无页面对象引导；`df4d709` 长生成超时；`19f7e33` 产物项目隔离（迁移 0015）；`edcde0a` 探索网络请求观察；`31450a3`/`2ab2874` 覆盖率口径统一；`bf8aa31` 恢复脚本目标库与快照；`62a2f06` 文档；`be6ec64` 评审三条 finding 修复；`89eb5ed` 暂停任务回队列 + 暂停运行无副作用（评审复评 A/B/D） |
@@ -620,6 +626,56 @@ PostgreSQL 18.6 监听 `127.0.0.1:55432`（datadir `/tmp/pgdata-aiqa`，socket `
 - 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
 
 
+## 3.13 Round 16（Evidence-Driven AI/Jev Intelligence，用户任务 m03748）
+
+用户任务 m03748：让 AI/Jev 基于 Round 15 的真实结构化证据，只对确定性规则无法判定的场景做语义分析，产出可追溯、可审核的测试建议。起点 `6e8709b`。设计文档 `docs/DISCOVERY_INTELLIGENCE.md`。
+
+### 交付
+
+| 层 | 位置 |
+| --- | --- |
+| 响应契约 | `packages/qa-core/qa_core/ai/models.py`（`DiscoveryScenarioAnalysis` / `DiscoverySuggestionStep`） |
+| Prompt | `packages/qa-core/qa_core/prompts/__init__.py`（`discovery_suggestion@v1.0`，已入 `PROMPT_REGISTRY`） |
+| 存储 | `apps/api/app/persistence/models.py`（`discovery_suggestions`）+ 迁移 `0017_discovery_suggestions` |
+| 仓储 | `apps/api/app/repositories/discovery_suggestion_repo.py`（`upsert_many` 幂等、`latest_by_scenario`、`set_review`） |
+| 任务服务 | `apps/api/app/services/task_discovery_intelligence.py`（`collect` / `analyze` / `grade` / `finalize`；工具 `discovery.collect_gaps` 等四个） |
+| 检索与审核 | `apps/api/app/services/discovery_intelligence_service.py`（建议、摘要、详情、审核决定、批准建用例、复用 live 任务） |
+| 任务类型 | `TaskType.ANALYZE_DISCOVERY` + `apps/api/app/services/task_workflows.py` 四步计划 + orchestrator dispatch |
+| API | `apps/api/app/api/quality_discovery.py`：`POST .../intelligence`(202)、`GET .../suggestions`、`.../suggestions/summary`、`.../suggestions/{id}`、`POST .../suggestions/{id}/review` |
+| 画布指标 | `packages/project-model/project_model/workflow_canvas.py`（`DiscoveryIntelligenceMetrics`）+ `apps/api/app/services/workflow_canvas_service.py` |
+| 前端 | `apps/web/src/features/canvas/IntelligenceSection.tsx`、`WorkflowCanvasPanel.tsx`、`canvasModel.ts`（卡片上的「AI 建议 n · 待审核 n · Jev 已评分 n」） |
+| 测试 | `apps/api/tests/test_discovery_intelligence.py`（17）、`test_decision_layer.py`（32，含真实 provider/Jev 用例）、`test_workflow_canvas.py`（7）、`apps/web/tests/canvas-model.test.mjs` |
+
+### 关键设计（为什么这样做）
+
+- **建议层独立成表**：`discovery_scenarios.coverage_status` 始终是规则结论，AI 读入写在 `discovery_suggestions`，两者各自可追溯；`refresh_scenarios` 全量替换场景表时不会抹掉 AI 历史与人工审核记录。
+- **只分析未决场景**：默认只取 `CANDIDATE_GAP` / `UNDETERMINED`，`COVERED` 不被模型重审；每次任务最多 `MAX_SCENARIOS_PER_TASK = 5` 个场景、每场景最多 12 条证据 / 12 条候选用例进入 prompt，截断如实写进 prompt 并记在 payload。
+- **引用必须回查数据库**：`evidence_ids` 不在本 run 真实行内 → `REJECTED / UNKNOWN_EVIDENCE`；`related_test_case_ids` 不在本项目 → `REJECTED / UNKNOWN_TEST_CASE`；两种情况都不落任何建议文本。
+- **降级不落文本**：`fallback_used` 或 provider 为 `fake`/`fallback` → `DEGRADED`，payload 无摘要无标题，假 provider 无法作者化任何建议。
+- **幂等**：`input_hash` 由场景+规则结论+引用证据+候选用例+provider+model+prompt 版本+重分析 token 生成，唯一键 `(run_id, scenario_id, input_hash)`；同一输入重复请求只 `attempts += 1`，不重复计费；显式重分析产生新行而不覆盖旧行。
+- **Jev 分数归一化**（本轮修掉的真缺陷）：Jev 的 `score` 是所给刻度的**期望索引**（三点刻度返回 `1.17`），原实现按 0..1 校验 → 每次打分都是 `invalid_request`（Round 12 遗留 FALLBACK 的根因）。现在 `JevDecisionProvider._rescale` 映射回 0..1，实测 `score 0.505 / confidence 0.90`。
+- **分级来源与失败语义分开**：`JEV_GRADED`（接受 Jev 分数）/ `JEV_LOW_CONFIDENCE`（答了但低于 `jev.minimum_confidence`）/ `JEV_TIMEOUT` / `JEV_FALLBACK` / `JEV_UNAVAILABLE` / `NOT_REQUESTED`，`source` 只有 `jev` 或 `rules`，`calibrated` 恒 `false`；规则分级（`insufficient`/`thin`/`sufficient`）始终与 Jev 数字并列记录。
+- **人工审核复用现有闸门**：`ACCEPT` / `REJECT`（必须写原因）/ `LINK_CASE` / `APPROVE_CREATE_CASE`（幂等，已建过就返回同一 id）/ `REANALYZE`；未批准不写 `test_cases`、不改自动化源码；审核记录写决定、操作者、时间、原因。
+
+### 真实验收（`.ai-runs/e2e-round16/acceptance.json`，`console_errors: []`）
+
+真实 Chromium + 真实 `mimo-v2.6-flash` + 真实 `jev-1.13.0`，可控页 `discovery-fixture.html` / `-b.html` / `-c.html`：**28/28 PASS**，A–H 八种场景全部覆盖（已有用例 → `COVERED` 不被重审；真实行为无用例 → `CANDIDATE_GAP` 建议；同义不同措辞 → `target_wording` 命中；证据不足 → `INSUFFICIENT_EVIDENCE` 不调模型；Provider 失败/超时 → `DEGRADED`/`JEV_TIMEOUT`；伪造 evidence_id → `REJECTED`；拒绝后重分析 → 新行且旧行保留；重复请求/刷新 → 复用任务与行）。
+
+### 本轮修掉的真缺陷
+
+- **Jev 打分全失败**：`score` 未按刻度归一化 → 一律 `invalid_request`；修复后真实分数入档。
+- **降级原因被压平**：低置信度、超时、不可用都显示成「Jev 不可用」；现在分开。
+- **通用 role locator 假覆盖**：`role=button` 的 value 就是 `button`，几乎命中所有用例 → 把真实缺口判成 `COVERED`；`GENERIC_LOCATOR_VALUES` 改为用 accessible name 匹配。
+- **fixture 页未放行**：受控页需加入 `PUBLIC_PATHS` 并有路由，否则浏览器运行时拿不到页面（401）。
+
+### 本轮未做（有意）
+
+- 不做执行树 UI；`agent_tasks` 没有 parent 列、也没有 cost 数据，Round 16.5 需先在运行时层补真实父子关系（映射见 `docs/DISCOVERY_INTELLIGENCE.md` §7）。
+- 审核反馈只作为记录保存，不回写全局匹配规则、不自动调参。
+- 不新建第二套 Provider/任务状态机；不重构既有 workflow 引擎。
+- 多实例一致性、部署/回滚、CI、PostgreSQL 仍 **BLOCKED**（同 §3.9）。
+
+
 ## 4. 环境基线（WSL / Linux）
 
 - 仓库路径：`/home/hans/self-github/ai-qa-platform`（WSL 原生文件系统，非 `/mnt/c`）
@@ -779,6 +835,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 - `apps/api/tests/conftest.py` 为每项测试创建隔离 SQLite，初始无项目；未选择项目时 `/requirements`、`/test-cases`、`/recorder` 回到项目页是设计行为。Runtime sample DB 与验收 DB 分离，禁止用 sample DB 做回归或修改用户数据。
 
 ## 9. 最后执行的测试
+
+- **Round 16（证据智能层，`c4075a1` + 本文档）**：后端全量 `uv run pytest -q` → **952 passed / 11 skipped / 61 warnings / 1417.83s**（Round 15 为 932 passed，本轮 +20 = `test_discovery_intelligence.py` 17 例 + Jev 归一化/分级用例）；`ruff check apps/api packages scripts` → All checks passed，`ruff format --check` → **464 files already formatted**；`scripts/export_openapi.py --check` → current（新增受控页路由已导出）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3240 keys**；web `npx tsc --noEmit` 与 `npx eslint src --max-warnings=0` 无输出，`pnpm --filter @ai-qa/web test` → **202 pass / 0 fail**；新增/更新后端套件 `test_discovery_intelligence.py`(17) + `test_decision_layer.py`(32) + `test_workflow_canvas.py`(7)。真实浏览器 `.ai-runs/e2e-round16/intelligence_acceptance.py`（最终代码，真实 `mimo-v2.6-flash` + 真实 `jev-1.13.0`）→ **28/28 PASS，`failed: []`，`console_errors: []`**；证据 `.ai-runs/e2e-round16/acceptance.json`，截图 `screenshots/after-canvas-intelligence.png`（AI 建议 + Jev 分级 + 审核按钮）、`after-canvas-approved.png`（批准后进入既有用例链）、`after-canvas-mobile.png`（390px 无横向溢出）。真实 Jev 打分 `score 0.505 / confidence 0.90`（归一化前一律 `invalid_request`）。
 
 - **Round 15（证据层，`e9f2951` + 本文档）**：前端 `npx tsc --noEmit` 无输出、`npx eslint src --max-warnings=0` 无输出、`pnpm --filter @ai-qa/web test` → **201 pass / 0 fail**（Round 14 为 197，+4 = 折叠/证据行用例）；`scripts/i18n_check.py` → 25 namespaces / 2 languages / **3206 keys**（+19）；`scripts/export_openapi.py --check` → current（本轮新增 6 个 `/api/discovery/runs/{run_id}/…` 端点已导出）；`ruff check apps/api packages` → All checks passed，`ruff format --check` 干净；新增后端套件 `test_discovery_evidence_capture.py`(16) + `test_discovery_evidence.py`(9) + `test_workflow_canvas.py`(6) + `test_runtime_migrations.py`(6) + `test_sensitive_redaction.py`(5) → **42 passed**；后端全量 `uv run pytest -q` → **932 passed / 11 skipped / 60 warnings / 517.63s**（Round 14 为 902 passed，本轮 +30 = 证据采集/接口/画布/迁移用例）。真实浏览器 `.ai-runs/e2e-round15/acceptance.py`（最终代码 `589e6ab`，runs `qd_7f6c62767dcf42b3` / `qd_df4cca7749ff4dc9`）→ **21/21 PASS，`failed: []`，`console_errors: []`**；真实数据追踪 `.ai-runs/e2e-round15/scenarios-trace.json` → `trace_complete: true`。
 
