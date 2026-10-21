@@ -2121,6 +2121,26 @@
         }
       }
     },
+    "/api/demo-shop/discovery-fixture-c.html": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Demo Discovery Fixture C",
+        "description": "Behaviours worded differently from any existing test, so the rules cannot settle their coverage.",
+        "operationId": "demo_discovery_fixture_c_api_demo_shop_discovery_fixture_c_html_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/golden-demo/seed": {
       "post": {
         "tags": [
