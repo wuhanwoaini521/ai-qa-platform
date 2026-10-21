@@ -17,7 +17,7 @@ from app.api.authz import get_current_user, require_permission
 from app.api.project_acl import enforce_project_access
 from app.container import get_workflow_definition_service
 from app.repositories.workflow_definition_repo import WorkflowVersionConflict, WorkflowVersionNotFound
-from app.services.workflow_definition_service import WorkflowDefinitionService
+from app.services.workflow_definition_service import WorkflowDefinitionService, WorkflowNameTaken
 
 router = APIRouter(tags=["workflows"])
 
@@ -67,7 +67,7 @@ async def create_workflow(
     await enforce_project_access(user, project_id)
     try:
         definition = await service.create(project_id, payload.name, payload.description, str(user.id))
-    except Exception as error:  # duplicate name is the only expected failure here
+    except WorkflowNameTaken as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     return await service.detail(definition)
 
@@ -146,5 +146,20 @@ async def compare_versions(
     definition, service = await _definition(definition_id, service, user)
     try:
         return await service.compare(definition, base, head)
+    except WorkflowVersionNotFound as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.get("/workflows/{definition_id}/execution-diff")
+async def execution_diff(
+    definition_id: str,
+    task_id: str = Query(min_length=1),
+    version: int | None = Query(default=None, ge=1),
+    user: User = Depends(get_current_user),
+    service: WorkflowDefinitionService = Depends(get_workflow_definition_service),
+) -> dict[str, Any]:
+    definition, service = await _definition(definition_id, service, user)
+    try:
+        return await service.execution_diff(definition, version, task_id)
     except WorkflowVersionNotFound as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error

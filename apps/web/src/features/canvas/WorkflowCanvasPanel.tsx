@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { ExecutionTreePanel } from './ExecutionTreePanel';
+import { WorkflowEditorPanel } from './WorkflowEditorPanel';
 import { IntelligenceSection } from './IntelligenceSection';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
@@ -460,12 +461,21 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
  * Two views of the same truth: the pipeline (what the project produced, stage by stage) and the
  * execution tree (what one task actually ran). Both read the server; neither can trigger work.
  */
+type CanvasMode = 'pipeline' | 'execution' | 'editor';
+const CANVAS_MODES: CanvasMode[] = ['pipeline', 'execution', 'editor'];
+const CANVAS_MODE_LABEL: Record<CanvasMode, string> = {
+  pipeline: 'canvasModes.viewPipeline',
+  execution: 'canvasModes.viewExecution',
+  editor: 'canvasModes.editor',
+};
+
 export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: string; requirementId?: string }) {
   const { t } = useTranslation('workspace');
   // The chosen view lives in the URL so a reload (or a shared link) lands on the same one.
   const [searchParams, setSearchParams] = useSearchParams();
-  const mode = searchParams.get('canvas') === 'execution' ? 'execution' : 'pipeline';
-  const setMode = (next: 'pipeline' | 'execution') => {
+  const requested = searchParams.get('canvas');
+  const mode: CanvasMode = requested === 'execution' ? 'execution' : requested === 'editor' ? 'editor' : 'pipeline';
+  const setMode = (next: CanvasMode) => {
     setSearchParams(
       (current) => {
         const params = new URLSearchParams(current);
@@ -478,7 +488,7 @@ export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: s
   return (
     <div className="lw-canvas-host">
       <div className="lw-canvas-modes" role="tablist" aria-label={t('canvas.title')}>
-        {(['pipeline', 'execution'] as const).map((key) => (
+        {CANVAS_MODES.map((key) => (
           <button
             key={key}
             type="button"
@@ -487,16 +497,20 @@ export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: s
             className={`lw-canvas-mode${mode === key ? ' is-active' : ''}`}
             onClick={() => setMode(key)}
           >
-            {key === 'pipeline' ? t('canvasModes.viewPipeline') : t('canvasModes.viewExecution')}
+            {t(CANVAS_MODE_LABEL[key])}
           </button>
         ))}
       </div>
-      {mode === 'pipeline' ? (
+      {mode === 'pipeline' && (
         <ReactFlowProvider>
           <CanvasSurface projectId={projectId} requirementId={requirementId} />
         </ReactFlowProvider>
-      ) : (
-        <ExecutionTreePanel projectId={projectId} />
+      )}
+      {mode === 'execution' && <ExecutionTreePanel projectId={projectId} />}
+      {mode === 'editor' && (
+        <ReactFlowProvider>
+          <WorkflowEditorPanel projectId={projectId} />
+        </ReactFlowProvider>
       )}
     </div>
   );

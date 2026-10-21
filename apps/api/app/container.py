@@ -462,7 +462,7 @@ def get_workflow_definition_service(
     session: AsyncSession = Depends(get_db),
 ) -> WorkflowDefinitionService:
     # Authoring reads and writes go through the request session so ACL and transaction stay one unit.
-    return WorkflowDefinitionService(definitions=WorkflowDefinitionRepository(session))
+    return WorkflowDefinitionService(definitions=WorkflowDefinitionRepository(session), tasks=TaskRepository(session))
 
 
 def get_execution_trace_service(session: AsyncSession = Depends(get_db)) -> ExecutionTraceService:

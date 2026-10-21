@@ -298,3 +298,82 @@ async def test_a_draft_that_never_validated_still_reports_its_issues(client):
     assert listed["definitions"][0]["draft_issues"][0]["code"] == "WRITE_WITHOUT_APPROVAL"
     assert listed["definitions"][0]["draft_node_count"] == 2
     assert listed["catalogue"] == (await client.get(f"/api/projects/{project_id}/workflows")).json()["catalogue"]
+
+
+async def test_the_execution_diff_names_what_ran_and_what_the_definition_expected(client, test_db_session):
+    """Read-only: the definition is compared with a task's real steps, never used to invent them."""
+    from app.persistence.models import TaskORM, TaskStepORM
+
+    project_id = await _project(client, "Workflow execution diff")
+    definition_id = (await _definition(client, project_id))["id"]
+    await client.put(f"/api/workflows/{definition_id}/draft", json=_graph())
+    assert (await client.post(f"/api/workflows/{definition_id}/publish")).status_code == 200
+
+    async with test_db_session() as session:
+        user_id = (await client.get("/api/auth/me")).json()["user"]["id"]
+        session.add(
+            TaskORM(
+                id="task_diff",
+                type="QA_GOAL",
+                goal="Run the readings flow",
+                status="COMPLETED",
+                owner_id=user_id,
+                project_id=project_id,
+                inputs={},
+                context={},
+                verification={},
+                created_at=None,
+            )
+        )
+        await session.flush()
+        for position, (key, tool) in enumerate(
+            [
+                ("collect", "discovery.collect_gaps"),
+                ("analyze", "discovery.analyze_gaps"),
+                ("write", "source.write_generated"),
+                ("probe", "browser.inspect"),
+            ]
+        ):
+            session.add(
+                TaskStepORM(
+                    id=f"step_{key}",
+                    task_id="task_diff",
+                    position=position,
+                    key=key,
+                    name=key,
+                    tool=tool,
+                    status="COMPLETED",
+                )
+            )
+        await session.commit()
+
+    response = await client.get(
+        f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_diff"}
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["totals"] == {
+        "definition_nodes": 5,
+        "ran_steps": 4,
+        "matched": 3,
+        "not_executed": 2,
+        "undeclared": 1,
+    }
+    assert [row["key"] for row in payload["matched"]] == ["collect", "analyze", "write"]
+    assert {row["key"] for row in payload["not_executed"]} == {"generate", "approve"}
+    assert payload["undeclared"][0]["tool"] == "browser.inspect"
+    assert payload["undeclared"][0]["reason"] == "the_definition_declares_no_node_of_this_kind"
+    # Facts the comparison does not establish stay declared as unknown.
+    assert "step_inputs_are_not_compared" in payload["unknown"]
+
+    other_project = await _project(client, "Someone else's project")
+    foreign = await client.get(
+        f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_diff", "version": 1}
+    )
+    assert foreign.status_code == 200, foreign.text
+    assert other_project != project_id
+
+    missing = await client.get(
+        f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_missing"}
+    )
+    assert missing.status_code == 404

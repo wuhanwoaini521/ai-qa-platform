@@ -123,6 +123,15 @@ import type {
   WorkflowCanvas,
 } from '../types/workflowCanvas';
 import type { ExecutionTrace } from '../types/executionTrace';
+import type {
+  WorkflowDefinitionDetail,
+  WorkflowDefinitionList,
+  WorkflowGraphSpec,
+  WorkflowIssue,
+  WorkflowVersionComparison,
+  WorkflowVersionSummary,
+  WorkflowExecutionDiff,
+} from '../types/workflowDefinition';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
@@ -926,6 +935,47 @@ export const api = {
   /** Read-only execution trajectory of one task: steps, model calls, evidence, artifacts, runs. */
   getTaskExecutionTrace: (taskId: string) =>
     request<ExecutionTrace>(`/tasks/${encodeURIComponent(taskId)}/execution-trace`),
+  /** Authoring side: workflow definitions, their drafts and their published versions. */
+  getWorkflows: (projectId: string) =>
+    request<WorkflowDefinitionList>(`/projects/${encodeURIComponent(projectId)}/workflows`),
+  createWorkflow: (projectId: string, data: { name: string; description?: string }) =>
+    request<WorkflowDefinitionDetail>(`/projects/${encodeURIComponent(projectId)}/workflows`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getWorkflow: (definitionId: string) =>
+    request<WorkflowDefinitionDetail>(`/workflows/${encodeURIComponent(definitionId)}`),
+  saveWorkflowDraft: (definitionId: string, graph: WorkflowGraphSpec, baseChecksum?: string | null) =>
+    request<{ draft: WorkflowVersionSummary; issues: WorkflowIssue[] }>(
+      `/workflows/${encodeURIComponent(definitionId)}/draft`,
+      { method: 'PUT', body: JSON.stringify({ ...graph, base_checksum: baseChecksum ?? null }) },
+    ),
+  validateWorkflow: (definitionId: string, graph: WorkflowGraphSpec) =>
+    request<{ issues: WorkflowIssue[] }>(`/workflows/${encodeURIComponent(definitionId)}/validate`, {
+      method: 'POST',
+      body: JSON.stringify(graph),
+    }),
+  publishWorkflow: (definitionId: string) =>
+    request<{ published: WorkflowVersionSummary; draft_version: number | null }>(
+      `/workflows/${encodeURIComponent(definitionId)}/publish`,
+      { method: 'POST' },
+    ),
+  restoreWorkflowVersion: (definitionId: string, version: number) =>
+    request<{ draft: WorkflowVersionSummary; issues: WorkflowIssue[] }>(
+      `/workflows/${encodeURIComponent(definitionId)}/versions/${version}/restore`,
+      { method: 'POST' },
+    ),
+  compareWorkflowVersions: (definitionId: string, base: number, head: number) =>
+    request<WorkflowVersionComparison>(
+      `/workflows/${encodeURIComponent(definitionId)}/compare?base=${base}&head=${head}`,
+    ),
+  getWorkflowExecutionDiff: (definitionId: string, taskId: string, version?: number | null) =>
+    request<WorkflowExecutionDiff>(
+      `/workflows/${encodeURIComponent(definitionId)}/execution-diff?task_id=${encodeURIComponent(taskId)}${
+        version ? `&version=${version}` : ''
+      }`,
+    ),
+
   /** The same projection for the project's most recent tasks, each as its own root. */
   getProjectExecutionTrace: (projectId: string, limit = 6) =>
     request<ExecutionTrace>(

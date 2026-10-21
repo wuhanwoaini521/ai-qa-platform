@@ -23,6 +23,7 @@ from project_model.workflow_definition import (
 )
 
 from app.persistence.models import WorkflowDefinitionORM, WorkflowDefinitionVersionORM
+from app.repositories.task_repo import TaskRepository
 from app.repositories.workflow_definition_repo import (
     WorkflowDefinitionRepository,
     WorkflowVersionConflict,
@@ -100,9 +101,14 @@ def compare_graphs(base: WorkflowGraphSpec, head: WorkflowGraphSpec) -> dict[str
     }
 
 
+class WorkflowNameTaken(ValueError):
+    """Two definitions in one project cannot share a name."""
+
+
 class WorkflowDefinitionService:
-    def __init__(self, definitions: WorkflowDefinitionRepository) -> None:
+    def __init__(self, definitions: WorkflowDefinitionRepository, tasks: TaskRepository | None = None) -> None:
         self.definitions = definitions
+        self.tasks = tasks
 
     def catalogue(self) -> list[dict[str, Any]]:
         return catalogue_payload()
@@ -145,6 +151,8 @@ class WorkflowDefinitionService:
         }
 
     async def create(self, project_id: str, name: str, description: str, actor_id: str | None) -> WorkflowDefinitionORM:
+        if any(existing.name == name for existing in await self.definitions.list_definitions(project_id)):
+            raise WorkflowNameTaken(f"A workflow named '{name}' already exists in this project.")
         definition, _ = await self.definitions.create(project_id, name, description, actor_id)
         return definition
 
@@ -243,6 +251,108 @@ class WorkflowDefinitionService:
                 )
             )
         return steps, row
+
+    async def execution_diff(
+        self,
+        definition: WorkflowDefinitionORM,
+        version: int | None,
+        task_id: str,
+    ) -> dict[str, Any]:
+        """Compare a definition against what a task actually ran: read-only, matched by node kind.
+
+        Nothing here is inferred. A node the task never reached is reported as not executed, and a step
+        whose tool no node declares is reported as undeclared; inputs and dependency edges are not compared.
+        """
+        if self.tasks is None:
+            raise WorkflowVersionNotFound("This deployment cannot read task rows.")
+        task = await self.tasks.get_by_id(task_id)
+        if task is None or task.project_id != definition.project_id:
+            raise WorkflowVersionNotFound(f"Task {task_id} does not belong to this project.")
+        row = (
+            await self.definitions.get_version(definition.id, version)
+            if version is not None
+            else (await self.definitions.draft(definition.id))
+        )
+        if row is None:
+            raise WorkflowVersionNotFound(f"Version {version} does not exist on this definition.")
+        graph = _graph(row.graph)
+        steps = await self.tasks.get_steps(task_id)
+
+        by_kind: dict[str, list[Any]] = {}
+        for step in steps:
+            by_kind.setdefault(step.tool, []).append(step)
+
+        matched: list[dict[str, Any]] = []
+        not_executed: list[dict[str, Any]] = []
+        consumed: set[str] = set()
+        for node in graph.nodes:
+            candidates = [step for step in by_kind.get(node.kind, []) if step.id not in consumed]
+            if not candidates:
+                not_executed.append(
+                    {
+                        "key": node.key,
+                        "kind": node.kind,
+                        "reason": "no_step_of_this_kind_ran",
+                    }
+                )
+                continue
+            step = candidates[0]
+            consumed.add(step.id)
+            matched.append(
+                {
+                    "key": node.key,
+                    "kind": node.kind,
+                    "step_key": step.key,
+                    "step_id": step.id,
+                    "status": str(step.status),
+                    "duration_ms": step.duration_ms,
+                    "error": step.error,
+                }
+            )
+
+        declared = {node.kind for node in graph.nodes}
+        undeclared: list[dict[str, Any]] = []
+        for step in steps:
+            if step.id in consumed:
+                continue
+            undeclared.append(
+                {
+                    "step_key": step.key,
+                    "step_id": step.id,
+                    "tool": step.tool,
+                    "status": str(step.status),
+                    "reason": (
+                        "the_definition_declares_this_kind_but_the_task_ran_it_more_often"
+                        if step.tool in declared
+                        else "the_definition_declares_no_node_of_this_kind"
+                    ),
+                }
+            )
+
+        return {
+            "definition_id": definition.id,
+            "version": row.version,
+            "state": row.state,
+            "checksum": row.checksum,
+            "task_id": task.id,
+            "task_type": str(task.type),
+            "task_status": str(task.status),
+            "totals": {
+                "definition_nodes": len(graph.nodes),
+                "ran_steps": len(steps),
+                "matched": len(matched),
+                "not_executed": len(not_executed),
+                "undeclared": len(undeclared),
+            },
+            "matched": matched,
+            "not_executed": not_executed,
+            "undeclared": undeclared,
+            "unknown": [
+                "step_inputs_are_not_compared",
+                "step_dependencies_are_not_compared",
+                "a_repeated_kind_is_matched_in_step_order",
+            ],
+        }
 
 
 def _compile_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
