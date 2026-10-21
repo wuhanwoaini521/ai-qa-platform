@@ -82,3 +82,41 @@ absent is reported as unknown, not as success.
   task twice (Round 18).
 - The execution diff is the data a future "definition drift" report needs; it already reports
   `UNDECLARED` steps honestly.
+
+## 9. A workflow planned from a sentence (Round 19)
+
+`POST /api/projects/{project_id}/workflows/plan` takes `{"prompt": "..."}` (3–2000 chars) and returns a
+candidate, never a definition:
+
+```json
+{"summary": "...", "graph": {"nodes": [...], "edges": [...]},
+ "issues": [], "valid": true, "invocation_id": "...", "provider_note": "..."}
+```
+
+Rules that make the candidate safe to trust:
+
+1. **The catalogue is the only vocabulary.** The prompt sent to the model lists the 25 kinds with
+   their risk, inputs and outputs. A kind outside `CATALOGUE` is dropped and reported as
+   `UNKNOWN_KIND`; the candidate is then `valid: false` and cannot be published.
+2. **The server validates, the model does not grade itself.** `validate_graph` from
+   `packages/project-model/project_model/workflow_definition.py` produces every issue code the editor
+   already knows (`MISSING_INPUT`, `CYCLE`, `WRITE_WITHOUT_APPROVAL`, …). A model that returns `"valid": true`
+   in its own JSON is ignored on that field.
+3. **Nothing is created.** Planning writes no definition, no version, no task and no run: the response is
+   a proposal. `apps/api/tests/test_workflow_planner.py::test_planning_leaves_the_project_untouched`
+   asserts the definition list is unchanged.
+4. **A human still does the two irreversible things.** `PUT /draft` saves what the person accepted;
+   `POST /publish` is the approval gate. The editor's `把候选放到画布` only fills the canvas, and the
+   existing save/publish buttons stay unchanged.
+5. **No provider, no plan.** With no real provider configured the route answers `503` with a reason;
+   a model error answers `502` with the provider's error. A failed plan never leaves a definition behind.
+
+What it deliberately does not do: it does not choose a definition to plan into, does not overwrite an
+existing draft, does not start execution (the published graph still has no scheduler path — §6), and
+does not "repair" a prompt into a supported one silently; an unsupported request produces a plan without
+the unsupported kind and the issues that explain why.
+
+Evidence: `.ai-runs/overnight-delivery/rounds/r19-acceptance.json` — 15/15 with the real provider
+(planning took 19 s, 9 nodes, each with a stated rationale, `valid: true`), the shell request produced no
+shell node, save→publish→reload kept the graph, the published checksum never changed afterwards, and the
+phone viewport had no overflow.

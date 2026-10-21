@@ -26,6 +26,7 @@ import type {
   WorkflowDefinitionDetail,
   WorkflowDefinitionList,
   WorkflowExecutionDiff,
+  WorkflowPlanCandidate,
   WorkflowIssue,
   WorkflowVersionComparison,
 } from '../../types/workflowDefinition';
@@ -178,6 +179,10 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
   const [tasks, setTasks] = useState<AgentTask[] | null>(null);
   const [diffTaskId, setDiffTaskId] = useState('');
   const [diff, setDiff] = useState<WorkflowExecutionDiff | null>(null);
+  const [planPrompt, setPlanPrompt] = useState('');
+  const [plan, setPlan] = useState<WorkflowPlanCandidate | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
   const dragStart = useRef<EditorState | null>(null);
   // A slow initial load must not overwrite a definition the user already picked or created.
   const loadSeq = useRef(0);
@@ -339,6 +344,35 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
       setDiff(await api.getWorkflowExecutionDiff(detail.id, diffTaskId, detail.published ? null : detail.draft.version));
     });
 
+  const askForPlan = async () => {
+    if (!planPrompt.trim()) {
+      return;
+    }
+    setPlanning(true);
+    setPlanError(null);
+    try {
+      setPlan(await api.planWorkflow(projectId, planPrompt.trim()));
+    } catch (error) {
+      setPlan(null);
+      setPlanError((error as Error).message);
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  /** A candidate only reaches the canvas when the user puts it there; saving stays a separate act. */
+  const applyPlan = () => {
+    if (!plan) {
+      return;
+    }
+    edit({
+      nodes: plan.graph.nodes.map((node) => ({ ...node, inputs: { ...(node.inputs ?? {}) } })),
+      edges: plan.graph.edges.map((edge) => ({ source: edge.source, target: edge.target })),
+    });
+    setSelectedKey(null);
+    setMessage(t('workflowEditor.planApplied'));
+  };
+
   const compareVersions = (base: number, head: number) =>
     run(async () => {
       if (!detail) {
@@ -451,6 +485,59 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
                   ))}
                 </ul>
                 <p className="wfe-muted">{t('workflowEditor.diffUnknown', { fields: diff.unknown.join(', ') })}</p>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+
+      {detail && (
+        <details className="wfe-plan">
+          <summary>{t('workflowEditor.planTitle')}</summary>
+          <div className="wfe-plan-body">
+            <p className="wfe-muted">{t('workflowEditor.planHint')}</p>
+            <textarea
+              aria-label={t('workflowEditor.planTitle')}
+              value={planPrompt}
+              placeholder={t('workflowEditor.planPlaceholder')}
+              rows={2}
+              maxLength={2000}
+              onChange={(event) => setPlanPrompt(event.target.value)}
+            />
+            <button type="button" onClick={() => void askForPlan()} disabled={planning || !planPrompt.trim()}>
+              {planning ? t('workflowEditor.planGenerating') : t('workflowEditor.planGenerate')}
+            </button>
+            {planError && (
+              <p className="wfe-message is-bad" role="alert">
+                {planError}
+              </p>
+            )}
+            {plan && (
+              <div className="wfe-plan-result">
+                <p className="wfe-plan-summary">{plan.summary}</p>
+                <p className={plan.valid ? 'wfe-ok' : 'wfe-bad'} role="status">
+                  {plan.valid ? t('workflowEditor.planValid') : t('workflowEditor.planInvalid')}
+                </p>
+                <ol className="wfe-plan-nodes">
+                  {plan.graph.nodes.map((node) => (
+                    <li key={node.key}>
+                      <strong>{node.key}</strong> · {node.kind}
+                      {node.rationale && <span className="wfe-muted"> — {node.rationale}</span>}
+                    </li>
+                  ))}
+                </ol>
+                {plan.issues.length > 0 && (
+                  <ul className="wfe-issues">
+                    {plan.issues.map((issue) => (
+                      <li key={`${issue.code}-${issue.node_key ?? ''}`} className="is-bad">
+                        {issue.code} · {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" onClick={applyPlan} disabled={plan.graph.nodes.length === 0}>
+                  {t('workflowEditor.planApply')}
+                </button>
               </div>
             )}
           </div>

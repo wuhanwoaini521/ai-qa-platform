@@ -410,3 +410,84 @@
 .wfe-diff-list .is-ok { color: var(--accent-green); }
 .wfe-diff-list .is-attention { color: var(--accent-amber); }
 .wfe-diff-list .is-bad { color: var(--accent-red); }
+
+.wfe-plan {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.wfe-plan > summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.wfe-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.wfe-plan-body textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-frame);
+  color: var(--ink);
+}
+
+.wfe-plan-body button {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-frame);
+  color: var(--ink);
+}
+
+.wfe-plan-body button:disabled {
+  opacity: 0.5;
+}
+
+.wfe-plan-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-frame);
+}
+
+.wfe-plan-summary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wfe-plan-nodes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wfe-ok {
+  color: var(--accent-green);
+  font-size: 12px;
+}
+
+.wfe-bad {
+  color: var(--accent-red);
+  font-size: 12px;
+}

@@ -819,6 +819,15 @@
   "editor": "Edit workflow"
 },
   "workflowEditor": {
+    "planTitle": "Plan a workflow in words",
+    "planHint": "Describe the job; the model proposes a graph using only the node kinds this platform runs. Nothing is saved, published or executed, and the server validates every node.",
+    "planPlaceholder": "For example: read this discovery run's gaps, draft test cases, and write the files once a human approves.",
+    "planGenerate": "Propose a workflow",
+    "planGenerating": "Planning…",
+    "planApply": "Put the candidate on the canvas",
+    "planApplied": "The candidate is on the canvas; it becomes a draft only when you save.",
+    "planValid": "The server accepted it: every node is in the catalogue.",
+    "planInvalid": "The server rejected it; fix the issues below first.",
   "definition": "Workflow definition",
   "none": "No workflow selected",
   "newName": "New workflow name",

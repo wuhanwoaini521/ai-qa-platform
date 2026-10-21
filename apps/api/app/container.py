@@ -78,6 +78,7 @@ from app.services.test_run_service import TestRunService
 from app.services.testrail_service import TestRailService
 from app.services.workflow_canvas_service import WorkflowCanvasService
 from app.services.workflow_definition_service import WorkflowDefinitionService
+from app.services.workflow_planner_service import WorkflowPlannerService
 from app.services.workspace_catalog_service import WorkspaceCatalogService
 from app.services.workspace_service import WorkspaceService
 from app.settings import get_config
@@ -456,6 +457,10 @@ def get_workflow_canvas_service(
         suggestions=DiscoverySuggestionRepository(session),
         bindings=bindings,
     )
+
+
+def get_workflow_planner_service() -> WorkflowPlannerService:
+    return WorkflowPlannerService()
 
 
 def get_workflow_definition_service(

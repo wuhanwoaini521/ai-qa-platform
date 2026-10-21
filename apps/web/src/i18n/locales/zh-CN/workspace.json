@@ -819,6 +819,15 @@
   "editor": "编辑工作流"
 },
   "workflowEditor": {
+    "planTitle": "用自然语言生成流程",
+    "planHint": "描述要做的事，AI 会按平台支持的节点给出候选流程；它不会保存、发布或执行任何东西，节点由服务端校验。",
+    "planPlaceholder": "例如：读取这次发现的质量差距，起草用例，人工批准后写入测试文件。",
+    "planGenerate": "生成候选流程",
+    "planGenerating": "生成中…",
+    "planApply": "把候选放到画布",
+    "planApplied": "候选流程已放到画布，保存后才会成为草稿。",
+    "planValid": "服务端校验通过：全部节点都在白名单内。",
+    "planInvalid": "服务端校验未通过，下面的问题必须先解决。",
     "definition": "工作流定义",
     "none": "未选择工作流",
     "newName": "新工作流名称",

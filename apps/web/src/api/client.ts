@@ -131,6 +131,7 @@ import type {
   WorkflowVersionComparison,
   WorkflowVersionSummary,
   WorkflowExecutionDiff,
+  WorkflowPlanCandidate,
 } from '../types/workflowDefinition';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -942,6 +943,11 @@ export const api = {
     request<WorkflowDefinitionDetail>(`/projects/${encodeURIComponent(projectId)}/workflows`, {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  planWorkflow: (projectId: string, prompt: string) =>
+    request<WorkflowPlanCandidate>(`/projects/${encodeURIComponent(projectId)}/workflows/plan`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
     }),
   getWorkflow: (definitionId: string) =>
     request<WorkflowDefinitionDetail>(`/workflows/${encodeURIComponent(definitionId)}`),

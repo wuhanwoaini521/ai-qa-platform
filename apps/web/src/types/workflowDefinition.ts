@@ -141,3 +141,17 @@ export interface WorkflowExecutionDiff {
   undeclared: WorkflowExecutionUndeclaredRow[];
   unknown: string[];
 }
+
+/** A candidate a model proposed: validated by the server, saved only if the user accepts it. */
+export interface WorkflowPlanCandidate {
+  summary: string;
+  graph: {
+    nodes: (WorkflowNodeSpec & { rationale?: string })[];
+    edges: WorkflowEdgeSpec[];
+  };
+  issues: WorkflowIssue[];
+  valid: boolean;
+  invocation_id: string | null;
+  provider_note: string;
+  planned_by: string;
+}

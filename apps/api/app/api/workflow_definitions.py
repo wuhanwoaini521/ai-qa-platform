@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field
 
 from app.api.authz import get_current_user, require_permission
 from app.api.project_acl import enforce_project_access
-from app.container import get_workflow_definition_service
+from app.container import get_workflow_definition_service, get_workflow_planner_service
 from app.repositories.workflow_definition_repo import WorkflowVersionConflict, WorkflowVersionNotFound
 from app.services.workflow_definition_service import WorkflowDefinitionService, WorkflowNameTaken
+from app.services.workflow_planner_service import WorkflowPlannerService, WorkflowPlanUnavailable
 
 router = APIRouter(tags=["workflows"])
 
@@ -30,6 +31,10 @@ class WorkflowCreate(BaseModel):
 class WorkflowGraphPayload(BaseModel):
     nodes: list[dict[str, Any]] = Field(default_factory=list)
     edges: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkflowPlanRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=2000)
 
 
 class WorkflowSave(WorkflowGraphPayload):
@@ -70,6 +75,21 @@ async def create_workflow(
     except WorkflowNameTaken as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     return await service.detail(definition)
+
+
+@router.post("/projects/{project_id}/workflows/plan")
+async def plan_workflow(
+    project_id: str,
+    payload: WorkflowPlanRequest,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+    service: WorkflowPlannerService = Depends(get_workflow_planner_service),
+) -> dict[str, Any]:
+    """Propose a candidate graph. Nothing is saved: the caller must accept it as a draft."""
+    await enforce_project_access(user, project_id)
+    try:
+        return await service.plan(payload.prompt, project_id=project_id, actor=str(user.id))
+    except WorkflowPlanUnavailable as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 
 
 @router.get("/workflows/{definition_id}")
