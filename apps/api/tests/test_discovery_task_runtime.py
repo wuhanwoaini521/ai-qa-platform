@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from app.persistence.models import ProjectORM
+from app.persistence.models import ProjectORM, utc_now
 from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.services.quality_discovery_models import DiscoveryRunCreate, DiscoveryStatus
 from app.services.quality_discovery_service import QualityDiscoveryService
@@ -46,7 +47,7 @@ async def _project(session_factory, project_id: str = "project_discovery_task") 
     return project_id
 
 
-async def _run_row(session_factory, project_id: str, status: str) -> str:
+async def _run_row(session_factory, project_id: str, status: str, *, age_seconds: int = 0) -> str:
     async with session_factory() as session:
         row = await QualityDiscoveryRepository(session).create(
             project_id=project_id,
@@ -58,6 +59,10 @@ async def _run_row(session_factory, project_id: str, status: str) -> str:
             allowed_domains=[],
         )
         await QualityDiscoveryRepository(session).update(row.id, status=status)
+        if age_seconds:
+            # Back-date the row so it looks like a process that died a while ago.
+            row.updated_at = utc_now() - timedelta(seconds=age_seconds)
+            row.created_at = row.updated_at
         await session.commit()
         return row.id
 
@@ -264,13 +269,16 @@ async def test_a_paused_run_takes_no_action_before_it_is_resumed(test_db_session
 @pytest.mark.asyncio
 async def test_startup_recovery_pauses_runs_a_dead_process_left_running(test_db_session):
     project_id = await _project(test_db_session)
-    running = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    abandoned = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value, age_seconds=3600)
+    # A second replica may be driving this one right now: nothing has touched it for a minute.
+    live = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
     completed = await _run_row(test_db_session, project_id, DiscoveryStatus.COMPLETED.value)
     service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
 
     assert await service.recover_interrupted_runs() == 1
 
-    paused = await service.get(running)
+    paused = await service.get(abandoned)
     assert paused.status == DiscoveryStatus.PAUSED.value
     assert "restarted" in (paused.error or "")
+    assert (await service.get(live)).status == DiscoveryStatus.RUNNING.value
     assert (await service.get(completed)).status == DiscoveryStatus.COMPLETED.value

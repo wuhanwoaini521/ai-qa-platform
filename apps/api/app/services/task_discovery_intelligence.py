@@ -242,10 +242,7 @@ class TaskDiscoveryIntelligenceService:
                     "source": f"discovery_evidence:{run_id}",
                     "summary": f"{len(cited)} readings cited {sum(len(row['evidence_ids']) for row in cited)} evidence rows",
                     "content": json.dumps(
-                        [
-                            {"suggestion_id": row["suggestion_id"], "evidence_ids": row["evidence_ids"]}
-                            for row in cited
-                        ],
+                        [{"suggestion_id": row["suggestion_id"], "evidence_ids": row["evidence_ids"]} for row in cited],
                         ensure_ascii=False,
                     ),
                     "metadata": {"run_id": run_id, "readings": len(records), "cited": len(cited)},

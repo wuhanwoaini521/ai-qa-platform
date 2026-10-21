@@ -14,9 +14,14 @@ from app.persistence.models import utc_now
 from app.ports.task_unit_of_work import TaskUnitOfWorkFactory
 from app.services.task_errors import ApprovalRequired, TaskBlocked, TaskCancelled
 from app.services.task_execution_orchestrator import TaskExecutionOrchestrator
+from app.services.task_lease_context import lease_scope, reset_lease
 from app.services.task_workspace import workspace_source_snapshot
 
 logger = logging.getLogger("app.task_runtime")
+
+# A lease outlives three missed heartbeats, so a slow database cannot make a live worker look dead.
+LEASE_SECONDS = 90
+HEARTBEAT_SECONDS = 20
 
 
 class TaskSchedulerService:
@@ -41,6 +46,8 @@ class TaskSchedulerService:
         self._child_runs = execution._child_runs
         self._semaphore = asyncio.Semaphore(self.concurrency)
         self._stopping = False
+        self._leases: dict[str, tuple[str, int]] = {}
+        self._heartbeats: dict[str, asyncio.Task] = {}
 
     async def cancel_active(self, task_id: str, run_id: str | None = None) -> None:
         active = self._active.get(task_id)
@@ -88,13 +95,20 @@ class TaskSchedulerService:
             task.cancel()
         if active:
             await asyncio.gather(*active, return_exceptions=True)
+        for task_id in list(self._leases):
+            await self._release_lease(task_id, expired=True)
 
     async def recover_interrupted(self) -> list[str]:
-        """Never replay a possibly side-effecting browser, patch or subprocess step blindly."""
+        """Never replay a possibly side-effecting browser, patch or subprocess step blindly.
+
+        Only tasks nobody holds a live lease on are recovered: a second replica must not block work
+        that the first replica is still executing. An expired or missing lease is the evidence that
+        the previous owner is gone.
+        """
         recovered: list[str] = []
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
-            for row in await repo.unfinished():
+            for row in await repo.unfinished_stale():
                 steps = await repo.steps_for_task(row.id)
                 for step in steps:
                     if step.status == TaskStepStatus.RUNNING.value:
@@ -141,11 +155,14 @@ class TaskSchedulerService:
                 await asyncio.sleep(self.poll_interval)
 
     async def _claim(self, task_id: str) -> bool:
+        owner = self.runtime_instance_id or "single-instance"
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
-            if not await repo.claim_for_execution(task_id):
+            token = await repo.claim_for_execution(task_id, owner=owner, lease_seconds=LEASE_SECONDS)
+            if token is None:
                 await repositories.rollback()
                 return False
+            self._leases[task_id] = (owner, token)
             task = await repo.get(task_id)
             assert task is not None
             task_values = {"status": TaskStatus.RUNNING.value}
@@ -155,10 +172,52 @@ class TaskSchedulerService:
             await repo.add_event(task_id, "task.started", {})
             await repo.add_event(task_id, "task.planning", {"step_count": len(await repo.steps_for_task(task_id))})
             await repositories.commit()
-            return True
+        self._start_heartbeat(task_id)
+        return True
+
+    def _start_heartbeat(self, task_id: str) -> None:
+        existing = self._heartbeats.get(task_id)
+        if existing is not None and not existing.done():
+            return
+        self._heartbeats[task_id] = asyncio.create_task(self._heartbeat(task_id), name=f"lease-{task_id}")
+
+    async def _heartbeat(self, task_id: str) -> None:
+        """Keep the lease alive while this process is the owner; stop when the task ends."""
+        try:
+            while not self._stopping:
+                await asyncio.sleep(HEARTBEAT_SECONDS)
+                lease = self._leases.get(task_id)
+                if lease is None:
+                    return
+                owner, token = lease
+                async with self.repository_scope() as repositories:
+                    renewed = await repositories.tasks.renew_lease(task_id, owner, token, LEASE_SECONDS)
+                    await repositories.commit()
+                if not renewed:
+                    logger.warning("Task %s no longer holds its lease; stopping the heartbeat", task_id)
+                    return
+        except asyncio.CancelledError:
+            raise
+        finally:
+            self._heartbeats.pop(task_id, None)
+
+    async def _release_lease(self, task_id: str, *, expired: bool = False) -> None:
+        heartbeat = self._heartbeats.pop(task_id, None)
+        if heartbeat is not None:
+            heartbeat.cancel()
+        lease = self._leases.pop(task_id, None)
+        if lease is None:
+            return
+        owner, token = lease
+        async with self.repository_scope() as repositories:
+            if expired:
+                await repositories.tasks.release_lease(task_id, owner, token)
+            await repositories.commit()
 
     async def _execute_task(self, task_id: str) -> None:
         async with self._semaphore:
+            lease = self._leases.get(task_id)
+            lease_token = lease_scope(*lease) if lease else None
             task, _ = await self.execution._load(task_id)
             if not task:
                 return
@@ -175,6 +234,9 @@ class TaskSchedulerService:
                 await self.execution._finish(task_id, TaskStatus.FAILED, str(error))
             finally:
                 await self._persist_execution_elapsed(task_id, time.monotonic() - execution_started)
+                if lease_token is not None:
+                    reset_lease(lease_token)
+                await self._release_lease(task_id, expired=True)
 
     async def _persist_execution_elapsed(self, task_id: str, elapsed: float) -> None:
         async with self.repository_scope() as repositories:

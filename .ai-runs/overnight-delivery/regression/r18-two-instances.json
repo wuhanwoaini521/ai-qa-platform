@@ -1,0 +1,103 @@
+{
+  "started_at": "2026-10-21T10:57:06.519294+00:00",
+  "finished_at": "2026-10-21T10:59:51.356166+00:00",
+  "database": "/tmp/aiqa_r18/aiqa.db",
+  "instances": [
+    8030,
+    8031,
+    8032,
+    8033
+  ],
+  "checks": 8,
+  "passed": 8,
+  "failed": [],
+  "results": [
+    {
+      "check": "instance A becomes ready",
+      "passed": true,
+      "detail": {
+        "port": 8030
+      }
+    },
+    {
+      "check": "the first instance takes a lease when it starts work",
+      "passed": true,
+      "detail": {
+        "task_id": "36802a5fb86b41669fa23f65e895a14d",
+        "status": "RUNNING",
+        "owner": "d582c0ea961443edadd55d6835ae5dfa",
+        "token": 1,
+        "expires_at": "2026-10-21 10:58:39.180173"
+      }
+    },
+    {
+      "check": "a peer startup leaves the analysis it is still waiting on running",
+      "passed": true,
+      "detail": {
+        "analysis": "RUNNING"
+      }
+    },
+    {
+      "check": "a peer startup closes an analysis a dead process left behind",
+      "passed": true,
+      "detail": {
+        "analysis": "FAILED"
+      }
+    },
+    {
+      "check": "a second replica starting up does not block the running task",
+      "passed": true,
+      "detail": {
+        "status_after_peer_start": "RUNNING",
+        "lease": {
+          "status": "RUNNING",
+          "owner": "d582c0ea961443edadd55d6835ae5dfa",
+          "token": 1,
+          "expires_at": "2026-10-21 10:58:39.180173"
+        }
+      }
+    },
+    {
+      "check": "the task still reaches a terminal state under its own owner",
+      "passed": true,
+      "detail": {
+        "task_id": "36802a5fb86b41669fa23f65e895a14d",
+        "status": "COMPLETED",
+        "failure_reason": null
+      }
+    },
+    {
+      "check": "a restart right after a crash leaves an unexpired lease alone",
+      "passed": true,
+      "detail": {
+        "status": "RUNNING",
+        "lease": {
+          "status": "RUNNING",
+          "owner": "d582c0ea961443edadd55d6835ae5dfa",
+          "token": 1,
+          "expires_at": "2026-10-21 10:59:40.507058"
+        },
+        "killed_at": "2026-10-21T10:58:11.461515+00:00"
+      }
+    },
+    {
+      "check": "an expired lease lets a restart recover the orphaned task",
+      "passed": true,
+      "detail": {
+        "status": "BLOCKED",
+        "lease": {
+          "status": "BLOCKED",
+          "owner": "d582c0ea961443edadd55d6835ae5dfa",
+          "token": 1,
+          "expires_at": "2026-10-21 10:59:40.507058"
+        },
+        "second_lease": {
+          "status": "RUNNING",
+          "owner": "d582c0ea961443edadd55d6835ae5dfa",
+          "token": 1,
+          "expires_at": "2026-10-21 10:59:40.507058"
+        }
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from types import SimpleNamespace
@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from app.api.failures import get_failure_service
 from app.main import app
-from app.persistence.models import BrowserSessionORM, FailureAnalysisORM
+from app.persistence.models import BrowserSessionORM, FailureAnalysisORM, utc_now
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory, TaskRepositoryUnitOfWork
 from app.repositories.test_run_repo import TestRunRepository
 from app.services.failure_workflow_service import FailureWorkflowService
@@ -560,6 +560,14 @@ async def test_workflow_does_not_authorize_retry_or_issue_draft_from_fake_diagno
         state = await FailureWorkflowService(get_failure_service(session)).get_repair_workflow(failure_id, analysis_id)
         assert "RETRY" not in state.allowed_actions
         assert "CREATE_ISSUE_DRAFT" not in state.allowed_actions
+
+
+async def _backdate_analysis(session_factory, analysis_id: str, *, seconds: int) -> None:
+    """Make an analysis look like it was left behind by a process that died a while ago."""
+    async with session_factory() as session:
+        row = await session.get(FailureAnalysisORM, analysis_id)
+        row.created_at = utc_now() - timedelta(seconds=seconds)
+        await session.commit()
 
 
 async def seed(
@@ -1750,13 +1758,23 @@ async def test_analysis_outlives_its_connection_and_stops_only_on_request(client
         assert record["result"]["block_reason"] == "ANALYSIS_CANCELLED"
         assert "START_ANALYSIS" in (await workflow.get_repair_workflow(failure_id)).allowed_actions
 
-        # A process restart must never leave an analysis RUNNING forever.
+        # A process restart must never leave an analysis RUNNING forever, but a second replica
+        # starting up must not close one that is still inside its own budget.
         async with workflow.repository_scope() as repositories:
             unfinished = await repositories.failure_analyses.create(failure_id)
             await repositories.commit()
-        assert unfinished in await workflow.recover_interrupted_analyses()
+        await _backdate_analysis(test_db_session, unfinished, seconds=3600)
+        _, other_failure, _ = await seed(client, test_db_session, error="AssertionError: still fresh")
+        async with workflow.repository_scope() as repositories:
+            fresh = await repositories.failure_analyses.create(other_failure)
+            await repositories.commit()
+        recovered = await workflow.recover_interrupted_analyses()
+        assert unfinished in recovered
+        assert fresh not in recovered
         records = await workflow.list_history(failure_id)
         assert next(record for record in records if record["id"] == unfinished)["status"] == "INTERRUPTED"
+        fresh_records = await workflow.list_history(other_failure)
+        assert next(record for record in fresh_records if record["id"] == fresh)["status"] == "RUNNING"
 
 
 @pytest.mark.asyncio

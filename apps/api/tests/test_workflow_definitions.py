@@ -347,9 +347,7 @@ async def test_the_execution_diff_names_what_ran_and_what_the_definition_expecte
             )
         await session.commit()
 
-    response = await client.get(
-        f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_diff"}
-    )
+    response = await client.get(f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_diff"})
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["totals"] == {
@@ -373,7 +371,5 @@ async def test_the_execution_diff_names_what_ran_and_what_the_definition_expecte
     assert foreign.status_code == 200, foreign.text
     assert other_project != project_id
 
-    missing = await client.get(
-        f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_missing"}
-    )
+    missing = await client.get(f"/api/workflows/{definition_id}/execution-diff", params={"task_id": "task_missing"})
     assert missing.status_code == 404

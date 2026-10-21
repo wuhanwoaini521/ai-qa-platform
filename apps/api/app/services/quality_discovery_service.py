@@ -7,7 +7,7 @@ import json
 import logging
 import weakref
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 from uuid import uuid4
 
@@ -79,6 +79,16 @@ __all__ = [
     "discovery_run_dict",
     "tag_is_text",
 ]
+
+
+def _run_is_stale(row, after_seconds: int) -> bool:
+    """A run is only abandoned when nothing has moved it for longer than the window."""
+    updated = getattr(row, "updated_at", None) or getattr(row, "created_at", None)
+    if updated is None:
+        return True
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    return updated < datetime.now(timezone.utc) - timedelta(seconds=after_seconds)
 
 
 class _GapActionLockEntry:
@@ -873,10 +883,18 @@ class QualityDiscoveryService(
             "progress": dict((final.progress if final is not None else {}) or {}),
         }
 
+    # A second replica must not pause a run whose loop is still writing progress in this one.
+    STALE_AFTER_SECONDS = 600
+    is_stale_run = staticmethod(_run_is_stale)
+
     async def recover_interrupted_runs(self) -> int:
         """Pause runs a previous process left queued or running so they can be resumed."""
         async with self.session_factory() as session:
-            stale = [row.id for row in await QualityDiscoveryRepository(session).list_non_terminal()]
+            stale = [
+                row.id
+                for row in await QualityDiscoveryRepository(session).list_non_terminal()
+                if _run_is_stale(row, self.STALE_AFTER_SECONDS)
+            ]
         for run_id in stale:
             self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
             await self._update(

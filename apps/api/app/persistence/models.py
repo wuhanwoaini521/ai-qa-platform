@@ -934,6 +934,10 @@ class TaskORM(Base):
     max_duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
     current_step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Who is executing this task right now, and until when (see 0020_task_lease).
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_token: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
     started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

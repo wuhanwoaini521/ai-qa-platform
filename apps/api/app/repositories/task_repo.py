@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from project_model.task_models import (
@@ -11,7 +12,7 @@ from project_model.task_models import (
     TaskEvidence,
     TaskStep,
 )
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.task_records import TaskRecord
@@ -25,6 +26,8 @@ from app.persistence.models import (
     TaskStepORM,
     utc_now,
 )
+
+UNFINISHED_STATUSES = ["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING", "PAUSING", "RESUMING"]
 
 
 class TaskRepository:
@@ -136,13 +139,73 @@ class TaskRepository:
         )
         return result.rowcount == 1
 
-    async def claim_for_execution(self, task_id: str) -> bool:
+    async def claim_for_execution(
+        self, task_id: str, *, owner: str | None = None, lease_seconds: int = 0
+    ) -> int | None:
+        """Take the task and, when an owner is given, its lease. Returns the fencing token.
+
+        A task is only ever taken from another owner when that owner's lease has run out: the status
+        alone is not evidence that nobody is working on it (see 0020_task_lease).
+        """
+        now = utc_now()
+        values: dict[str, Any] = {"status": "PLANNING", "updated_at": now}
+        if owner:
+            values.update(
+                lease_owner=owner,
+                lease_token=TaskORM.lease_token + 1,
+                lease_expires_at=now + timedelta(seconds=lease_seconds),
+            )
+        claimable = TaskORM.status.in_(["PENDING", *UNFINISHED_STATUSES])
+        if owner:
+            claimable = and_(
+                claimable,
+                or_(TaskORM.lease_owner.is_(None), TaskORM.lease_expires_at.is_(None), TaskORM.lease_expires_at < now),
+            )
+        result = await self.session.execute(update(TaskORM).where(TaskORM.id == task_id, claimable).values(**values))
+        if result.rowcount != 1:
+            return None
+        if not owner:
+            return 0
+        token = await self.session.execute(select(TaskORM.lease_token).where(TaskORM.id == task_id))
+        return int(token.scalar_one())
+
+    async def renew_lease(self, task_id: str, owner: str, token: int, lease_seconds: int) -> bool:
         result = await self.session.execute(
             update(TaskORM)
-            .where(TaskORM.id == task_id, TaskORM.status.in_(["PENDING", "REPLANNING"]))
-            .values(status="PLANNING", updated_at=utc_now())
+            .where(TaskORM.id == task_id, TaskORM.lease_owner == owner, TaskORM.lease_token == token)
+            .values(lease_expires_at=utc_now() + timedelta(seconds=lease_seconds), updated_at=utc_now())
         )
         return result.rowcount == 1
+
+    async def release_lease(self, task_id: str, owner: str, token: int) -> bool:
+        """Hand the task back so a peer can recover it without waiting for the lease to expire."""
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(TaskORM.id == task_id, TaskORM.lease_owner == owner, TaskORM.lease_token == token)
+            .values(lease_owner=None, lease_expires_at=None, updated_at=utc_now())
+        )
+        return result.rowcount == 1
+
+    async def holds_lease(self, task_id: str, owner: str, token: int) -> bool:
+        row = await self.session.execute(
+            select(TaskORM.lease_token).where(
+                TaskORM.id == task_id, TaskORM.lease_owner == owner, TaskORM.lease_token == token
+            )
+        )
+        return row.scalar_one_or_none() == token
+
+    async def unfinished_stale(self, grace_seconds: int = 0) -> list[TaskRecord]:
+        """Unfinished tasks nobody is provably working on: unleased, or whose lease has run out."""
+        cutoff = utc_now() - timedelta(seconds=grace_seconds)
+        stmt = select(TaskORM).where(
+            TaskORM.status.in_(UNFINISHED_STATUSES),
+            or_(
+                TaskORM.lease_owner.is_(None),
+                TaskORM.lease_expires_at.is_(None),
+                TaskORM.lease_expires_at < cutoff,
+            ),
+        )
+        return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
     async def claim_running_step(self, task_id: str, step_id: str, task_status: str) -> TaskStep | None:
         task = await self.session.get(TaskORM, task_id)

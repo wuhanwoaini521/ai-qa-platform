@@ -1326,9 +1326,15 @@ class FailureWorkflowService:
         return closed
 
     async def recover_interrupted_analyses(self) -> list[str]:
-        """Startup: no analysis survives a process restart, so close every leftover RUNNING record."""
+        """Startup: close analyses whose owner is provably gone.
+
+        A second replica starting up must not close an analysis the first replica is still running, so
+        only rows past their own budget plus the grace period are recovered (the same window the
+        reconnect path uses).
+        """
+        budget = float(get_config().repair.analysis_timeout_seconds)
         async with self.repository_scope() as repositories:
-            running = await repositories.failure_analyses.list_running_ids()
+            running = await repositories.failure_analyses.list_stale_running(timeout_seconds=budget)
         for analysis_id in running:
             record = await self._history_get(analysis_id)
             if record is None:

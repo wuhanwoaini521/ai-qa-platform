@@ -1,0 +1,54 @@
+{
+  "started_at": "2026-10-21",
+  "start_head": "c6d08df",
+  "start_unpushed": 23,
+  "rounds": {
+    "17": {
+      "status": "PASS",
+      "verdicts": {
+        "A_definition": "PASS",
+        "B_editor": "PASS",
+        "C_dag_execution": "BLOCKED"
+      },
+      "acceptance": {
+        "checks": 20,
+        "passed": 20,
+        "console_errors": 0,
+        "evidence": ".ai-runs/overnight-delivery/rounds/r17-acceptance.json"
+      },
+      "commits": [
+        "553995a",
+        "10ff830"
+      ],
+      "finished_at": "2026-10-21T18:11:40"
+    },
+    "18": {
+      "status": "PASS",
+      "verdicts": {
+        "multi_process_same_host": "PASS",
+        "multi_host": "BLOCKED",
+        "cancel_race_fenced": "FAIL"
+      },
+      "acceptance": {
+        "checks": 8,
+        "passed": 8,
+        "evidence": ".ai-runs/overnight-delivery/regression/r18-two-instances.json",
+        "tests": "apps/api/tests/test_task_lease.py, test_multi_instance_recovery.py"
+      },
+      "finished_at": "2026-10-21T11:20:00"
+    },
+    "19": {
+      "status": "PENDING"
+    },
+    "20": {
+      "status": "PENDING"
+    },
+    "21": {
+      "status": "PENDING"
+    },
+    "22": {
+      "status": "PENDING"
+    }
+  },
+  "current_round": 18
+}

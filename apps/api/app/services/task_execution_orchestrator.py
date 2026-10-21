@@ -30,6 +30,7 @@ from app.services.task_evidence_service import TaskEvidenceService
 from app.services.task_execution_ports import TaskExecutionPorts
 from app.services.task_failure_repair_service import TaskFailureRepairService
 from app.services.task_goal_service import TaskGoalService
+from app.services.task_lease_context import current_lease
 from app.services.task_test_execution_service import TaskTestExecutionService
 from app.services.task_workspace import workspace_source_digest
 
@@ -479,6 +480,12 @@ class TaskExecutionOrchestrator:
     ) -> None:
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
+            lease = current_lease()
+            if lease is not None and not await repo.holds_lease(task_id, lease[0], lease[1]):
+                # Another instance owns this task now; a terminal write from here would overwrite its run.
+                await repo.add_event(task_id, "task.lease_lost", {"owner": lease[0], "token": lease[1]})
+                await repositories.commit()
+                return
             row = await repo.get(task_id)
             if not row or row.status in self.TERMINAL:
                 return

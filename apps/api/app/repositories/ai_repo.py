@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from project_model.models import AIInvocationDTO, AIUsageSummary
 from sqlalchemy import case, desc, func, select, update
@@ -132,12 +132,17 @@ class AIRepository:
             await session.commit()
             return row
 
+    # Longer than any single call can take (three retries of the long-generation budget), so a live
+    # call in another replica is never reported as interrupted.
+    STALE_INVOCATION_SECONDS = 1800
+
     async def recover_interrupted_invocations(self) -> int:
         """Close calls a dead process left RUNNING so the usage view never shows a stuck invocation."""
+        cutoff = utc_now() - timedelta(seconds=self.STALE_INVOCATION_SECONDS)
         async with self.session_factory() as session:
             result = await session.execute(
                 update(AIInvocationORM)
-                .where(AIInvocationORM.status == "RUNNING")
+                .where(AIInvocationORM.status == "RUNNING", AIInvocationORM.created_at < cutoff)
                 .values(status="INTERRUPTED", error_type="process_interrupted")
             )
             await session.commit()

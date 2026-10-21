@@ -1,0 +1,230 @@
+{
+  "generated_at": "2026-10-21T18:06:28",
+  "checks": 20,
+  "passed": 20,
+  "failed": [],
+  "results": [
+    {
+      "name": "the editor opens inside the workspace canvas",
+      "passed": true,
+      "detail": {
+        "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&stage=automation&view=canvas&canvas=editor"
+      }
+    },
+    {
+      "name": "creating a definition creates no task and no run",
+      "passed": true,
+      "detail": {
+        "tasks": 50,
+        "runs": 50
+      }
+    },
+    {
+      "name": "the editor connects nodes into a dependency chain",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          "run",
+          "request_approval",
+          "write_generated"
+        ],
+        "edges": 2
+      }
+    },
+    {
+      "name": "the inspector asks for the input the node needs",
+      "passed": true,
+      "detail": {
+        "inputs": 2
+      }
+    },
+    {
+      "name": "undo and redo step through the edit history",
+      "passed": true,
+      "detail": {
+        "after_undo": "",
+        "after_redo": "qd_r17_acceptance"
+      }
+    },
+    {
+      "name": "saving stores the graph the server can read back",
+      "passed": true,
+      "detail": {
+        "message": "草稿已保存。",
+        "nodes": 3,
+        "edges": 2,
+        "issues": []
+      }
+    },
+    {
+      "name": "a reload rebuilds the same draft",
+      "passed": true,
+      "detail": {
+        "nodes": 3,
+        "edges": 2
+      }
+    },
+    {
+      "name": "an invalid draft is saved with the reason it is invalid",
+      "passed": true,
+      "detail": {
+        "cycle_status": 200,
+        "cycle_codes": [
+          "CYCLE",
+          "APPROVAL_WITHOUT_WRITE"
+        ],
+        "unknown_kind_status": 200,
+        "unknown_kind_codes": [
+          "UNKNOWN_KIND"
+        ]
+      }
+    },
+    {
+      "name": "an invalid draft cannot be published",
+      "passed": true,
+      "detail": {
+        "status": 422,
+        "detail": "{'detail': \"A workflow with validation issues cannot be published: Node 'x' uses unknown kind 'shell.exec'.\", 'code': 'HTTP_422', 'message': \"A workflow with validation issues cannot be published: Nod"
+      }
+    },
+    {
+      "name": "publishing an immutable version is allowed only with a clean draft",
+      "passed": true,
+      "detail": {
+        "published": 1,
+        "draft": 2,
+        "clean_draft": true
+      }
+    },
+    {
+      "name": "an edit after publishing becomes the next draft, not a rewrite of v1",
+      "passed": true,
+      "detail": {
+        "draft": 2,
+        "published": 1
+      }
+    },
+    {
+      "name": "the published version keeps its own graph after a later draft edit",
+      "passed": true,
+      "detail": {
+        "published_nodes": 3,
+        "draft_nodes": 4,
+        "published_checksum": "040ce69f5799",
+        "draft_checksum": "6e9f731917a7"
+      }
+    },
+    {
+      "name": "comparing two versions names the nodes that changed",
+      "passed": true,
+      "detail": {
+        "added": [
+          "verify"
+        ],
+        "identical": false,
+        "keys": [
+          "nodes",
+          "edges",
+          "identical"
+        ]
+      }
+    },
+    {
+      "name": "a real execution is compared node by node",
+      "passed": true,
+      "detail": {
+        "task": "4664643db605448da5e3f09b413cfb4b",
+        "status": "COMPLETED",
+        "totals": {
+          "definition_nodes": 4,
+          "ran_steps": 4,
+          "matched": 0,
+          "not_executed": 4,
+          "undeclared": 4
+        },
+        "unknown": [
+          "step_inputs_are_not_compared",
+          "step_dependencies_are_not_compared",
+          "a_repeated_kind_is_matched_in_step_order"
+        ]
+      }
+    },
+    {
+      "name": "the diff is honest about what ran but was never declared",
+      "passed": true,
+      "detail": {
+        "undeclared": 4,
+        "matched": 0
+      }
+    },
+    {
+      "name": "a definition that mirrors a real task matches its steps",
+      "passed": true,
+      "detail": {
+        "task": "4664643db605448da5e3f09b413cfb4b",
+        "kinds": [
+          "discovery.collect_gaps",
+          "discovery.analyze_gaps",
+          "discovery.grade_gaps",
+          "discovery.summarize_gaps"
+        ],
+        "save_status": 200,
+        "issues": [
+          "MISSING_INPUT",
+          "MISSING_INPUT",
+          "MISSING_INPUT",
+          "MISSING_INPUT"
+        ],
+        "totals": {
+          "definition_nodes": 4,
+          "ran_steps": 4,
+          "matched": 4,
+          "not_executed": 0,
+          "undeclared": 0
+        }
+      }
+    },
+    {
+      "name": "editing and publishing never starts an execution",
+      "passed": true,
+      "detail": {
+        "tasks_before": 50,
+        "tasks_after": 50,
+        "runs_before": 50,
+        "runs_after": 50
+      }
+    },
+    {
+      "name": "publishing is gated by a project-write permission",
+      "passed": true,
+      "detail": {
+        "permissions": [
+          "automation:edit",
+          "integration:manage",
+          "project:read",
+          "project:write",
+          "release:gate",
+          "requirement:write",
+          "run:execute",
+          "security:admin",
+          "test_case:write"
+        ],
+        "note": "denial for a role without project:write is covered by apps/api/tests/test_workflow_definitions.py"
+      }
+    },
+    {
+      "name": "the editor stays usable on a phone viewport",
+      "passed": true,
+      "detail": {
+        "overflow": 0,
+        "nodes": 4,
+        "font_px": 10
+      }
+    },
+    {
+      "name": "the editor flow logs no console error",
+      "passed": true,
+      "detail": []
+    }
+  ]
+}

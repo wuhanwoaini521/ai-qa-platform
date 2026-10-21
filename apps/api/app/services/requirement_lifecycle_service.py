@@ -6,7 +6,7 @@ import asyncio
 import copy
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from project_model.lifecycle import (
@@ -98,18 +98,40 @@ def _validate_analysis_payload(payload) -> RequirementAnalysis:
     return analysis
 
 
+def _is_stale(entry: dict, after_seconds: int) -> bool:
+    """An analysis is only abandoned when its own start is older than the window."""
+    started = entry.get("started_at")
+    if not started:
+        return True
+    try:
+        moment = datetime.fromisoformat(str(started))
+    except ValueError:
+        return True
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment < utc_now() - timedelta(seconds=after_seconds)
+
+
 class RequirementLifecycleService:
     def __init__(self, repository_scope: RepositoryScopeFactory, orchestrator=None, decisions=None):
         self.repository_scope = repository_scope
         self.orchestrator = orchestrator or build_ai_orchestrator()
         self.decisions = decisions or DecisionService(repository_scope=repository_scope)
 
+    # A second replica starts while the first is still waiting for the model. Only an analysis older
+    # than this window can be called abandoned; `stream` already treats a younger RUNNING entry as live.
+    STALE_AFTER_SECONDS = 600
+
     async def recover_interrupted(self):
         async with self.repository_scope() as repositories:
             rows = await repositories.requirements.list_with_qa_model()
             for row in rows:
                 raw = row["qa_model"] or {}
-                if raw.get("history") and raw["history"][-1].get("status") == "RUNNING":
+                if (
+                    raw.get("history")
+                    and raw["history"][-1].get("status") == "RUNNING"
+                    and _is_stale(raw["history"][-1], self.STALE_AFTER_SECONDS)
+                ):
                     changed = {
                         **raw,
                         "history": [

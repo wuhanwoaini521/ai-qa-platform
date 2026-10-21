@@ -52,9 +52,7 @@ def upgrade():
         sa.ForeignKeyConstraint(["definition_id"], ["workflow_definitions.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "definition_id", "version", name="uq_workflow_definition_versions_definition_version"
-        ),
+        sa.UniqueConstraint("definition_id", "version", name="uq_workflow_definition_versions_definition_version"),
     )
     op.create_index("ix_workflow_definition_versions_definition_id", "workflow_definition_versions", ["definition_id"])
     op.create_index("ix_workflow_definition_versions_project_id", "workflow_definition_versions", ["project_id"])
