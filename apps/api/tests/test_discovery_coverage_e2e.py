@@ -69,6 +69,7 @@ async def _shot(page, *, path: str, full_page: bool = True) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.timeout(900)  # real Chromium discovery; ~167 s on an idle machine, longer under load
 async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db_session, tmp_path, monkeypatch):
     """Exercise persisted Discovery and the complete test-to-coverage path against real Chromium."""
     pytest.importorskip("playwright")

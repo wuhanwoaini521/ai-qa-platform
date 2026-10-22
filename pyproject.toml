@@ -30,6 +30,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
+    "pytest-timeout>=2.4.0",
 ]
 
 [tool.ruff]
@@ -59,6 +60,10 @@ testpaths = ["apps/api/tests", "packages/qa-core/tests", "packages/integrations/
 # third-party test code (and fail on their dependencies) instead of the platform's own suite.
 norecursedirs = [".git", ".venv", "node_modules", "runtime", "dist", ".pytest_cache", ".ruff_cache"]
 asyncio_mode = "auto"
+# No single test may hang the suite: the slowest real test is a real-browser discovery run at ~167 s, so
+# 180 s leaves room for a loaded machine. Tests that really need longer carry @pytest.mark.timeout(...).
+timeout = 180
+timeout_method = "thread"
 pythonpath = ["apps/api", "packages/qa-core", "packages/project-model", "packages/integrations", "packages/platform-config", "apps/worker"]
 markers = [
     "unit: fast, isolated test with no external dependency",

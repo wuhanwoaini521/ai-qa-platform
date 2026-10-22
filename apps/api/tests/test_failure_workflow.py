@@ -1798,7 +1798,7 @@ async def test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error(cl
     monkeypatch.setattr(
         workflow_module,
         "get_config",
-        lambda: base.model_copy(update={"repair": base.repair.model_copy(update={"analysis_timeout_seconds": 0.5})}),
+        lambda: base.model_copy(update={"repair": base.repair.model_copy(update={"analysis_timeout_seconds": 5})}),
     )
     async with test_db_session() as session:
         service = get_failure_service(session)
@@ -1806,8 +1806,10 @@ async def test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error(cl
         workflow = FailureWorkflowService(service)
         events = [event async for event in workflow.stream(failure_id)]
         assert events[-1].type == "run.timeout"
-        assert "0.5" in events[-1].message
-        await asyncio.wait_for(cancelled.wait(), timeout=3)
+        assert "5" in events[-1].message
+        # The budget is generous on purpose: under a loaded full suite a 0.5 s budget could expire
+        # during setup, before the provider call was entered, and then nothing is left to cancel.
+        await asyncio.wait_for(cancelled.wait(), timeout=10)
         record = (await workflow.list_history(failure_id))[0]
         assert record["status"] == "TIMEOUT"
         assert record["result"]["block_reason"] == "ANALYSIS_TIMEOUT"

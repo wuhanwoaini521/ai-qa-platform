@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-22T01:32:28",
+  "generated_at": "2026-10-22T10:55:53",
   "checks": 24,
   "passed": 24,
   "failed": [],
@@ -8,7 +8,7 @@
       "name": "the editor opens inside the workspace canvas",
       "passed": true,
       "detail": {
-        "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?canvas=editor&projectId=proj_golden_shop_v1&requirementId=req_939eae8d76d4&testDesignId=des_2aa5850cfe48&caseId=tc_661a346ee4c6&stage=automation&view=canvas"
+        "url": "http://127.0.0.1:5173/workspace/proj_golden_shop_v1?projectId=proj_golden_shop_v1&stage=automation&view=canvas&canvas=editor"
       }
     },
     {
