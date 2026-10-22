@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：最终工程收尾（用户任务 m07699，记录见 §3.22）。**给后端套件加挂死防护（`pytest-timeout` 2.4.0，默认 180s / `timeout_method = "thread"`，真实浏览器 e2e 单测标 900s），并用真实耗时（最慢 166.82s）决定阈值，双向验明：10.9s 的用例在 `--timeout=2` 下被终止，168.8s 的 e2e 在 `--timeout=30` 下靠自带标记存活。同时判定并只修一个**测试侧**竞态（0.5s 预算在 setup 阶段就被耗尽 → 无东西可取消，产品侧 `run.timeout`/TIMEOUT/`ANALYSIS_TIMEOUT` 全部正确），预算改 5s、等待改 10s。最终代码上双通道全量：SQLite **996 passed / 11 skipped / 890.37s / exit 0**，PostgreSQL 16 全量（与 SQLite 同范围 `apps/api/tests packages`）**999 passed / 8 skipped / 2066.93s / exit 0**；旧回归记录已按真实 revision 分类，中断/参数错误的记录标为无效。五级判定不变：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮 Round 17 复核审计见 §3.21。
+**当前活动轮次：RC Freeze（用户任务 m07860，记录见 §3.23，报告 `.ai-runs/overnight-delivery/RC-BASELINE.md`）。**本轮零产品改动，只做冻结/审计/交接：确认冻结树（代码 `b8958e2`、HEAD `279ccd2`、35 笔未推送）、把每个数字对应到 revision 与证据文件、扫描新增行里的凭据（只有两处演练/本地一次性口令）、实跑备份→恢复（44/44 表一致）与迁移往返（空库 → `0021` / 44 表、基线 downgrade 有意不清空、逐级降级才是受支持路径）、建立本地可恢复标记（tag `rc-2026.10.22` + `runtime/backups/aiqa-rc-2026.10.22.bundle`）、列出三个发布阻断（B1 DAG 执行路由、B2 cancel 未 fencing、B3 远端 CI 与部署回滚）与下一阶段最小修复清单。本轮在冻结树复跑前端 227 pass 与真实 Chromium 24/24。五级判定：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮最终工程收尾见 §3.22。
+
+**上一轮：最终工程收尾（用户任务 m07699，记录见 §3.22）。**给后端套件加挂死防护（`pytest-timeout` 2.4.0，默认 180s / `timeout_method = "thread"`，真实浏览器 e2e 单测标 900s），并用真实耗时（最慢 166.82s）决定阈值，双向验明：10.9s 的用例在 `--timeout=2` 下被终止，168.8s 的 e2e 在 `--timeout=30` 下靠自带标记存活。同时判定并只修一个**测试侧**竞态（0.5s 预算在 setup 阶段就被耗尽 → 无东西可取消，产品侧 `run.timeout`/TIMEOUT/`ANALYSIS_TIMEOUT` 全部正确），预算改 5s、等待改 10s。最终代码上双通道全量：SQLite **996 passed / 11 skipped / 890.37s / exit 0**，PostgreSQL 16 全量（与 SQLite 同范围 `apps/api/tests packages`）**999 passed / 8 skipped / 2066.93s / exit 0**；旧回归记录已按真实 revision 分类，中断/参数错误的记录标为无效。五级判定不变：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮 Round 17 复核审计见 §3.21。
 
 **Round 16（上一轮，用户任务 m03748，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
 
@@ -44,8 +46,9 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾：挂死防护 + 双通道全量回归）→ 本文件所在提交（`docs(release): record the frozen final regression…`） |
-| 未推送提交 | `origin/main..HEAD` = 35 笔（本任务默认不 push；复核审计 +2、最终收尾 +1） |
+| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾：挂死防护 + 双通道全量回归）→ `279ccd2`（冻结最终回归记录）→ 本文件所在提交（RC Freeze 基线） |
+| 未推送提交 | `origin/main..HEAD` = 37 笔（本任务默认不 push；复核审计 +2、最终收尾 +1、RC Freeze +2 = 验收证据复跑 + 本文件） |
+| RC 标记 | annotated tag `rc-2026.10.22`（仅本地）+ `runtime/backups/aiqa-rc-2026.10.22.bundle`（**自包含** git bundle，62 MB，`git bundle verify` → "The bundle records a complete history"，脱离远端也能恢复） |
 | 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20，`stored_artifacts.created_by` 加宽到 100；SQLite 下 no-op） |
 | 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
 | Round 16.5 HEAD（历史） | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
@@ -924,6 +927,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
+- **RC Freeze（本轮，用户任务 m07860，零产品改动）**：冻结树上复跑 —— 前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 无输出；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**。恢复路径实跑 —— `scripts/backup_db.sh` + `scripts/restore_db.sh` 后与活的开发库逐表比对 **44/44 一致**（`alembic_version` 两侧均 `0021_artifact_actor_width`）；空库 `alembic upgrade head` → `0021` / 44 表，`downgrade base` 后 36 表（基线迁移有意保留），再 `upgrade head` 回到 44 表。后端全量沿用 §3.22 的双通道数字（SQLite 996/11/890.37s、PostgreSQL 999/8/2066.93s），本轮未重跑。
+
 - **最终工程收尾（本轮，用户任务 m07699，代码 `b8958e2`，代码冻结）**：先带 `--durations=25` 跑一次定阈值（`regression/durations-sqlite.log`，最慢 `test_discovery_coverage_e2e.py::test_real_browser_discovery_to_playwright_coverage_e2e` **166.82s**，第二名 13.40s），再加 `pytest-timeout>=2.4.0`（`pyproject.toml`：`timeout = 180`、`timeout_method = "thread"`；该 e2e 标 `@pytest.mark.timeout(900)`）。双向验证：`--timeout=2` 杀掉一个真实 10.9s 的用例；同一 e2e 在 `--timeout=30` 下靠自带标记通过（168.77s）。最终代码后端 **SQLite 全量 996 passed / 11 skipped / 63 warnings / 890.37s / exit 0**（`regression/final-sqlite.log`）、**PostgreSQL 16 全量 999 passed / 8 skipped / 61 warnings / 2066.93s / exit 0**（`regression/final-postgres.log`，同范围 `apps/api/tests packages`；差的 3 条是 `postgres` 标记用例在 SQLite 下跳过）。`ruff check .` / `format --check .`（488 files）干净、`scripts/export_openapi.py --check` current、`scripts/i18n_check.py` 3390 keys、前端 **227 pass / 0 fail** + `tsc`/`eslint` 干净、真实 Chromium `rounds/r17_acceptance.py` 在最终代码复跑 **24/24 PASS，`failed: []`**。唯一一次失败 `test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error` 判定为**测试侧竞态**（0.5s 预算在 provider 调用被进入前就耗尽），产品侧行为正确；修测试（预算 5s、等待 10s）后该文件 50 passed。旧记录分类见 §3.22 表格。
 
 - **Round 17 复核审计（用户任务 m07420）**：按原 7 个 Phase 逐条核实已交付的 Studio，修复 1 个 P1（拖拽布局永远无法保存），补齐 4 条真实验收。后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 706.27s**；`ruff check .` / `ruff format --check .`（488 files）干净；前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**（+2 = `sameLayout` 的布局/亚像素用例），`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**（新增：循环草稿发布 422、无人工批准步骤的写节点发布 422、restore 只改草稿、拖拽后保存并在刷新后保持）；证据 `rounds/r17-acceptance.json`，说明 `rounds/r17-reaudit.md`。
@@ -1185,3 +1190,29 @@ pnpm -r typecheck && pnpm -r lint
 **6) 五级判定（分开给，不合并）**：`CORE_PRODUCT_PASS` = **PASS**；`WORKFLOW_STUDIO_PASS` = **PASS**；`DAG_EXECUTION_PASS` = **BLOCKED**（`compile_plan` 可编译，但没有经审批的执行路由，`/execute` 为 404）；`MULTI_INSTANCE_PASS` = **BLOCKED**（只证明同机双进程；`cancel` 仍未按租约 fencing，`R18-B2`）；`RELEASE_CANDIDATE_PASS` = **BLOCKED**（CI 服务从未在远端跑过、部署只做过单机 compose 演练、多实例未达 PASS）。
 
 **本轮未做（有意）**：不改产品代码、不做无证据的重构、不 push/merge/deploy；`.ai-runs/**`（除 `overnight-delivery/`）与 `runtime/backups/` 保持未跟踪。
+
+## 3.23 RC Freeze（用户任务 m07860：冻结、审计、可恢复标记）
+
+**本轮只做冻结/审计/交接，零产品改动。** 完整基线报告：`.ai-runs/overnight-delivery/RC-BASELINE.md`。
+
+**1) 冻结点**
+- 代码提交 `b8958e2`（最终回归所在树），本轮验收证据复跑提交 `a17275d`，`origin/main..HEAD` = **37 笔**（13 feat / 11 docs / 6 fix / 4 test / 1 style / 1 refactor / 1 chore），时间跨度 2026-10-20 → 2026-10-22。
+- 本地标记：annotated tag **`rc-2026.10.22`**（不推送）；可恢复副本 `runtime/backups/aiqa-rc-2026.10.22.bundle`（自包含 git bundle，62 MB，含完整历史与该 tag，未跟踪、本地；`git bundle verify` 报告 records a complete history）。
+- 跟踪树干净：`git status --porcelain` 只有未跟踪目录 —— `.ai-runs/` 下 17 个历史验收目录（2.2 GB）与 `runtime/backups/`（1.7 MB，2026-10-19 的三份 SQLite 备份）。`.ai-runs/overnight-delivery/**` 在 git 内。
+
+**2) 数字与 revision 的对应**（完整表见 RC-BASELINE.md §1）
+- 两份全量日志的 `HEAD:` 行写的是 `460cf3e`，因为提交发生在跑完之后；被测树与 `b8958e2` 逐字节一致，证据是 `git diff --stat b8958e2 -- pyproject.toml uv.lock apps/api/tests/test_discovery_coverage_e2e.py apps/api/tests/test_failure_workflow.py` 为空，且该提交只包含这 4 个文件 + 验收证据/日志。
+- 本轮在冻结树复跑：前端 **227 pass / 0 fail**、`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净、真实 Chromium `rounds/r17_acceptance.py` **24/24 PASS，`failed: []`**。
+
+**3) 敏感信息审计**：`git diff origin/main..HEAD` 的新增行全量扫描（provider key / bearer / 私钥 / 口令）只命中两处：`rounds/deploy-drill/drill.env` 的 `POSTGRES_PASSWORD=drillonlypassword`（同一文件写明 `APP_SECRET_KEY=drill-only-secret-key-not-for-production`、`QA_AI_ENABLED=false`、`JEV_ENABLED=false`，该栈由同一演练创建并销毁）与 `docs/agent-handoff.md` 里 Postgres-16 测试通道命令的 `POSTGRES_PASSWORD=postgres`（仓库早已记录的本地一次性容器）。**真实 provider / Jev 凭据不在仓库内**（`config/config.yaml` 只引用 `${QA_AI_*}` / `${JEV_*}`），证据目录内也没有 provider 材料。
+
+**4) 备份与迁移恢复路径（本轮实跑，不是引用）**
+- 备份 → 恢复：`bash scripts/backup_db.sh /tmp/rc-drill`（走 SQLite 在线备份 API，WAL 安全）→ `bash scripts/restore_db.sh <备份> /tmp/rc-drill/restored.db` → 逐表比对 **44/44 一致**（`test_runs` 76、`failure_records` 24、`failure_analyses` 28、`agent_tasks` 103、`ai_invocations` 1631、`workflow_definitions` 41、`discovery_evidence` 624、`discovery_suggestions` 13），两侧 `alembic_version` 均为 `0021_artifact_actor_width`。
+- 迁移：空库 `alembic upgrade head` → `0021` / **44 表**；`downgrade base` 后仍留 **36 表**，因为 `0001_baseline.py` 的 downgrade 有意保留数据（源码注释即如此），所以「一键清空」不是受支持操作；再 `upgrade head` 回到 44 表与 `0021`（升级路径幂等）。**受支持的回收路径是逐级 `downgrade -1`**：Round 20 在 PostgreSQL 容器上演练过 `0021 → 0020 → head`（`rounds/r20-deploy.json`），`test_runtime_migrations.py` 对每个非基线迁移做往返（6 passed）。
+- 运行手册写在 RC-BASELINE.md §4（停 API → 备份 → 必要时降一级 → restore（会先自我快照 `*.pre-restore.<ts>`）→ `alembic current` 对齐 → `/api/health` 三项健康）。
+
+**5) 三个发布阻断（代码证据 + 关闭标准见 RC-BASELINE.md §5）**：B1 DAG 执行路由缺失（`compile_plan` 存在但无路由，`/execute` 404）；B2 cancel 未按租约 fencing（`task_command_service` 直接写终态，`R18-B2`）；B3 远端 CI 与部署/回滚验收从未真跑（CI 只在 push 到 `main` 触发，部署只有单机 compose 演练 12/12）。
+
+**6) 下一阶段最小修复清单**：只做 B2（最小、纯后端）→ B1（需人工决定哪些节点可无人执行，先要产品/安全决策）→ B3（需真实 push 权限与主机）。验收标准：§2 的数字不得回退，每条新结论必须自带 JSON/日志证据且日志内记录 revision，最终树上的运行才能标 PASS。
+
+**判定**：`CORE_PRODUCT_PASS` PASS、`WORKFLOW_STUDIO_PASS` PASS、`DAG_EXECUTION_PASS` BLOCKED、`MULTI_INSTANCE_PASS` BLOCKED、`RELEASE_CANDIDATE_PASS` BLOCKED。未验证条件不标 PASS。**本轮未做**：不 push/merge/deploy，不加功能，不改产品代码。

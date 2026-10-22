@@ -103,6 +103,38 @@
         "MULTI_INSTANCE_PASS": "BLOCKED",
         "RELEASE_CANDIDATE_PASS": "BLOCKED"
       }
+    },
+    "rc_freeze": {
+      "state": "PASS",
+      "frozen_commit": "b8958e2",
+      "head": "279ccd2",
+      "unpushed": 35,
+      "tag": "rc-2026.10.22",
+      "bundle": "runtime/backups/aiqa-rc-2026.10.22.bundle",
+      "gates": {
+        "frontend": 227,
+        "chromium_r17": 24,
+        "tsc": "clean",
+        "eslint": "clean"
+      },
+      "recovery": {
+        "backup_restore_tables": "44/44",
+        "alembic_head": "0021_artifact_actor_width",
+        "fresh_db_tables": 44
+      },
+      "verdicts": {
+        "CORE_PRODUCT_PASS": "PASS",
+        "WORKFLOW_STUDIO_PASS": "PASS",
+        "DAG_EXECUTION_PASS": "BLOCKED",
+        "MULTI_INSTANCE_PASS": "BLOCKED",
+        "RELEASE_CANDIDATE_PASS": "BLOCKED"
+      },
+      "blockers": [
+        "B1 DAG execution route missing",
+        "B2 cancel not fenced by lease",
+        "B3 remote CI and deploy rollback never ran"
+      ],
+      "report": ".ai-runs/overnight-delivery/RC-BASELINE.md"
     }
   },
   "current_round": 22,
