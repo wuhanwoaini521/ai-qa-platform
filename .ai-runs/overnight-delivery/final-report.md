@@ -6,9 +6,12 @@ earlier round without re-running it.
 
 ## 1. Final HEAD
 
-`6a865c3 feat(ux): keep the canvas legible instead of fitting everything` + the Round 22 commit that
-follows it in this same delivery (`fix(planner)`/`fix(canvas)` + docs). 31 commits ahead of `origin/main`,
-**nothing pushed** (the mission forbids push/merge/deploy).
+this commit (subject: `docs(release): record the frozen final regression, both channels, and classify every
+older record`) on top of `b8958e2 test(pytest): put a hang guard on the suite and stop a timeout test racing its own budget`.
+35 commits ahead of `origin/main`, **nothing pushed** (the
+mission forbids push/merge/deploy). The earlier code commits of the delivery are `53b7276` (Round 22),
+`0f11fa3` (Round 17 re-audit) and `460cf3e` (report correction); everything measured below was re-run on
+`b8958e2`.
 
 ## 2–3. Per round: commit and verdict
 
@@ -19,7 +22,8 @@ follows it in this same delivery (`fix(planner)`/`fix(canvas)` + docs). 31 commi
 | 19 AI workflow planner | `3c0add5` | **PASS** planner + validation; execution **BLOCKED** |
 | 20 CI / PostgreSQL / deployment | `8b1c07d` | **PASS** CI-command parity, PG channel, single-host compose drill; CI service **BLOCKED** |
 | 21 UX / performance / observability | `6a865c3` | **PASS** |
-| 22 Release candidate audit | this commit | **PASS** audit; release level **BLOCKED** (see §12) |
+| 22 Release candidate audit | `53b7276` | **PASS** audit; release level **BLOCKED** (see §12) |
+| 17 re-audit + final engineering close | `0f11fa3` + `b8958e2` | **PASS** (7-phase verification, 24/24; hang guard + all-green final runs) |
 
 ## 4. Delivered
 
@@ -49,17 +53,49 @@ follows it in this same delivery (`fix(planner)`/`fix(canvas)` + docs). 31 commi
 
 ## 6–8. Test statistics (final code)
 
-| Gate | Result |
+Final numbers are the ones measured on the frozen final code (logs carry HEAD, command, start/end and exit code under `.ai-runs/overnight-delivery/regression/`).
+
+| Gate | Result (final code) |
 | --- | --- |
-| Backend pytest (SQLite) | **996 passed / 11 skipped / 63 warnings / 677.08 s** |
-| Frontend tests | **225 pass / 0 fail** |
+| Backend pytest (SQLite) | **996 passed / 11 skipped / 63 warnings / 890.37 s / exit 0** — `regression/final-sqlite.log` |
+| Backend pytest (PostgreSQL 16) | **999 passed / 8 skipped / 61 warnings / 2066.93 s / exit 0** — whole suite `apps/api/tests packages` on `postgres:16-alpine` (`aiqa-r20-pg`, port 55432), `regression/final-postgres.log`; the 3-test difference is the `postgres`-marked tests that skip on SQLite |
+| Frontend tests | **227 pass / 0 fail** |
 | TypeScript / ESLint | clean / clean |
 | Ruff check + format | clean, 488 files |
 | OpenAPI contract | current |
 | i18n | 25 namespaces, 2 languages, 3390 keys |
-| Alembic | `test_runtime_migrations.py` 6 passed (up/down to `0015`) |
-| PostgreSQL 16 | **838 passed / 8 skipped / 1086.64 s** — the whole backend suite on a `postgres:16-alpine` container at Round 20 (log `.ai-runs/overnight-delivery/rounds/r20-postgres.txt`), plus a 34-test PG subset (planner, migrations, evidence, lease) re-run at the Round 22 code state |
-| Real Chromium E2E (Round 22) | **15/15 PASS**, `failed: []`, `console_errors: []` |
+| Alembic | `test_runtime_migrations.py` 6 passed (up/down round trip) |
+| Test-hang guard | `pytest-timeout` 2.4.0, 180 s default (`timeout_method = "thread"`), real-browser e2e marked 900 s; both directions proven (a 10.9 s test killed at 2 s; the 168.8 s e2e survived `--timeout=30`) |
+| Real Chromium E2E (Round 22 audit) | **15/15 PASS**, `failed: []`, `console_errors: []` — ran at `53b7276`; no product code changed afterwards |
+| Real Chromium E2E (Studio, re-run on final code) | **24/24 PASS**, `failed: []` — `rounds/r17_acceptance.py` |
+
+### 6.1 Regression records classified by the revision they actually ran on
+
+| Record | Code state | Result | Status |
+| --- | --- | --- | --- |
+| `regression/final-sqlite.log` | final HEAD | 996 / 11 / 890.37 s / exit 0 | **final** |
+| `regression/final-postgres.log` | final HEAD | 999 / 8 / 2066.93 s / exit 0 | **final** |
+| `regression/durations-sqlite.log` | `460cf3e` | 1 failed / 995 passed / 1402.88 s | used only to choose the timeouts; the failure is a test-side race, fixed (see 6.2) |
+| `r17-readaudit-backend` | `0f11fa3` | 996 / 11 / 706.27 s | valid for that revision, superseded by the final run |
+| `r22-backend-verbose` | `53b7276` | 996 / 11 / 677.08 s | valid for that revision |
+| `r22-backend-full-v2` | pre-R22-fixes (`6a865c3` + planner work) | 994 / 11 / 724.80 s | superseded by 996 |
+| `r21` suite | `6a865c3` | 994 / 11 / 724.80 s | valid for that revision |
+| `rounds/r20-postgres.txt` | `8b1c07d` | 838 / 8 / 1086.64 s | valid, but that run covered `apps/api` only |
+| `backend-full-sqlite-r20` | `8b1c07d` | 989 / 11 / 1049.87 s | valid for that revision |
+| `r22-backend-full` | — | `unrecognized arguments: --timeout=600` | **invalid** (plugin absent, suite never ran) |
+| `r22-backend-full-final` | — | exit 143 | **invalid** (SIGTERM, killed by me) |
+| `r22-backend-final-2` | — | 57 % progress only | **invalid** (truncated, no summary) |
+
+### 6.2 The one failure in the final-code discovery run was a test-side race
+
+`apps/api/tests/test_failure_workflow.py::test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error`
+asserted that the hanging provider coroutine received the cancellation within 3 s. The product side
+was already correct in that same run: `run.timeout` was emitted, the log recorded
+`Failure analysis timed out analysis_id=… budget=0.5s`, and the record ended `TIMEOUT` with
+`block_reason=ANALYSIS_TIMEOUT` and `START_ANALYSIS` still allowed. The race: a 0.5 s budget can
+expire during setup on a loaded suite *before* the provider call is entered, so there is nothing to
+cancel and the event never fires. Fixed in the test only (budget 5 s, wait 10 s, reason in a comment);
+the file is 50 passed, and the run below is the one that counts.
 
 ## 9. Real AI/Jev acceptance
 
@@ -133,5 +169,15 @@ inherit `discovery_run_access`).
 2. Add cancel-request rows so a non-owner replica cannot force a terminal state (`R18-B2`).
 3. Turn CI on for a push (or a nightly schedule) so the PostgreSQL channel and the E2E suite run on a
    fresh machine; the container drill is ready to reuse.
-4. Before any push: 31 commits are local, evidence is under `.ai-runs/overnight-delivery/` (committed) and
+4. Before any push: 34 commits are local, evidence is under `.ai-runs/overnight-delivery/` (committed) and
    the rest of `.ai-runs/**` stays untracked by design.
+
+## 18. The five verdict levels, stated separately
+
+| Level | Verdict | Why |
+| --- | --- | --- |
+| `CORE_PRODUCT_PASS` | **PASS** | Both business chains run end to end on real Chromium with the real provider: run → failure → analysis → human approval → apply → exact verification; and sentence → candidate workflow → draft → publish → stop before execution. 996/999 backend, 227 frontend, 15/15 + 24/24 real-browser checks, no console error. |
+| `WORKFLOW_STUDIO_PASS` | **PASS** | Definitions are versioned, validated (writes need an approval ancestor), published immutably, restorable as a draft, diffable against a published version and against a real task; layout is saveable. 24/24 acceptance. |
+| `DAG_EXECUTION_PASS` | **BLOCKED** | `WorkflowDefinitionService.compile_plan` exists and `task_scheduler_service` really honours `depends_on`, but no route executes a definition (`/execute` → 404) and no approved end-to-end execution of a stored graph is proven. |
+| `MULTI_INSTANCE_PASS` | **BLOCKED** | Proven for two processes on one host only (lease, heartbeat, fencing, 8/8 drill). No second host and no PostgreSQL-backed multi-replica run; `cancel` is still unfenced across replicas (`R18-B2`). |
+| `RELEASE_CANDIDATE_PASS` | **BLOCKED** | CI has never run in the CI service (the mission forbids push), deployment is proven only as a single-host compose drill, and multi-instance is blocked. What *is* proven: the CI command set passes locally on SQLite **and** PostgreSQL, images build and run, and the stack survives a downgrade/upgrade plus a database restore. |

@@ -5,7 +5,7 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：Round 17 复核审计（用户任务 m07420，记录见 §3.21）。**按 Round 17 原 prompt 的 7 个 Phase 逐条核实「已交付的版本化工作流 Studio」，只以代码与可重跑证据为准：Phase 1/2/5/6 实质完成（定义与执行分表、版本与乐观并发、执行 Diff 带 `unknown` 列表、任务级证据 9 条/11 步），Phase 4 执行仍 BLOCKED（`compile_plan` 有实现但无执行路由，未新建第二套调度器）。审计发现并修复 1 个真实 P1：拖拽布局永远无法保存（`dirty` 只比较图语义，保存按钮因此始终禁用）；真实验收从 20 项扩到 24 项全 PASS。判定：A 定义与编辑 PASS、B 执行 BLOCKED、C 任意 DAG BLOCKED。上一轮 Round 22 的发布候选审计结论见 §3.20（五级判定：核心产品 PASS、Studio PASS、DAG/多实例/发布候选 BLOCKED）。
+**当前活动轮次：最终工程收尾（用户任务 m07699，记录见 §3.22）。**给后端套件加挂死防护（`pytest-timeout` 2.4.0，默认 180s / `timeout_method = "thread"`，真实浏览器 e2e 单测标 900s），并用真实耗时（最慢 166.82s）决定阈值，双向验明：10.9s 的用例在 `--timeout=2` 下被终止，168.8s 的 e2e 在 `--timeout=30` 下靠自带标记存活。同时判定并只修一个**测试侧**竞态（0.5s 预算在 setup 阶段就被耗尽 → 无东西可取消，产品侧 `run.timeout`/TIMEOUT/`ANALYSIS_TIMEOUT` 全部正确），预算改 5s、等待改 10s。最终代码上双通道全量：SQLite **996 passed / 11 skipped / 890.37s / exit 0**，PostgreSQL 16 全量（与 SQLite 同范围 `apps/api/tests packages`）**999 passed / 8 skipped / 2066.93s / exit 0**；旧回归记录已按真实 revision 分类，中断/参数错误的记录标为无效。五级判定不变：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮 Round 17 复核审计见 §3.21。
 
 **Round 16（上一轮，用户任务 m03748，记录见 §3.13，设计文档 `docs/DISCOVERY_INTELLIGENCE.md`，真实验收 `.ai-runs/e2e-round16/acceptance.json`）。** 本轮在 Round 15 的结构化证据之上，只让 AI/Jev 分析确定性规则无法判定的场景（`CANDIDATE_GAP` / `UNDETERMINED` / 显式重分析），把结果作为独立、可审核的建议层写入 `discovery_suggestions`，不覆盖 `discovery_scenarios` 的规则判定；虚构 evidence_id 或 case_id 直接拒绝并留原因，Provider 降级不落任何建议文本，人工批准才生成用例。真实 Chromium 验收 28/28、真实 provider（`mimo-v2.6-flash`）与真实 Jev（`jev-1.13.0`，score 0.505 / confidence 0.90）均走通；后端/前端全量见 §9。
 
@@ -44,8 +44,8 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | `8b1c07d`（R20）→ `6a865c3`（R21 画布可读性/证据分页）→ `53b7276`（R22 发布候选）→ Round 17 复核审计提交（见 §3.21） |
-| 未推送提交 | `origin/main..HEAD` = 32 笔（本任务默认不 push；Round 21 +1、Round 22 +1、复核审计 +1） |
+| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾：挂死防护 + 双通道全量回归）→ 本文件所在提交（`docs(release): record the frozen final regression…`） |
+| 未推送提交 | `origin/main..HEAD` = 35 笔（本任务默认不 push；复核审计 +2、最终收尾 +1） |
 | 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20，`stored_artifacts.created_by` 加宽到 100；SQLite 下 no-op） |
 | 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
 | Round 16.5 HEAD（历史） | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
@@ -924,7 +924,9 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 
 ## 9. 最后执行的测试
 
-- **Round 17 复核审计（本轮，用户任务 m07420）**：按原 7 个 Phase 逐条核实已交付的 Studio，修复 1 个 P1（拖拽布局永远无法保存），补齐 4 条真实验收。后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 706.27s**；`ruff check .` / `ruff format --check .`（488 files）干净；前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**（+2 = `sameLayout` 的布局/亚像素用例），`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**（新增：循环草稿发布 422、无人工批准步骤的写节点发布 422、restore 只改草稿、拖拽后保存并在刷新后保持）；证据 `rounds/r17-acceptance.json`，说明 `rounds/r17-reaudit.md`。
+- **最终工程收尾（本轮，用户任务 m07699，代码 `b8958e2`，代码冻结）**：先带 `--durations=25` 跑一次定阈值（`regression/durations-sqlite.log`，最慢 `test_discovery_coverage_e2e.py::test_real_browser_discovery_to_playwright_coverage_e2e` **166.82s**，第二名 13.40s），再加 `pytest-timeout>=2.4.0`（`pyproject.toml`：`timeout = 180`、`timeout_method = "thread"`；该 e2e 标 `@pytest.mark.timeout(900)`）。双向验证：`--timeout=2` 杀掉一个真实 10.9s 的用例；同一 e2e 在 `--timeout=30` 下靠自带标记通过（168.77s）。最终代码后端 **SQLite 全量 996 passed / 11 skipped / 63 warnings / 890.37s / exit 0**（`regression/final-sqlite.log`）、**PostgreSQL 16 全量 999 passed / 8 skipped / 61 warnings / 2066.93s / exit 0**（`regression/final-postgres.log`，同范围 `apps/api/tests packages`；差的 3 条是 `postgres` 标记用例在 SQLite 下跳过）。`ruff check .` / `format --check .`（488 files）干净、`scripts/export_openapi.py --check` current、`scripts/i18n_check.py` 3390 keys、前端 **227 pass / 0 fail** + `tsc`/`eslint` 干净、真实 Chromium `rounds/r17_acceptance.py` 在最终代码复跑 **24/24 PASS，`failed: []`**。唯一一次失败 `test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error` 判定为**测试侧竞态**（0.5s 预算在 provider 调用被进入前就耗尽），产品侧行为正确；修测试（预算 5s、等待 10s）后该文件 50 passed。旧记录分类见 §3.22 表格。
+
+- **Round 17 复核审计（用户任务 m07420）**：按原 7 个 Phase 逐条核实已交付的 Studio，修复 1 个 P1（拖拽布局永远无法保存），补齐 4 条真实验收。后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 706.27s**；`ruff check .` / `ruff format --check .`（488 files）干净；前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**（+2 = `sameLayout` 的布局/亚像素用例），`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**（新增：循环草稿发布 422、无人工批准步骤的写节点发布 422、restore 只改草稿、拖拽后保存并在刷新后保持）；证据 `rounds/r17-acceptance.json`，说明 `rounds/r17-reaudit.md`。
 
 - **Round 22（发布候选审计，`53b7276`）**：后端 SQLite 全量 `uv run python -m pytest apps/api/tests packages -q` → **996 passed / 11 skipped / 63 warnings / 677.08s**（Round 21 为 994 passed，+2 = planner 的一次纠正与「非列表返回不是 500」两个用例）；PostgreSQL 16 通道（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`）`test_workflow_planner test_runtime_migrations test_discovery_evidence test_task_lease` → **34 passed**；`ruff check .` / `ruff format --check .`（488 files）干净；`scripts/i18n_check.py` → 25 namespaces / 3390 keys；`scripts/export_openapi.py --check` → current；前端 `pnpm --filter @ai-qa/web test` → **225 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 干净。真实 Chromium + 真实 provider：`.ai-runs/overnight-delivery/rounds/r22_acceptance.py` → **15/15 PASS，`failed: []`，`console_errors: []`**（证据 `rounds/r22-acceptance.json`，说明 `rounds/r22.md`）。两条链路：失败→批准→精确验证（`run_1949eb638ae2`/`fail_00fd043c649c`/`7a5e3a6f…`/`run_01b4e1aebd12`）、自然语言→草稿→发布→停在执行前（planner `valid:true` 14 节点，`72b52b01-…`，`/execute` 404）。
 
@@ -1140,3 +1142,46 @@ pnpm -r typecheck && pnpm -r lint
 **本轮修复的真实缺陷（P1）**：`WorkflowEditorPanel.tsx:200` 的 `dirty` 只比较 `sameGraph`，而 `canonical()` 刻意排除 `position`，保存按钮又是 `disabled={… || !dirty}` → 拖动节点后「保存草稿」始终禁用，布局**永远无法持久化**。修法：`workflowEditorModel.ts` 新增 `sameLayout()`（按 key 排序比较取整后的坐标），`dirty = !sameGraph(...) || !sameLayout(...)`；图语义不变，版本 diff 仍不受布局影响。新增前端 2 个测试（布局算未保存、亚像素漂移不算变化）+ 1 条真实验收。
 
 **回归**：前端 227 pass（原 225）、`tsc`/`eslint` 干净；后端全量见 §9 本轮条目；`ruff check`/`format --check` 干净。
+
+## 3.22 最终工程收尾（用户任务 m07699：挂死防护、双通道全量回归、记录按 revision 分类）
+
+**为什么做**：此前出现过三次「不可用的回归记录」（`--timeout=600` 参数不被识别 → 直接启动失败、退出码 143（我自己 SIGTERM 掉的）、只打到 57% 的截断输出）。“跑不动/跑一半”和“真失败”必须分开，这是发布判定的一部分。
+
+**1) 用真实耗时定超时，而不是拍一个数**
+- 先带 `--durations=25` 跑一次全量（`regression/durations-sqlite.log`，HEAD `460cf3e`）：最慢 `apps/api/tests/test_discovery_coverage_e2e.py::test_real_browser_discovery_to_playwright_coverage_e2e` **166.82s**，第二名 `test_agent_tasks.py::test_browser_agent_completes_second_ecommerce_journey_on_demo_shop` **13.40s**，其余 call 均 < 11s（setup 最大 10.72s）。
+- 依赖：`pytest-timeout>=2.4.0` 加入 dev 组（`uv add --dev pytest-timeout`，`uv.lock` 同步更新）。
+- 配置：`pyproject.toml` 的 `[tool.pytest.ini_options]` 增加 `timeout = 180` 与 `timeout_method = "thread"`（跨平台，不依赖 SIGALRM）；真实浏览器用例单独 `@pytest.mark.timeout(900)`。
+- 双向验证（缺一不可）：① `uv run python -m pytest "apps/api/tests/test_agent_tasks.py::test_create_test_runs_browser_decision_approval_and_generated_pytest" -q --timeout=2` → 插件在 2s 打印 `Timeout` 并终止（该用例真实耗时 10.9s）；② `uv run python -m pytest apps/api/tests/test_discovery_coverage_e2e.py -q --timeout=30` → **1 passed / 168.77s**，即用例自带的 900s 标记覆盖了命令行默认值。
+
+**2) 那次唯一的失败是测试自身的时序竞态，不是产品缺陷**
+- 失败用例：`apps/api/tests/test_failure_workflow.py::test_analysis_timeout_ends_the_run_with_an_explicit_retryable_error`，断言 `await asyncio.wait_for(cancelled.wait(), timeout=3)` 超时。
+- 产品侧在同一份日志里是正确的：`run.timeout` 事件已发出、`Failure analysis timed out analysis_id=… budget=0.5s` 已记录，`status=TIMEOUT` / `result.block_reason=ANALYSIS_TIMEOUT` / `allowed_actions` 含 `START_ANALYSIS` 三条断言全部通过。
+- 根因：用例把预算压到 0.5s；高负载全量运行时，0.5s 会在「provider 调用被进入之前」被 setup 的建库/建项目/编排放耗尽，于是**没有东西可取消**，`HangingProvider.complete()` 从未执行，`cancelled` 永不置位。单跑 2.29s 通过，全量下约 1/5 概率失败。
+- 修法（只动测试，产品零改动）：预算 0.5s → **5s**（仍远小于任何真实分析，仍证明“超时会终止”），等待窗口 3s → **10s**，并把这段时序原因写成注释。修后该文件 **50 passed**。
+
+**3) 最终代码上的双通道全量回归**（日志都记录 HEAD、命令、开始/结束时间、退出码、汇总行）
+- SQLite：`regression/final-sqlite.log` → **996 passed / 11 skipped / 63 warnings / 890.37s**，`EXIT: 0`。
+- PostgreSQL 16（容器 `aiqa-r20-pg`，`postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`）：`regression/final-postgres.log` → **999 passed / 8 skipped / 61 warnings / 2066.93s**，`EXIT: 0`。差异来源是 3 条 `postgres` 标记用例在 PG 上真跑、SQLite 下跳过（996+3=999、11−3=8）。本轮把 PG 通道从「`apps/api`」扩到与 SQLite 相同的「`apps/api/tests packages`」，所以数值高于 Round 20 的 838。
+
+**4) 回归记录按真实 revision 分类**（不把修复前/中断的结果当最终结果）
+
+| 记录 | 代码状态 | 结果 | 处置 |
+| --- | --- | --- | --- |
+| `regression/final-sqlite.log` | 最终 HEAD | 996 / 11 / 890.37s / exit 0 | **最终** |
+| `regression/final-postgres.log` | 最终 HEAD | 999 / 8 / 2066.93s / exit 0 | **最终** |
+| `regression/durations-sqlite.log` | `460cf3e` | 1 failed / 995 passed / 1402.88s | 仅用于定阈值；失败已判定为测试竞态并修复 |
+| `r17-readaudit-backend` | `0f11fa3` | 996 / 11 / 706.27s | 该 revision 有效，被最终跑取代 |
+| `r22-backend-verbose` | `53b7276` | 996 / 11 / 677.08s | 该 revision 有效 |
+| `r22-backend-full-v2` | R22 修复前 | 994 / 11 / 724.80s | 被 996 取代 |
+| R21 全量 | `6a865c3` | 994 / 11 / 724.80s | 该 revision 有效 |
+| `rounds/r20-postgres.txt` | `8b1c07d` | 838 / 8 / 1086.64s | 该 revision 有效，但范围只有 `apps/api` |
+| `backend-full-sqlite-r20` | `8b1c07d` | 989 / 11 / 1049.87s | 该 revision 有效 |
+| `r22-backend-full` | — | `unrecognized arguments: --timeout=600` | **无效**（插件缺失，套件没跑起来） |
+| `r22-backend-full-final` | — | exit 143 | **无效**（被 SIGTERM 终止） |
+| `r22-backend-final-2` | — | 仅 57% 进度 | **无效**（截断，无汇总行） |
+
+**5) 其余门禁（最终代码复跑）**：`ruff check .` / `ruff format --check .` 488 files 干净；`scripts/export_openapi.py --check` → current；`scripts/i18n_check.py` → 25 namespaces / 3390 keys；前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**，`tsc --noEmit`、`eslint src --max-warnings=0` 干净；真实浏览器 `rounds/r17_acceptance.py` 在最终代码复跑 **24/24 PASS，`failed: []`**（编辑/发布/版本对比/执行 Diff/权限/手机视口/无控制台错误）。
+
+**6) 五级判定（分开给，不合并）**：`CORE_PRODUCT_PASS` = **PASS**；`WORKFLOW_STUDIO_PASS` = **PASS**；`DAG_EXECUTION_PASS` = **BLOCKED**（`compile_plan` 可编译，但没有经审批的执行路由，`/execute` 为 404）；`MULTI_INSTANCE_PASS` = **BLOCKED**（只证明同机双进程；`cancel` 仍未按租约 fencing，`R18-B2`）；`RELEASE_CANDIDATE_PASS` = **BLOCKED**（CI 服务从未在远端跑过、部署只做过单机 compose 演练、多实例未达 PASS）。
+
+**本轮未做（有意）**：不改产品代码、不做无证据的重构、不 push/merge/deploy；`.ai-runs/**`（除 `overnight-delivery/`）与 `runtime/backups/` 保持未跟踪。

@@ -56,8 +56,55 @@
       "finished_at": "2026-10-21T17:20:00+00:00",
       "backend": "996 passed / 11 skipped / 677.08s",
       "frontend": "225 pass / 0 fail"
+    },
+    "final_close": {
+      "state": "PASS",
+      "head": "b8958e2",
+      "finished_at": "2026-10-22T10:58:49+08:00",
+      "hang_guard": {
+        "plugin": "pytest-timeout 2.4.0",
+        "default_seconds": 180,
+        "method": "thread",
+        "e2e_mark_seconds": 900
+      },
+      "backend": {
+        "sqlite": {
+          "passed": 996,
+          "skipped": 11,
+          "seconds": 890.37,
+          "exit": 0,
+          "log": "regression/final-sqlite.log"
+        },
+        "postgres": {
+          "passed": 999,
+          "skipped": 8,
+          "seconds": 2066.93,
+          "exit": 0,
+          "log": "regression/final-postgres.log"
+        }
+      },
+      "frontend": {
+        "passed": 227,
+        "failed": 0
+      },
+      "browser": {
+        "acceptance": "rounds/r17_acceptance.py",
+        "checks": 24,
+        "passed": 24,
+        "failed": []
+      },
+      "fixed": [
+        "test_failure_workflow.py analysis-timeout test raced its own 0.5s budget (test-only fix)"
+      ],
+      "verdicts": {
+        "CORE_PRODUCT_PASS": "PASS",
+        "WORKFLOW_STUDIO_PASS": "PASS",
+        "DAG_EXECUTION_PASS": "BLOCKED",
+        "MULTI_INSTANCE_PASS": "BLOCKED",
+        "RELEASE_CANDIDATE_PASS": "BLOCKED"
+      }
     }
   },
   "current_round": 22,
-  "updated_at": "2026-10-21T20:48:30"
+  "updated_at": "2026-10-22T10:58:49+08:00"
 }
