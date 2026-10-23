@@ -35,6 +35,8 @@ export interface WorkspaceContext {
   lineNumber?: number;
   nodeId?: string;
   stepId?: string;
+  recorderFromRequirementId?: string;
+  recorderFromCaseId?: string;
   stage?: WorkspaceStage;
   view?: WorkspaceView;
   returnTo?: 'workspace';
@@ -52,6 +54,8 @@ const PARAMS: ReadonlyArray<[keyof WorkspaceContext, string]> = [
   ['browserSessionId', 'browserSessionId'],
   ['nodeId', 'nodeid'],
   ['stepId', 'step'],
+  ['recorderFromRequirementId', 'recorderFromRequirementId'],
+  ['recorderFromCaseId', 'recorderFromCaseId'],
   ['stage', 'stage'],
   ['view', 'view'],
   ['returnTo', 'returnTo'],
@@ -95,6 +99,8 @@ export function readWorkspaceContext(
     file: nonEmpty(params, 'file'),
     nodeId: nonEmpty(params, 'nodeid') ?? nonEmpty(params, 'nodeId'),
     stepId: nonEmpty(params, 'step'),
+    recorderFromRequirementId: nonEmpty(params, 'recorderFromRequirementId'),
+    recorderFromCaseId: nonEmpty(params, 'recorderFromCaseId'),
     returnTo: params.get('returnTo') === 'workspace' ? 'workspace' : undefined,
   };
 

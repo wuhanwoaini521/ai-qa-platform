@@ -50,6 +50,38 @@ test('context updates preserve unrelated view state and replace stale entity IDs
   assert.equal(params.get('line'), null);
 });
 
+test('round trips recorder source context and replaces stale source IDs', () => {
+  const source = readWorkspaceContext('?stage=automation&view=browser&requirementId=req-1&caseId=case-1', 'project-1');
+  const params = writeWorkspaceContext('', {
+    ...source,
+    recorderFromRequirementId: source.requirementId,
+    recorderFromCaseId: source.testCaseId,
+  });
+  const reopened = readWorkspaceContext(params, 'project-1');
+  assert.equal(reopened.recorderFromRequirementId, 'req-1');
+  assert.equal(reopened.recorderFromCaseId, 'case-1');
+
+  const changedSource = writeWorkspaceContext(params, {
+    ...reopened,
+    recorderFromRequirementId: 'req-2',
+    recorderFromCaseId: undefined,
+  });
+  const next = readWorkspaceContext(changedSource, 'project-1');
+  assert.equal(next.recorderFromRequirementId, 'req-2');
+  assert.equal(next.recorderFromCaseId, undefined);
+
+  const leftRecorder = writeWorkspaceContext(changedSource, {
+    ...next,
+    view: 'cases',
+    recorderFromRequirementId: undefined,
+    recorderFromCaseId: undefined,
+  });
+  const workspace = readWorkspaceContext(leftRecorder, 'project-1');
+  assert.equal(workspace.view, 'cases');
+  assert.equal(workspace.recorderFromRequirementId, undefined);
+  assert.equal(workspace.recorderFromCaseId, undefined);
+});
+
 test('round trips the Workspace Discover stage and view', () => {
   const context = readWorkspaceContext('?stage=discover&view=discover&requirementId=req-1', 'project-1');
   assert.equal(context.stage, 'discover');

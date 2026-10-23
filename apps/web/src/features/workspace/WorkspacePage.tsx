@@ -425,6 +425,8 @@ export function WorkspacePage() {
         projectId: projectId || undefined,
         view: next,
         stage: stageForView[next],
+        recorderFromRequirementId: next === 'browser' ? context.requirementId : undefined,
+        recorderFromCaseId: next === 'browser' ? context.testCaseId : undefined,
       });
       if (next === 'code' || next === 'debug') params.delete('preset');
       return params;
@@ -653,7 +655,9 @@ export function WorkspacePage() {
       { ...saved.test_case, binding: saved.binding },
     ]);
     updateContext({
-      requirementId: saved.test_case.requirement_id ?? context.requirementId,
+      requirementId: saved.test_case.requirement_id ?? context.recorderFromRequirementId ?? context.requirementId,
+      recorderFromRequirementId: undefined,
+      recorderFromCaseId: undefined,
       testCaseId: saved.test_case.id,
       automationBindingId: saved.binding.id,
       taskId: undefined,
@@ -1200,6 +1204,15 @@ export function WorkspacePage() {
                 selectedProjectId={projectId}
                 embedded
                 runConfig={runConfig}
+                workspaceOrigin={context.recorderFromRequirementId || context.recorderFromCaseId ? {
+                  requirement: context.recorderFromRequirementId
+                    ? requirements.find((item) => item.id === context.recorderFromRequirementId)?.title ?? context.recorderFromRequirementId
+                    : undefined,
+                  testCase: context.recorderFromCaseId
+                    ? cases.find((item) => item.id === context.recorderFromCaseId)?.title ?? context.recorderFromCaseId
+                    : undefined,
+                } : undefined}
+                onReturnToWorkspace={() => setView(context.recorderFromCaseId ? 'cases' : 'requirement')}
                 onNavigateToRuns={onRunStarted}
                 onOpenRecordedCase={openRecordedCase}
               /></Suspense>}

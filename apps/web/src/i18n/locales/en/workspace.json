@@ -186,6 +186,11 @@
       "diagnose": "Results, failures, and reruns stay in this Workspace"
     }
   },
+  "recorderOrigin": {
+    "label": "Recording source context",
+    "note": "The recording is saved as a new case. The source requirement and case are not changed automatically.",
+    "return": "Return to this Workspace"
+  },
   "main": {
     "title": "Workspace content",
     "currentStage": "Current stage",

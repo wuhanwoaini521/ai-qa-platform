@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
@@ -55,8 +56,11 @@ export const RecorderPage: React.FC<{
   onNavigateToRuns?: (runId: string) => void;
   onOpenRecordedCase?: (savedCase: Awaited<ReturnType<typeof api.saveRecorderCase>>, filePath: string) => void;
   runConfig?: RecorderRunConfig;
-}> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, onOpenRecordedCase, runConfig }) => {
+  workspaceOrigin?: { requirement?: string; testCase?: string };
+  onReturnToWorkspace?: () => void;
+}> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, onOpenRecordedCase, runConfig, workspaceOrigin, onReturnToWorkspace }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('workspace');
   const [searchParams] = useSearchParams();
   const requestedSessionId = searchParams.get('session_id');
   const projectId = selectedProjectId ?? projects[0]?.id ?? null;
@@ -623,6 +627,11 @@ export const RecorderPage: React.FC<{
 
   return (
     <div className={`recorder-page${embedded ? ' is-embedded' : ''}`}>
+      {workspaceOrigin && <section className="recorder-workspace-origin" aria-label={t('recorderOrigin.label')}>
+        <div><strong>{workspaceOrigin.requirement || workspaceOrigin.testCase}</strong>{workspaceOrigin.requirement && workspaceOrigin.testCase && <span>{workspaceOrigin.testCase}</span>}</div>
+        <p>{t('recorderOrigin.note')}</p>
+        {onReturnToWorkspace && <button type="button" className="btn btn-secondary btn-sm" onClick={onReturnToWorkspace}>{t('recorderOrigin.return')}</button>}
+      </section>}
       <header className="recorder-page-header">
         <div className="recorder-page-heading">
           <h2><MousePointer2 size={20} aria-hidden="true" /> 浏览器录制器</h2>
