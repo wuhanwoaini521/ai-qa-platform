@@ -525,6 +525,10 @@ button, input, select, textarea {
   transform: rotate(180deg);
 }
 
+.sidebar-mobile-nav-hint {
+  display: none;
+}
+
 .sidebar-nav {
   flex: 1;
   min-height: 0;
@@ -1137,6 +1141,7 @@ button, input, select, textarea {
   }
 
   .sidebar-nav {
+    position: relative;
     flex-direction: row;
     align-items: center;
     flex: 1 1 0;
@@ -1158,6 +1163,28 @@ button, input, select, textarea {
   .sidebar-nav::-webkit-scrollbar-thumb {
     background: var(--line-strong);
     border: 0;
+  }
+
+  .sidebar-mobile-nav-hint {
+    display: flex;
+    position: absolute;
+    z-index: 2;
+    right: 0;
+    top: 50%;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 34px;
+    color: var(--ink-muted);
+    background: linear-gradient(90deg, transparent, var(--surface) 38%);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity 120ms ease;
+  }
+
+  .sidebar-mobile-nav-hint.is-visible {
+    opacity: 1;
   }
 
   .sidebar-nav > .tooltip-trigger {

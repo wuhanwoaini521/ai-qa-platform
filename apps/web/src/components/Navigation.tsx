@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
   MoreHorizontal,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
@@ -92,6 +93,8 @@ export const Navigation: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
+  const sidebarNavRef = useRef<HTMLElement>(null);
+  const [mobileNavHasMore, setMobileNavHasMore] = useState(false);
 
   useEffect(() => {
     try {
@@ -100,6 +103,22 @@ export const Navigation: React.FC = () => {
       // Keep the sidebar usable when storage is unavailable.
     }
   }, [collapsed]);
+
+  useEffect(() => {
+    const nav = sidebarNavRef.current;
+    if (!nav) return;
+    const updateOverflow = () => {
+      setMobileNavHasMore(nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 1);
+    };
+    updateOverflow();
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(nav);
+    nav.addEventListener('scroll', updateOverflow, { passive: true });
+    return () => {
+      observer.disconnect();
+      nav.removeEventListener('scroll', updateOverflow);
+    };
+  }, [collapsed, projects.length]);
 
   useEffect(() => {
     const focusNavigationSearch = (event: KeyboardEvent) => {
@@ -296,7 +315,7 @@ export const Navigation: React.FC = () => {
 
       <div className="sidebar-divider" />
 
-      <nav className="sidebar-nav" id="primary-sidebar-navigation" aria-label={t('primaryNavigation')}>
+      <nav ref={sidebarNavRef} className="sidebar-nav" id="primary-sidebar-navigation" aria-label={t('primaryNavigation')}>
         {matches ? (
           <>
             {matches.primary.map(renderItem)}
@@ -320,6 +339,9 @@ export const Navigation: React.FC = () => {
             </details>
           </>
         )}
+        <span className={`sidebar-mobile-nav-hint${mobileNavHasMore ? ' is-visible' : ''}`} aria-hidden="true">
+          <ChevronRight size={13} strokeWidth={2} />
+        </span>
       </nav>
 
       <div className="sidebar-pinned">
