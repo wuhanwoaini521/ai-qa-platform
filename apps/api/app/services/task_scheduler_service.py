@@ -119,13 +119,20 @@ class TaskSchedulerService:
                             finished_at=utc_now(),
                         )
                 failure_reason = "Interrupted by API restart. Review the current workspace and explicitly replan."
-                await repo.update_task(
+                cancelled = row.cancel_requested_at is not None
+                written = await repo.finish_fenced(
                     row.id,
-                    status=TaskStatus.BLOCKED.value,
-                    failure_reason=failure_reason,
-                    finished_at=utc_now(),
+                    TaskStatus.CANCELLED.value if cancelled else TaskStatus.BLOCKED.value,
+                    require_no_live_lease=True,
+                    failure_reason=None if cancelled else failure_reason,
                 )
-                await repo.add_event(row.id, "task.blocked", {"reason": failure_reason, "recovered": True})
+                if not written:
+                    # Another replica claimed it between the query and the write; leave it to its owner.
+                    continue
+                if cancelled:
+                    await repo.add_event(row.id, "task.cancelled", {"via": "recovery", "recovered": True})
+                else:
+                    await repo.add_event(row.id, "task.blocked", {"reason": failure_reason, "recovered": True})
                 recovered.append(row.id)
             await repositories.commit()
         return recovered
@@ -192,10 +199,17 @@ class TaskSchedulerService:
                 owner, token = lease
                 async with self.repository_scope() as repositories:
                     renewed = await repositories.tasks.renew_lease(task_id, owner, token, LEASE_SECONDS)
+                    fresh = await repositories.tasks.get(task_id) if renewed else None
                     await repositories.commit()
                 if not renewed:
                     logger.warning("Task %s no longer holds its lease; stopping the heartbeat", task_id)
                     return
+                if fresh is not None and fresh.cancel_requested_at is not None:
+                    # A cancel from another replica travels through the row; stop our own execution here
+                    # so a long step cannot outlive the request.
+                    active = self._active.get(task_id)
+                    if active is not None and not active.done():
+                        active.cancel()
         except asyncio.CancelledError:
             raise
         finally:
@@ -228,7 +242,9 @@ class TaskSchedulerService:
                 await self._execute_dag(task_id, execution_started)
             except asyncio.CancelledError:
                 # The API lifespan owns process-level cancellation; recover_interrupted will
-                # mark the task BLOCKED on the next start if it was not user-cancelled.
+                # mark the task BLOCKED on the next start if it was not user-cancelled. A user
+                # cancel writes its request first, so only that case may end the task here.
+                await self._finish_cancelled_if_requested(task_id)
                 raise
             except Exception as error:
                 await self.execution._finish(task_id, TaskStatus.FAILED, str(error))
@@ -237,6 +253,13 @@ class TaskSchedulerService:
                 if lease_token is not None:
                     reset_lease(lease_token)
                 await self._release_lease(task_id, expired=True)
+
+    async def _finish_cancelled_if_requested(self, task_id: str) -> None:
+        """End a task whose owner was aborted, but only when a user actually asked for it."""
+        task, _ = await self.execution._load(task_id)
+        if task is None or task.cancel_requested_at is None or task.status in self.execution.TERMINAL:
+            return
+        await self.execution._finish(task_id, TaskStatus.CANCELLED, "Cancelled by user.")
 
     async def _persist_execution_elapsed(self, task_id: str, elapsed: float) -> None:
         async with self.repository_scope() as repositories:
@@ -264,6 +287,9 @@ class TaskSchedulerService:
                 return
             if task.status == TaskStatus.PAUSING.value:
                 await self._pause_at_boundary(task_id, elapsed_seconds=time.monotonic() - started)
+                return
+            if task.cancel_requested_at is not None:
+                await self.execution._finish(task_id, TaskStatus.CANCELLED, "Cancelled by user.")
                 return
             if len(steps) > task.max_steps:
                 await self.execution._finish(task_id, TaskStatus.FAILED, "Task step limit exceeded.")

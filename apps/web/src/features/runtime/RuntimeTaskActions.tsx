@@ -45,6 +45,8 @@ export function RuntimeTaskActions({
   const failed = ['FAILED', 'BLOCKED'].includes(snapshot.status);
   const paused = snapshot.status.toUpperCase() === 'PAUSED';
   const pausing = snapshot.status.toUpperCase() === 'PAUSING';
+  // A cancel is a request the lease owner turns into a status; until then the button must not re-send it.
+  const cancelRequested = Boolean(snapshot.task?.cancel_requested_at);
   const pausable = ['PENDING', 'PLANNING', 'RUNNING', 'VERIFYING', 'RETRYING', 'REPLANNING'].includes(snapshot.status.toUpperCase());
   const retryLabel = retryActionLabel(snapshot.task?.type);
   const approval = snapshot.summary.approval;
@@ -122,7 +124,8 @@ export function RuntimeTaskActions({
       )}
       {pausable && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void command(() => api.pauseTask(taskId))}>{t('pauseTask')}</button>}
       {pausing && <p className="rt-notice" role="status">{t('pauseAfterStep')}</p>}
-      {runtimeActive(snapshot.status) && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void command(() => api.cancelTask(taskId))}>{t('cancelTask')}</button>}
+      {cancelRequested && <p className="rt-notice" role="status">{t('cancelRequested')}</p>}
+      {runtimeActive(snapshot.status) && <button className="btn btn-secondary btn-sm" disabled={busy || cancelRequested} onClick={() => void command(() => api.cancelTask(taskId))}>{t('cancelTask')}</button>}
       {error && <p className="rt-notice" role="alert">{error}</p>}
     </section>
   );

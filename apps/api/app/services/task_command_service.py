@@ -377,29 +377,48 @@ class TaskCommandService:
             await repositories.commit()
         return await self.get(task_id, owner_id)
 
-    async def cancel(self, task_id: str, owner_id: str) -> TaskStatus | None:
+    async def cancel(self, task_id: str, owner_id: str) -> TaskDetail | None:
+        """Ask the task to stop.
+
+        A replica that does not own the lease may record the request but must not write a terminal
+        status it did not produce; the owner ends its own task under its lease, and a task nobody
+        holds a live lease on can be closed here atomically (see `finish_fenced`).
+        """
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
             task = await repo.get(task_id, owner_id)
             if not task or task.status in self.TERMINAL:
                 return None
-            await repo.update_task(task.id, status=TaskStatus.CANCELLED.value, finished_at=utc_now())
-            if task.current_step_id:
-                step = await repo.get_step(task.current_step_id)
-                if step and step.status in {
-                    TaskStepStatus.RUNNING.value,
-                    TaskStepStatus.WAITING_FOR_APPROVAL.value,
-                }:
-                    await repo.update_step(
-                        step.id,
-                        status=TaskStepStatus.CANCELLED.value,
-                        error="Cancelled by user.",
-                        finished_at=utc_now(),
-                    )
-            await repo.add_event(task.id, "task.cancelled", {})
+            requested = await repo.request_cancel(task.id, owner_id)
+            if requested is None:
+                await repositories.commit()
+                return await repo.get_detail(task)
+            if requested.cancel_requested_at is not None and task.cancel_requested_at is None:
+                await repo.add_event(task.id, "task.cancel_requested", {"actor": owner_id})
+            finalized = await repo.finish_fenced(
+                task.id,
+                TaskStatus.CANCELLED.value,
+                require_no_live_lease=True,
+                failure_reason=None,
+            )
+            if finalized:
+                if task.current_step_id:
+                    step = await repo.get_step(task.current_step_id)
+                    if step and step.status in {
+                        TaskStepStatus.RUNNING.value,
+                        TaskStepStatus.WAITING_FOR_APPROVAL.value,
+                    }:
+                        await repo.update_step(
+                            step.id,
+                            status=TaskStepStatus.CANCELLED.value,
+                            error="Cancelled by user.",
+                            finished_at=utc_now(),
+                        )
+                await repo.add_event(task.id, "task.cancelled", {"via": "request"})
             await repositories.commit()
+            detail = await repo.get_detail(task)
         await self.cancel_execution(task_id, (task.context or {}).get("run_id"))
-        return TaskStatus.CANCELLED
+        return detail
 
     async def pause(self, task_id: str, owner_id: str) -> TaskDetail | None:
         async with self.repository_scope() as repositories:

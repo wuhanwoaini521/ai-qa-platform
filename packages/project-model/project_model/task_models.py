@@ -203,6 +203,7 @@ class Task(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     updated_at: datetime
+    cancel_requested_at: datetime | None = None
 
 
 class TaskDetail(Task):

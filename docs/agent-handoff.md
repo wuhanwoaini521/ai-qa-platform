@@ -5,7 +5,9 @@
 
 ## 1. 当前任务目标
 
-**当前活动轮次：RC Freeze（用户任务 m07860，记录见 §3.23，报告 `.ai-runs/overnight-delivery/RC-BASELINE.md`）。**本轮零产品改动，只做冻结/审计/交接：确认冻结树（代码 `b8958e2`、HEAD `279ccd2`、35 笔未推送）、把每个数字对应到 revision 与证据文件、扫描新增行里的凭据（只有两处演练/本地一次性口令）、实跑备份→恢复（44/44 表一致）与迁移往返（空库 → `0021` / 44 表、基线 downgrade 有意不清空、逐级降级才是受支持路径）、建立本地可恢复标记（tag `rc-2026.10.22` + `runtime/backups/aiqa-rc-2026.10.22.bundle`）、列出三个发布阻断（B1 DAG 执行路由、B2 cancel 未 fencing、B3 远端 CI 与部署回滚）与下一阶段最小修复清单。本轮在冻结树复跑前端 227 pass 与真实 Chromium 24/24。五级判定：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮最终工程收尾见 §3.22。
+**当前活动轮次：RC Hotfix 1 — 任务取消按租约 fencing（用户任务 m07997，记录见 §3.24）。** 基线 HEAD `6e2705b`（tag `rc-2026.10.22` 保持不动）。唯一开发目标是 R18-B2：把「取消」拆成*请求*（任何授权调用方都能记录，`agent_tasks.cancel_requested_at/by`，迁移 `0022_task_cancel_request`）与*终态写入*（只能由租约属主或无人持活租约时的恢复路径通过 `finish_fenced` 落盘），并在 DAG 循环头、步骤边界、心跳三处让属主识别请求后自行终止；本会落 `FAILED/BLOCKED` 的结局改写为 `CANCELLED` 且把原结局留在 `verification.interrupted_outcome`。真实 Chromium + 真后端 + 真 SQLite 验收 **14/14**；PostgreSQL 16 上 fencing 组 **18 passed**；B2 判定 **PARTIAL**（单进程语义已修，无第二主机 → `MULTI_INSTANCE_PASS` 仍 BLOCKED）。上一轮 RC Freeze 见 §3.23。
+
+**上一轮：RC Freeze（用户任务 m07860，记录见 §3.23，报告 `.ai-runs/overnight-delivery/RC-BASELINE.md`）。**本轮零产品改动，只做冻结/审计/交接：确认冻结树（代码 `b8958e2`、HEAD `279ccd2`、35 笔未推送）、把每个数字对应到 revision 与证据文件、扫描新增行里的凭据（只有两处演练/本地一次性口令）、实跑备份→恢复（44/44 表一致）与迁移往返（空库 → `0021` / 44 表、基线 downgrade 有意不清空、逐级降级才是受支持路径）、建立本地可恢复标记（tag `rc-2026.10.22` + `runtime/backups/aiqa-rc-2026.10.22.bundle`）、列出三个发布阻断（B1 DAG 执行路由、B2 cancel 未 fencing、B3 远端 CI 与部署回滚）与下一阶段最小修复清单。该轮在冻结树复跑前端 227 pass 与真实 Chromium 24/24。五级判定：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。最终工程收尾见 §3.22。
 
 **上一轮：最终工程收尾（用户任务 m07699，记录见 §3.22）。**给后端套件加挂死防护（`pytest-timeout` 2.4.0，默认 180s / `timeout_method = "thread"`，真实浏览器 e2e 单测标 900s），并用真实耗时（最慢 166.82s）决定阈值，双向验明：10.9s 的用例在 `--timeout=2` 下被终止，168.8s 的 e2e 在 `--timeout=30` 下靠自带标记存活。同时判定并只修一个**测试侧**竞态（0.5s 预算在 setup 阶段就被耗尽 → 无东西可取消，产品侧 `run.timeout`/TIMEOUT/`ANALYSIS_TIMEOUT` 全部正确），预算改 5s、等待改 10s。最终代码上双通道全量：SQLite **996 passed / 11 skipped / 890.37s / exit 0**，PostgreSQL 16 全量（与 SQLite 同范围 `apps/api/tests packages`）**999 passed / 8 skipped / 2066.93s / exit 0**；旧回归记录已按真实 revision 分类，中断/参数错误的记录标为无效。五级判定不变：核心产品 PASS、Studio PASS、DAG 执行 BLOCKED、多实例 BLOCKED、发布候选 BLOCKED。上一轮 Round 17 复核审计见 §3.21。
 
@@ -46,10 +48,10 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾：挂死防护 + 双通道全量回归）→ `279ccd2`（冻结最终回归记录）→ 本文件所在提交（RC Freeze 基线） |
-| 未推送提交 | `origin/main..HEAD` = 37 笔（本任务默认不 push；复核审计 +2、最终收尾 +1、RC Freeze +2 = 验收证据复跑 + 本文件） |
-| RC 标记 | annotated tag `rc-2026.10.22`（仅本地）+ `runtime/backups/aiqa-rc-2026.10.22.bundle`（**自包含** git bundle，62 MB，`git bundle verify` → "The bundle records a complete history"，脱离远端也能恢复） |
-| 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20，`stored_artifacts.created_by` 加宽到 100；SQLite 下 no-op） |
+| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾）→ `279ccd2`（冻结最终回归记录）→ `a17275d`+`6e2705b`（RC Freeze：验收复跑 + 基线报告）→ 本文件所在提交（RC Hotfix 1：取消请求/终态分离） |
+| 未推送提交 | `origin/main..HEAD` = 39 笔（本任务默认不 push；RC Freeze +2、Hotfix 1 = 代码 + 本文件） |
+| RC 标记 | annotated tag `rc-2026.10.22`（指向 RC Freeze 基线，**不动**）+ 另建 `rc-2026.10.22-hotfix1` 标在本轮提交上（仅本地）；可恢复副本 `runtime/backups/aiqa-rc-2026.10.22.bundle`（自包含 git bundle，62 MB，`git bundle verify` → "The bundle records a complete history"，脱离远端也能恢复） |
+| 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20）→ `0022_task_cancel_request`（Hotfix 1，`agent_tasks.cancel_requested_at/by`，可逆） |
 | 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
 | Round 16.5 HEAD（历史） | `ec5bae8`（Round 16.5 的 3 笔：`23cdb71` 执行轨迹契约与只读投影、`4dba380` 前端执行树、`ec5bae8` 契约与数据缺口文档；本文档提交在其后） |
 | Round 16.5 提交数 | 3（`23cdb71`、`4dba380`、`ec5bae8`）+ 本文档提交 |
@@ -1216,3 +1218,30 @@ pnpm -r typecheck && pnpm -r lint
 **6) 下一阶段最小修复清单**：只做 B2（最小、纯后端）→ B1（需人工决定哪些节点可无人执行，先要产品/安全决策）→ B3（需真实 push 权限与主机）。验收标准：§2 的数字不得回退，每条新结论必须自带 JSON/日志证据且日志内记录 revision，最终树上的运行才能标 PASS。
 
 **判定**：`CORE_PRODUCT_PASS` PASS、`WORKFLOW_STUDIO_PASS` PASS、`DAG_EXECUTION_PASS` BLOCKED、`MULTI_INSTANCE_PASS` BLOCKED、`RELEASE_CANDIDATE_PASS` BLOCKED。未验证条件不标 PASS。**本轮未做**：不 push/merge/deploy，不加功能，不改产品代码。
+
+## 3.24 RC Hotfix 1 — 任务取消按租约 fencing（用户任务 m07997）
+
+**目标：只修 R18-B2（非租约持有者可写任务终态），不加功能。** 基线 HEAD `6e2705b`（tag `rc-2026.10.22`），旧 tag 保持不动。
+
+**1) 审计到的可绕过路径（修复前）**
+- `apps/api/app/services/task_command_service.py:380 cancel()` 无条件 `update_task(status=CANCELLED)`：任何能调 `POST /api/tasks/{id}/cancel` 的进程都直接写终态，不管自己是不是执行者。
+- `apps/api/app/services/task_execution_orchestrator.py:481 _finish()` 在 `current_lease()` 为 `None` 时直接写终态（无租约上下文即免检）。
+- `apps/api/app/services/task_scheduler_service.py:100 recover_interrupted()` 先 `unfinished_stale()` 再无条件写 `BLOCKED`（SELECT-then-write 竞态）。
+- `_execute_step` 的等待循环只认 `status == CANCELLED`，因此「请求已记录但尚未落终态」的中间态在 owner 侧完全不可见。
+
+**2) 修复（取消 = 请求 + 由属主/授权恢复落终态）**
+- 迁移 `0022_task_cancel_request`：`agent_tasks.cancel_requested_at` / `cancel_requested_by`（可逆）。
+- `TaskRepository.request_cancel(task_id, actor)`：单条条件 UPDATE，只记录首个请求、永不碰终态；`TaskRepository.finish_fenced(...)`：单条条件 UPDATE，可要求 `lease_owner+lease_token` 匹配或「无人持有活租约」，`rowcount == 1` 才算成功。
+- `TaskCommandService.cancel()` 改为：记请求（事件 `task.cancel_requested`）→ 仅当没人持有活租约时才 `finish_fenced(require_no_live_lease=True)`；否则只返回请求态。
+- `_finish()` 全部走 `finish_fenced`；属主侧在 DAG 循环头、步骤边界、心跳（20s）三处识别请求并自行终止；把本会落 `FAILED/BLOCKED` 的终态改写为 `CANCELLED`，原结局写进 `verification.interrupted_outcome`，不丢被中断的步骤。
+- 前端 `RuntimeTaskActions` 显示「取消已请求，任务会在当前步骤结束时停止。」并禁用重复取消；`Task`/`AgentTask` 类型与 OpenAPI 同步。
+- 文档：`docs/TASK_LEASE.md` 新增 §4（请求 vs 终态），§5 换成 10 条 fencing 用例与浏览器验收，§6 只剩多主机 BLOCKED。
+
+**3) 修复前可复现的证据**：取消后 `cancel_requested_at` 有值、状态停在 `RUNNING` 近一分钟，随后被写成 `BLOCKED`。根因不是代码路径没接上，而是开发机上存在一个 **Oct 21 20:43 的孤儿 uvicorn**（PID 110215，父进程已死，仍持 DB 与调度器、跑旧代码）在执行任务——正是 B2 描述的场景：非属主（HTTP 副本）写终态，真正执行者随后覆盖。`lsof runtime/ai_qa_platform.db` 定位后 `kill -9`，单进程下任务 2 秒内 `CANCELLED`。**教训：验收前必须确认只有一个进程持有 `runtime/ai_qa_platform.db`。**
+
+**4) 验证**
+- `apps/api/tests/test_task_cancel_fencing.py`（10 条，含 1 条 `@pytest.mark.postgres`）：属主边界取消 / 非属主只记请求 / 过期属主写入被拒 / 租约过期后取消立即终态 / 恢复按请求分流（CANCELLED vs BLOCKED）/ 取消与完成并发只留一条终态 / 丢失租约留 `task.lease_lost` / 重复取消幂等 / 列往返 / PG 双事务并发。
+- PostgreSQL 16 容器（`aiqa-r20-pg`，`AI_QA_TEST_DATABASE_URL=…:55432/aiqa_test`）跑 `test_task_cancel_fencing + test_task_lease + test_multi_instance_recovery` → **18 passed / 61.14s**；同组在 SQLite 下 9 passed / 1 skipped。
+- 真实 Chromium + 真后端 + 真 SQLite：`.ai-runs/overnight-delivery/rounds/r18b_cancel_acceptance.py` → **14/14 PASS，`failed: []`，无控制台错误**（证据 `rounds/r18b-cancel-acceptance.json`，截图 `rounds/screenshots/hotfix1-*.png`）。任务 `48fc9096fc144559b529c99c951e4526`：07:15:33 创建 → 07:15:35 点取消（`cancel_requested_at=07:15:35.739`）→ 07:15:37 `CANCELLED`，`lease_owner=null`、`finished_at` 有值、`task.cancel_requested` ×1 + `task.cancelled` ×1、`diagnose` 步骤 `CANCELLED`、再次取消 409。
+
+**5) 判定**：`B2` **PARTIAL**。单进程与「请求/终态分离」的语义已修复并有真实浏览器证据；PostgreSQL 上的并发与 fencing 由测试覆盖；但**没有第二台主机**，`MULTI_INSTANCE_PASS` 仍为 BLOCKED，`RELEASE_CANDIDATE_PASS` 仍为 BLOCKED（B1、B3 未动）。

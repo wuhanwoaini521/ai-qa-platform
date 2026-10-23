@@ -943,6 +943,10 @@ class TaskORM(Base):
     lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
     lease_token: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     lease_expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True, index=True)
+    # A user's wish to stop, recorded separately from the terminal write (see 0022_task_cancel_request):
+    # any authorized user may request it, only the lease owner or the recovery path may finalize it.
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    cancel_requested_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
     started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

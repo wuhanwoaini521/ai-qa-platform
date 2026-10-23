@@ -124,7 +124,10 @@ print("STARTUP_OK")
         # assertion the failure actually belongs to.
         encoding="utf-8",
         errors="replace",
-        timeout=120,
+        # Importing the app under a fully loaded suite (all tests running, one real-browser e2e in
+        # flight) took over two minutes once; the child is a cold interpreter with no cache, so the
+        # cap has to be generous or a slow machine reports a product failure that never happened.
+        timeout=300,
     )
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "STARTUP_OK" in result.stdout

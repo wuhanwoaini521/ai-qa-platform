@@ -32,6 +32,8 @@ class TaskRecord:
     started_at: datetime | None
     finished_at: datetime | None
     updated_at: datetime
+    cancel_requested_at: datetime | None = None
+    cancel_requested_by: str | None = None
 
     @classmethod
     def from_record(cls, record: Any) -> TaskRecord:
@@ -59,4 +61,6 @@ class TaskRecord:
             started_at=record.started_at,
             finished_at=record.finished_at,
             updated_at=record.updated_at,
+            cancel_requested_at=getattr(record, "cancel_requested_at", None),
+            cancel_requested_by=getattr(record, "cancel_requested_by", None),
         )

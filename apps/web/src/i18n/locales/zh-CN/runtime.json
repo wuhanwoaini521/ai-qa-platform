@@ -188,6 +188,7 @@
   "noTimeline": "暂无执行时间记录",
   "browserNoSession": "本次任务未关联实时浏览器会话；若有其他浏览器遥测，可在事件流中查看。",
   "cancelTask": "取消任务",
+    "cancelRequested": "取消已请求，任务会在当前步骤结束时停止。",
   "pauseTask": "暂停接管",
   "pauseAfterStep": "当前步骤结束后暂停；你可以在 Studio 修改文件，再恢复任务。",
   "resumeTask": "读取工作区并恢复",

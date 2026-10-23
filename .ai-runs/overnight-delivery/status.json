@@ -135,6 +135,26 @@
         "B3 remote CI and deploy rollback never ran"
       ],
       "report": ".ai-runs/overnight-delivery/RC-BASELINE.md"
+    },
+    "hotfix1": {
+      "state": "PASS",
+      "task": "m07997 RC Hotfix 1 — task cancel fencing",
+      "base_head": "6e2705b",
+      "tag_base": "rc-2026.10.22",
+      "migration": "0022_task_cancel_request",
+      "mechanism": "cancel request row (cancel_requested_at/by) + finish_fenced terminal write",
+      "verdicts": {
+        "B2": "PARTIAL",
+        "MULTI_INSTANCE_PASS": "BLOCKED",
+        "RELEASE_CANDIDATE_PASS": "BLOCKED"
+      },
+      "evidence": {
+        "unit": "apps/api/tests/test_task_cancel_fencing.py (10 cases; 9 sqlite + 1 postgres)",
+        "postgres_subset": "test_task_cancel_fencing + test_task_lease + test_multi_instance_recovery -> 18 passed",
+        "browser": ".ai-runs/overnight-delivery/rounds/r18b-cancel-acceptance.json (14/14)",
+        "screenshots": "rounds/screenshots/hotfix1-*.png"
+      },
+      "finished_at": "2026-10-22"
     }
   },
   "current_round": 22,

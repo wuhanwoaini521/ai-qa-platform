@@ -22013,6 +22013,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
           }
         },
         "type": "object",
@@ -22442,6 +22454,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
           },
           "steps": {
             "items": {

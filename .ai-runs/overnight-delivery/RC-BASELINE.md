@@ -114,8 +114,24 @@ file to `*.pre-restore.<ts>` before overwriting) → `alembic current` must equa
 | # | Blocker | Code evidence | Why it blocks | Acceptance criteria to close it |
 | --- | --- | --- | --- | --- |
 | B1 | **DAG execution route missing** | `apps/api/app/services/workflow_definition_service.py:226 compile_plan` exists and `apps/api/app/services/task_scheduler_service.py` really honours `depends_on`, but `apps/api/app/api/workflow_definitions.py` exposes no execute route — `POST /api/workflows/{id}/execute` returns **404** (asserted in `r22_acceptance.py` and `r17_acceptance.py`) | a published definition cannot be run end to end, so the studio is a definition tool only (`DAG_EXECUTION_PASS` is BLOCKED) | a route that compiles a **published** version into `TaskStepSpec`s and starts it through the existing `TaskRuntimeService`; approval nodes still gate every `writes` node; an acceptance run that publishes v1, executes it, and reaches `COMPLETED` with per-step status; no second scheduler appears in the diff |
-| B2 | **Cancel is not fenced across replicas** | `apps/api/app/services/task_command_service.py` writes the terminal `CANCELLED` row without checking the lease; recorded as `R18-B2` in `.ai-runs/overnight-delivery/blockers.md` | a non-owner replica can overwrite a task another process is still running, which is exactly what the lease in `19d845e` was added to prevent | cancel becomes a **request** row that only the lease holder may turn into a terminal state (or a fenced write that fails when `lease_owner` differs); a two-process test where a peer's cancel does not clobber a live owner's task; the existing `test_task_lease.py` fence tests stay green |
+| B2 | **Cancel is not fenced across replicas** — *addressed by Hotfix 1, see §5.1* | `apps/api/app/services/task_command_service.py` writes the terminal `CANCELLED` row without checking the lease; recorded as `R18-B2` in `.ai-runs/overnight-delivery/blockers.md` | a non-owner replica can overwrite a task another process is still running, which is exactly what the lease in `19d845e` was added to prevent | cancel becomes a **request** row that only the lease holder may turn into a terminal state (or a fenced write that fails when `lease_owner` differs); a two-process test where a peer's cancel does not clobber a live owner's task; the existing `test_task_lease.py` fence tests stay green |
 | B3 | **Remote CI and deploy/rollback acceptance never ran** | `.github/workflows/ci.yml` only runs on push to `main`, which this mission forbids; the same command set passes locally on SQLite **and** PostgreSQL; deployment is proven only as a single-host compose drill (`rounds/r20-deploy.json`, 12/12) | there is no evidence from a fresh machine or from the CI service, and no rolling replacement or rollback of a deployed version | a CI run on a real push (or a nightly schedule) that is green, including the PostgreSQL channel and the browser E2E; a deployment of two consecutive versions with a proven rollback to the first, on a clean host |
+
+### 5.1 Hotfix 1 closed the B2 mechanism (PARTIAL, not a PASS)
+
+`0022_task_cancel_request` adds `agent_tasks.cancel_requested_at/by`; `TaskRepository.request_cancel` records a
+request with one conditional UPDATE (never a terminal state), and `TaskRepository.finish_fenced` is the only
+path that may write `CANCELLED`, matching either `lease_owner+lease_token` or "no live lease". The owner
+notices the request at the DAG loop head, at the step boundary and in the heartbeat, and any `FAILED/BLOCKED`
+outcome that races a request is rewritten to `CANCELLED` with the original outcome kept in
+`verification.interrupted_outcome`.
+
+Evidence: `apps/api/tests/test_task_cancel_fencing.py` (10 cases, 9 on SQLite + 1 PostgreSQL-only),
+`rounds/r18b_cancel_acceptance.py` on real Chromium + real backend + real SQLite (14/14), and the pre-fix
+reproduction (a stale second process — an orphaned uvicorn from a previous stack — really was executing the
+task and overwrote the cancel with `BLOCKED`, which is the defect in the field).
+
+What is **not** closed: a second *host*. `MULTI_INSTANCE_PASS` therefore stays BLOCKED, and B1/B3 are untouched.
 
 ## 6. Minimal fix list for the next phase (nothing else)
 

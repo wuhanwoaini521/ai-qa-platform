@@ -188,6 +188,7 @@
   "noTimeline": "No execution timing has been recorded",
   "browserNoSession": "This task has no live browser session linked. Check the event stream for any separately recorded browser telemetry.",
   "cancelTask": "Cancel task",
+    "cancelRequested": "Cancellation requested; the task stops at the end of the current step.",
   "pauseTask": "Pause for takeover",
   "pauseAfterStep": "The current step will finish before pausing. Edit files in Studio, then resume.",
   "resumeTask": "Read workspace and resume",

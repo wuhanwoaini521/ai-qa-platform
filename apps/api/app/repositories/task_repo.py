@@ -28,6 +28,7 @@ from app.persistence.models import (
 )
 
 UNFINISHED_STATUSES = ["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING", "PAUSING", "RESUMING"]
+TERMINAL_STATUSES = ["COMPLETED", "FAILED", "BLOCKED", "CANCELLED"]
 
 
 class TaskRepository:
@@ -193,6 +194,63 @@ class TaskRepository:
             )
         )
         return row.scalar_one_or_none() == token
+
+    async def request_cancel(self, task_id: str, actor: str) -> TaskRecord | None:
+        """Record the user's wish to stop, without touching the status.
+
+        Anyone who may see the task may ask for it; the first request wins so a second one cannot
+        rewrite the actor or the time. Returns the row as it stands, or None when there is nothing
+        left to cancel.
+        """
+        now = utc_now()
+        await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.status.not_in(TERMINAL_STATUSES),
+                TaskORM.cancel_requested_at.is_(None),
+            )
+            .values(cancel_requested_at=now, cancel_requested_by=actor[:120], updated_at=now)
+        )
+        return await self.get(task_id)
+
+    async def finish_fenced(
+        self,
+        task_id: str,
+        status: str,
+        *,
+        owner: str | None = None,
+        token: int | None = None,
+        failure_reason: str | None = None,
+        verification: dict[str, Any] | None = None,
+        require_no_live_lease: bool = False,
+        finished_at: Any = None,
+    ) -> bool:
+        """Write a terminal status only against the ownership it was decided under.
+
+        The check and the write are one statement, so a lease that expires (or moves to a new owner)
+        between deciding and writing cannot be overwritten: `owner`/`token` must still match the row.
+        With `require_no_live_lease` the statement instead requires that nobody holds a live lease —
+        the same evidence the startup recovery uses before it may close a task.
+        """
+        now = finished_at or utc_now()
+        conditions = [TaskORM.id == task_id, TaskORM.status.not_in(TERMINAL_STATUSES)]
+        if owner is not None and token is not None:
+            conditions += [TaskORM.lease_owner == owner, TaskORM.lease_token == token]
+        if require_no_live_lease:
+            conditions.append(
+                or_(
+                    TaskORM.lease_owner.is_(None),
+                    TaskORM.lease_expires_at.is_(None),
+                    TaskORM.lease_expires_at < now,
+                )
+            )
+        values: dict[str, Any] = {"status": status, "failure_reason": failure_reason, "finished_at": now}
+        if verification is not None:
+            values["verification"] = verification
+        values["updated_at"] = now
+        result = await self.session.execute(update(TaskORM).where(*conditions).values(**values))
+        return result.rowcount == 1
 
     async def unfinished_stale(self, grace_seconds: int = 0) -> list[TaskRecord]:
         """Unfinished tasks nobody is provably working on: unleased, or whose lease has run out."""
@@ -449,6 +507,7 @@ class TaskRepository:
             "started_at": row.started_at,
             "finished_at": row.finished_at,
             "updated_at": row.updated_at,
+            "cancel_requested_at": getattr(row, "cancel_requested_at", None),
         }
 
     async def update_task(self, task_id: str, **values: Any) -> TaskRecord | None:

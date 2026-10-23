@@ -91,6 +91,7 @@ export interface RuntimeSnapshot {
         replan_count?: number;
         max_replans?: number;
         recorder_session_id?: string | null;
+        cancel_requested_at?: string | null;
       })
     | null;
   blocking: {

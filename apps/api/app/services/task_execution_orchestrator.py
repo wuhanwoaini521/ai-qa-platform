@@ -225,8 +225,13 @@ class TaskExecutionOrchestrator:
                 repo = repositories.tasks
                 fresh = await repo.get(task.id)
                 current = await repo.get_step(step.id)
-                if not fresh or fresh.status == TaskStatus.CANCELLED.value:
-                    return TaskBlocked("Task was cancelled")
+                if not fresh:
+                    return TaskBlocked("Task disappeared before the step could start")
+                if fresh.status == TaskStatus.CANCELLED.value:
+                    return TaskCancelled("Task was cancelled")
+                if fresh.cancel_requested_at is not None:
+                    # Someone asked for this task to stop; only this owner may end it, here at a boundary.
+                    return TaskCancelled("Cancelled by user.")
                 if current is None:
                     return TaskBlocked("Task step disappeared")
                 if fresh.status == TaskStatus.PAUSING.value:
@@ -346,6 +351,22 @@ class TaskExecutionOrchestrator:
                     fresh = await repo.get(task.id)
                     if current is None or fresh is None:
                         return error
+                    if fresh.cancel_requested_at is not None:
+                        # The user asked to stop before this step failed; a retry would ignore that.
+                        await repo.update_step(
+                            current.id,
+                            status=TaskStepStatus.CANCELLED.value,
+                            error=SensitiveRedactor.redact_text(str(error))[:4000],
+                            duration_ms=elapsed,
+                            finished_at=utc_now(),
+                        )
+                        await repo.add_event(
+                            task.id,
+                            "step.progress",
+                            {"step_id": step.id, "status": "CANCELLED", "duration_ms": elapsed},
+                        )
+                        await repositories.commit()
+                        return TaskCancelled("Cancelled by user.")
                     next_step_retry_count = current.retry_count + 1
                     next_task_retry_count = fresh.retry_count
                     retryable = (
@@ -490,13 +511,46 @@ class TaskExecutionOrchestrator:
             if not row or row.status in self.TERMINAL:
                 return
             verification_result = row.verification if verification is None else verification
-            await repo.update_task(
+            requested_cancel = row.cancel_requested_at is not None and status in {
+                TaskStatus.FAILED,
+                TaskStatus.BLOCKED,
+            }
+            if requested_cancel:
+                # The user asked to stop; anything that happened afterwards is a consequence of the stop,
+                # not a product failure the next reader should chase. The outcome stays in the event.
+                verification_result = {
+                    **(verification_result or {}),
+                    "interrupted_outcome": status.value,
+                    "interrupted_reason": reason,
+                }
+                status = TaskStatus.CANCELLED
+                reason = "Cancelled by user."
+            written = await repo.finish_fenced(
                 task_id,
-                status=status.value,
+                status.value,
+                owner=lease[0] if lease else None,
+                token=lease[1] if lease else None,
+                require_no_live_lease=lease is None,
                 failure_reason=reason,
-                finished_at=utc_now(),
                 verification=verification_result,
             )
+            if not written:
+                # The lease moved (or expired and was re-claimed) between deciding and writing.
+                await repo.add_event(task_id, "task.lease_lost", {"owner": lease[0] if lease else None})
+                await repositories.commit()
+                return
+            if status == TaskStatus.CANCELLED and row.current_step_id:
+                step = await repo.get_step(row.current_step_id)
+                if step and step.status in {
+                    TaskStepStatus.RUNNING.value,
+                    TaskStepStatus.WAITING_FOR_APPROVAL.value,
+                }:
+                    await repo.update_step(
+                        step.id,
+                        status=TaskStepStatus.CANCELLED.value,
+                        error="Cancelled by user.",
+                        finished_at=utc_now(),
+                    )
             event = (
                 "task.completed"
                 if status == TaskStatus.COMPLETED

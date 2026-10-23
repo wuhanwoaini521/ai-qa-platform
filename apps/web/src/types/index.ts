@@ -660,6 +660,7 @@ export interface AgentTask {
   started_at?: string | null;
   finished_at?: string | null;
   updated_at: string;
+  cancel_requested_at?: string | null;
   steps?: AgentTaskStep[];
   events?: AgentTaskEvent[];
 }
