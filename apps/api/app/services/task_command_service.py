@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import hashlib
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from project_model.task_models import (
     Task,
@@ -25,6 +28,7 @@ from app.services.task_goal_service import TaskGoalService
 from app.services.task_workflows import build_plan
 from app.services.task_workspace import workspace_source_snapshot
 from app.services.workspace_service import WorkspaceService
+from app.settings import get_config
 
 logger = logging.getLogger("app.task_runtime")
 
@@ -130,6 +134,8 @@ class TaskCommandService:
         return await self.goal_service._compile_goal(data)
 
     async def create(self, data: TaskCreate, owner_id: str) -> Task:
+        if data.type == TaskType.WORKFLOW_EXECUTION:
+            raise ValueError("Workflow execution tasks can only be created from a published Workflow version.")
         data = TaskGoalService.apply_runtime_limits(data)
         if data.type != TaskType.QA_GOAL or not data.idempotency_key:
             return await self._create(data, owner_id)
@@ -144,6 +150,151 @@ class TaskCommandService:
                 if existing:
                     return Task(**repositories.tasks.task_values(existing))
             return await self._create(data, owner_id)
+
+    async def workflow_replay(
+        self,
+        *,
+        definition_id: str,
+        owner_id: str,
+        idempotency_key: str,
+        inputs: dict[str, Any],
+        requested_version: int | None,
+    ) -> Task | None:
+        """Return a stored request before current publication or source state is revalidated."""
+        async with self.repository_scope() as repositories:
+            existing = await repositories.tasks.workflow_execution_by_idempotency(
+                definition_id, owner_id, idempotency_key
+            )
+            if existing is None:
+                return None
+            if existing.inputs != inputs or (
+                requested_version is not None and existing.workflow_version != requested_version
+            ):
+                raise ValueError("Idempotency key was already used with different Workflow inputs.")
+            return Task(**repositories.tasks.task_values(existing))
+
+    async def create_workflow(
+        self,
+        *,
+        project_id: str,
+        owner_id: str,
+        goal: str,
+        inputs: dict[str, Any],
+        plan: list[Any],
+        node_kinds: dict[str, str],
+        definition_id: str,
+        version_id: str,
+        version: int,
+        checksum: str,
+        idempotency_key: str,
+        failure_id: str | None = None,
+        requested_version: int | None = None,
+    ) -> Task:
+        """Persist one server-compiled published Workflow plan through this runtime."""
+        config = get_config()
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "project_id": project_id,
+                    "goal": goal,
+                    "inputs": inputs,
+                    "definition_id": definition_id,
+                    "version_id": version_id,
+                    "version": version,
+                    "checksum": checksum,
+                    "plan": [item.model_dump(mode="json") for item in plan],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        values = {
+            "type": TaskType.WORKFLOW_EXECUTION.value,
+            "goal": goal,
+            "status": TaskStatus.PENDING.value,
+            "owner_id": owner_id,
+            "project_id": project_id,
+            "workspace_id": None,
+            "inputs": inputs,
+            "context": {
+                "ai_calls": 0,
+                "tool_calls": 0,
+                "workflow_node_keys_by_kind": node_kinds,
+            },
+            "verification": {},
+            "retry_count": 0,
+            "replan_count": 0,
+            "max_steps": config.agent.max_steps,
+            "max_retries": 0,
+            "max_replans": 0,
+            "max_ai_calls": 0,
+            "max_duration_seconds": int(config.agent.max_runtime_seconds),
+            "current_step_id": None,
+            "failure_reason": None,
+            "workflow_execution_id": uuid4().hex,
+            "workflow_definition_id": definition_id,
+            "workflow_version_id": version_id,
+            "workflow_version": version,
+            "workflow_checksum": checksum,
+            "workflow_idempotency_key": idempotency_key,
+            "workflow_request_fingerprint": fingerprint,
+        }
+        steps = [
+            {
+                "key": item.key,
+                "name": item.name,
+                "tool": item.tool,
+                "status": TaskStepStatus.PENDING.value,
+                "dependencies": item.depends_on,
+                "condition": item.when,
+                "inputs": item.inputs,
+                "outputs": {},
+                "evidence_ids": [],
+                "retry_count": 0,
+                "max_retries": 0,
+                "parallelizable": False,
+            }
+            for item in plan
+        ]
+        try:
+            async with self.repository_scope() as repositories:
+                existing = await repositories.tasks.workflow_execution_by_idempotency(
+                    definition_id, owner_id, idempotency_key
+                )
+                if existing is not None:
+                    if existing.inputs != inputs or (
+                        requested_version is not None and existing.workflow_version != requested_version
+                    ):
+                        raise ValueError("Idempotency key was already used with different Workflow inputs.")
+                    return Task(**repositories.tasks.task_values(existing))
+                if not config.agent.enabled:
+                    raise ValueError("Agent task execution is disabled by config/config.yaml.")
+                if len(plan) > config.agent.max_steps:
+                    raise ValueError(
+                        f"Workflow plan has {len(plan)} steps, exceeding max_steps={config.agent.max_steps}"
+                    )
+                if failure_id is not None:
+                    failure = await repositories.test_runs.get_failure_by_id(failure_id)
+                    source_run = await repositories.test_runs.get_by_id(failure.run_id) if failure else None
+                    if failure is None or source_run is None or source_run.project_id != project_id:
+                        raise ValueError("Failure record was not found in this project.")
+                row = await repositories.tasks.create(values, steps)
+                await repositories.commit()
+                return Task(**repositories.tasks.task_values(row))
+        except Exception:
+            # A unique constraint arbitrates concurrent API processes. Reload its winner and compare
+            # the request instead of relying on an in-process lock.
+            async with self.repository_scope() as repositories:
+                existing = await repositories.tasks.workflow_execution_by_idempotency(
+                    definition_id, owner_id, idempotency_key
+                )
+                if existing is None:
+                    raise
+                if existing.inputs != inputs or (
+                    requested_version is not None and existing.workflow_version != requested_version
+                ):
+                    raise ValueError("Idempotency key was already used with different Workflow inputs.")
+                return Task(**repositories.tasks.task_values(existing))
 
     async def _create(self, data: TaskCreate, owner_id: str) -> Task:
         recorder_runtime_id = await self._recorder_runtime_id(data, owner_id)
@@ -438,22 +589,21 @@ class TaskCommandService:
             }:
                 return None
             if task.status == TaskStatus.PENDING.value:
-                next_context = {
-                    **(task.context or {}),
-                    "pause_workspace_snapshot": workspace_source_snapshot(task.workspace_id),
-                }
+                next_context = dict(task.context or {})
+                if task.type != TaskType.WORKFLOW_EXECUTION.value:
+                    next_context["pause_workspace_snapshot"] = workspace_source_snapshot(task.workspace_id)
                 next_status = TaskStatus.PAUSED.value
-                await repo.add_event(task.id, "task.paused", {"boundary": "before_start"})
+                event_type = "task.paused"
+                payload = {"boundary": "before_start"}
             else:
                 next_context = task.context or {}
                 next_status = TaskStatus.PAUSING.value
-                await repo.add_event(task.id, "task.pause_requested", {"boundary": "after_current_step"})
-            await repo.update_task(
-                task.id,
-                context=next_context,
-                status=next_status,
-                finished_at=None if next_status == TaskStatus.PAUSED.value else task.finished_at,
-            )
+                event_type = "task.pause_requested"
+                payload = {"boundary": "after_current_step"}
+            if not await repo.request_pause(task.id, owner_id, task.status, next_status, next_context):
+                await repositories.rollback()
+                return None
+            await repo.add_event(task.id, event_type, payload)
             await repositories.commit()
         return await self.get(task_id, owner_id)
 
@@ -477,6 +627,19 @@ class TaskCommandService:
             task = await repo.get(task_id, owner_id)
             if not task or task.status != TaskStatus.RESUMING.value:
                 return None
+
+            if task.type == TaskType.WORKFLOW_EXECUTION.value:
+                context = task.context or {}
+                await repo.add_event(
+                    task.id,
+                    "task.resumed",
+                    {"changed_files": [], "workspace_files": 0, "plan_refreshed": False},
+                )
+                if not await repo.finish_resume(task.id, owner_id, TaskStatus.PENDING.value, context):
+                    await repositories.rollback()
+                    return await self.get(task_id, owner_id)
+                await repositories.commit()
+                return await self.get(task_id, owner_id)
 
             before = (task.context or {}).get("pause_workspace_snapshot", {})
             current = workspace_source_snapshot(task.workspace_id)
@@ -695,6 +858,10 @@ class TaskCommandService:
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
             task = await repo.get(task_id, owner_id)
+            if task and task.type == TaskType.WORKFLOW_EXECUTION.value:
+                raise ValueError(
+                    "A Workflow execution cannot be replanned; create a new execution from a published version."
+                )
             if not task or task.status not in {TaskStatus.BLOCKED.value, TaskStatus.FAILED.value}:
                 return None
             if task.replan_count >= task.max_replans:
