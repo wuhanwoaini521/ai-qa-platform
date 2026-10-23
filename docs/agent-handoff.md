@@ -48,8 +48,8 @@ Round 6（用户任务 m06679）结论 **PARTIAL** 保持有效，是本分支�
 | Round 14 起点 | `c756994 docs(handoff): record the case-to-recorder entry in the Round 13 audit`（Round 13 收尾） |
 | Round 15 起点 | `1b19ca1 fix(canvas): keep the pipeline legible instead of shrinking it to fit`（Round 14 收尾） |
 | Round 16.5 起点 | `254a41e docs(handoff): record the Round 16 evidence-driven suggestions and their acceptance numbers`（Round 16 收尾） |
-| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾）→ `279ccd2`（冻结最终回归记录）→ `a17275d`+`6e2705b`（RC Freeze：验收复跑 + 基线报告）→ 本文件所在提交（RC Hotfix 1：取消请求/终态分离） |
-| 未推送提交 | `origin/main..HEAD` = 39 笔（本任务默认不 push；RC Freeze +2、Hotfix 1 = 代码 + 本文件） |
+| 当前 HEAD | `53b7276`（R22 发布候选）→ `0f11fa3`（R17 复核审计修 P1）→ `460cf3e`（PG 记录修正）→ `b8958e2`（最终工程收尾）→ `279ccd2`（冻结最终回归记录）→ `a17275d`+`6e2705b`（RC Freeze：验收复跑 + 基线报告）→ `9785688`（RC Hotfix 1：取消请求/终态分离）+ 本文件提交 |
+| 未推送提交 | `origin/main..HEAD` = 39 笔（含 Hotfix 1 代码 + 文档）（本任务默认不 push；RC Freeze +2、Hotfix 1 = 代码 + 本文件） |
 | RC 标记 | annotated tag `rc-2026.10.22`（指向 RC Freeze 基线，**不动**）+ 另建 `rc-2026.10.22-hotfix1` 标在本轮提交上（仅本地）；可恢复副本 `runtime/backups/aiqa-rc-2026.10.22.bundle`（自包含 git bundle，62 MB，`git bundle verify` → "The bundle records a complete history"，脱离远端也能恢复） |
 | 迁移 | `0019_workflow_definitions`（R17）→ `0020_task_lease`（R18）→ `0021_artifact_actor_width`（R20）→ `0022_task_cancel_request`（Hotfix 1，`agent_tasks.cancel_requested_at/by`，可逆） |
 | 本轮证据目录 | `.ai-runs/overnight-delivery/`（`plan.md`、`status.json`、`decisions.md`、`blockers.md`、`rounds/`、`regression/`） |
@@ -928,6 +928,8 @@ Round3 核心目标已通过；Round2 旧矩阵仍未闭合，下一 P0 是全�
 **判定**：CI 命令对等 **PASS**；PostgreSQL 通道 **PASS**；单机部署演练 **PASS**；CI 服务、多主机 PostgreSQL、Windows 宿主 **BLOCKED**。
 
 ## 9. 最后执行的测试
+
+- **RC Hotfix 1（任务取消 fencing，提交 `9785688`，迁移 `0022_task_cancel_request`）**：取消拆成「请求」（`agent_tasks.cancel_requested_at/by`，`TaskRepository.request_cancel` 单条条件 UPDATE，永不写终态）与「终态」（只有 `finish_fenced` 能写：租约 owner+token 匹配，或确认无人持活租约），属主在 DAG 循环头 / 步骤边界 / 心跳三处识别请求并自行终止，本会落 `FAILED/BLOCKED` 的结局改写为 `CANCELLED` 并把原结局留在 `verification.interrupted_outcome`。后端全量 `uv run python -m pytest apps/api/tests packages -q --timeout=900` → **SQLite 1005 passed / 12 skipped / 63 warnings / 1278.88s / exit 0**（`/tmp/h1-sqlite-final3.log`）；**PostgreSQL 16 全量**（`AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/aiqa_test`，同范围）→ **1009 passed / 8 skipped / 61 warnings / 2699.98s / exit 0**；fencing 组在 PG 上 18 passed / 61.14s，`test_runtime_migrations.py` 6 passed，`test_agent_tasks.py -k cancel` 5 passed。真实 Chromium + 真后端 + 真 SQLite `rounds/r18b_cancel_acceptance.py` → **14/14 PASS，`failed: []`，无控制台错误**（证据 `rounds/r18b-cancel-acceptance.json`，任务 `16822f43ce004effb2dc07a94f8bc228`：02:12:11 创建 → 02:12:14 取消 → 02:12:16 `CANCELLED`）。前端 227 pass + `tsc`/`eslint` 干净，`ruff check`/`format`（490 files）干净，OpenAPI current，i18n 3391 keys。全量跑里唯一的失败 `test_startup_without_credentials` 是子进程 120s 上限在高负载下超时（单跑 16.03s 通过），已把上限提到 300s 并复跑通过。
 
 - **RC Freeze（本轮，用户任务 m07860，零产品改动）**：冻结树上复跑 —— 前端 `pnpm --filter @ai-qa/web test` → **227 pass / 0 fail**，`tsc --noEmit` 与 `eslint src --max-warnings=0` 无输出；真实 Chromium `.ai-runs/overnight-delivery/rounds/r17_acceptance.py` → **24/24 PASS，`failed: []`**。恢复路径实跑 —— `scripts/backup_db.sh` + `scripts/restore_db.sh` 后与活的开发库逐表比对 **44/44 一致**（`alembic_version` 两侧均 `0021_artifact_actor_width`）；空库 `alembic upgrade head` → `0021` / 44 表，`downgrade base` 后 36 表（基线迁移有意保留），再 `upgrade head` 回到 44 表。后端全量沿用 §3.22 的双通道数字（SQLite 996/11/890.37s、PostgreSQL 999/8/2066.93s），本轮未重跑。
 

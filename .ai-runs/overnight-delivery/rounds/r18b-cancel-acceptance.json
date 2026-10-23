@@ -2,39 +2,39 @@
   "checks": 14,
   "passed": 14,
   "failed": [],
-  "task_id": "f0e42513a7d140aa9f2110440c1d823d",
+  "task_id": "16822f43ce004effb2dc07a94f8bc228",
   "journal": [
     {
       "stage": "task_created",
-      "at": "2026-10-22T08:03:07+00:00",
-      "task_id": "f0e42513a7d140aa9f2110440c1d823d"
+      "at": "2026-10-23T02:12:11+00:00",
+      "task_id": "16822f43ce004effb2dc07a94f8bc228"
     },
     {
       "stage": "task_started",
-      "at": "2026-10-22T08:03:11+00:00",
+      "at": "2026-10-23T02:12:11+00:00",
       "status": "RUNNING"
     },
     {
       "stage": "cancel_clicked",
-      "at": "2026-10-22T08:03:21+00:00",
-      "task_id": "f0e42513a7d140aa9f2110440c1d823d"
+      "at": "2026-10-23T02:12:14+00:00",
+      "task_id": "16822f43ce004effb2dc07a94f8bc228"
     },
     {
       "stage": "task_finished",
-      "at": "2026-10-22T08:03:30+00:00",
-      "task_id": "f0e42513a7d140aa9f2110440c1d823d",
+      "at": "2026-10-23T02:12:16+00:00",
+      "task_id": "16822f43ce004effb2dc07a94f8bc228",
       "status": "CANCELLED"
     },
     {
       "stage": "db_task",
-      "at": "2026-10-22T08:03:45+00:00",
+      "at": "2026-10-23T02:12:17+00:00",
       "status": "CANCELLED",
       "cancel_requested_by": "c35b9752-5d9b-47aa-9f4d-1581eb22c38b",
       "lease_owner": null
     },
     {
       "stage": "db_events",
-      "at": "2026-10-22T08:03:45+00:00",
+      "at": "2026-10-23T02:12:17+00:00",
       "events": [
         "evidence.created",
         "step.completed",
@@ -47,5 +47,5 @@
       ]
     }
   ],
-  "finished_at": "2026-10-22T08:03:46+00:00"
+  "finished_at": "2026-10-23T02:12:18+00:00"
 }
