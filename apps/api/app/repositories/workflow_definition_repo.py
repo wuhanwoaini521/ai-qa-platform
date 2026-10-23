@@ -12,7 +12,7 @@ from app.services.workflow_errors import WorkflowVersionConflict, WorkflowVersio
 
 
 def graph_checksum(graph: dict[str, Any]) -> str:
-    """Stable digest of a graph, order-independent for edges and keyed by node order for readability."""
+    """Stable digest of a graph, independent of node and edge declaration order."""
     normalised = {
         "nodes": sorted(
             (
@@ -130,6 +130,8 @@ class WorkflowDefinitionRepository:
             raise WorkflowVersionConflict(
                 "The draft changed since this page loaded it. Reload the draft before saving."
             )
+        if draft.state != "DRAFT":
+            raise WorkflowVersionConflict("Published Workflow versions are immutable; reload the current draft.")
         draft.graph = graph
         draft.checksum = graph_checksum(graph)
         draft.issues = issues

@@ -19,8 +19,11 @@ from project_model.workflow_definition import (
     catalogue_payload,
     dependencies,
     execution_order,
+    validate_execution_graph,
     validate_graph,
 )
+from pydantic import ValidationError
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.persistence.models import WorkflowDefinitionORM, WorkflowDefinitionVersionORM
 from app.repositories.task_repo import TaskRepository
@@ -28,7 +31,13 @@ from app.repositories.workflow_definition_repo import (
     WorkflowDefinitionRepository,
     graph_checksum,
 )
-from app.services.workflow_errors import WorkflowVersionConflict, WorkflowVersionNotFound
+from app.services.workflow_errors import (
+    WorkflowConcurrentModification,
+    WorkflowGraphValidationError,
+    WorkflowVersionConflict,
+    WorkflowVersionNotFound,
+)
+from app.settings import get_config
 
 DRAFT = "DRAFT"
 PUBLISHED = "PUBLISHED"
@@ -39,13 +48,20 @@ def issues_payload(issues: list[WorkflowIssue]) -> list[dict[str, Any]]:
 
 
 def _graph(raw: dict[str, Any] | None) -> WorkflowGraphSpec:
+    return WorkflowGraphSpec.model_validate(raw if raw is not None else {"nodes": [], "edges": []})
+
+
+def _graph_payload(raw: Any) -> dict[str, Any]:
     try:
-        return WorkflowGraphSpec.model_validate(raw or {"nodes": [], "edges": []})
-    except Exception:  # a stored graph that no longer parses is reported as empty, never guessed at
-        return WorkflowGraphSpec()
+        return _graph(raw).model_dump(exclude_none=True)
+    except ValidationError:
+        return empty_graph()
 
 
 def version_payload(row: WorkflowDefinitionVersionORM, *, with_graph: bool = False) -> dict[str, Any]:
+    raw_graph = row.graph if isinstance(row.graph, dict) else {}
+    nodes = raw_graph.get("nodes")
+    edges = raw_graph.get("edges")
     payload: dict[str, Any] = {
         "id": row.id,
         "version": row.version,
@@ -56,11 +72,11 @@ def version_payload(row: WorkflowDefinitionVersionORM, *, with_graph: bool = Fal
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "published_by": row.published_by,
         "published_at": row.published_at.isoformat() if row.published_at else None,
-        "node_count": len((row.graph or {}).get("nodes") or []),
-        "edge_count": len((row.graph or {}).get("edges") or []),
+        "node_count": len(nodes) if isinstance(nodes, list) else 0,
+        "edge_count": len(edges) if isinstance(edges, list) else 0,
     }
     if with_graph:
-        payload["graph"] = row.graph or {"nodes": [], "edges": []}
+        payload["graph"] = _graph_payload(row.graph)
     return payload
 
 
@@ -118,6 +134,8 @@ class WorkflowDefinitionService:
 
     async def _summary(self, row: WorkflowDefinitionORM) -> dict[str, Any]:
         draft = await self.definitions.draft(row.id)
+        draft_graph = draft.graph if draft and isinstance(draft.graph, dict) else {}
+        draft_nodes = draft_graph.get("nodes")
         return {
             "id": row.id,
             "project_id": row.project_id,
@@ -125,7 +143,7 @@ class WorkflowDefinitionService:
             "description": row.description,
             "published_version": row.published_version,
             "draft_version": row.draft_version,
-            "draft_node_count": len(((draft.graph if draft else {}) or {}).get("nodes") or []),
+            "draft_node_count": len(draft_nodes) if isinstance(draft_nodes, list) else 0,
             "draft_issues": (draft.issues if draft else []) or [],
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
@@ -134,17 +152,55 @@ class WorkflowDefinitionService:
         draft = await self.definitions.draft(definition.id)
         versions = await self.definitions.versions(definition.id)
         published = None
+        published_execution = None
         if definition.published_version:
             published = await self.definitions.get_version(definition.id, definition.published_version)
+            if published is not None:
+                try:
+                    graph = _graph(published.graph)
+                    issues = validate_execution_graph(graph, {"failure_id": "eligibility-check"})
+                except ValidationError as error:
+                    graph = WorkflowGraphSpec()
+                    issues = [WorkflowIssue(code="MALFORMED_GRAPH", message=str(error))]
+                max_steps = get_config().agent.max_steps
+                if len(graph.nodes) > max_steps:
+                    issues.append(
+                        WorkflowIssue(
+                            code="STEP_BUDGET_EXCEEDED",
+                            message=f"Workflow plan has {len(graph.nodes)} steps, exceeding max_steps={max_steps}.",
+                        )
+                    )
+                try:
+                    checksum_matches = published.checksum == graph_checksum(published.graph or {})
+                except (AttributeError, TypeError):
+                    checksum_matches = False
+                if not checksum_matches:
+                    issues.append(
+                        WorkflowIssue(
+                            code="CHECKSUM_MISMATCH",
+                            message="The published Workflow version checksum does not match its graph.",
+                        )
+                    )
+                published_execution = {
+                    "eligible": not issues,
+                    "node_kinds": [node.kind for node in graph.nodes],
+                    "issues": issues_payload(issues),
+                    "subset": "failure.collect with optional failure.classify",
+                }
         return {
             **(await self._summary(definition)),
             "draft": {
                 "version": draft.version if draft else None,
                 "checksum": draft.checksum if draft else None,
-                "graph": (draft.graph if draft else {"nodes": [], "edges": []}),
+                "graph": _graph_payload(draft.graph) if draft else empty_graph(),
                 "issues": (draft.issues if draft else []) or [],
             },
-            "published": version_payload(published, with_graph=True) if published else None,
+            "published": {
+                **version_payload(published, with_graph=True),
+                "execution": published_execution,
+            }
+            if published
+            else None,
             "versions": [version_payload(row) for row in versions],
             "catalogue": self.catalogue(),
         }
@@ -163,19 +219,30 @@ class WorkflowDefinitionService:
         base_checksum: str | None = None,
     ) -> dict[str, Any]:
         """A draft may be saved while invalid — the issues travel with it so the editor can show them."""
-        parsed = _graph(graph)
+        try:
+            parsed = _graph(graph)
+        except ValidationError as error:
+            raise WorkflowGraphValidationError(f"Workflow graph validation failed: {error}") from error
         issues = validate_graph(parsed)
-        draft = await self.definitions.save_draft(
-            definition,
-            parsed.model_dump(exclude_none=True),
-            issues_payload(issues),
-            actor_id,
-            base_checksum=base_checksum,
-        )
+        try:
+            draft = await self.definitions.save_draft(
+                definition,
+                parsed.model_dump(exclude_none=True),
+                issues_payload(issues),
+                actor_id,
+                base_checksum=base_checksum,
+            )
+        except StaleDataError as error:
+            await self.definitions.session.rollback()
+            raise WorkflowConcurrentModification("Workflow changed concurrently. Reload and retry.") from error
         return {"draft": version_payload(draft, with_graph=True), "issues": issues_payload(issues)}
 
     async def validate(self, graph: dict[str, Any]) -> list[dict[str, Any]]:
-        return issues_payload(validate_graph(_graph(graph)))
+        try:
+            parsed = _graph(graph)
+        except ValidationError as error:
+            raise WorkflowGraphValidationError(f"Workflow graph validation failed: {error}") from error
+        return issues_payload(validate_graph(parsed))
 
     async def publish(self, definition: WorkflowDefinitionORM, actor_id: str | None) -> dict[str, Any]:
         draft = await self.definitions.draft(definition.id)
@@ -186,7 +253,11 @@ class WorkflowDefinitionService:
             raise WorkflowVersionConflict(
                 "A workflow with validation issues cannot be published: " + "; ".join(issue.message for issue in issues)
             )
-        published = await self.definitions.publish(definition, [], actor_id)
+        try:
+            published = await self.definitions.publish(definition, [], actor_id)
+        except StaleDataError as error:
+            await self.definitions.session.rollback()
+            raise WorkflowConcurrentModification("Workflow changed concurrently. Reload and retry.") from error
         return {
             "published": version_payload(published, with_graph=True),
             "draft_version": definition.draft_version,
@@ -224,16 +295,34 @@ class WorkflowDefinitionService:
         return row
 
     async def compile_plan(
-        self, definition: WorkflowDefinitionORM, version: int | None = None
+        self,
+        definition: WorkflowDefinitionORM,
+        version: int | None = None,
+        *,
+        inputs: dict[str, Any] | None = None,
+        for_execution: bool = False,
     ) -> tuple[list[TaskStepSpec], WorkflowDefinitionVersionORM]:
-        """Turn a published graph into runtime steps; dependency keys become step dependencies."""
+        """Compile a published graph; launch compilation applies the audited execution gate."""
         row = await self.published_version(definition, version)
-        graph = _graph(row.graph)
-        issues = validate_graph(graph)
-        if issues:
+        try:
+            graph = _graph(row.graph)
+        except ValidationError as error:
+            raise WorkflowVersionConflict(f"This published version has a malformed graph: {error}") from error
+        launch_inputs = inputs or {}
+        issues = validate_execution_graph(graph, launch_inputs) if for_execution else validate_graph(graph)
+        if for_execution and len(graph.nodes) > get_config().agent.max_steps:
             raise WorkflowVersionConflict(
-                "This published version no longer validates: " + "; ".join(issue.message for issue in issues)
+                f"Workflow plan has {len(graph.nodes)} steps, exceeding max_steps={get_config().agent.max_steps}"
             )
+        if for_execution and row.checksum != graph_checksum(row.graph or {}):
+            raise WorkflowVersionConflict("This published Workflow version checksum does not match its graph.")
+        if issues:
+            message = (
+                "This published version is not eligible to run: "
+                if for_execution
+                else "This published version no longer validates: "
+            )
+            raise WorkflowVersionConflict(message + "; ".join(issue.message for issue in issues))
         waits = dependencies(graph)
         nodes = {node.key: node for node in graph.nodes}
         steps: list[TaskStepSpec] = []
@@ -246,7 +335,7 @@ class WorkflowDefinitionService:
                     name=(node.title or spec.title)[:200],
                     tool=node.kind,
                     depends_on=waits[key],
-                    inputs=_compile_inputs(node.inputs),
+                    inputs=_compile_inputs(node.inputs, launch_inputs, bind_launch_inputs=for_execution),
                 )
             )
         return steps, row
@@ -354,11 +443,15 @@ class WorkflowDefinitionService:
         }
 
 
-def _compile_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
-    """``{"$input": name}`` means "bind from the run inputs", so the step leaves the key out."""
+def _compile_inputs(
+    inputs: dict[str, Any], launch_inputs: dict[str, Any], *, bind_launch_inputs: bool = False
+) -> dict[str, Any]:
+    """Resolve launch references only for execution; authoring compilation preserves its legacy shape."""
     compiled: dict[str, Any] = {}
     for name, value in inputs.items():
         if isinstance(value, dict) and set(value) == {"$input"}:
+            if bind_launch_inputs:
+                compiled[name] = launch_inputs[value["$input"]]
             continue
         compiled[name] = value
     return compiled

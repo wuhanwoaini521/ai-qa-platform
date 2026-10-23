@@ -7,14 +7,39 @@ only compiled from a version that validates.
 from __future__ import annotations
 
 import pytest
-from app.repositories.workflow_definition_repo import WorkflowDefinitionRepository, WorkflowVersionNotFound
+from app.repositories.workflow_definition_repo import (
+    WorkflowDefinitionRepository,
+    WorkflowVersionNotFound,
+    graph_checksum,
+)
 from app.services.workflow_definition_service import WorkflowDefinitionService
 from conftest import bearer_client, login_token
+from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
 
 
 PASSWORD = "pw-123456"
+
+
+def test_graph_checksum_and_execution_order_ignore_node_declaration_order():
+    graph = {
+        "nodes": [
+            {"key": "first", "kind": "tests.generate"},
+            {"key": "second", "kind": "tests.generate"},
+        ],
+        "edges": [],
+    }
+
+    reordered = {**graph, "nodes": list(reversed(graph["nodes"]))}
+
+    assert graph_checksum(graph) == graph_checksum(reordered)
+
+    from project_model.workflow_definition import WorkflowGraphSpec, execution_order
+
+    assert execution_order(WorkflowGraphSpec.model_validate(graph)) == execution_order(
+        WorkflowGraphSpec.model_validate(reordered)
+    )
 
 
 async def _as(admin, email: str):
@@ -156,6 +181,98 @@ async def test_an_invalid_draft_is_flagged_and_cannot_be_published(client):
     assert {issue["code"] for issue in validated.json()["issues"]} == {"UNKNOWN_EDGE_NODE"}
 
 
+@pytest.mark.parametrize(
+    "graph",
+    [
+        {"nodes": [{"key": 7, "kind": "tests.generate"}], "edges": []},
+        {"nodes": [{"key": "a", "kind": "tests.generate", "inputs": None}], "edges": []},
+        {"nodes": [{"key": "a", "kind": "tests.generate", "position": {"x": "bad"}}], "edges": []},
+        {"nodes": [None], "edges": []},
+        {"nodes": [{"key": "a", "kind": "tests.generate"}], "edges": [{"source": None, "target": "a"}]},
+        {"nodes": None, "edges": []},
+    ],
+)
+async def test_validate_rejects_structurally_malformed_graph_with_422(client, graph):
+    project_id = await _project(client, "Malformed workflow validation")
+    definition_id = (await _definition(client, project_id))["id"]
+
+    response = await client.post(f"/api/workflows/{definition_id}/validate", json=graph)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("corrupt_graph", [[], [1], {"nodes": [None], "edges": []}])
+async def test_corrupt_published_graph_does_not_break_detail_or_launch(client, test_db_session, corrupt_graph):
+    project_id = await _project(client, "Corrupt published graph")
+    definition_id = (await _definition(client, project_id))["id"]
+    saved = await client.put(f"/api/workflows/{definition_id}/draft", json=_graph())
+    assert saved.status_code == 200
+    published = await client.post(f"/api/workflows/{definition_id}/publish")
+    assert published.status_code == 200
+
+    from app.persistence.models import WorkflowDefinitionVersionORM
+
+    async with test_db_session() as session:
+        version = await session.get(WorkflowDefinitionVersionORM, published.json()["published"]["id"])
+        version.graph = corrupt_graph
+        await session.commit()
+
+    detail = await client.get(f"/api/workflows/{definition_id}")
+    launch = await client.post(
+        f"/api/workflows/{definition_id}/execute",
+        json={"version": published.json()["published"]["version"], "inputs": {"failure_id": "missing"}},
+        headers={"Idempotency-Key": "corrupt-graph-launch"},
+    )
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["published"]["execution"]["eligible"] is False
+    assert detail.json()["published"]["graph"] == {"nodes": [], "edges": []}
+    assert launch.status_code == 422, launch.text
+
+
+@pytest.mark.parametrize("corrupt_graph", [[1], {"nodes": 7, "edges": None}])
+async def test_corrupt_draft_graph_does_not_break_definition_list_or_detail(client, test_db_session, corrupt_graph):
+    project_id = await _project(client, "Corrupt draft graph")
+    definition_id = (await _definition(client, project_id))["id"]
+
+    from app.persistence.models import WorkflowDefinitionVersionORM
+
+    async with test_db_session() as session:
+        draft = await session.scalar(
+            select(WorkflowDefinitionVersionORM).where(
+                WorkflowDefinitionVersionORM.definition_id == definition_id,
+                WorkflowDefinitionVersionORM.state == "DRAFT",
+            )
+        )
+        draft.graph = corrupt_graph
+        await session.commit()
+
+    listing = await client.get(f"/api/projects/{project_id}/workflows")
+    detail = await client.get(f"/api/workflows/{definition_id}")
+
+    assert listing.status_code == 200, listing.text
+    assert listing.json()["definitions"][0]["draft_node_count"] == 0
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["draft"]["graph"] == {"nodes": [], "edges": []}
+
+
+async def test_malformed_draft_is_rejected_without_replacing_the_saved_graph(client):
+    project_id = await _project(client, "Malformed workflow draft")
+    definition_id = (await _definition(client, project_id))["id"]
+    original = await client.put(f"/api/workflows/{definition_id}/draft", json=_graph())
+    assert original.status_code == 200
+    original_graph = original.json()["draft"]["graph"]
+
+    malformed = await client.put(
+        f"/api/workflows/{definition_id}/draft",
+        json={"nodes": [{"key": 7, "kind": "tests.generate"}], "edges": []},
+    )
+
+    assert malformed.status_code == 422
+    after = await client.get(f"/api/workflows/{definition_id}")
+    assert after.json()["draft"]["graph"] == original_graph
+
+
 async def test_a_stale_editor_cannot_overwrite_a_newer_draft(client, test_db_session):
     project_id = await _project(client, "Workflow conflict")
     definition_id = (await _definition(client, project_id))["id"]
@@ -175,6 +292,66 @@ async def test_a_stale_editor_cannot_overwrite_a_newer_draft(client, test_db_ses
         },
     )
     assert fresh.status_code == 200, fresh.text
+
+
+async def test_concurrent_orm_version_conflicts_return_409_and_preserve_published_version(client, test_db_session):
+    from sqlalchemy.orm.exc import StaleDataError
+
+    project_id = await _project(client, "Workflow optimistic conflict")
+    definition_id = (await _definition(client, project_id))["id"]
+    saved = await client.put(f"/api/workflows/{definition_id}/draft", json=_graph())
+    assert saved.status_code == 200
+
+    from app.api.workflow_definitions import get_workflow_definition_service
+    from app.container import get_db
+    from app.main import app
+
+    async def stale_publish(self, definition, issues, actor_id):
+        raise StaleDataError("concurrent update")
+
+    async def stale_save(self, definition, graph, issues, actor_id, base_checksum=None):
+        raise StaleDataError("concurrent update")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(WorkflowDefinitionRepository, "publish", stale_publish)
+    monkeypatch.setattr(WorkflowDefinitionRepository, "save_draft", stale_save)
+    original_dependency = app.dependency_overrides.get(get_workflow_definition_service)
+    original_db_dependency = app.dependency_overrides.get(get_db)
+
+    async def dependency():
+        async with test_db_session() as session:
+            yield WorkflowDefinitionService(WorkflowDefinitionRepository(session))
+
+    async def rollback_db():
+        yield None
+
+    async def fresh_dependency():
+        async with test_db_session() as session:
+            yield WorkflowDefinitionService(WorkflowDefinitionRepository(session))
+
+    app.dependency_overrides[get_db] = rollback_db
+    app.dependency_overrides[get_workflow_definition_service] = fresh_dependency
+    try:
+        response = await client.post(f"/api/workflows/{definition_id}/publish")
+    finally:
+        if original_dependency is None:
+            app.dependency_overrides.pop(get_workflow_definition_service, None)
+        else:
+            app.dependency_overrides[get_workflow_definition_service] = original_dependency
+        if original_db_dependency is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = original_db_dependency
+        monkeypatch.undo()
+
+    assert response.status_code == 409
+    assert "CONCURRENT_MODIFICATION" in response.text
+    assert "reload" in response.text.lower()
+    async with test_db_session() as session:
+        definition = await WorkflowDefinitionRepository(session).get(definition_id)
+        versions = await WorkflowDefinitionRepository(session).versions(definition_id)
+    assert definition.published_version is None
+    assert [row.state for row in versions] == ["DRAFT"]
 
 
 async def test_restoring_a_published_version_creates_a_new_draft(client):

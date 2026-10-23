@@ -4,6 +4,14 @@ routes. They live here so an API router never has to import the repository layer
 """
 
 
+class WorkflowConcurrentModification(RuntimeError):
+    """A concurrent ORM update prevented a Workflow draft or publish operation."""
+
+
+class WorkflowGraphValidationError(ValueError):
+    """The submitted graph payload cannot be parsed as a Workflow graph."""
+
+
 class WorkflowVersionConflict(RuntimeError):
     """The definition changed under the caller (stale version or an already published version)."""
 
