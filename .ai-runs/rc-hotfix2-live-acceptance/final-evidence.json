@@ -1,0 +1,72 @@
+{
+  "baseline_head": "a732cb1e4895fcf580ee430c1126e4fd7510af54",
+  "tested_head": "a732cb1e4895fcf580ee430c1126e4fd7510af54",
+  "tested_tree": "working tree includes pre-existing RC changes and F11-F13 remediation; HEAD tree remains 29ca8335bc62e9f043e0ede605507bfe6d3addb1",
+  "working_tree": "modified; existing user changes, .ai-runs data, and runtime/backups preserved",
+  "focused_workflow_suite": {
+    "command": "uv run --no-sync pytest apps/api/tests/test_workflow_definitions.py apps/api/tests/test_workflow_execution.py -q",
+    "exit_code": 0,
+    "passed": 33,
+    "skipped": 0,
+    "warnings": 12
+  },
+  "sqlite_full_suite": {
+    "command": "uv run --no-sync pytest apps/api/tests packages -q",
+    "exit_code": 0,
+    "previous_run": {
+      "passed": 1043,
+      "skipped": 12,
+      "warnings": 72,
+      "duration_seconds": 600.67,
+      "exit_code": 0
+    },
+    "final_review_fix_rerun": "passed after malformed persisted graph handling, concurrent omitted-version publish race handling, and deterministic node-key execution ordering were finalized",
+    "final": {
+      "passed": 1048,
+      "skipped": 12,
+      "warnings": 74,
+      "duration_seconds": 738.79,
+      "exit_code": 0
+    },
+    "output": "final suite result captured from background run b8hjp6k0w; command: uv run --no-sync pytest apps/api/tests packages -q"
+  },
+  "frontend": {
+    "unit_tests": "227 passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "production_build": "passed; existing large-chunk advisory emitted"
+  },
+  "contracts_and_lint": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed (411 files)",
+    "i18n_check": "passed (25 namespaces, 2 languages, 3398 keys)",
+    "openapi_check": "passed",
+    "git_diff_check": "passed"
+  },
+  "chromium": {
+    "playwright": "1.62.0",
+    "chromium_version": "151.0.7922.34",
+    "journey": "dedicated isolated SQLite database -> authenticated Workspace -> create failure.collect workflow -> bind $input.failure_id -> save -> publish -> launch seeded project-owned failure -> Execution Tree",
+    "isolated_database": "/tmp/aiqa-f11-f13-chromium.db",
+    "task_id": "3904cb6436e1430ebfb8ba3f29baf5d7",
+    "failure_id": "fail_6539505817f0",
+    "result": "Task and Collect failure evidence step COMPLETED; PytestTraceback evidence is visible in Execution Tree; no page errors or browser console errors",
+    "screenshots": [
+      "screenshots/f11-f13-workflow-published.png",
+      "screenshots/f11-f13-execution-tree.png"
+    ]
+  },
+  "postgresql": {
+    "status": "BLOCKED",
+    "reason": "No docker/podman, PostgreSQL client/server listener, or AI_QA_TEST_DATABASE_URL available; no production or ordinary database was used"
+  },
+  "review": {
+    "original_findings": "F1-F10 remain closed as documented",
+    "F11": "implemented and covered by malformed request/corrupt stored graph regression tests",
+    "F12": "implemented and covered by deleted failure replay, changed inputs, explicit/mutable version, authorization order, and concurrent publish-race winner replay tests",
+    "F13": "implemented and covered by current budget detail and launch regressions",
+    "independent_final_review": "complete; reviewer confirmed checksum/execution-order fix and no remaining actionable findings"
+  },
+  "verdict": "PARTIAL: SQLite and independent review passed; PostgreSQL 16 validation remains blocked",
+  "restrictions": "No push, merge, deploy, destructive cleanup, or backup deletion"
+}

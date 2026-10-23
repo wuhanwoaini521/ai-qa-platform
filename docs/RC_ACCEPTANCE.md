@@ -5,6 +5,7 @@
 - main：`d8a2eef`（未改动）
 - 报告与证据目录：`.ai-runs/rc-acceptance/`、`.ai-runs/ui-redesign/`（均未纳入版本库）
 - 最终结论：**PARTIAL**
+- 当前 RC Hotfix 2 最终验收：见下文 §9；该节绑定代码 HEAD `a732cb1e4895fcf580ee430c1126e4fd7510af54` 及其工作树修复，SQLite 全量仍以 §9 最新记录为准。
 
 > 本报告不把 RC 验收 PASS 等同于企业生产就绪。本轮结论为 PARTIAL，因此也不构成生产就绪。
 
@@ -229,4 +230,23 @@
 - 独立评审：两轮（首轮 PARTIAL → 修复 `be6ec64` → 复评 PASS → 复评新增 4 条已修于 `89eb5ed`），最终回归在修复后的提交上重跑。
 
 **明确标记为 BLOCKED（不计入 PASS）**：CI/CD 流水线（本轮提交从未推送，`.github/workflows/ci.yml` 未运行，以本地等价检查替代）；部署与回滚演练（本机无容器运行时）；PostgreSQL 通道（本机无 PG）。**需诚实标注**：本环境 `discovery_candidate_score`（`jev-1.13.0`）50/50 以 `FALLBACK` 收尾（`error_type=invalid_request`），定位器决策由确定性回退产生，不得描述为真实 Jev 模型决策。**仍存的历史 UX 项**：D5 结果摘要偏薄；D6 录制入口仍只在 Studio 未绑定空状态。
+
+---
+
+## 9. RC Hotfix 2 最终验收（2026-10-23）
+
+本节仅记录本轮代码状态，不覆盖 §§1–8 中绑定旧 SHA 的历史结论。验收基线 HEAD：`a732cb1e4895fcf580ee430c1126e4fd7510af54`；本节同时覆盖该 HEAD 上保留的既有未提交 RC 工作与 F11–F13 修复。SQLite 全量运行期间 Git HEAD 未变化；此前 `sqlite-full-final.log` 绑定旧树，不作为本轮数字的日志来源。
+
+| 门禁 | 结果 | 证据 / 边界 |
+| --- | --- | --- |
+| 后端全量（SQLite） | **PASS** — 1048 passed / 12 skipped / 74 warnings / 738.79s / exit 0 | `uv run --no-sync pytest apps/api/tests packages -q`；复跑覆盖坏 graph 规范化、并发 replay winner 与节点 key 确定性 tie-break。 |
+| PostgreSQL 16 全量 | **BLOCKED** | 无 `docker`/`podman`、无 PostgreSQL listener/client、`AI_QA_TEST_DATABASE_URL` 未设置；未使用生产或普通数据库。 |
+| 前端 | **PASS** — 227 passed；typecheck、lint、production build 通过 | build 带有既有 large-chunk advisory。 |
+| Python 静态检查 | **PASS** — Ruff check；411 files format check；`git diff --check` 通过 | 本轮执行。 |
+| API / i18n 契约 | **PASS** — OpenAPI current；25 namespaces × 2 languages / 3398 keys | 本轮执行。 |
+| Chromium Workflow E2E | **PASS（修复后真实 UI）** | Playwright 1.62.0 / Chromium 151.0.7922.34；专用 `/tmp/aiqa-f11-f13-chromium.db`。UI 创建并发布 `failure.collect`、绑定 seeded failure 并启动；Task `3904cb6436e1430ebfb8ba3f29baf5d7` 与 collector step 为 COMPLETED，Execution Tree 显示 PytestTraceback evidence，page/console errors 为空。截图见 `.ai-runs/rc-hotfix2-live-acceptance/screenshots/f11-f13-*`。 |
+| Review findings | **PASS** | F11–F13 均有代码与回归映射；独立复评确认坏图、重放竞态及 checksum/执行顺序风险已关闭，无剩余可执行问题。 |
+| 最终树状态 | **未提交** | 保留已有 RC 脏工作；不 push、merge、deploy。 |
+
+**本节结论：PARTIAL。** SQLite 全量、前端、静态/契约门禁、独立复评及修复后的 Chromium UI 旅程通过；PostgreSQL 16 为 BLOCKED，因此整体验收保持 PARTIAL.
 
