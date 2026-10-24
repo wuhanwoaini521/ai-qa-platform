@@ -3765,6 +3765,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/{definition_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Workflow */
+        post: operations["execute_workflow_api_workflows__definition_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/{definition_id}/publish": {
         parameters: {
             query?: never;
@@ -5438,6 +5455,16 @@ export interface components {
             project_id?: string | null;
             /** Status */
             status?: string | null;
+            /** Workflow Execution Id */
+            workflow_execution_id?: string | null;
+            /** Workflow Definition Id */
+            workflow_definition_id?: string | null;
+            /** Workflow Version Id */
+            workflow_version_id?: string | null;
+            /** Workflow Version */
+            workflow_version?: number | null;
+            /** Workflow Checksum */
+            workflow_checksum?: string | null;
             /**
              * Generated At
              * Format: date-time
@@ -8233,6 +8260,18 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Cancel Requested At */
+            cancel_requested_at?: string | null;
+            /** Workflow Execution Id */
+            workflow_execution_id?: string | null;
+            /** Workflow Definition Id */
+            workflow_definition_id?: string | null;
+            /** Workflow Version Id */
+            workflow_version_id?: string | null;
+            /** Workflow Version */
+            workflow_version?: number | null;
+            /** Workflow Checksum */
+            workflow_checksum?: string | null;
         };
         /** TaskApprovalRequest */
         TaskApprovalRequest: {
@@ -8424,6 +8463,18 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Cancel Requested At */
+            cancel_requested_at?: string | null;
+            /** Workflow Execution Id */
+            workflow_execution_id?: string | null;
+            /** Workflow Definition Id */
+            workflow_definition_id?: string | null;
+            /** Workflow Version Id */
+            workflow_version_id?: string | null;
+            /** Workflow Version */
+            workflow_version?: number | null;
+            /** Workflow Checksum */
+            workflow_checksum?: string | null;
             /** Steps */
             steps?: components["schemas"]["TaskStep"][];
             /** Events */
@@ -8602,7 +8653,7 @@ export interface components {
          * TaskType
          * @enum {string}
          */
-        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "EXPLORE_PRODUCT" | "ANALYZE_DISCOVERY" | "RUN_REGRESSION" | "REVIEW_TEST";
+        TaskType: "QA_GOAL" | "ANALYZE_REQUIREMENT" | "CREATE_TEST" | "FIX_FAILURE" | "OPTIMIZE_TEST" | "EXPLORE_PAGE" | "EXPLORE_PRODUCT" | "ANALYZE_DISCOVERY" | "RUN_REGRESSION" | "REVIEW_TEST" | "WORKFLOW_EXECUTION";
         /** Team */
         Team: {
             /** Name */
@@ -9734,6 +9785,16 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * Discovery Match Count
+             * @default 0
+             */
+            discovery_match_count: number;
+            /**
+             * Discovery Truncated
+             * @default false
+             */
+            discovery_truncated: boolean;
+            /**
              * Truncated
              * @default false
              */
@@ -9786,6 +9847,15 @@ export interface components {
             edges?: {
                 [key: string]: unknown;
             }[];
+        };
+        /** WorkflowLaunch */
+        WorkflowLaunch: {
+            /** Version */
+            version?: number | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
         };
         /** WorkflowNode */
         WorkflowNode: {
@@ -14653,6 +14723,7 @@ export interface operations {
                 kind?: string | null;
                 state_id?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path: {
@@ -17701,6 +17772,45 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_workflow_api_workflows__definition_id__execute_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                definition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowLaunch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

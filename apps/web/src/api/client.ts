@@ -134,6 +134,21 @@ import type {
   WorkflowPlanCandidate,
 } from '../types/workflowDefinition';
 
+export interface WorkflowLaunchRequest {
+  version: number;
+  inputs: { failure_id: string };
+}
+
+export interface WorkflowLaunchResponse {
+  task_id: string;
+  execution_id: string;
+  definition_id: string;
+  version_id: string;
+  version: number;
+  checksum: string;
+  status: string;
+}
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'ai-qa.auth-token';
 
@@ -951,6 +966,12 @@ export const api = {
     }),
   getWorkflow: (definitionId: string) =>
     request<WorkflowDefinitionDetail>(`/workflows/${encodeURIComponent(definitionId)}`),
+  executeWorkflow: (definitionId: string, data: WorkflowLaunchRequest, idempotencyKey: string) =>
+    request<WorkflowLaunchResponse>(`/workflows/${encodeURIComponent(definitionId)}/execute`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(data),
+    }),
   saveWorkflowDraft: (definitionId: string, graph: WorkflowGraphSpec, baseChecksum?: string | null) =>
     request<{ draft: WorkflowVersionSummary; issues: WorkflowIssue[] }>(
       `/workflows/${encodeURIComponent(definitionId)}/draft`,

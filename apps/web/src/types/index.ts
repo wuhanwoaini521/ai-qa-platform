@@ -541,7 +541,8 @@ export type AgentTaskType =
   | 'EXPLORE_PAGE'
   | 'EXPLORE_PRODUCT'
   | 'RUN_REGRESSION'
-  | 'REVIEW_TEST';
+  | 'REVIEW_TEST'
+  | 'WORKFLOW_EXECUTION';
 
 export interface AgentGoalPreview {
   goal: string;

@@ -746,6 +746,7 @@
   "allTasks": "全部任务（每个任务各成一棵树）",
   "live": "实时",
   "summary": "节点 {{nodes}} · 顶层任务 {{roots}} · 模型调用 {{invocations}}",
+  "workflowProvenance": "工作流 v{{version}} · {{execution}}",
   "refresh": "刷新",
   "clearFocus": "取消聚焦",
   "hint": "单击节点查看详情，双击只保留这一支",
@@ -784,7 +785,8 @@
     "FIX_FAILURE": "失败修复",
     "EXPLORE_PRODUCT": "产品探索",
     "GENERATE_TESTS": "生成用例",
-    "QA_GOAL": "质量目标"
+    "QA_GOAL": "质量目标",
+    "WORKFLOW_EXECUTION": "已发布工作流执行"
   },
   "detail": {
     "title": "节点详情",
@@ -819,6 +821,16 @@
   "editor": "编辑工作流"
 },
   "workflowEditor": {
+    "unsaved": "有未保存的更改",
+    "mobilePanels": "工作流编辑面板",
+    "panels": {
+      "canvas": "画布",
+      "nodes": "节点库",
+      "settings": "配置"
+    },
+    "canvasEmptyTitle": "从这里开始搭建工作流",
+    "canvasEmptyHint": "从节点库添加节点，再连线定义经过校验的工作步骤。",
+    "openNodeLibrary": "打开节点库",
     "planTitle": "用自然语言生成流程",
     "planHint": "描述要做的事，AI 会按平台支持的节点给出候选流程；它不会保存、发布或执行任何东西，节点由服务端校验。",
     "planPlaceholder": "例如：读取这次发现的质量差距，起草用例，人工批准后写入测试文件。",
@@ -828,6 +840,11 @@
     "planApplied": "候选流程已放到画布，保存后才会成为草稿。",
     "planValid": "服务端校验通过：全部节点都在白名单内。",
     "planInvalid": "服务端校验未通过，下面的问题必须先解决。",
+    "launchTitle": "运行已发布版本",
+    "launchUnavailable": "此发布版本不符合当前已验证执行子集的条件。",
+    "failureId": "失败记录 ID",
+    "launch": "运行发布版本",
+    "launching": "正在启动…",
     "definition": "工作流定义",
     "none": "未选择工作流",
     "newName": "新工作流名称",

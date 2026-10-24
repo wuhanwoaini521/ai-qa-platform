@@ -11107,6 +11107,71 @@
         }
       }
     },
+    "/api/workflows/{definition_id}/execute": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Execute Workflow",
+        "operationId": "execute_workflow_api_workflows__definition_id__execute_post",
+        "parameters": [
+          {
+            "name": "definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Definition Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 100,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowLaunch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Execute Workflow Api Workflows  Definition Id  Execute Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflows/{definition_id}/publish": {
       "post": {
         "tags": [
@@ -14899,6 +14964,61 @@
               }
             ],
             "title": "Status"
+          },
+          "workflow_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Execution Id"
+          },
+          "workflow_definition_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Definition Id"
+          },
+          "workflow_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version Id"
+          },
+          "workflow_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version"
+          },
+          "workflow_checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Checksum"
           },
           "generated_at": {
             "type": "string",
@@ -22025,6 +22145,61 @@
               }
             ],
             "title": "Cancel Requested At"
+          },
+          "workflow_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Execution Id"
+          },
+          "workflow_definition_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Definition Id"
+          },
+          "workflow_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version Id"
+          },
+          "workflow_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version"
+          },
+          "workflow_checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Checksum"
           }
         },
         "type": "object",
@@ -22467,6 +22642,61 @@
             ],
             "title": "Cancel Requested At"
           },
+          "workflow_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Execution Id"
+          },
+          "workflow_definition_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Definition Id"
+          },
+          "workflow_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version Id"
+          },
+          "workflow_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version"
+          },
+          "workflow_checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Checksum"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/TaskStep"
@@ -22869,7 +23099,8 @@
           "EXPLORE_PRODUCT",
           "ANALYZE_DISCOVERY",
           "RUN_REGRESSION",
-          "REVIEW_TEST"
+          "REVIEW_TEST",
+          "WORKFLOW_EXECUTION"
         ],
         "title": "TaskType"
       },
@@ -25623,6 +25854,16 @@
             "type": "object",
             "title": "Counts"
           },
+          "discovery_match_count": {
+            "type": "integer",
+            "title": "Discovery Match Count",
+            "default": 0
+          },
+          "discovery_truncated": {
+            "type": "boolean",
+            "title": "Discovery Truncated",
+            "default": false
+          },
           "truncated": {
             "type": "boolean",
             "title": "Truncated",
@@ -25761,6 +26002,29 @@
         },
         "type": "object",
         "title": "WorkflowGraphPayload"
+      },
+      "WorkflowLaunch": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inputs"
+          }
+        },
+        "type": "object",
+        "title": "WorkflowLaunch"
       },
       "WorkflowNode": {
         "properties": {

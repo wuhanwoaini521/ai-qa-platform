@@ -6,12 +6,27 @@ export interface WorkflowNodeInput {
   description: string;
 }
 
+export type WorkflowExecutionClass =
+  | 'AUTO_READ_ONLY'
+  | 'AUTO_SANDBOXED'
+  | 'DRAFT_ONLY'
+  | 'HUMAN_APPROVAL_REQUIRED'
+  | 'FORBIDDEN'
+  | 'BLOCKED';
+
+export interface WorkflowExecutionPolicy {
+  classification: WorkflowExecutionClass;
+  enabled: boolean;
+  reason: string;
+}
+
 export interface WorkflowCatalogueEntry {
   kind: string;
   title: string;
   risk: 'READ' | 'PROPOSE' | 'APPROVAL' | 'WRITE' | 'EXECUTE';
   summary: string;
   writes: boolean;
+  execution: WorkflowExecutionPolicy;
   inputs: WorkflowNodeInput[];
 }
 
@@ -52,6 +67,12 @@ export interface WorkflowVersionSummary {
   node_count: number;
   edge_count: number;
   graph?: WorkflowGraphSpec;
+  execution?: {
+    eligible: boolean;
+    node_kinds: string[];
+    issues: WorkflowIssue[];
+    subset: string;
+  } | null;
 }
 
 export interface WorkflowDefinitionSummary {

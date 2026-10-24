@@ -50,6 +50,11 @@ export interface ExecutionTrace {
   root_task_id: string | null;
   root_count: number;
   status: string | null;
+  workflow_execution_id?: string | null;
+  workflow_definition_id?: string | null;
+  workflow_version_id?: string | null;
+  workflow_version?: number | null;
+  workflow_checksum?: string | null;
   nodes: TraceNode[];
   edges: TraceEdge[];
   counts: Record<TraceNodeType, number>;

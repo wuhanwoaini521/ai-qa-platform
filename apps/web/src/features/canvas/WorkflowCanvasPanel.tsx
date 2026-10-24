@@ -13,7 +13,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 
 import { ExecutionTreePanel } from './ExecutionTreePanel';
 import { WorkflowEditorPanel } from './WorkflowEditorPanel';
@@ -490,6 +490,7 @@ const CANVAS_MODE_LABEL: Record<CanvasMode, string> = {
 
 export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: string; requirementId?: string }) {
   const { t } = useTranslation('workspace');
+  const navigate = useNavigate();
   // The chosen view lives in the URL so a reload (or a shared link) lands on the same one.
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get('canvas');
@@ -525,10 +526,19 @@ export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: s
           <CanvasSurface projectId={projectId} requirementId={requirementId} />
         </ReactFlowProvider>
       )}
-      {mode === 'execution' && <ExecutionTreePanel projectId={projectId} />}
+      {mode === 'execution' && <ExecutionTreePanel projectId={projectId} taskId={searchParams.get('taskId')} />}
       {mode === 'editor' && (
         <ReactFlowProvider>
-          <WorkflowEditorPanel projectId={projectId} />
+          <WorkflowEditorPanel
+            projectId={projectId}
+            onExecutionCreated={(taskId) => {
+              const params = new URLSearchParams(searchParams);
+              params.set('canvas', 'execution');
+              params.set('taskId', taskId);
+              setSearchParams(params, { replace: true });
+              navigate(`/workspace/${encodeURIComponent(projectId)}?${params.toString()}`);
+            }}
+          />
         </ReactFlowProvider>
       )}
     </div>

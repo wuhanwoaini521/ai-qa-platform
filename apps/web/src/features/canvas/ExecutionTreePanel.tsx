@@ -219,10 +219,10 @@ function NodeDetail({ node, onClose }: { node: TraceNode; onClose: () => void })
   );
 }
 
-function TreeSurface({ projectId }: { projectId: string }) {
+function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialTaskId?: string | null }) {
   const { t } = useTranslation('workspace');
   const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(initialTaskId ?? null);
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -253,7 +253,7 @@ function TreeSurface({ projectId }: { projectId: string }) {
         if (!alive) return;
         const ordered = [...rows].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
         setTasks(ordered);
-        setTaskId((current) => current ?? ordered[0]?.id ?? null);
+        setTaskId((current) => current ?? initialTaskId ?? ordered[0]?.id ?? null);
       })
       .catch(() => {
         if (alive) setTasks([]);
@@ -261,7 +261,7 @@ function TreeSurface({ projectId }: { projectId: string }) {
     return () => {
       alive = false;
     };
-  }, [projectId]);
+  }, [initialTaskId, projectId]);
 
   useEffect(() => {
     setSelectedId(null);
@@ -402,6 +402,9 @@ function TreeSurface({ projectId }: { projectId: string }) {
                 roots: trace.root_count,
                 invocations: trace.counts.invocation ?? 0,
               })}
+              {trace.workflow_execution_id && (
+                <> · {t('executionTree.workflowProvenance', { version: trace.workflow_version, execution: trace.workflow_execution_id.slice(0, 8) })}</>
+              )}
             </span>
           )}
           {focusId && (
@@ -482,10 +485,10 @@ function toneColor(tone: TreeCardData['tone'] | undefined): string {
   return '#374151';
 }
 
-export function ExecutionTreePanel({ projectId }: { projectId: string }) {
+export function ExecutionTreePanel({ projectId, taskId: initialTaskId }: { projectId: string; taskId?: string | null }) {
   return (
     <ReactFlowProvider>
-      <TreeSurface projectId={projectId} />
+      <TreeSurface projectId={projectId} initialTaskId={initialTaskId} />
     </ReactFlowProvider>
   );
 }

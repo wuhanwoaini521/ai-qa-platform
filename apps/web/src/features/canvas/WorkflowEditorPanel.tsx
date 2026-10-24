@@ -165,7 +165,13 @@ function EditorSurface({
   );
 }
 
-export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
+export function WorkflowEditorPanel({
+  projectId,
+  onExecutionCreated,
+}: {
+  projectId: string;
+  onExecutionCreated?: (taskId: string) => void;
+}) {
   const { t } = useTranslation('workspace');
   const [list, setList] = useState<WorkflowDefinitionList | null>(null);
   const [detail, setDetail] = useState<WorkflowDefinitionDetail | null>(null);
@@ -184,6 +190,11 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
   const [plan, setPlan] = useState<WorkflowPlanCandidate | null>(null);
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [failureId, setFailureId] = useState('');
+  const [launching, setLaunching] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'canvas' | 'nodes' | 'settings'>('canvas');
+  const [smallViewport, setSmallViewport] = useState(() => window.matchMedia('(max-width: 900px)').matches);
+  const launchKeys = useRef(new Map<string, string>());
   const dragStart = useRef<EditorState | null>(null);
   // A slow initial load must not overwrite a definition the user already picked or created.
   const loadSeq = useRef(0);
@@ -226,6 +237,13 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
   useEffect(() => {
     void load().catch((error: Error) => setMessage(error.message));
   }, [load]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px)');
+    const update = () => setSmallViewport(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     api
@@ -383,61 +401,133 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
       setCompare(await api.compareWorkflowVersions(detail.id, base, head));
     });
 
+  const executePublished = async () => {
+    const published = detail?.published;
+    const failure = failureId.trim();
+    if (!detail || !published?.execution?.eligible || !failure || dirty || busy || launching) return;
+    const keyScope = `${detail.id}:${published.id}:${failure}`;
+    let idempotencyKey = launchKeys.current.get(keyScope);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      launchKeys.current.set(keyScope, idempotencyKey);
+    }
+    setLaunching(true);
+    setMessage(null);
+    try {
+      const created = await api.executeWorkflow(
+        detail.id,
+        { version: published.version, inputs: { failure_id: failure } },
+        idempotencyKey,
+      );
+      launchKeys.current.delete(keyScope);
+      onExecutionCreated?.(created.task_id);
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setLaunching(false);
+    }
+  };
+
   return (
     <div className="wfe-panel">
       <header className="wfe-toolbar">
-        <select
-          aria-label={t('workflowEditor.definition')}
-          value={detail?.id ?? ''}
-          onChange={(event) => void run(async () => load(event.target.value))}
-        >
-          <option value="">{t('workflowEditor.none')}</option>
-          {(list?.definitions ?? []).map((definition) => (
-            <option key={definition.id} value={definition.id}>
-              {definition.name}
-            </option>
-          ))}
-        </select>
-        <input
-          aria-label={t('workflowEditor.newName')}
-          placeholder={t('workflowEditor.newName')}
-          value={newName}
-          onChange={(event) => setNewName(event.target.value)}
-          className="wfe-name"
-        />
-        <button type="button" onClick={() => void createWorkflow()} disabled={busy}>
-          {t('workflowEditor.create')}
-        </button>
-        <span className="wfe-separator" />
-        <button type="button" onClick={() => setHistory(undo)} disabled={!history.past.length}>
-          {t('workflowEditor.undo')}
-        </button>
-        <button type="button" onClick={() => setHistory(redo)} disabled={!history.future.length}>
-          {t('workflowEditor.redo')}
-        </button>
-        <button type="button" onClick={() => edit(autoLayout(history.present))} disabled={!detail}>
-          {t('workflowEditor.autoLayout')}
-        </button>
-        <button type="button" onClick={() => void validate()} disabled={!detail || busy}>
-          {t('workflowEditor.validate')}
-        </button>
-        <button type="button" onClick={() => void save()} disabled={!detail || busy || !dirty} className="wfe-primary">
-          {dirty ? t('workflowEditor.saveDraft') : t('workflowEditor.saved')}
-        </button>
-        <button
-          type="button"
-          onClick={() => void publish()}
-          disabled={!detail || busy || dirty || !canPublish || issues.length > 0}
-          title={canPublish ? undefined : t('workflowEditor.needLead')}
-        >
-          {t('workflowEditor.publish')}
-        </button>
+        <div className="wfe-definition-controls">
+          <select
+            aria-label={t('workflowEditor.definition')}
+            value={detail?.id ?? ''}
+            onChange={(event) => void run(async () => load(event.target.value))}
+          >
+            <option value="">{t('workflowEditor.none')}</option>
+            {(list?.definitions ?? []).map((definition) => (
+              <option key={definition.id} value={definition.id}>
+                {definition.name}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label={t('workflowEditor.newName')}
+            placeholder={t('workflowEditor.newName')}
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            className="wfe-name"
+          />
+          <button type="button" onClick={() => void createWorkflow()} disabled={busy}>
+            {t('workflowEditor.create')}
+          </button>
+        </div>
+        <div className="wfe-edit-actions">
+          <button type="button" onClick={() => setHistory(undo)} disabled={!history.past.length}>
+            {t('workflowEditor.undo')}
+          </button>
+          <button type="button" onClick={() => setHistory(redo)} disabled={!history.future.length}>
+            {t('workflowEditor.redo')}
+          </button>
+          <button type="button" onClick={() => edit(autoLayout(history.present))} disabled={!detail}>
+            {t('workflowEditor.autoLayout')}
+          </button>
+          <button type="button" onClick={() => void validate()} disabled={!detail || busy}>
+            {t('workflowEditor.validate')}
+          </button>
+        </div>
+        <div className="wfe-release-actions">
+          <span className={`wfe-save-state${dirty ? ' is-dirty' : ''}`}>{dirty ? t('workflowEditor.unsaved') : t('workflowEditor.saved')}</span>
+          <button type="button" onClick={() => void save()} disabled={!detail || busy || !dirty} className="wfe-primary">
+            {t('workflowEditor.saveDraft')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void publish()}
+            disabled={!detail || busy || dirty || !canPublish || issues.length > 0}
+            title={canPublish ? undefined : t('workflowEditor.needLead')}
+          >
+            {t('workflowEditor.publish')}
+          </button>
+        </div>
       </header>
 
       {message && (
         <p className="wfe-message" role="status">
           {message}
         </p>
+      )}
+
+      {detail?.published && (
+        <details className="wfe-launch" aria-label={t('workflowEditor.launchTitle')}>
+          <summary>{t('workflowEditor.launchTitle')} · v{detail.published.version}</summary>
+          <div className="wfe-launch-content">
+            <div className="wfe-launch-copy">
+              <p className="wfe-muted">
+                {detail.published.execution?.subset ?? t('workflowEditor.launchUnavailable')}
+              </p>
+              {detail.published.execution?.issues.map((issue) => (
+                <p className="wfe-muted" key={`${issue.code}-${issue.node_key ?? ''}`}>
+                  {issue.message}
+                </p>
+              ))}
+            </div>
+            {detail.published.execution?.eligible && (
+              <div className="wfe-launch-controls">
+                <label>
+                  <span>{t('workflowEditor.failureId')}</span>
+                  <input
+                    value={failureId}
+                    onChange={(event) => setFailureId(event.target.value)}
+                    maxLength={2000}
+                    autoComplete="off"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="wfe-launch-button"
+                  onClick={() => void executePublished()}
+                  disabled={!failureId.trim() || busy || launching || dirty}
+                >
+                  {launching ? t('workflowEditor.launching') : t('workflowEditor.launch')}
+                </button>
+              </div>
+            )}
+          </div>
+        </details>
       )}
 
       {detail && (
@@ -552,67 +642,41 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
           <p>{t('workflowEditor.emptyHint')}</p>
         </div>
       ) : (
-        <div className="wfe-body">
-          <aside className="wfe-palette" aria-label={t('workflowEditor.palette')}>
-            <h4>{t('workflowEditor.palette')}</h4>
-            {catalogue.map((entry) => (
-              <button
-                key={entry.kind}
-                type="button"
-                className={`wfe-palette-item is-${riskLabel(entry.risk)}`}
-                onClick={() => {
-                  const result = addNode(history.present, catalogue, entry.kind);
-                  if ('error' in result) {
-                    setMessage(t(ERROR_TEXT[result.error]));
-                    return;
-                  }
-                  edit(result.state);
-                  setSelectedKey(result.key);
-                }}
-                title={entry.summary}
-              >
-                <span>{t(`workflowEditor.kinds.${entry.kind}`, { defaultValue: entry.title })}</span>
-                <small>{riskLabel(entry.risk)}</small>
-              </button>
-            ))}
-            <h4>{t('workflowEditor.versions')}</h4>
-            <ul className="wfe-versions">
-              {detail.versions.map((version) => (
-                <li key={version.id}>
-                  <span>
-                    v{version.version} · {version.state === 'PUBLISHED' ? t('workflowEditor.published') : t('workflowEditor.draft')}
-                  </span>
-                  <small>
-                    {version.node_count} {t('workflowEditor.nodes')}
-                  </small>
-                  <span className="wfe-version-actions">
-                    {version.state === 'PUBLISHED' && (
-                      <button type="button" onClick={() => void restore(version.version)} disabled={busy}>
-                        {t('workflowEditor.restore')}
-                      </button>
-                    )}
-                    {detail.published && detail.draft.version && version.version !== detail.draft.version && (
-                      <button
-                        type="button"
-                        onClick={() => void compareVersions(version.version, detail.draft.version as number)}
-                        disabled={busy}
-                      >
-                        {t('workflowEditor.compare')}
-                      </button>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </aside>
-
+        <>
+        {smallViewport && <nav className="wfe-mobile-tabs" aria-label={t('workflowEditor.mobilePanels')}>
+          {(['canvas', 'nodes', 'settings'] as const).map((panel) => (
+            <button
+              key={panel}
+              type="button"
+              className={mobilePanel === panel ? 'is-active' : ''}
+              aria-pressed={mobilePanel === panel}
+              onClick={() => setMobilePanel(panel)}
+            >
+              {t(`workflowEditor.panels.${panel}`)}
+            </button>
+          ))}
+        </nav>}
+        <div className={`wfe-body${smallViewport ? ` is-mobile-${mobilePanel}` : ''}`}>
           <div className="wfe-canvas">
+            {history.present.nodes.length === 0 && (
+              <div className="wfe-canvas-empty">
+                <span className="wfe-canvas-empty-icon" aria-hidden="true">＋</span>
+                <strong>{t('workflowEditor.canvasEmptyTitle')}</strong>
+                <p>{t('workflowEditor.canvasEmptyHint')}</p>
+                <button type="button" onClick={() => setMobilePanel('nodes')}>
+                  {t('workflowEditor.openNodeLibrary')}
+                </button>
+              </div>
+            )}
             <ReactFlowProvider>
               <EditorSurface
                 state={history.present}
                 catalogue={catalogue}
                 selectedKey={selectedKey}
-                onSelect={setSelectedKey}
+                onSelect={(key) => {
+                  setSelectedKey(key);
+                  if (key && smallViewport) setMobilePanel('settings');
+                }}
                 onConnect={onConnect}
                 onDeleteEdge={(edge) => edit(disconnect(history.present, edge.source, edge.target))}
                 onDeleteNodes={(keys) => {
@@ -638,6 +702,60 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
               />
             </ReactFlowProvider>
           </div>
+
+          <aside className="wfe-palette" aria-label={t('workflowEditor.palette')}>
+            <h4>{t('workflowEditor.palette')}</h4>
+            {catalogue.map((entry) => (
+              <button
+                key={entry.kind}
+                type="button"
+                className={`wfe-palette-item is-${riskLabel(entry.risk)}`}
+                onClick={() => {
+                  const result = addNode(history.present, catalogue, entry.kind);
+                  if ('error' in result) {
+                    setMessage(t(ERROR_TEXT[result.error]));
+                    return;
+                  }
+                  edit(result.state);
+                  setSelectedKey(result.key);
+                  setMobilePanel('settings');
+                }}
+                title={entry.summary}
+              >
+                <span>{t(`workflowEditor.kinds.${entry.kind}`, { defaultValue: entry.title })}</span>
+                <small>{riskLabel(entry.risk)}</small>
+              </button>
+            ))}
+            <details className="wfe-versions-disclosure">
+              <summary>{t('workflowEditor.versions')} · {detail.versions.length}</summary>
+              <ul className="wfe-versions">
+                {detail.versions.map((version) => (
+                  <li key={version.id}>
+                    <span>
+                      v{version.version} · {version.state === 'PUBLISHED' ? t('workflowEditor.published') : t('workflowEditor.draft')}
+                    </span>
+                    <small>{version.node_count} {t('workflowEditor.nodes')}</small>
+                    <span className="wfe-version-actions">
+                      {version.state === 'PUBLISHED' && (
+                        <button type="button" onClick={() => void restore(version.version)} disabled={busy}>
+                          {t('workflowEditor.restore')}
+                        </button>
+                      )}
+                      {detail.published && detail.draft.version && version.version !== detail.draft.version && (
+                        <button
+                          type="button"
+                          onClick={() => void compareVersions(version.version, detail.draft.version as number)}
+                          disabled={busy}
+                        >
+                          {t('workflowEditor.compare')}
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </aside>
 
           <aside className="wfe-inspector" aria-label={t('workflowEditor.inspector')}>
             {selected && selectedSpec ? (
@@ -681,14 +799,21 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
               <p className="wfe-muted">{t('workflowEditor.selectNode')}</p>
             )}
 
-            <h4>{t('workflowEditor.issues')}</h4>
+            <h4>{t('workflowEditor.issues')} {issues.length > 0 && <span className="wfe-issue-count">{issues.length}</span>}</h4>
             {issues.length === 0 ? (
               <p className="wfe-muted">{t('workflowEditor.noIssues')}</p>
             ) : (
               <ul className="wfe-issues">
                 {issues.map((issue) => (
                   <li key={`${issue.code}-${issue.node_key ?? 'graph'}`} className={`is-${issueTone(issue.code)}`}>
-                    <button type="button" onClick={() => issue.node_key && setSelectedKey(issue.node_key)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!issue.node_key) return;
+                        setSelectedKey(issue.node_key);
+                        if (smallViewport) setMobilePanel('settings');
+                      }}
+                    >
                       <strong>{issue.code}</strong>
                       <span>{issue.message}</span>
                     </button>
@@ -703,6 +828,7 @@ export function WorkflowEditorPanel({ projectId }: { projectId: string }) {
             )}
           </aside>
         </div>
+        </>
       )}
 
       {compare && (
