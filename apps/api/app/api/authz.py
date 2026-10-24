@@ -79,9 +79,8 @@ RULES: tuple[Rule, ...] = (
     Rule("/api/test-designs", Permission.PROJECT_READ, Permission.REQUIREMENT_WRITE),
     Rule("/api/test-cases", Permission.PROJECT_READ, Permission.TEST_CASE_WRITE),
     Rule("/api/workspaces", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
-    # Drafting a workflow is an automation change; publishing it separately needs PROJECT_WRITE
-    # (see the per-route guard in api/workflow_definitions.py).
-    Rule("/api/workflows", Permission.PROJECT_READ, Permission.AUTOMATION_EDIT),
+    # Workflow reads use project access; route handlers authorize draft, publish and run separately.
+    Rule("/api/workflows", Permission.PROJECT_READ, Permission.PROJECT_READ),
     Rule("/api/recorder", Permission.AUTOMATION_EDIT, Permission.AUTOMATION_EDIT),
     Rule("/api/debug", Permission.RUN_EXECUTE, Permission.RUN_EXECUTE),
     Rule("/api/decision", Permission.PROJECT_READ, Permission.SECURITY_ADMIN),

@@ -1,7 +1,8 @@
 # Versioned QA Workflow Studio
 
-Round 17. What a workflow definition is, what it is not, and where the boundary to the
-TaskRuntime sits. The definition is data; the runtime is the only thing that executes.
+Updated for RC Hotfix 2. A workflow definition is data; TaskRuntimeService remains the only
+scheduler and execution owner. Published Workflow execution is enabled only for a verified,
+server-compiled failure analysis subset described below.
 
 ## 1. Definition vs execution
 
@@ -62,16 +63,36 @@ real task and returns rows `MATCHED` / `NOT_EXECUTED` / `UNDECLARED` / `FAILED` 
 `a_repeated_kind_is_matched_in_step_order`). It never invents a missing fact: a step whose evidence is
 absent is reported as unknown, not as success.
 
-## 6. What this round deliberately does not do
+## 6. Verified published Workflow execution subset
 
-- **No execution of a published definition.** `compile_plan()` produces `TaskStepSpec` rows that the
-  existing runtime already understands, but nothing in the product creates a task from a definition
-  yet. Round 17 verdict for `DAG_EXECUTION` is therefore **BLOCKED**, not PASS — see §7.
-- No drag-to-reorder dependencies beyond connecting handles, no multi-select, no comments, no
-  per-node permissions.
-- No arbitrary code nodes, no expression language, no retry policy editor (each kind carries its own
-  runtime defaults).
-- No definition-derived scheduling: the runtime still builds plans from `build_plan(task_type)`.
+`POST /api/workflows/{definition_id}/execute` starts a task through the existing `TaskRuntimeService`
+for an immutable published version. The server checks project access and `RUN_EXECUTE`, resolves the
+published version, verifies its graph checksum and launch inputs, validates referenced failures against
+the Workflow project, and compiles the execution plan on the server. The client cannot submit a plan.
+
+Only these shapes are enabled:
+
+- one `failure.collect` node; or
+- one `failure.collect` node followed by one `failure.classify` node, bound to the collector result.
+
+The collector may use an authored custom key; its result is mapped explicitly to the existing
+classifier handler input. Workflow tasks persist the execution ID, definition ID, published version row
+ID and number, checksum, idempotency key, and request fingerprint. Replays for the same definition,
+caller, and key return the same task when the fingerprint matches; reuse with different inputs or a
+newly resolved published version conflicts. Task duration uses `agent.max_runtime_seconds`, and launch
+is refused when `agent.enabled` is false. Workflow steps have zero retries, replans, and AI-call budget.
+
+This is a restricted verified execution subset. It does not authorize arbitrary DAG execution and does
+not establish a generic `DAG_EXECUTION_PASS`. Other catalogue kinds remain unavailable to this execution
+route until their handlers and safety controls are separately verified. No arbitrary code, provider,
+browser, source-write, repair, or domain-mutation handler is enabled here.
+
+The existing scheduler, leases, cancellation, recovery, pause behavior, and Execution Trace remain the
+runtime authorities. The exact persisted task and published provenance are displayed in the existing
+Execution Tree.
+
+Other editor gaps remain: no drag-to-reorder dependencies beyond connecting handles, no multi-select,
+no comments, and no per-node permissions.
 
 ## 7. Verdicts
 
@@ -79,13 +100,12 @@ absent is reported as unknown, not as success.
 |---|---|---|
 | A. Definition (create, validate, version, publish immutably) | **PASS** | `apps/api/tests/test_workflow_definitions.py` (10), acceptance checks 1–12 |
 | B. Editor (in-canvas edit, connect, inputs, undo/redo, save, reload, compare, phone) | **PASS** | `.ai-runs/overnight-delivery/rounds/r17-acceptance.json` 20/20, `apps/web/tests/workflow-editor-model.test.mjs` (10) |
-| C. DAG execution from a definition | **BLOCKED** | `compile_plan` exists and is tested, but no endpoint starts a task from a definition; declaring it PASS would require a scheduler path that does not exist |
+| C. Restricted published Workflow execution | **PASS for the verified subset only** | `apps/api/tests/test_workflow_execution.py`, `apps/api/tests/test_workflow_definitions.py`, `apps/api/tests/test_runtime_migrations.py`; real Chromium acceptance `.ai-runs/rc-hotfix2-live-acceptance/` (HTTP 202, both custom-key steps completed, provenance in Execution Trace, no page errors). This does not imply arbitrary `DAG_EXECUTION_PASS`. |
 
-## 8. Round 18+ entry points
+## 8. Remaining execution scope
 
-- Starting a task from a published version needs: a `workflow_definition_version_id` on the task,
-  a compile step in `TaskCommandService`, and a lease so two workers cannot run the same version's
-  task twice (Round 18).
+- Expanding the enabled node set requires a separate handler and safety review for each kind. The
+  current launch path remains restricted to `failure.collect` and optional `failure.classify`.
 - The execution diff is the data a future "definition drift" report needs; it already reports
   `UNDECLARED` steps honestly.
 
@@ -117,10 +137,11 @@ Rules that make the candidate safe to trust:
 5. **No provider, no plan.** With no real provider configured the route answers `503` with a reason;
    a model error answers `502` with the provider's error. A failed plan never leaves a definition behind.
 
-What it deliberately does not do: it does not choose a definition to plan into, does not overwrite an
-existing draft, does not start execution (the published graph still has no scheduler path — §6), and
-does not "repair" a prompt into a supported one silently; an unsupported request produces a plan without
-the unsupported kind and the issues that explain why.
+What planning deliberately does not do: it does not choose a definition to plan into, does not overwrite
+an existing draft, does not execute the proposed graph directly, and does not "repair" a prompt into a
+supported one silently; an unsupported request produces a plan without the unsupported kind and the
+issues that explain why. Execution still requires a person to save and publish a supported graph before
+using the restricted launch route in §6.
 
 Evidence: `.ai-runs/overnight-delivery/rounds/r19-acceptance.json` — 15/15 with the real provider
 (planning took 19 s, 9 nodes, each with a stated rationale, `valid: true`), the shell request produced no

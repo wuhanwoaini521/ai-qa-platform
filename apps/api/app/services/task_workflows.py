@@ -95,6 +95,8 @@ def build_plan(task_type: TaskType) -> list[TaskStepSpec]:
             ("report", "Produce evidence-backed review", "source.review_report", ("review", "browser"), {}),
         ],
     }
+    if task_type == TaskType.WORKFLOW_EXECUTION:
+        raise ValueError("Workflow execution plans must be compiled from a published definition.")
     steps = templates[task_type]
     return [
         TaskStepSpec(

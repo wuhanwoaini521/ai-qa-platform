@@ -258,6 +258,8 @@ class TaskExecutionOrchestrator:
                 await repositories.commit()
 
             try:
+                async with self.repository_scope() as repositories:
+                    await repositories.tasks._assert_current_lease(task.id)
                 outputs = await self._run_step_tool(task.id, step, deadline=deadline)
             except ApprovalRequired:
                 async with self.repository_scope() as repositories:
@@ -449,6 +451,8 @@ class TaskExecutionOrchestrator:
                         await repositories.commit()
                 return {"deferred_for_pause": True}
 
+            async with self.repository_scope() as repositories:
+                await repositories.tasks._assert_current_lease(task.id)
             await self._complete_step(task.id, step.id, outputs, duration_ms=(time.perf_counter() - started) * 1000)
             return outputs
 
@@ -503,9 +507,8 @@ class TaskExecutionOrchestrator:
             repo = repositories.tasks
             lease = current_lease()
             if lease is not None and not await repo.holds_lease(task_id, lease[0], lease[1]):
-                # Another instance owns this task now; a terminal write from here would overwrite its run.
-                await repo.add_event(task_id, "task.lease_lost", {"owner": lease[0], "token": lease[1]})
-                await repositories.commit()
+                # Another instance owns this task now; this worker must not write anything further.
+                logger.warning("Task %s lost its lease before terminal persistence", task_id)
                 return
             row = await repo.get(task_id)
             if not row or row.status in self.TERMINAL:
@@ -536,8 +539,7 @@ class TaskExecutionOrchestrator:
             )
             if not written:
                 # The lease moved (or expired and was re-claimed) between deciding and writing.
-                await repo.add_event(task_id, "task.lease_lost", {"owner": lease[0] if lease else None})
-                await repositories.commit()
+                logger.warning("Task %s lost its lease during terminal persistence", task_id)
                 return
             if status == TaskStatus.CANCELLED and row.current_step_id:
                 step = await repo.get_step(row.current_step_id)
@@ -570,6 +572,11 @@ class TaskExecutionOrchestrator:
         if not task:
             raise TaskBlocked("Task not found")
         outputs = {step.key: step.outputs for step in steps if step.status == TaskStepStatus.COMPLETED.value}
+        if getattr(task, "type", None) == "WORKFLOW_EXECUTION":
+            node_keys = (task.context or {}).get("workflow_node_keys_by_kind") or {}
+            collector_key = node_keys.get("failure.collect")
+            if collector_key and collector_key in outputs:
+                outputs["collect"] = outputs[collector_key]
         for step in steps:
             if step.status != TaskStepStatus.COMPLETED.value:
                 continue

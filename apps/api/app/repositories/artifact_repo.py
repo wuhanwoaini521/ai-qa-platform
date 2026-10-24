@@ -11,7 +11,8 @@ from app.persistence.models import ArtifactORM, utc_now
 
 class ArtifactRepository:
     def __init__(self, session_factory=None) -> None:
-        self._session_factory = session_factory
+        self._session = session_factory if isinstance(session_factory, AsyncSession) else None
+        self._session_factory = None if self._session is not None else session_factory
 
     @property
     def session_factory(self):
@@ -30,6 +31,7 @@ class ArtifactRepository:
         session: AsyncSession | None = None,
         project_id: str | None = None,
         created_by: str | None = None,
+        commit: bool = True,
     ) -> ArtifactORM:
         art_id = str(uuid.uuid4())
         orm = ArtifactORM(
@@ -44,14 +46,28 @@ class ArtifactRepository:
             created_at=utc_now(),
         )
 
-        async def _exec(s: AsyncSession) -> ArtifactORM:
+        async def _exec(s: AsyncSession, *, should_commit: bool) -> ArtifactORM:
             s.add(orm)
-            await s.commit()
-            await s.refresh(orm)
+            await s.flush()
+            if should_commit:
+                await s.commit()
+                await s.refresh(orm)
             return orm
 
-        if session:
-            return await _exec(session)
+        if session is not None:
+            return await _exec(session, should_commit=commit)
+        if self._session is not None:
+            return await _exec(self._session, should_commit=commit)
+        async with self.session_factory() as s:
+            return await _exec(s, should_commit=True)
+
+    async def storage_path_is_referenced(self, storage_path: str) -> bool:
+        async def _exec(s: AsyncSession) -> bool:
+            stmt = select(ArtifactORM.id).where(ArtifactORM.storage_path == storage_path).limit(1)
+            return (await s.execute(stmt)).scalar_one_or_none() is not None
+
+        if self._session is not None:
+            return await _exec(self._session)
         async with self.session_factory() as s:
             return await _exec(s)
 
@@ -61,7 +77,9 @@ class ArtifactRepository:
             res = await s.execute(stmt)
             return res.scalar_one_or_none()
 
-        if session:
+        if session is not None:
             return await _exec(session)
+        if self._session is not None:
+            return await _exec(self._session)
         async with self.session_factory() as s:
             return await _exec(s)

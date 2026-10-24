@@ -917,6 +917,14 @@ class TaskORM(Base):
     """Durable user goal. Test runs and worker jobs remain execution resources below a task."""
 
     __tablename__ = "agent_tasks"
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_definition_id",
+            "owner_id",
+            "workflow_idempotency_key",
+            name="uq_agent_tasks_workflow_idempotency",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
@@ -947,6 +955,13 @@ class TaskORM(Base):
     # any authorized user may request it, only the lease owner or the recovery path may finalize it.
     cancel_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     cancel_requested_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    workflow_execution_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True, index=True)
+    workflow_definition_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    workflow_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    workflow_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workflow_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    workflow_idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    workflow_request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, index=True)
     started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

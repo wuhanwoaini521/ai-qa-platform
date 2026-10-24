@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.persistence.database import async_session_factory
 from app.repositories.ai_budget_repo import AIDailyBudgetRepository
 from app.repositories.ai_provider_settings_repo import AIProviderSettingsRepository, DecisionProviderSettingsRepository
+from app.repositories.artifact_repo import ArtifactRepository
 from app.repositories.automation_binding_repo import AutomationBindingRepository
 from app.repositories.breakpoint_repo import BreakpointRepository
 from app.repositories.browser_session_repo import BrowserSessionRepository
@@ -37,7 +38,8 @@ class TaskRepositoryUnitOfWork:
 
     def __init__(self, session: AsyncSession) -> None:
         self.tasks = TaskRepository(session)
-        self.evidence = TaskEvidenceRepository(session)
+        self.evidence = TaskEvidenceRepository(session, self.tasks)
+        self.artifacts = ArtifactRepository(session)
         self.failures = FailureRepository(session)
         self.failure_analyses = FailureAnalysisRepository(session)
         self.breakpoints = BreakpointRepository(session)

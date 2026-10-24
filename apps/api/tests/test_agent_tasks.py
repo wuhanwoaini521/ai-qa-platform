@@ -121,7 +121,15 @@ async def test_agent_goal_child_run_preserves_browser_environment_and_worker_con
     assert captured[0].parallel_workers == 3
 
 
-@pytest.mark.parametrize("task_type", [item for item in TaskType if item != TaskType.QA_GOAL])
+def test_workflow_execution_plan_requires_a_published_definition():
+    with pytest.raises(ValueError, match="published definition"):
+        build_plan(TaskType.WORKFLOW_EXECUTION)
+
+
+@pytest.mark.parametrize(
+    "task_type",
+    [item for item in TaskType if item not in {TaskType.QA_GOAL, TaskType.WORKFLOW_EXECUTION}],
+)
 def test_registered_task_workflows_are_valid_dags(task_type):
     plan = build_plan(task_type)
     keys = [step.key for step in plan]

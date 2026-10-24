@@ -63,6 +63,31 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         assert {"project_id", "created_by"} <= {
             column["name"] for column in inspect(connection).get_columns("stored_artifacts")
         }
+        # Workflow task identity and its cross-version idempotency key are reversible on SQLite.
+        workflow_task_columns = {
+            "workflow_execution_id",
+            "workflow_definition_id",
+            "workflow_version_id",
+            "workflow_version",
+            "workflow_checksum",
+            "workflow_idempotency_key",
+            "workflow_request_fingerprint",
+        }
+        assert workflow_task_columns <= {column["name"] for column in inspect(connection).get_columns("agent_tasks")}
+        workflow_idempotency = next(
+            constraint
+            for constraint in inspect(connection).get_unique_constraints("agent_tasks")
+            if constraint["name"] == "uq_agent_tasks_workflow_idempotency"
+        )
+        assert workflow_idempotency["column_names"] == [
+            "workflow_definition_id",
+            "owner_id",
+            "workflow_idempotency_key",
+        ]
+        downgrade_database(connection, "0022_task_cancel_request")
+        assert not workflow_task_columns & {column["name"] for column in inspect(connection).get_columns("agent_tasks")}
+        upgrade_database(connection)
+        assert workflow_task_columns <= {column["name"] for column in inspect(connection).get_columns("agent_tasks")}
         # The evidence index must come back down on SQLite too, not only up.
         assert {"discovery_evidence", "discovery_scenarios"} <= set(inspect(connection).get_table_names())
         # Versioned workflow definitions: additive tables that must also go down on SQLite.

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import uuid
+from contextvars import ContextVar
 from pathlib import Path
 
 from project_model.models import ArtifactDownloadInfo, ArtifactUploadResponse
 
 from app.repositories.artifact_repo import ArtifactRepository
 from app.settings import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class ArtifactStorageService:
@@ -26,6 +30,7 @@ class ArtifactStorageService:
         # writing anywhere else would let /health report writable for a location the API never uses.
         self.base_dir = Path(base_dir or get_config().app.artifact_storage_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._pending_path: ContextVar[Path | None] = ContextVar(f"artifact_pending_{id(self)}", default=None)
 
     async def save_artifact(
         self,
@@ -35,21 +40,42 @@ class ArtifactStorageService:
         storage_type: str = "LOCAL",
         project_id: str | None = None,
         created_by: str | None = None,
+        commit: bool = True,
     ) -> ArtifactUploadResponse:
         safe_name = Path(filename.replace("\\", "/")).name or "artifact.bin"
         file_path = self.base_dir / f"{uuid.uuid4().hex}_{safe_name}"
         file_path.write_bytes(content)
+        pending_token = self._pending_path.set(file_path)
 
-        orm = await self.artifact_repo.create(
-            filename=safe_name,
-            size_bytes=len(content),
-            content_type=content_type,
-            storage_type=storage_type,
-            storage_path=str(file_path),
-            project_id=project_id,
-            created_by=created_by,
-        )
+        try:
+            orm = await self.artifact_repo.create(
+                filename=safe_name,
+                size_bytes=len(content),
+                content_type=content_type,
+                storage_type=storage_type,
+                storage_path=str(file_path),
+                project_id=project_id,
+                created_by=created_by,
+                commit=commit,
+            )
+        except BaseException:
+            if commit:
+                try:
+                    referenced = await self.artifact_repo.storage_path_is_referenced(str(file_path))
+                except BaseException:
+                    logger.exception("Could not verify whether artifact file %s is referenced", file_path)
+                    referenced = True
+                if referenced:
+                    self._pending_path.set(None)
+                else:
+                    self.discard_pending_artifact()
+            else:
+                self.discard_pending_artifact()
+            self._pending_path.reset(pending_token)
+            raise
 
+        if commit:
+            self._pending_path.reset(pending_token)
         return ArtifactUploadResponse(
             artifact_id=orm.id,
             filename=orm.filename,
@@ -58,6 +84,16 @@ class ArtifactStorageService:
             storage_type=orm.storage_type,
             storage_url=f"/api/artifacts/{orm.id}/download",
         )
+
+    def discard_pending_artifact(self) -> None:
+        path = self._pending_path.get()
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to remove uncommitted artifact file %s", path)
+            finally:
+                self._pending_path.set(None)
 
     async def get_download_info(self, artifact_id: str) -> ArtifactDownloadInfo | None:
         orm = await self.artifact_repo.get_by_id(artifact_id)

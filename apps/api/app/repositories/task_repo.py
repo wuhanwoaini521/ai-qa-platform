@@ -26,6 +26,7 @@ from app.persistence.models import (
     TaskStepORM,
     utc_now,
 )
+from app.services.task_lease_context import current_lease
 
 UNFINISHED_STATUSES = ["PLANNING", "RUNNING", "VERIFYING", "RETRYING", "REPLANNING", "PAUSING", "RESUMING"]
 TERMINAL_STATUSES = ["COMPLETED", "FAILED", "BLOCKED", "CANCELLED"]
@@ -44,6 +45,25 @@ class TaskRepository:
         await self.session.flush()
         await self.add_event(task.id, "task.created", {"type": task.type, "goal": task.goal})
         return TaskRecord.from_record(task)
+
+    async def _assert_current_lease(self, task_id: str) -> None:
+        """Take a write lock on the leased task before any dependent row is persisted."""
+        lease = current_lease()
+        if lease is None:
+            return
+        now = utc_now()
+        held = await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.lease_owner == lease[0],
+                TaskORM.lease_token == lease[1],
+                TaskORM.lease_expires_at >= now,
+            )
+            .values(lease_token=TaskORM.lease_token)
+        )
+        if held.rowcount != 1:
+            raise RuntimeError("Task lease was lost before persistence.")
 
     async def get(self, task_id: str, owner_id: str | None = None) -> TaskRecord | None:
         stmt = select(TaskORM).where(TaskORM.id == task_id)
@@ -67,10 +87,36 @@ class TaskRepository:
         return TaskRecord.from_record(row) if row else None
 
     async def add_step(self, **values: Any) -> TaskStep:
+        await self._assert_current_lease(values["task_id"])
         row = TaskStepORM(id=uuid.uuid4().hex, **values)
         self.session.add(row)
         await self.session.flush()
         return TaskStep.model_validate(row, from_attributes=True)
+
+    async def request_pause(
+        self,
+        task_id: str,
+        owner_id: str,
+        current_status: str,
+        next_status: str,
+        context: dict[str, Any],
+    ) -> bool:
+        result = await self.session.execute(
+            update(TaskORM)
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.owner_id == owner_id,
+                TaskORM.status == current_status,
+                TaskORM.cancel_requested_at.is_(None),
+            )
+            .values(
+                context=context,
+                status=next_status,
+                finished_at=None if next_status == "PAUSED" else TaskORM.finished_at,
+                updated_at=utc_now(),
+            )
+        )
+        return result.rowcount == 1
 
     async def claim_resume(self, task_id: str, owner_id: str) -> bool:
         result = await self.session.execute(
@@ -171,10 +217,16 @@ class TaskRepository:
         return int(token.scalar_one())
 
     async def renew_lease(self, task_id: str, owner: str, token: int, lease_seconds: int) -> bool:
+        now = utc_now()
         result = await self.session.execute(
             update(TaskORM)
-            .where(TaskORM.id == task_id, TaskORM.lease_owner == owner, TaskORM.lease_token == token)
-            .values(lease_expires_at=utc_now() + timedelta(seconds=lease_seconds), updated_at=utc_now())
+            .where(
+                TaskORM.id == task_id,
+                TaskORM.lease_owner == owner,
+                TaskORM.lease_token == token,
+                TaskORM.lease_expires_at >= now,
+            )
+            .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
         )
         return result.rowcount == 1
 
@@ -190,7 +242,10 @@ class TaskRepository:
     async def holds_lease(self, task_id: str, owner: str, token: int) -> bool:
         row = await self.session.execute(
             select(TaskORM.lease_token).where(
-                TaskORM.id == task_id, TaskORM.lease_owner == owner, TaskORM.lease_token == token
+                TaskORM.id == task_id,
+                TaskORM.lease_owner == owner,
+                TaskORM.lease_token == token,
+                TaskORM.lease_expires_at >= utc_now(),
             )
         )
         return row.scalar_one_or_none() == token
@@ -236,7 +291,11 @@ class TaskRepository:
         now = finished_at or utc_now()
         conditions = [TaskORM.id == task_id, TaskORM.status.not_in(TERMINAL_STATUSES)]
         if owner is not None and token is not None:
-            conditions += [TaskORM.lease_owner == owner, TaskORM.lease_token == token]
+            conditions += [
+                TaskORM.lease_owner == owner,
+                TaskORM.lease_token == token,
+                TaskORM.lease_expires_at >= now,
+            ]
         if require_no_live_lease:
             conditions.append(
                 or_(
@@ -265,10 +324,26 @@ class TaskRepository:
         )
         return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
+    async def fail_running_steps(self, task_id: str, error: str) -> int:
+        result = await self.session.execute(
+            update(TaskStepORM)
+            .where(TaskStepORM.task_id == task_id, TaskStepORM.status == "RUNNING")
+            .values(status="FAILED", error=error, finished_at=utc_now())
+        )
+        return result.rowcount
+
     async def claim_running_step(self, task_id: str, step_id: str, task_status: str) -> TaskStep | None:
-        task = await self.session.get(TaskORM, task_id)
+        lease = current_lease()
+        task_stmt = select(TaskORM).where(TaskORM.id == task_id).with_for_update()
+        if lease is not None:
+            task_stmt = task_stmt.where(
+                TaskORM.lease_owner == lease[0],
+                TaskORM.lease_token == lease[1],
+                TaskORM.lease_expires_at >= utc_now(),
+            )
+        task = (await self.session.execute(task_stmt)).scalar_one_or_none()
         step = await self.session.get(TaskStepORM, step_id)
-        if task is None or step is None or task.status in {"CANCELLED", "PAUSING"}:
+        if task is None or step is None or step.task_id != task_id or task.status in {"CANCELLED", "PAUSING"}:
             return None
         step.status = "RUNNING"
         step.started_at = step.started_at or utc_now()
@@ -282,15 +357,23 @@ class TaskRepository:
     async def await_step_approval(
         self, task_id: str, owner_id: str, current_status: str, step_id: str, next_status: str
     ) -> bool:
-        task_claim = await self.session.execute(
-            update(TaskORM)
-            .where(
-                TaskORM.id == task_id,
-                TaskORM.owner_id == owner_id,
-                TaskORM.status == current_status,
-                TaskORM.current_step_id == step_id,
+        conditions = [
+            TaskORM.id == task_id,
+            TaskORM.owner_id == owner_id,
+            TaskORM.status == current_status,
+            TaskORM.current_step_id == step_id,
+        ]
+        lease = current_lease()
+        if lease is not None:
+            conditions.extend(
+                [
+                    TaskORM.lease_owner == lease[0],
+                    TaskORM.lease_token == lease[1],
+                    TaskORM.lease_expires_at >= utc_now(),
+                ]
             )
-            .values(status=next_status, current_step_id=step_id, updated_at=utc_now())
+        task_claim = await self.session.execute(
+            update(TaskORM).where(*conditions).values(status=next_status, current_step_id=step_id, updated_at=utc_now())
         )
         if task_claim.rowcount != 1:
             return False
@@ -302,6 +385,7 @@ class TaskRepository:
         return step_claim.rowcount == 1
 
     async def update_context(self, task_id: str, **values: Any) -> TaskRecord | None:
+        await self._assert_current_lease(task_id)
         task = await self.session.get(TaskORM, task_id)
         if task is None:
             return None
@@ -311,6 +395,7 @@ class TaskRepository:
         return TaskRecord.from_record(task)
 
     async def reserve_ai_call(self, task_id: str) -> bool:
+        await self._assert_current_lease(task_id)
         task = await self.session.get(TaskORM, task_id, with_for_update=True)
         if task is None:
             return False
@@ -324,6 +409,7 @@ class TaskRepository:
         return True
 
     async def update_inputs(self, task_id: str, **values: Any) -> TaskRecord | None:
+        await self._assert_current_lease(task_id)
         task = await self.session.get(TaskORM, task_id)
         if task is None:
             return None
@@ -469,6 +555,20 @@ class TaskRepository:
         stmt = stmt.order_by(TaskORM.created_at.desc()).limit(limit)
         return [TaskRecord.from_record(row) for row in (await self.session.execute(stmt)).scalars()]
 
+    async def workflow_execution_by_idempotency(
+        self, definition_id: str, owner_id: str, idempotency_key: str
+    ) -> TaskRecord | None:
+        row = (
+            await self.session.execute(
+                select(TaskORM).where(
+                    TaskORM.workflow_definition_id == definition_id,
+                    TaskORM.owner_id == owner_id,
+                    TaskORM.workflow_idempotency_key == idempotency_key,
+                )
+            )
+        ).scalar_one_or_none()
+        return TaskRecord.from_record(row) if row else None
+
     async def recent_qa_goals(self, owner_id: str, project_id: str, limit: int = 100) -> list[TaskRecord]:
         stmt = (
             select(TaskORM)
@@ -508,9 +608,17 @@ class TaskRepository:
             "finished_at": row.finished_at,
             "updated_at": row.updated_at,
             "cancel_requested_at": getattr(row, "cancel_requested_at", None),
+            "workflow_execution_id": getattr(row, "workflow_execution_id", None),
+            "workflow_definition_id": getattr(row, "workflow_definition_id", None),
+            "workflow_version_id": getattr(row, "workflow_version_id", None),
+            "workflow_version": getattr(row, "workflow_version", None),
+            "workflow_checksum": getattr(row, "workflow_checksum", None),
+            "workflow_idempotency_key": getattr(row, "workflow_idempotency_key", None),
+            "workflow_request_fingerprint": getattr(row, "workflow_request_fingerprint", None),
         }
 
     async def update_task(self, task_id: str, **values: Any) -> TaskRecord | None:
+        await self._assert_current_lease(task_id)
         task = await self.session.get(TaskORM, task_id)
         if not task:
             return None
@@ -524,12 +632,19 @@ class TaskRepository:
         step = await self.session.get(TaskStepORM, step_id)
         if not step:
             return None
+        lease = current_lease()
+        if lease is not None:
+            try:
+                await self._assert_current_lease(step.task_id)
+            except RuntimeError:
+                return None
         for key, value in values.items():
             setattr(step, key, value)
         await self.session.flush()
         return TaskStep.model_validate(step, from_attributes=True)
 
     async def add_event(self, task_id: str, event_type: str, payload: dict[str, Any] | None = None) -> TaskEventORM:
+        await self._assert_current_lease(task_id)
         payload = payload or {}
         step_id = payload.get("step_id")
         if isinstance(step_id, str):
@@ -544,18 +659,21 @@ class TaskRepository:
         return event
 
     async def add_evidence(self, **values: Any) -> TaskEvidenceORM:
+        await self._assert_current_lease(values["task_id"])
         row = TaskEvidenceORM(id=uuid.uuid4().hex, **values)
         self.session.add(row)
         await self.session.flush()
         return row
 
     async def add_artifact(self, **values: Any) -> TaskArtifactORM:
+        await self._assert_current_lease(values["task_id"])
         row = TaskArtifactORM(id=uuid.uuid4().hex, **values)
         self.session.add(row)
         await self.session.flush()
         return row
 
     async def add_decision(self, **values: Any) -> TaskDecisionORM:
+        await self._assert_current_lease(values["task_id"])
         row = TaskDecisionORM(id=uuid.uuid4().hex, **values)
         self.session.add(row)
         await self.session.flush()

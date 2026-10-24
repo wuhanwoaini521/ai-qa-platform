@@ -170,4 +170,6 @@ class WorkflowCanvas(BaseModel):
     nodes: list[WorkflowNode]
     edges: list[WorkflowEdge]
     counts: dict[str, int] = Field(default_factory=dict)
+    discovery_match_count: int = 0
+    discovery_truncated: bool = False
     truncated: bool = False

@@ -127,6 +127,47 @@ async def test_a_discovery_run_becomes_one_node_with_its_real_counts_and_evidenc
     assert page_state["collection_method"] == "browser_runtime"
 
 
+async def test_requirement_filter_is_applied_before_discovery_limit(client, test_db_session):
+    project_id = await _project(client)
+    first = await client.post(
+        "/api/requirements",
+        json={"project_id": project_id, "title": "Target requirement", "description": "", "acceptance_criteria": ""},
+    )
+    other = await client.post(
+        "/api/requirements",
+        json={"project_id": project_id, "title": "Other requirement", "description": "", "acceptance_criteria": ""},
+    )
+    target_id, other_id = first.json()["id"], other.json()["id"]
+    async with test_db_session() as session:
+        for index in range(8):
+            session.add(
+                QualityDiscoveryRunORM(
+                    id=f"qd_filter_{index}",
+                    project_id=project_id,
+                    requested_by="tester",
+                    mode="VALIDATE",
+                    start_url="http://example.test/",
+                    requirement_id=target_id if index == 0 else other_id,
+                    status=DiscoveryStatus.STOPPED.value,
+                    result={"states": []},
+                )
+            )
+        await session.commit()
+
+    response = await client.get(f"/api/projects/{project_id}/workflow-canvas", params={"requirement_id": target_id})
+    assert response.status_code == 200, response.text
+    canvas = response.json()
+    assert [node["entity_id"] for node in canvas["nodes"] if node["kind"] == "DISCOVERY"] == ["qd_filter_0"]
+    assert canvas["discovery_match_count"] == 1
+    assert canvas["discovery_truncated"] is False
+
+    all_runs = await client.get(f"/api/projects/{project_id}/workflow-canvas")
+    all_canvas = all_runs.json()
+    assert len([node for node in all_canvas["nodes"] if node["kind"] == "DISCOVERY"]) == 3
+    assert all_canvas["discovery_match_count"] == 8
+    assert all_canvas["discovery_truncated"] is True
+
+
 async def test_a_failure_brings_its_repair_chain_and_the_links_that_join_them(client, test_db_session):
     project_id = await _project(client)
     file_path = "tests/test_canvas.py"

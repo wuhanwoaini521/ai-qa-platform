@@ -87,6 +87,11 @@ class ExecutionTrace(BaseModel):
     root_task_id: str | None = None
     project_id: str | None = None
     status: str | None = None
+    workflow_execution_id: str | None = None
+    workflow_definition_id: str | None = None
+    workflow_version_id: str | None = None
+    workflow_version: int | None = None
+    workflow_checksum: str | None = None
     generated_at: datetime
     nodes: list[TraceNode] = Field(default_factory=list)
     edges: list[TraceEdge] = Field(default_factory=list)

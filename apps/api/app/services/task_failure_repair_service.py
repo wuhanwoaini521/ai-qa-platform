@@ -70,10 +70,13 @@ class TaskFailureRepairService:
                 "evidence_bundle": evidence_bundle.model_dump(mode="json"),
                 "rendered_evidence": evidence_bundle.render(),
             }
+        evidence_step_key = ((task.context or {}).get("workflow_node_keys_by_kind") or {}).get(
+            "failure.collect", "collect"
+        )
         evidence = [
             await self.context.evidence(
                 task,
-                "collect",
+                evidence_step_key,
                 EvidenceType.PYTEST_TRACEBACK,
                 "failure_records + test_executions",
                 f"Collected {result['exception_type']} for {result['test_nodeid']}.",

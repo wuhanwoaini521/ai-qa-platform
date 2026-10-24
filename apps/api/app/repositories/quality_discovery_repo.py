@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.models import QualityDiscoveryRunORM, utc_now
@@ -16,14 +16,24 @@ class QualityDiscoveryRepository:
         result = await self.session.execute(select(QualityDiscoveryRunORM).where(QualityDiscoveryRunORM.id == run_id))
         return result.scalar_one_or_none()
 
-    async def list_by_project(self, project_id: str, limit: int = 25) -> list[QualityDiscoveryRunORM]:
-        result = await self.session.execute(
-            select(QualityDiscoveryRunORM)
-            .where(QualityDiscoveryRunORM.project_id == project_id)
-            .order_by(desc(QualityDiscoveryRunORM.created_at))
-            .limit(limit)
-        )
+    async def list_by_project(
+        self, project_id: str, limit: int = 25, requirement_id: str | None = None
+    ) -> list[QualityDiscoveryRunORM]:
+        statement = select(QualityDiscoveryRunORM).where(QualityDiscoveryRunORM.project_id == project_id)
+        if requirement_id is not None:
+            statement = statement.where(QualityDiscoveryRunORM.requirement_id == requirement_id)
+        result = await self.session.execute(statement.order_by(desc(QualityDiscoveryRunORM.created_at)).limit(limit))
         return list(result.scalars().all())
+
+    async def count_by_project(self, project_id: str, requirement_id: str | None = None) -> int:
+        statement = (
+            select(func.count())
+            .select_from(QualityDiscoveryRunORM)
+            .where(QualityDiscoveryRunORM.project_id == project_id)
+        )
+        if requirement_id is not None:
+            statement = statement.where(QualityDiscoveryRunORM.requirement_id == requirement_id)
+        return int((await self.session.execute(statement)).scalar_one())
 
     async def list_non_terminal(self) -> list[QualityDiscoveryRunORM]:
         result = await self.session.execute(

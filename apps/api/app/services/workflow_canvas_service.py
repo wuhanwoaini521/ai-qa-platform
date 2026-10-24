@@ -112,7 +112,12 @@ class WorkflowCanvasService:
                 run_rows.append(run)
                 displayed.add(run.id)
         task_rows = await tasks.list(owner_id, project_id=project_id, limit=MAX_TASKS)
-        discovery_rows = await self.discovery.list_by_project(project_id, MAX_DISCOVERY_RUNS)
+        discovery_rows = await self.discovery.list_by_project(
+            project_id, MAX_DISCOVERY_RUNS + 1, requirement_id=requirement_id
+        )
+        discovery_match_count = await self.discovery.count_by_project(project_id, requirement_id=requirement_id)
+        discovery_truncated = discovery_match_count > MAX_DISCOVERY_RUNS
+        discovery_rows = discovery_rows[:MAX_DISCOVERY_RUNS]
         binding_rows = (await self.bindings.list_recorded(project_id))[:MAX_RECORDER]
 
         task_by_failure: dict[str, Any] = {}
@@ -485,9 +490,11 @@ class WorkflowCanvasService:
             nodes=nodes,
             edges=edges,
             counts=counts,
+            discovery_match_count=discovery_match_count,
+            discovery_truncated=discovery_truncated,
             truncated=len(run_rows) > MAX_RUNS
             or len([row for row in failure_rows if row.run_id in run_nodes]) >= MAX_FAILURES
-            or len(discovery_rows) >= MAX_DISCOVERY_RUNS
+            or discovery_truncated
             or len(binding_rows) >= MAX_RECORDER,
         )
 

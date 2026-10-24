@@ -134,7 +134,17 @@ class ExecutionTraceService:
                     finished_at=task.finished_at,
                     status=task.status,
                     links={"task": f"/runs/tasks?taskId={task.id}"},
-                    inputs=safe_summary({"type": task.type, **task.inputs}),
+                    inputs=safe_summary(
+                        {
+                            "type": task.type,
+                            **task.inputs,
+                            "workflow_execution_id": task.workflow_execution_id,
+                            "workflow_definition_id": task.workflow_definition_id,
+                            "workflow_version_id": task.workflow_version_id,
+                            "workflow_version": task.workflow_version,
+                            "workflow_checksum": task.workflow_checksum,
+                        }
+                    ),
                     outputs=safe_summary({"failure_reason": task.failure_reason}),
                     error_code="TASK_BLOCKED" if task.status in {"BLOCKED", "FAILED"} else None,
                     unknown=["parent_task_id"],
@@ -355,10 +365,16 @@ class ExecutionTraceService:
                 counts.suggestion += 1
                 edges.append(TraceEdge(id=f"{node_id}->{parent}", source=node_id, target=parent, type="PRODUCES"))
 
+        root = next((task for task in task_models if task.id == root_task_id), None)
         return ExecutionTrace(
             root_task_id=root_task_id,
             project_id=project_id or (task_models[0].project_id if task_models else None),
             status=task_models[0].status if len(task_models) == 1 else None,
+            workflow_execution_id=root.workflow_execution_id if root else None,
+            workflow_definition_id=root.workflow_definition_id if root else None,
+            workflow_version_id=root.workflow_version_id if root else None,
+            workflow_version=root.workflow_version if root else None,
+            workflow_checksum=root.workflow_checksum if root else None,
             generated_at=utc_now(),
             nodes=nodes,
             edges=edges,

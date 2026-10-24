@@ -46,6 +46,7 @@ class TaskSchedulerService:
         self._child_runs = execution._child_runs
         self._semaphore = asyncio.Semaphore(self.concurrency)
         self._stopping = False
+        self._next_recovery_at = 0.0
         self._leases: dict[str, tuple[str, int]] = {}
         self._heartbeats: dict[str, asyncio.Task] = {}
 
@@ -109,15 +110,6 @@ class TaskSchedulerService:
         async with self.repository_scope() as repositories:
             repo = repositories.tasks
             for row in await repo.unfinished_stale():
-                steps = await repo.steps_for_task(row.id)
-                for step in steps:
-                    if step.status == TaskStepStatus.RUNNING.value:
-                        await repo.update_step(
-                            step.id,
-                            status=TaskStepStatus.FAILED.value,
-                            error="API restarted while this tool was running; inspect side effects before retrying.",
-                            finished_at=utc_now(),
-                        )
                 failure_reason = "Interrupted by API restart. Review the current workspace and explicitly replan."
                 cancelled = row.cancel_requested_at is not None
                 written = await repo.finish_fenced(
@@ -129,6 +121,10 @@ class TaskSchedulerService:
                 if not written:
                     # Another replica claimed it between the query and the write; leave it to its owner.
                     continue
+                await repo.fail_running_steps(
+                    row.id,
+                    "API restarted while this tool was running; inspect side effects before retrying.",
+                )
                 if cancelled:
                     await repo.add_event(row.id, "task.cancelled", {"via": "recovery", "recovered": True})
                 else:
@@ -154,6 +150,15 @@ class TaskSchedulerService:
                         task = asyncio.create_task(self._execute_task(task_id), name=f"agent-task-{task_id}")
                         self._active[task_id] = task
                         task.add_done_callback(lambda done, tid=task_id: self._active.pop(tid, None))
+                now = time.monotonic()
+                if now >= self._next_recovery_at:
+                    try:
+                        await self.recover_interrupted()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logger.exception("Periodic task recovery failed")
+                    self._next_recovery_at = now + max(0.05, self.poll_interval * 10)
                 await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 raise
@@ -170,15 +175,19 @@ class TaskSchedulerService:
                 await repositories.rollback()
                 return False
             self._leases[task_id] = (owner, token)
-            task = await repo.get(task_id)
-            assert task is not None
-            task_values = {"status": TaskStatus.RUNNING.value}
-            if task.started_at is None:
-                task_values["started_at"] = utc_now()
-            await repo.update_task(task_id, **task_values)
-            await repo.add_event(task_id, "task.started", {})
-            await repo.add_event(task_id, "task.planning", {"step_count": len(await repo.steps_for_task(task_id))})
-            await repositories.commit()
+            lease_token = lease_scope(owner, token)
+            try:
+                task = await repo.get(task_id)
+                assert task is not None
+                task_values = {"status": TaskStatus.RUNNING.value}
+                if task.started_at is None:
+                    task_values["started_at"] = utc_now()
+                await repo.update_task(task_id, **task_values)
+                await repo.add_event(task_id, "task.started", {})
+                await repo.add_event(task_id, "task.planning", {"step_count": len(await repo.steps_for_task(task_id))})
+                await repositories.commit()
+            finally:
+                reset_lease(lease_token)
         self._start_heartbeat(task_id)
         return True
 
@@ -197,12 +206,28 @@ class TaskSchedulerService:
                 if lease is None:
                     return
                 owner, token = lease
-                async with self.repository_scope() as repositories:
-                    renewed = await repositories.tasks.renew_lease(task_id, owner, token, LEASE_SECONDS)
-                    fresh = await repositories.tasks.get(task_id) if renewed else None
-                    await repositories.commit()
+                renewed = False
+                fresh = None
+                for attempt in range(3):
+                    try:
+                        async with self.repository_scope() as repositories:
+                            renewed = await repositories.tasks.renew_lease(task_id, owner, token, LEASE_SECONDS)
+                            fresh = await repositories.tasks.get(task_id) if renewed else None
+                            await repositories.commit()
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        if attempt == 2:
+                            logger.exception("Task %s heartbeat failed after bounded retries", task_id)
+                        else:
+                            await asyncio.sleep(0.1 * (attempt + 1))
                 if not renewed:
-                    logger.warning("Task %s no longer holds its lease; stopping the heartbeat", task_id)
+                    logger.warning("Task %s no longer holds its lease; cancelling active execution", task_id)
+                    active = self._active.get(task_id)
+                    if active is not None and not active.done():
+                        active.cancel()
+                        await asyncio.gather(active, return_exceptions=True)
                     return
                 if fresh is not None and fresh.cancel_requested_at is not None:
                     # A cancel from another replica travels through the row; stop our own execution here
@@ -232,14 +257,14 @@ class TaskSchedulerService:
         async with self._semaphore:
             lease = self._leases.get(task_id)
             lease_token = lease_scope(*lease) if lease else None
-            task, _ = await self.execution._load(task_id)
-            if not task:
-                return
             worker_started = time.monotonic()
-            elapsed_before = max(0.0, float((task.context or {}).get("_execution_elapsed_seconds", 0)))
-            execution_started = worker_started - elapsed_before
+            execution_started = worker_started
             try:
-                await self._execute_dag(task_id, execution_started)
+                task, _ = await self.execution._load(task_id)
+                if task is not None:
+                    elapsed_before = max(0.0, float((task.context or {}).get("_execution_elapsed_seconds", 0)))
+                    execution_started = worker_started - elapsed_before
+                    await self._execute_dag(task_id, execution_started)
             except asyncio.CancelledError:
                 # The API lifespan owns process-level cancellation; recover_interrupted will
                 # mark the task BLOCKED on the next start if it was not user-cancelled. A user
@@ -247,12 +272,22 @@ class TaskSchedulerService:
                 await self._finish_cancelled_if_requested(task_id)
                 raise
             except Exception as error:
-                await self.execution._finish(task_id, TaskStatus.FAILED, str(error))
+                try:
+                    await self.execution._finish(task_id, TaskStatus.FAILED, str(error))
+                except Exception:
+                    logger.exception("Task %s could not be finalized after execution failed", task_id)
             finally:
-                await self._persist_execution_elapsed(task_id, time.monotonic() - execution_started)
-                if lease_token is not None:
-                    reset_lease(lease_token)
-                await self._release_lease(task_id, expired=True)
+                try:
+                    await self._persist_execution_elapsed(task_id, time.monotonic() - execution_started)
+                except Exception:
+                    logger.warning("Task %s failed to persist elapsed time", task_id, exc_info=True)
+                finally:
+                    if lease_token is not None:
+                        reset_lease(lease_token)
+                    try:
+                        await self._release_lease(task_id, expired=True)
+                    except Exception:
+                        logger.exception("Task %s lease cleanup failed", task_id)
 
     async def _finish_cancelled_if_requested(self, task_id: str) -> None:
         """End a task whose owner was aborted, but only when a user actually asked for it."""

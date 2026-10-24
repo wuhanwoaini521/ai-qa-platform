@@ -197,7 +197,7 @@ async def test_cancel_and_completion_cannot_both_win(test_db_session):
     assert terminal_events == ["task.completed"], "exactly one terminal transition may be announced"
 
 
-async def test_a_worker_that_lost_its_lease_is_told_it_was_evicted(test_db_session):
+async def test_a_worker_that_lost_its_lease_writes_nothing(test_db_session):
     task_id = await _seed(test_db_session)
     stale = await _claim(test_db_session, task_id, lease_seconds=-1)
     await _claim(test_db_session, task_id, owner="worker-b")
@@ -211,7 +211,7 @@ async def test_a_worker_that_lost_its_lease_is_told_it_was_evicted(test_db_sessi
     row = await _row(test_db_session, task_id)
     events = await _events(test_db_session, task_id)
     assert row.status == "PLANNING"
-    assert "task.lease_lost" in events
+    assert events == [], "a stale worker must not announce lease loss through the fenced event store"
 
 
 async def test_cancelling_twice_keeps_one_request_and_one_transition(test_db_session):

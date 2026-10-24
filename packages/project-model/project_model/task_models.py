@@ -22,6 +22,7 @@ class TaskType(str, Enum):
     ANALYZE_DISCOVERY = "ANALYZE_DISCOVERY"
     RUN_REGRESSION = "RUN_REGRESSION"
     REVIEW_TEST = "REVIEW_TEST"
+    WORKFLOW_EXECUTION = "WORKFLOW_EXECUTION"
 
 
 class TaskStatus(str, Enum):
@@ -204,6 +205,11 @@ class Task(BaseModel):
     finished_at: datetime | None = None
     updated_at: datetime
     cancel_requested_at: datetime | None = None
+    workflow_execution_id: str | None = None
+    workflow_definition_id: str | None = None
+    workflow_version_id: str | None = None
+    workflow_version: int | None = None
+    workflow_checksum: str | None = None
 
 
 class TaskDetail(Task):

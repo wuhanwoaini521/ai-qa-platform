@@ -21,10 +21,40 @@ class TaskEvidenceService:
     async def create_artifact(
         self, task: TaskExecutionRecord, step_key: str, name: str, kind: str, content: bytes, content_type: str
     ) -> dict[str, Any]:
-        saved = await ArtifactStorageService().save_artifact(
-            name, content, content_type, project_id=task.project_id, created_by=task.owner_id
-        )
-        return {"artifact_id": saved.artifact_id, "name": name, "kind": kind}
+        artifact_id: str
+        storage: ArtifactStorageService | None = None
+        try:
+            async with self.context.repository_scope() as repositories:
+                await repositories.tasks._assert_current_lease(task.id)
+                storage = ArtifactStorageService(artifact_repo=repositories.artifacts)
+                saved = await storage.save_artifact(
+                    name,
+                    content,
+                    content_type,
+                    project_id=task.project_id,
+                    created_by=task.owner_id,
+                    commit=False,
+                )
+                step_id = self.context.active_runtime_step.get()
+                await repositories.evidence.add_artifact(
+                    task_id=task.id,
+                    step_id=step_id,
+                    artifact_id=saved.artifact_id,
+                    name=name,
+                    kind=kind,
+                )
+                await repositories.evidence.add_event(
+                    task.id,
+                    "artifact.created",
+                    {"step_id": step_id, "artifact_id": saved.artifact_id, "name": name},
+                )
+                await repositories.commit()
+                artifact_id = saved.artifact_id
+        except BaseException:
+            if storage is not None:
+                storage.discard_pending_artifact()
+            raise
+        return {"artifact_id": artifact_id, "name": name, "kind": kind, "_persisted": True}
 
     @staticmethod
     async def build_evidence(
@@ -72,6 +102,8 @@ class TaskEvidenceService:
                 {"evidence_id": evidence.id, "type": evidence.type, "step_id": step_id},
             )
         for item in outputs.pop("_artifacts", []):
+            if item.pop("_persisted", False):
+                continue
             await repository.add_artifact(task_id=task_id, step_id=step_id, **item)
             await repository.add_event(
                 task_id,
@@ -87,6 +119,8 @@ class TaskEvidenceService:
         step_id: str | None,
         artifact: dict[str, Any],
     ) -> None:
+        if artifact.get("_persisted"):
+            return
         await repository.add_artifact(task_id=task_id, step_id=step_id, **artifact)
 
     async def emit_browser_event(
@@ -146,6 +180,8 @@ class TaskEvidenceService:
             await repositories.commit()
 
     async def persist_browser_artifact(self, task_id: str, artifact: dict[str, Any]) -> None:
+        if artifact.get("_persisted"):
+            return
         step_id = self.context.active_runtime_step.get()
         async with self.context.repository_scope() as repositories:
             repository = repositories.evidence

@@ -34,6 +34,13 @@ class TaskRecord:
     updated_at: datetime
     cancel_requested_at: datetime | None = None
     cancel_requested_by: str | None = None
+    workflow_execution_id: str | None = None
+    workflow_definition_id: str | None = None
+    workflow_version_id: str | None = None
+    workflow_version: int | None = None
+    workflow_checksum: str | None = None
+    workflow_idempotency_key: str | None = None
+    workflow_request_fingerprint: str | None = None
 
     @classmethod
     def from_record(cls, record: Any) -> TaskRecord:
@@ -63,4 +70,11 @@ class TaskRecord:
             updated_at=record.updated_at,
             cancel_requested_at=getattr(record, "cancel_requested_at", None),
             cancel_requested_by=getattr(record, "cancel_requested_by", None),
+            workflow_execution_id=getattr(record, "workflow_execution_id", None),
+            workflow_definition_id=getattr(record, "workflow_definition_id", None),
+            workflow_version_id=getattr(record, "workflow_version_id", None),
+            workflow_version=getattr(record, "workflow_version", None),
+            workflow_checksum=getattr(record, "workflow_checksum", None),
+            workflow_idempotency_key=getattr(record, "workflow_idempotency_key", None),
+            workflow_request_fingerprint=getattr(record, "workflow_request_fingerprint", None),
         )
