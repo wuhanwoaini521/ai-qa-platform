@@ -10,7 +10,7 @@ interface TestExplorerProps {
   collectionFailed: boolean;
   runningTest: boolean;
   onCollect: () => void;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, line?: number) => void;
   onRunTest: (nodeid: string) => void;
   onDebugTest: (nodeid: string) => void;
 }
@@ -75,7 +75,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
                   textAlign: 'left',
                   cursor: 'pointer',
                 }}
-                onClick={() => onOpenFile(test.path)}
+                onClick={() => onOpenFile(test.path, test.line)}
               >
                 {test.name}
               </button>

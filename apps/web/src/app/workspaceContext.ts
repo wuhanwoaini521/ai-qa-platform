@@ -7,6 +7,7 @@ export type WorkspaceStage =
   | 'failure';
 
 export type WorkspaceView = 'requirement' | 'discover' | 'cases' | 'code' | 'browser' | 'debug' | 'results';
+export type WorkspaceMode = 'explore' | 'write' | 'debug' | 'repair';
 
 /**
  * Shared cross-surface context. Entity IDs in the URL remain the source of truth;
@@ -125,6 +126,13 @@ export function readWorkspaceContext(
   if (Number.isSafeInteger(rawLine) && rawLine > 0) context.lineNumber = rawLine;
 
   return context;
+}
+
+export function workspaceModeForContext(context: Pick<WorkspaceContext, 'stage' | 'view'>): WorkspaceMode {
+  if (context.stage === 'failure') return 'repair';
+  if (context.view === 'debug' || context.view === 'results') return 'debug';
+  if (context.view === 'cases' || context.view === 'code') return 'write';
+  return 'explore';
 }
 
 export function writeWorkspaceContext(

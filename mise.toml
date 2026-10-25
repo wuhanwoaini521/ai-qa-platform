@@ -1,4 +1,5 @@
 [tools]
 node = "24"
 python = "3.13"
+rtk = "latest"
 uv = "latest"

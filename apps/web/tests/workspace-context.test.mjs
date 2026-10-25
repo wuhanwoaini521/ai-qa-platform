@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, buildScopedHref, readWorkspaceContext, resolveCanonicalFile, writeWorkspaceContext } =
+const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, buildScopedHref, readWorkspaceContext, resolveCanonicalFile, workspaceModeForContext, writeWorkspaceContext } =
   await import('../src/app/workspaceContext.ts');
 const { withProjectId } = await import('../src/app/projectPaths.ts');
 
@@ -48,6 +48,19 @@ test('context updates preserve unrelated view state and replace stale entity IDs
   assert.equal(params.get('view'), 'code');
   assert.equal(params.get('file'), 'tests/test_case_b.py');
   assert.equal(params.get('line'), null);
+});
+
+test('maps existing Workspace views to the four adaptive modes', () => {
+  for (const view of ['requirement', 'discover', 'browser']) {
+    assert.equal(workspaceModeForContext({ view }), 'explore');
+  }
+  for (const view of ['cases', 'code']) {
+    assert.equal(workspaceModeForContext({ view }), 'write');
+  }
+  for (const view of ['debug', 'results']) {
+    assert.equal(workspaceModeForContext({ view }), 'debug');
+  }
+  assert.equal(workspaceModeForContext({ stage: 'failure', view: 'results' }), 'repair');
 });
 
 test('round trips the Workspace Discover stage and view', () => {

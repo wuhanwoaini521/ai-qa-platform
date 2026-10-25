@@ -43,7 +43,8 @@
     "stop": "停止"
   },
   "tabs": {
-    "noOpenTabs": "没有打开的标签页（按 Cmd+P 打开文件）"
+    "noOpenTabs": "没有打开的标签页（按 Cmd+P 打开文件）",
+    "closeFile": "关闭 {{fileName}}"
   },
   "fileTree": {
     "newFileInside": "在此目录中新建文件",

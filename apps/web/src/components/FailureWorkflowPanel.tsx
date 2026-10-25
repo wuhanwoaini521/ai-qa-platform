@@ -77,7 +77,7 @@ export const FailureWorkflowPanel: React.FC<{
   const terminal = [...events]
     .reverse()
     .find((event) =>
-      ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
+      ['run.completed', 'run.failed', 'run.cancelled', 'run.timeout'].includes(event.type),
     );
   const selectedRun = history.find((item) => item.id === selectedId);
   const selectedResult = selectedRun?.result;
@@ -162,6 +162,7 @@ export const FailureWorkflowPanel: React.FC<{
   const completed = selectedRun?.status === 'COMPLETED' || terminal?.type === 'run.completed';
   const interrupted =
     history.find((item) => item.id === selectedId)?.status === 'INTERRUPTED';
+  const timedOut = terminal?.type === 'run.timeout' || selectedRun?.status === 'TIMEOUT';
   const failed = terminal?.type === 'run.failed';
   const cancelled = terminal?.type === 'run.cancelled';
   const verified = verification?.metadata?.verified === true || selectedResult?.verified === true;
@@ -175,13 +176,15 @@ export const FailureWorkflowPanel: React.FC<{
     ? t('workflow.analyzing')
     : failed
       ? t('workflow.failed')
-      : cancelled
-        ? t('workflow.cancelled')
-        : interrupted
-          ? t('workflow.interrupted')
-          : verifying
-            ? t('workflow.verifying')
-            : verified
+      : timedOut
+        ? t('workflow.timedOut')
+        : cancelled
+          ? t('workflow.cancelled')
+          : interrupted
+            ? t('workflow.interrupted')
+            : verifying
+              ? t('workflow.verifying')
+              : verified
               ? t('workflow.verified')
               : rolledBack
                 ? t('workflow.rolledBackHeading')

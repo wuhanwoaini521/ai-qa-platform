@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from app.adapters.playwright.proxy import launch_chromium
+from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
 from app.services.locator_decision_service import LocatorDecisionService
 from project_model.models import DecisionResult
 
@@ -105,6 +106,29 @@ async def test_locator_decision_does_not_cut_off_a_healthy_jev_call_after_three_
     assert result["summary"]["provider"] == "jev"
     assert result["summary"]["model"] == "slow-test"
     assert result["summary"]["fallback_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_locator_decision_streams_history_and_provider_progress():
+    class StubDecisionService:
+        async def choose(self, _request, **_kwargs):
+            return DecisionResult(provider="jev", model="test", choice="candidate_1", confidence=0.95)
+
+    events = []
+
+    async def record(event):
+        events.append(event.type)
+
+    service = LocatorDecisionService(
+        decision_service=StubDecisionService(),
+        repository_scope=TaskRepositoryScopeFactory(),
+    )
+    candidates = service.generate_candidates({"candidates": [{"kind": "test_id", "value": "submit"}]})
+    await service.decide(run_id="progress-test", event={}, candidates=candidates, on_event=record)
+
+    assert events.index("locator_history_started") < events.index("locator_history_completed")
+    assert events.index("locator_history_completed") < events.index("decision_started")
+    assert "decision_completed" in events
 
 
 @pytest.mark.asyncio

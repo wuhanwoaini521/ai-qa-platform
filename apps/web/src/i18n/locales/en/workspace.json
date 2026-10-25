@@ -23,38 +23,32 @@
     "debug": "Debug",
     "results": "Results"
   },
-  "automationViews": {
-    "label": "Automation tools",
-    "code": "Code",
+  "modes": {
+    "navigation": "Workspace modes",
+    "explore": "Explore",
+    "write": "Write Tests",
+    "debug": "Debug",
+    "repair": "AI Repair",
+    "latestRunFailed": "latest run failed",
+    "exploreViews": "Explore views",
+    "writeViews": "Test authoring views",
+    "debugViews": "Debug views"
+  },
+  "modeViews": {
     "browser": "Browser",
-    "record": "Browser recording",
-    "debug": "Debug"
+    "discover": "Coverage",
+    "requirement": "Requirements",
+    "cases": "Test cases",
+    "code": "Automation",
+    "debug": "Debugger",
+    "results": "Run results"
   },
-  "journey": { "requirement": "Requirement", "discover": "Discover & audit", "cases": "Cases", "automation": "Automation", "result": "Results" },
+  "mobile": {
+    "resizeDebugSplit": "Resize editor and browser panes; use left and right arrow keys",
+    "debug": { "navigation": "Debug panels", "code": "Code", "browser": "Browser", "steps": "Steps", "logs": "State" },
+    "explore": { "navigation": "Explore panels", "browser": "Browser", "task": "Task" }
+  },
   "quick": { "requirement": "Workspace · Requirements", "cases": "Workspace · Test cases", "failures": "Workspace · Failure queue", "recorder": "Workspace · Browser recorder", "searchPlaceholder": "Search requirements, cases, failures, or recorder", "destinations": "Workspace quick destinations" },
-  "journeyFacts": {
-    "loading": "Loading project data",
-    "noRequirements": "No requirements",
-    "discover": "Explore product behavior and compare coverage",
-    "requirementCount": "{{count}} requirements",
-    "analyzing": "Analysis running",
-    "noCases": "No test cases",
-    "caseCount": "{{count}} test cases",
-    "caseCountScoped": "{{count}} test cases in this requirement",
-    "bindingCount": "{{bound}}/{{total}} bound",
-    "bindingCountScoped": "{{bound}}/{{total}} bound in this requirement",
-    "noRun": "No run recorded",
-    "latestAnalysis": "Latest QA analysis: {{status}}",
-    "analysisStatus": {
-      "RUNNING": "Running",
-      "SUCCESS": "Succeeded",
-      "FAILED": "Failed",
-      "BLOCKED": "Blocked",
-      "REFERENCE": "Reference"
-    },
-    "runStatus": "This run: {{status}} · {{saved}}/{{total}} per-case results saved"
-  },
-  "stages": "Workspace stages",
   "stage": {
     "requirement": "Requirement",
     "cases": "Test cases",
@@ -183,6 +177,15 @@
       "execute": "Runs the actual bound automation case",
       "diagnose": "Results, failures, and reruns stay in this Workspace"
     }
+  },
+  "debugBrowser": {
+    "title": "Live browser evidence",
+    "emptyTitle": "Select a run to inspect browser evidence",
+    "emptyDescription": "Choose a recent execution from the context panel. Browser frames and the execution timeline appear here when available.",
+    "loading": "Loading selected run evidence…",
+    "loadError": "Could not load the selected run evidence.",
+    "openRuns": "Open run history",
+    "timeline": "Execution timeline"
   },
   "main": {
     "title": "Workspace content",

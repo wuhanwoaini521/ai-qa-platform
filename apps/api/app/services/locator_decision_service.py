@@ -182,12 +182,6 @@ class LocatorDecisionService:
         from app.services.locator_history_service import LocatorHistoryService
 
         history = LocatorHistoryService(self.repository_scope)
-        await history.enrich(safe_url, candidates)
-        ranked = rank_locator_candidates(candidates)
-        scores = {item["candidate_id"]: item["confidence"] for item in ranked}
-        for item in candidates:
-            item["static_score"] = scores[item["candidate_id"]]
-        candidates.sort(key=lambda item: item["static_score"], reverse=True)
 
         async def emit(
             event_type: str,
@@ -227,6 +221,14 @@ class LocatorDecisionService:
             stage="analysis",
             metadata={"action": str(event.get("action", ""))},
         )
+        await emit("locator_history_started", "Checking locator history", stage="history")
+        await history.enrich(safe_url, candidates)
+        await emit("locator_history_completed", "Locator history checked", stage="history")
+        ranked = rank_locator_candidates(candidates)
+        scores = {item["candidate_id"]: item["confidence"] for item in ranked}
+        for item in candidates:
+            item["static_score"] = scores[item["candidate_id"]]
+        candidates.sort(key=lambda item: item["static_score"], reverse=True)
         await emit(
             "evidence_collected",
             "Target element evidence collected",

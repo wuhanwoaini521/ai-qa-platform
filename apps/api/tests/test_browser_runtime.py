@@ -87,10 +87,13 @@ def _fake_browser_runtime(monkeypatch, *, session_ttl_seconds=60, page_error=Non
                 raise browser_close_error
 
     class FakePlaywright:
-        stop_calls = 0
+        def __init__(self):
+            self.stop_calls = 0
+            self.stopped = asyncio.Event()
 
         async def stop(self):
             self.stop_calls += 1
+            self.stopped.set()
 
     playwright = FakePlaywright()
 
@@ -543,8 +546,9 @@ async def test_browser_runtime_expires_idle_session_without_another_request(monk
     runtime, browsers, playwright = _fake_browser_runtime(monkeypatch, session_ttl_seconds=0.03)
     session = await runtime.create_session()
 
-    await asyncio.wait_for(browsers[0].closed.wait(), timeout=1)
+    await asyncio.wait_for(playwright.stopped.wait(), timeout=1)
 
+    assert browsers[0].closed.is_set()
     assert session.status == "EXPIRED"
     assert session.id not in runtime._sessions
     assert browsers[0].context.closed
@@ -590,6 +594,189 @@ async def test_browser_runtime_close_all_releases_every_session(monkeypatch):
     assert not runtime._sessions
     assert all(browser.context.closed and browser.close_calls == 1 for browser in browsers)
     assert playwright.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_close_all_stops_driver_when_session_close_stalls(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, browsers, playwright = _fake_browser_runtime(monkeypatch)
+    session = await runtime.create_session()
+    close_started = asyncio.Event()
+
+    async def stuck_close():
+        close_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await playwright.stopped.wait()
+
+    monkeypatch.setattr(browsers[0], "close", stuck_close)
+    close_task = asyncio.create_task(runtime.close_session(session.id))
+    await asyncio.wait_for(close_started.wait(), timeout=1)
+
+    await asyncio.wait_for(runtime.close_all(), timeout=1)
+    await asyncio.wait_for(close_task, timeout=1)
+
+    assert session.status == "CLOSED"
+    assert playwright.stop_calls == 1
+    assert not runtime._closing_tasks
+    assert not runtime._sessions and not runtime._resources
+    assert runtime._playwright is None
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_start_waits_for_timed_out_driver_stop(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, _browsers, playwright = _fake_browser_runtime(monkeypatch)
+    session = await runtime.create_session()
+    stop_started = asyncio.Event()
+    stop_release = asyncio.Event()
+
+    async def stuck_stop():
+        playwright.stop_calls += 1
+        stop_started.set()
+        try:
+            await stop_release.wait()
+        except asyncio.CancelledError:
+            await stop_release.wait()
+
+    monkeypatch.setattr(playwright, "stop", stuck_stop)
+    with pytest.raises(TimeoutError, match="driver did not stop"):
+        await runtime.close_session(session.id)
+    await asyncio.wait_for(stop_started.wait(), timeout=1)
+
+    new_playwright = type(playwright)()
+
+    class Manager:
+        async def start(self):
+            return new_playwright
+
+    runtime._playwright_factory = lambda: Manager()
+    stop_release.set()
+    new_session = await runtime.create_session()
+
+    assert runtime._playwright is new_playwright
+    assert runtime._playwright_stop_task is None
+    assert playwright.stop_calls == 1
+    await runtime.close_session(new_session.id)
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_close_all_bounds_lifecycle_lock_wait(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, _browsers, _playwright = _fake_browser_runtime(monkeypatch)
+    acquired = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hold_lifecycle_lock():
+        async with runtime._lifecycle_lock:
+            acquired.set()
+            await release.wait()
+
+    holder = asyncio.create_task(hold_lifecycle_lock())
+    await asyncio.wait_for(acquired.wait(), timeout=1)
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(runtime.close_all(), timeout=1)
+    assert runtime._closing_all
+
+    release.set()
+    await holder
+    await runtime.close_all()
+    assert not runtime._closing_all
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_close_all_stops_driver_when_resource_close_stalls(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, browsers, playwright = _fake_browser_runtime(monkeypatch)
+    session = await runtime.create_session()
+    close_started = asyncio.Event()
+
+    async def stuck_close():
+        close_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await playwright.stopped.wait()
+
+    monkeypatch.setattr(browsers[0], "close", stuck_close)
+    await asyncio.wait_for(runtime.close_all(), timeout=1)
+
+    assert close_started.is_set()
+    assert session.status == "CLOSED"
+    assert playwright.stop_calls == 1
+    assert not runtime._closing_tasks
+    assert not runtime._sessions and not runtime._resources
+    assert runtime._playwright is None
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_close_all_retries_driver_stop_before_reopening(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, _browsers, playwright = _fake_browser_runtime(monkeypatch)
+    await runtime.create_session()
+    stop_started = asyncio.Event()
+    stop_release = asyncio.Event()
+
+    async def stuck_stop():
+        playwright.stop_calls += 1
+        stop_started.set()
+        try:
+            await stop_release.wait()
+        except asyncio.CancelledError:
+            await stop_release.wait()
+
+    monkeypatch.setattr(playwright, "stop", stuck_stop)
+    with pytest.raises(TimeoutError, match="driver did not stop"):
+        await runtime.close_all()
+
+    await asyncio.wait_for(stop_started.wait(), timeout=1)
+    assert runtime._playwright is playwright
+    assert runtime._playwright_stop_task is not None and not runtime._playwright_stop_task.done()
+    assert runtime._closing_all
+
+    stop_release.set()
+    await asyncio.wait_for(runtime.close_all(), timeout=1)
+
+    assert playwright.stop_calls == 1
+    assert runtime._playwright is None
+    assert runtime._playwright_stop_task is None
+    assert not runtime._closing_all
+
+
+@pytest.mark.asyncio
+async def test_browser_runtime_retries_a_stop_task_cancelled_during_wait(monkeypatch):
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    runtime, _browsers, playwright = _fake_browser_runtime(monkeypatch)
+    await runtime.create_session()
+    first_cancelled = asyncio.Event()
+    second_cancel = asyncio.Event()
+    attempts = 0
+
+    async def stop_with_cancellation_race():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                first_cancelled.set()
+                await second_cancel.wait()
+
+    monkeypatch.setattr(playwright, "stop", stop_with_cancellation_race)
+    with pytest.raises(TimeoutError):
+        await runtime.close_all()
+    await asyncio.wait_for(first_cancelled.wait(), timeout=1)
+
+    retry = asyncio.create_task(runtime._stop_playwright())
+    await asyncio.sleep(0)
+    runtime._playwright_stop_task.cancel()
+    await asyncio.wait_for(retry, timeout=1)
+
+    assert attempts == 2
+    assert runtime._playwright is None
+    assert runtime._playwright_stop_task is None
+    await runtime.close_all()
 
 
 @pytest.mark.asyncio

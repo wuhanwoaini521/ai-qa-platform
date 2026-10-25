@@ -47,6 +47,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onOpenTask,
   onOpenRun,
+  onOpenCreateProject,
 }) => {
   const { t } = useTranslation('dashboard');
   const { t: taskT } = useTranslation('tasks');
@@ -154,6 +155,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="dashboard-page">
+      {!statsUnavailable && stats?.total_projects === 0 && <section className="card dashboard-first-project" aria-labelledby="dashboard-first-project-title">
+        <div>
+          <h2 id="dashboard-first-project-title">{t('firstProjectTitle')}</h2>
+          <p>{t('firstProjectDescription')}</p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => onOpenCreateProject ? onOpenCreateProject() : onNavigate('projects')}>
+          <FolderGit2 size={15} aria-hidden="true" />{t('createFirstProject')}
+        </button>
+      </section>}
+
       <section className="dashboard-attention card" aria-label={t('needsAttention')}>
         <div className="dashboard-attention-heading">
           <div><div className="card-title">{t('needsAttention')}</div><div className="card-subtitle">{t('needsAttentionSubtitle')}</div></div>
@@ -341,18 +352,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </thead>
                 <tbody>
                   {recentRuns.map((run) => (
-                    <tr
-                      key={run.id}
-                      className="clickable-row"
-                      onClick={() => onNavigate('runs')}
-                    >
+                    <tr key={run.id}>
                       <td>
                         <span className="status-pill status-pill-plain">
                           <span className={`status-dot ${RUN_STATUS_TONE[run.status] ?? ''}`} />
                           {run.status}
                         </span>
                       </td>
-                      <td className="mono">#{run.id.slice(0, 8)}</td>
+                      <td><button type="button" className="dashboard-run-link mono" aria-label={t('openRun', { runId: run.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(run.id) : onNavigate('runs')}>#{run.id.slice(0, 8)}</button></td>
                       <td className="text-secondary">{run.runner_type || 'LOCAL'}</td>
                       <td>
                         <span className="tone-passed">{run.passed}</span>

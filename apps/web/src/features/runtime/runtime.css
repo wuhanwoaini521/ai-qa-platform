@@ -841,6 +841,7 @@
   max-height: 620px;
   margin-top: 20px;
 }
+.rt-timeline-scroll:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 .rt-timeline-body {
   position: relative;
 }

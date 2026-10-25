@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Project, ProjectCreate, FrameworkType } from '../types';
 import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 
@@ -27,9 +27,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const { t } = useTranslation('projects');
   const { t: lc } = useTranslation('lifecycle');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [demoBusy,setDemoBusy]=useState(false);
   const [demoError,setDemoError]=useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(() => searchParams.get('create') === '1');
   const createProjectTriggerRef = useRef<HTMLButtonElement>(null);
   const createProjectDialogRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState<ProjectCreate>({
@@ -42,6 +43,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   });
   const [submitting, setSubmitting] = useState(false);
   const projectDisplayNames = buildProjectDisplayNames(projects);
+  const closeProjectDialog = useCallback(() => {
+    setIsModalOpen(false);
+    if (searchParams.get('create') === '1') navigate('/projects', { replace: true });
+  }, [navigate, searchParams]);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -51,7 +56,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     focusable()[0]?.focus();
     const handleDialogKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsModalOpen(false);
+        closeProjectDialog();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -74,7 +79,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
       window.removeEventListener('keydown', handleDialogKeyDown);
       createProjectTriggerRef.current?.focus();
     };
-  }, [isModalOpen]);
+  }, [isModalOpen, closeProjectDialog]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +87,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     try {
       setSubmitting(true);
       await onCreateProject(formData);
-      setIsModalOpen(false);
+      closeProjectDialog();
       setFormData({
         name: '',
         description: '',
@@ -241,15 +246,16 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   type="button"
                   aria-label={t('common:close')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeProjectDialog}
                 >
                   ✕
                 </button>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <div className="form-group">
-                  <label className="form-label">{t('modalNameLabel')}</label>
+                  <label className="form-label" htmlFor="project-name">{t('modalNameLabel')}</label>
                   <input
+                    id="project-name"
                     type="text"
                     required
                     className="form-control"
@@ -260,8 +266,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('common:description')}</label>
+                  <label className="form-label" htmlFor="project-description">{t('common:description')}</label>
                   <textarea
+                    id="project-description"
                     rows={2}
                     className="form-control"
                     placeholder={t('modalDescriptionPlaceholder')}
@@ -271,8 +278,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t('modalRepositoryUrlLabel')}</label>
+                  <label className="form-label" htmlFor="project-repository-url">{t('modalRepositoryUrlLabel')}</label>
                   <input
+                    id="project-repository-url"
                     type="url"
                     className="form-control"
                     placeholder={t('modalRepositoryUrlPlaceholder')}
@@ -283,8 +291,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">{t('modalFrameworkTypeLabel')}</label>
+                    <label className="form-label" htmlFor="project-framework-type">{t('modalFrameworkTypeLabel')}</label>
                     <select
+                      id="project-framework-type"
                       className="form-control"
                       value={formData.framework_type}
                       onChange={(e) =>
@@ -298,8 +307,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{t('modalDefaultBranchLabel')}</label>
+                    <label className="form-label" htmlFor="project-default-branch">{t('modalDefaultBranchLabel')}</label>
                     <input
+                      id="project-default-branch"
                       type="text"
                       className="form-control"
                       value={formData.default_branch}
@@ -332,7 +342,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeProjectDialog}
                 >
                   {t('common:cancel')}
                 </button>

@@ -12,7 +12,11 @@ class EmptyTestCaseRepository:
 
 
 class EmptyRunRepository:
+    def __init__(self):
+        self.project_id = None
+
     async def list_failures(self, limit: int = 20, project_id: str | None = None):
+        self.project_id = project_id
         return []
 
 
@@ -33,6 +37,17 @@ def _service(items: list[FlakyTestItem]) -> QualityIntelligenceService:
         test_run_repo=EmptyRunRepository(),
         history_repo=HistoryRepository(items),
     )
+
+
+@pytest.mark.asyncio
+async def test_risk_matrix_scopes_failure_reads_to_project():
+    repository = EmptyRunRepository()
+    service = _service([])
+    service.test_run_repo = repository
+
+    await service.calculate_risk_matrix("proj_demo")
+
+    assert repository.project_id == "proj_demo"
 
 
 @pytest.mark.asyncio

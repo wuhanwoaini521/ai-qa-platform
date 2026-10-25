@@ -11,6 +11,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app.persistence.models import FailureAnalysisORM, utc_now
 
+_TERMINAL_EVENTS = {
+    "run.completed": "COMPLETED",
+    "run.failed": "FAILED",
+    "run.cancelled": "CANCELLED",
+    "run.timeout": "TIMEOUT",
+    "run.interrupted": "INTERRUPTED",
+}
+
 # Grace on top of the analysis budget before a RUNNING row is treated as ownerless.
 ORPHAN_GRACE_SECONDS = 60.0
 
@@ -75,13 +83,14 @@ class FailureAnalysisRepository:
         )
         rolled_back = (row.result or {}).get("repair_state") == "ROLLED_BACK"
         stale_failure = rolled_back and event.type == "repair.failed"
-        if not duplicate and not stale_failure:
+        terminal_status = _TERMINAL_EVENTS.get(event.type)
+        stale_terminal = terminal_status is not None and row.status != "RUNNING"
+        if not duplicate and not stale_failure and not stale_terminal:
             row.events = [*row.events, serialized_event]
-        terminal = {"run.completed": "COMPLETED", "run.failed": "FAILED", "run.cancelled": "CANCELLED"}
-        if event.type in terminal:
-            row.status = terminal[event.type]
+        if row.status == "RUNNING" and terminal_status is not None:
+            row.status = terminal_status
             row.finished_at = utc_now()
-        if result is not None:
+        if result is not None and not stale_terminal:
             incoming_result = SensitiveRedactor.redact_value(result)
             if not rolled_back or incoming_result.get("repair_state") == "ROLLED_BACK":
                 row.result = incoming_result

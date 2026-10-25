@@ -73,7 +73,7 @@ const ICON_STROKE = 1.6;
 const SIDEBAR_COLLAPSED_KEY = 'ai-qa.sidebar-collapsed';
 
 /** Project context and searchable destinations in an expandable navigation rail. */
-export const Navigation: React.FC = () => {
+export const Navigation: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const { t } = useTranslation('nav');
   const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
@@ -89,6 +89,8 @@ export const Navigation: React.FC = () => {
       return false;
     }
   });
+  const isCollapsed = compact || collapsed;
+  const languageToggleLabel = i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中';
   const searchInputRef = useRef<HTMLInputElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
@@ -148,6 +150,7 @@ export const Navigation: React.FC = () => {
     { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: buildScopedHref('/runs', { projectId: selectedProjectId ?? undefined }) },
     { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: buildScopedHref('/quality', { projectId: selectedProjectId ?? undefined }) },
   ];
+  const visibleNavItems = compact ? navItems.filter((item) => item.id !== 'workspace') : navItems;
   const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' };
   const platformItems: NavItem[] = [
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
@@ -202,7 +205,7 @@ export const Navigation: React.FC = () => {
     const label = t(item.labelKey);
     const mobileLabel = t(item.mobileLabelKey ?? item.labelKey);
     return (
-      <Tooltip key={item.id} label={label} enabled={collapsed}>
+      <Tooltip key={item.id} label={label} enabled={isCollapsed}>
         <NavLink
           to={item.to}
           end={item.end}
@@ -221,7 +224,7 @@ export const Navigation: React.FC = () => {
   const renderQuickDestination = (item: QuickDestination) => {
     const Icon = item.icon;
     return (
-      <Tooltip key={item.id} label={item.label} enabled={collapsed}>
+      <Tooltip key={item.id} label={item.label} enabled={isCollapsed}>
         <NavLink to={item.to} aria-label={item.label} onClick={() => { setQuery(''); setSearchOpen(false); }} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
           <span>{item.label}</span>
@@ -231,7 +234,7 @@ export const Navigation: React.FC = () => {
   };
 
   return (
-    <aside className={`app-sidebar${collapsed ? ' is-collapsed' : ''}`}>
+    <aside className={`app-sidebar${isCollapsed ? ' is-collapsed' : ''}${compact ? ' is-workspace-compact' : ''}`}>
       <div className="sidebar-header">
         <div className="sidebar-logo-icon" title={t('common:appName')} aria-hidden="true">
           QA
@@ -308,7 +311,7 @@ export const Navigation: React.FC = () => {
           </>
         ) : (
           <>
-            {navItems.map(renderItem)}
+            {visibleNavItems.map(renderItem)}
             <div className="sidebar-divider" />
             <details key={platformItems.some((item) => pathname.startsWith(item.to)) ? 'platform-active' : 'platform-idle'} className="sidebar-platform" open={platformItems.some((item) => pathname.startsWith(item.to))}>
               <summary className="sidebar-section-label" title={t('nav:platform')}>
@@ -335,7 +338,7 @@ export const Navigation: React.FC = () => {
           <button
             type="button"
             className="sidebar-lang-toggle"
-            aria-label={t('common:language')}
+            aria-label={`${languageToggleLabel} ${t('common:language')}`}
             title={t('common:language')}
             onClick={() => {
               const next = i18n.resolvedLanguage === 'zh-CN' ? 'en' : 'zh-CN';
@@ -343,7 +346,7 @@ export const Navigation: React.FC = () => {
               storeLanguage(next);
             }}
           >
-            {i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中'}
+            {languageToggleLabel}
           </button>
         </div>
       </div>

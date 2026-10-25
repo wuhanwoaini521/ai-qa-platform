@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
@@ -18,12 +19,12 @@ import {
 } from './recorderRunModel';
 
 type StepAction = RecorderStep['action'];
+type RecorderSocketState = 'disconnected' | 'connecting' | 'connected' | 'closed' | 'error';
 type ElementPreview = { tag?: string; id?: string; class?: string; role?: string | null; name?: string; text?: string; value_redacted?: boolean; attributes?: Record<string, string>; bounding_box?: { x: number; y: number; width: number; height: number }; frame_path?: string[]; shadow_path?: string[]; candidates?: RecorderLocatorCandidate[]; parent_summary?: string; visible?: boolean; actionable?: boolean };
 type Frame = { type: string; action?: string; image?: string; url?: string; title?: string; state?: string; steps?: RecorderStep[]; locator_trace?: AITraceEvent[]; locator_verification?: Record<string, unknown> | null; hovered?: ElementPreview | null; tabs?: Array<{index:number;url:string;title:string;active:boolean}>; picked?: (ElementPreview & { action: string; evidence?: RecorderStep['evidence']; ranked_candidates?: RecorderLocatorCandidate[]; selection?: { selected_candidate?: RecorderLocatorCandidate; summary?: RecorderStep['locator_decision'] } | null }) | null; message?: string };
 type PendingAgentGoal = { goal: string; sessionId: string; startUrl: string; strategy: 'fast' | 'agent'; waitingForNavigation: boolean; trustedDomains: string[]; minimumFrameRevision?: number };
 
 const actions: StepAction[] = ['navigate','back','scroll','click','double_click','fill','select','check','uncheck','press','hover','wait','assert_visible','assert_text','assert_url','assert_title','assert_count'];
-const labels: Record<StepAction, string> = { navigate:'打开页面', back:'返回上一页', scroll:'滚动页面', click:'点击', double_click:'双击', fill:'填写', select:'选择', check:'勾选', uncheck:'取消勾选', press:'按键', hover:'悬停', wait:'等待', assert_visible:'断言可见', assert_text:'断言文本', assert_url:'断言 URL', assert_title:'断言标题', assert_count:'断言数量' };
 const blankDiff: GitDiffResult = { diff: '', changed_files: [] };
 const normalizeRecorderFilePath = (path: string): string =>
   path.replaceAll(String.fromCharCode(92), '/').split('/').filter(Boolean).join('/');
@@ -39,14 +40,6 @@ const normalizedHttpUrl = (value: string): string | null => {
     return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password ? parsed.href : null;
   } catch { return null; }
 };
-const recorderErrorMessage = (error: unknown, targetUrl?: string): string => {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('ERR_NETWORK_ACCESS_DENIED')) {
-    const target = targetUrl ? `“${targetUrl}”` : '目标网页';
-    return `录制器浏览器运行在 API 服务所在主机，当前无法访问${target}（ERR_NETWORK_ACCESS_DENIED）。请使用 API 主机可访问的地址，或在 API 服务配置 BROWSER_PROXY_URL 后重试。`;
-  }
-  return message;
-};
 
 export const RecorderPage: React.FC<{
   projects: Project[];
@@ -57,13 +50,23 @@ export const RecorderPage: React.FC<{
   runConfig?: RecorderRunConfig;
 }> = ({ projects, selectedProjectId, embedded = false, onNavigateToRuns, onOpenRecordedCase, runConfig }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('recorder');
+  const { t: workspaceT } = useTranslation('workspace');
   const [searchParams] = useSearchParams();
   const requestedSessionId = searchParams.get('session_id');
   const projectId = selectedProjectId ?? projects[0]?.id ?? null;
+  const recorderErrorMessage = useCallback((error: unknown, targetUrl?: string) => {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes('ERR_NETWORK_ACCESS_DENIED')
+      ? t('errors.networkAccessDenied', { target: targetUrl ? `“${targetUrl}”` : t('errors.targetWebsite') })
+      : message;
+  }, [t]);
+  const actionLabel = (action: StepAction) => t(`actions.${action}`);
   const [url, setUrl] = useState('about:blank');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [restoreCheckedProjectId, setRestoreCheckedProjectId] = useState<string | null>(null);
-  const [socketState, setSocketState] = useState('未连接');
+  const [socketState, setSocketState] = useState<RecorderSocketState>('disconnected');
+  const [socketDetail, setSocketDetail] = useState('');
   const [frame, setFrame] = useState<Frame | null>(null);
   const [steps, setSteps] = useState<RecorderStep[]>([]);
   const [optimization, setOptimization] = useState<Awaited<ReturnType<typeof api.optimizeRecorder>> | null>(null);
@@ -72,19 +75,21 @@ export const RecorderPage: React.FC<{
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [caseName, setCaseName] = useState('录制的浏览器用例');
+  const [caseName, setCaseName] = useState(() => t('defaults.caseName'));
   const [requirement, setRequirement] = useState('');
   const [browserStrategy, setBrowserStrategy] = useState<'fast' | 'agent'>('agent');
   const [trustedDomainsText, setTrustedDomainsText] = useState('');
   const [filePath, setFilePath] = useState('tests/test_recorded_case.py');
   const [testName, setTestName] = useState('test_recorded_case');
-  const [suiteName, setSuiteName] = useState('录制用例');
+  const [suiteName, setSuiteName] = useState(() => t('defaults.suiteName'));
   const [tagsText, setTagsText] = useState('recorder');
   const [markersText, setMarkersText] = useState('');
   const [code, setCode] = useState('');
   const [scriptGeneration, setScriptGeneration] = useState(0);
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
+  const [exploreMobilePanel, setExploreMobilePanel] = useState<'browser' | 'task'>('browser');
+  const [naturalFlowOpen, setNaturalFlowOpen] = useState(embedded);
   const [pendingAgentGoal, setPendingAgentGoal] = useState<PendingAgentGoal | null>(null);
   const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number } | null>(null);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
@@ -148,7 +153,7 @@ export const RecorderPage: React.FC<{
       setRecording(saved.state === 'RECORDING');
     }).catch(() => window.localStorage.removeItem(`ai-qa.recorder.session.${projectId}`)).finally(() => { if (active) setRestoreCheckedProjectId(projectId); });
     return () => { active = false; };
-  }, [projectId, requestedSessionId, sessionId]);
+  }, [projectId, requestedSessionId, sessionId, recorderErrorMessage]);
 
   useEffect(() => {
     if (!projectId || !requestedSessionId || sessionId === requestedSessionId) return;
@@ -156,7 +161,7 @@ export const RecorderPage: React.FC<{
     void api.getRecorderSession(requestedSessionId).then((saved) => {
       if (!active) return;
       if (saved.project_id !== projectId) {
-        setError('该浏览器会话不属于当前项目。请先切换到所属项目。');
+        setError(t('errors.sessionWrongProject'));
         return;
       }
       setSessionId(saved.id);
@@ -168,12 +173,14 @@ export const RecorderPage: React.FC<{
       if (active) setError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => { active = false; };
-  }, [projectId, requestedSessionId, sessionId]);
+  }, [projectId, requestedSessionId, sessionId, recorderErrorMessage, t]);
 
   useEffect(() => {
     if (!sessionId) return;
     let active = true;
     let socket: WebSocket | null = null;
+    setSocketState('connecting');
+    setSocketDetail('');
     void Promise.all([
       getRecorderSocketUrl(sessionId),
       api.createStreamTicket('recorder', sessionId),
@@ -184,10 +191,14 @@ export const RecorderPage: React.FC<{
       wsRef.current = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'auth', stream_ticket: streamTicket }));
-        setSocketState('已连接');
+        setSocketState('connected');
+        setSocketDetail('');
       };
-      ws.onclose = (event) => { setSocketState(event.code === 1000 ? '已关闭' : `连接中断 (${event.code})`); };
-      ws.onerror = () => setSocketState('连接错误');
+      ws.onclose = (event) => {
+        setSocketState(event.code === 1000 ? 'closed' : 'error');
+        setSocketDetail(event.code === 1000 ? '' : t('connection.interrupted', { code: event.code }));
+      };
+      ws.onerror = () => { setSocketState('error'); setSocketDetail(t('connection.error')); };
       ws.onmessage = (event) => {
       if (!active) return;
       const data = JSON.parse(event.data) as Frame;
@@ -229,14 +240,17 @@ export const RecorderPage: React.FC<{
       } else if (data.type === 'error' || data.type === 'command_error') {
         if (data.type === 'command_error' && data.url) pendingUrlRef.current = data.url;
         setPendingAgentGoal((pending) => pending?.sessionId === sessionId ? null : pending);
-        setError(recorderErrorMessage(data.message || '浏览器操作失败', data.url));
+        setError(recorderErrorMessage(data.message || t('errors.browserOperationFailed'), data.url));
       }
       };
     }).catch((error) => {
-      if (active) setSocketState(error instanceof Error ? error.message : '连接错误');
+      if (active) {
+        setSocketState('error');
+        setSocketDetail(error instanceof Error ? error.message : t('connection.error'));
+      }
     });
     return () => { active = false; socket?.close(); if (wsRef.current === socket) wsRef.current = null; };
-  }, [sessionId]);
+  }, [sessionId, recorderErrorMessage, t]);
 
   useEffect(() => {
     frameRevisionRef.current = 0;
@@ -272,7 +286,7 @@ export const RecorderPage: React.FC<{
   }, []);
 
   const createSession = async () => {
-    if (!projectId) { setError('请先创建或选择项目'); return; }
+    if (!projectId) { setError(t('errors.noProject')); return; }
     const startUrl = normalizeBrowserUrl(url);
     setUrl(startUrl);
     setBusy(true); setError('');
@@ -290,7 +304,7 @@ export const RecorderPage: React.FC<{
   const closeSession = async () => {
     if (sessionId) { try { await api.closeRecorderSession(sessionId); } catch { /* session may already have ended */ } }
     if (projectId) window.localStorage.removeItem(`ai-qa.recorder.session.${projectId}`);
-    wsRef.current?.close(1000); pendingUrlRef.current = null; setSessionId(null); setFrame(null); setRecording(false);
+    wsRef.current?.close(1000); pendingUrlRef.current = null; setSessionId(null); setFrame(null); setRecording(false); setSocketState('disconnected'); setSocketDetail('');
   };
 
   const navigateBrowser = (target: string) => {
@@ -373,7 +387,7 @@ export const RecorderPage: React.FC<{
   };
 
   const addAssertion = (action: StepAction) => {
-    const step: RecorderStep = { id: crypto.randomUUID().replaceAll('-', '').slice(0,12), action, description: labels[action], locator: action.startsWith('assert_') && !['assert_url','assert_title'].includes(action) ? { kind:'css', value:'#result', exact:false } : undefined, value: action === 'assert_count' ? '1' : '' };
+    const step: RecorderStep = { id: crypto.randomUUID().replaceAll('-', '').slice(0,12), action, description: actionLabel(action), locator: action.startsWith('assert_') && !['assert_url','assert_title'].includes(action) ? { kind:'css', value:'#result', exact:false } : undefined, value: action === 'assert_count' ? '1' : '' };
     setSteps((current) => [...current, step]); send('add_step', { step });
   };
 
@@ -394,9 +408,9 @@ export const RecorderPage: React.FC<{
     const output = browserAgentOutput;
     if (!sessionId || !task || !output || !canGenerateAgentScript || busy) return;
     const startUrl = normalizedHttpUrl(String(task.inputs.url ?? ''));
-    if (!startUrl) { setError('Agent 任务缺少有效的起始网址，不能生成脚本。'); return; }
+    if (!startUrl) { setError(t('errors.noAgentStartUrl')); return; }
     const generated = recorderStepsFromAgent(output, startUrl);
-    if (!generated || generated.actionCount === 0) { setError('这次 Agent 执行没有可复用的成功动作，未生成脚本。'); return; }
+    if (!generated || generated.actionCount === 0) { setError(t('errors.noReusableActions')); return; }
 
     setBusy(true);
     setError('');
@@ -442,7 +456,7 @@ export const RecorderPage: React.FC<{
     if (!projectId || !sessionId || agentTaskRunning) return;
     void aiTask.start({
       type,
-      goal: type === 'CREATE_TEST' ? (requirement.trim() || `根据录制步骤生成并验证测试：${caseName}`) : `探索并总结页面：${url}`,
+      goal: type === 'CREATE_TEST' ? (requirement.trim() || t('defaults.testGoal', { caseName })) : t('defaults.exploreGoal', { url }),
       project_id: projectId,
       workspace_id: type === 'CREATE_TEST' ? projectId : undefined,
       inputs: {
@@ -457,11 +471,11 @@ export const RecorderPage: React.FC<{
     const goal = requirement.trim();
     const trustedDomains = normalizeTrustedDomains(trustedDomainsText);
     const strategy = browserStrategy;
-    if (!projectId) { setError('请先创建或选择项目'); return; }
-    if (goal.length < 8) { setError('请用自然语言描述完整操作流程'); return; }
+    if (!projectId) { setError(t('errors.noProject')); return; }
+    if (goal.length < 8) { setError(t('errors.goalTooShort')); return; }
     const currentPageUrl = frame?.url && frame.url !== 'about:blank' ? frame.url : url;
     const startUrl = flowStartUrl(goal, currentPageUrl);
-    if (!startUrl) { setError('请在操作描述中写入起始网址，例如 uniqlo.com'); return; }
+    if (!startUrl) { setError(t('errors.missingStartUrl')); return; }
 
     setBusy(true);
     setError('');
@@ -469,7 +483,8 @@ export const RecorderPage: React.FC<{
     setAgentScriptSource(null);
     try {
       if (!sessionId) {
-        setSocketState('连接中');
+        setSocketState('connecting');
+        setSocketDetail('');
         const created = await api.createRecorderSession(projectId, startUrl, steps);
         setSessionId(created.id);
         setFrame(null);
@@ -482,7 +497,7 @@ export const RecorderPage: React.FC<{
         setPendingAgentGoal({ goal, sessionId: created.id, startUrl, strategy, waitingForNavigation: false, trustedDomains });
         return;
       }
-      if (!isConnected) throw new Error('浏览器连接尚未就绪，请稍后重试。');
+      if (!isConnected) throw new Error(t('errors.connectionNotReady'));
       const currentUrl = normalizedHttpUrl(currentPageUrl);
       const needsNavigation = currentUrl !== startUrl;
       setPendingAgentGoal({ goal, sessionId, startUrl, strategy, waitingForNavigation: needsNavigation, trustedDomains });
@@ -494,7 +509,7 @@ export const RecorderPage: React.FC<{
   };
 
   const saveRecorderCase = async (normalizedPath: string) => {
-    if (!projectId || !sessionId) throw new Error('请先创建录制会话');
+    if (!projectId || !sessionId) throw new Error(t('errors.noRecorderSession'));
     const tags = [...new Set([...tagsText.split(',').map((tag)=>tag.trim()).filter(Boolean), ...(suiteName.trim() ? [`suite:${suiteName.trim()}`] : [])])];
     const normalizedTestName = testName.replace(/\\W+/g, '_').replace(/^_+|_+$/g, '') || 'test_recorded_case';
     const safeTestName = normalizedTestName.startsWith('test_') ? normalizedTestName : `test_${normalizedTestName}`;
@@ -502,8 +517,8 @@ export const RecorderPage: React.FC<{
       test_case: {
         project_id: projectId,
         title: caseName,
-        steps: steps.map((step) => step.description || labels[step.action]),
-        expected_result: '所有录制步骤及断言执行通过',
+        steps: steps.map((step) => step.description || actionLabel(step.action)),
+        expected_result: t('defaults.expectedResult'),
         priority,
         automation_status: 'AUTOMATED',
         tags,
@@ -519,7 +534,7 @@ export const RecorderPage: React.FC<{
     setBusy(true); setError('');
     try {
       const normalizedPath = normalizeRecorderFilePath(filePath);
-      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
+      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error(t('errors.pythonFilePath'));
       // PUT creates or overwrites, so re-recording the same case no longer dead-ends in a 409.
       await api.writeWorkspaceFile(projectId, normalizedPath, code);
       const savedCase = await saveRecorderCase(normalizedPath);
@@ -544,7 +559,7 @@ export const RecorderPage: React.FC<{
     setBusy(true); setError('');
     try {
       const normalizedPath = normalizeRecorderFilePath(filePath);
-      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error('请输入项目内的 .py 文件路径');
+      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) throw new Error(t('errors.pythonFilePath'));
       // PUT creates or overwrites, so re-recording the same case no longer dead-ends in a 409.
       await api.writeWorkspaceFile(projectId, normalizedPath, code);
       const savedCase = await saveRecorderCase(normalizedPath);
@@ -574,14 +589,20 @@ export const RecorderPage: React.FC<{
     const parameter = step.value_redacted
       ? step.secret_env_var ?? `QA_RECORDER_SECRET_${step.id.toUpperCase()}`
       : step.action === 'navigate' ? step.url ?? '' : step.action === 'press' ? step.key ?? '' : step.value ?? '';
+    const parameterLabel = step.value_redacted ? t('steps.secretVariable') : t('steps.parameter');
+    const parameterPlaceholder = step.value_redacted ? t('steps.secretValuePlaceholder')
+      : step.action === 'wait' ? t('steps.milliseconds')
+        : step.action === 'scroll' ? t('steps.scrollDirection')
+          : step.action === 'assert_count' ? t('steps.count') : t('steps.parameterValue');
     return <>
-      <input className="recorder-step-field recorder-step-locator" aria-label="步骤定位器" value={locatorValue} placeholder={locatorRequired ? '定位器' : '无定位器'} disabled={!locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
-      <input className="recorder-step-field recorder-step-parameter" aria-label={step.value_redacted ? '敏感值环境变量名' : '步骤参数'} value={parameter} disabled={step.value_redacted} placeholder={step.value_redacted ? '敏感值已脱敏；由环境变量读取' : step.action==='wait'?'毫秒':step.action==='scroll'?'方向（up/down）':step.action==='assert_count'?'数量':'参数 / 断言值'} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
+      <input className="recorder-step-field recorder-step-locator" aria-label={t('steps.locator')} value={locatorValue} placeholder={locatorRequired ? t('steps.locator') : t('steps.noLocator')} disabled={!locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
+      <input className="recorder-step-field recorder-step-parameter" aria-label={parameterLabel} value={parameter} disabled={step.value_redacted} placeholder={parameterPlaceholder} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
     </>;
   };
 
   const projectName = projects.find((project) => project.id === projectId)?.name;
-  const isConnected = socketState === '已连接';
+  const isConnected = socketState === 'connected';
+  const socketLabel = socketDetail || t(`connection.${socketState}`);
   const browserAgentOutput = asRecord(aiTask.task?.plan.find((step) => step.key === 'browser_agent')?.outputs);
   const canGenerateAgentScript = aiTask.task?.type === 'EXPLORE_PAGE'
     && aiTask.task.status === 'COMPLETED'
@@ -594,16 +615,16 @@ export const RecorderPage: React.FC<{
   const verificationFacts = (['unique', 'visible', 'enabled', 'editable', 'clickable'] as const)
     .filter((key) => typeof locatorVerificationMetadata[key] === 'boolean')
     .map((key) => `${key}=${locatorVerificationMetadata[key] === true ? 'yes' : 'no'}`);
-  const locatorEngine = String(locatorDecisionMetadata.engine ?? 'Local Strategy');
+  const locatorEngine = String(locatorDecisionMetadata.engine ?? t('locator.localStrategy'));
   const locatorModel = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.model === 'string' ? locatorDecisionMetadata.model : '';
-  const locatorLatency = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.latency_ms === 'number' ? `${locatorDecisionMetadata.latency_ms.toFixed(1)} ms` : '';
+  const locatorLatency = locatorEngine === 'Jev' && typeof locatorDecisionMetadata.latency_ms === 'number' ? t('locator.latency', { value: `${locatorDecisionMetadata.latency_ms.toFixed(1)} ms` }) : '';
 
   useEffect(() => {
     const pending = pendingAgentGoal;
-    if (!pending || pending.sessionId !== sessionId || pending.waitingForNavigation || !isNavigationFrameFresh(frameRevisionRef.current, pending.minimumFrameRevision) || socketState !== '已连接' || !projectId || aiTask.busy || frame?.type !== 'frame') return;
+    if (!pending || pending.sessionId !== sessionId || pending.waitingForNavigation || !isNavigationFrameFresh(frameRevisionRef.current, pending.minimumFrameRevision) || socketState !== 'connected' || !projectId || aiTask.busy || frame?.type !== 'frame') return;
     if (!/^https?:\/\//i.test(frame.url || '')) {
       setPendingAgentGoal(null);
-      setError(`浏览器已连接，但没有加载出可操作的网页（${frame.url || '空白页面'}）。请检查目标网址和 API 主机的网络/代理后重试。`);
+      setError(t('errors.noActionablePage', { url: frame.url || t('errors.targetWebsite') }));
       return;
     }
     setPendingAgentGoal(null);
@@ -619,21 +640,21 @@ export const RecorderPage: React.FC<{
         ...(pending.trustedDomains.length ? { trusted_domains: pending.trustedDomains } : {}),
       },
     });
-  }, [pendingAgentGoal, sessionId, socketState, projectId, aiTask.busy, aiTask.start, frame]);
+  }, [pendingAgentGoal, sessionId, socketState, projectId, aiTask.busy, aiTask.start, frame, t]);
 
   return (
-    <div className={`recorder-page${embedded ? ' is-embedded' : ''}`}>
+    <div className={`recorder-page${embedded ? ' is-embedded' : ''}`} data-mobile-panel={embedded ? exploreMobilePanel : undefined}>
       <header className="recorder-page-header">
         <div className="recorder-page-heading">
-          <h2><MousePointer2 size={20} aria-hidden="true" /> 浏览器录制器</h2>
+          <h2><MousePointer2 size={20} aria-hidden="true" /> {t('header.title')}</h2>
           {projectName && <span className="recorder-project-label">{projectName}</span>}
           <span className={`status-pill ${isConnected ? 'status-pill-online' : 'status-pill-draft'}`}>
-            会话：{socketState}
+            {t('connection.session', { state: socketLabel })}
           </span>
-          {recording && <span className="status-pill status-pill-warning">正在录制</span>}
+          {recording && <span className="status-pill status-pill-warning">{t('header.recording')}</span>}
         </div>
 
-        <div className="recorder-actions" role="group" aria-label="录制器操作">
+        <div className="recorder-actions" role="group" aria-label={t('header.actions')} tabIndex={embedded ? 0 : undefined}>
           <button
             type="button"
             className={`btn ${recording ? 'btn-secondary' : 'btn-primary'}`}
@@ -641,10 +662,10 @@ export const RecorderPage: React.FC<{
             onClick={() => { const next = !recording; setRecording(next); send(recording ? 'pause' : 'start'); }}
           >
             {recording ? <CirclePause size={16} /> : <CirclePlay size={16} />}
-            {recording ? '暂停录制' : '开始录制'}
+            {recording ? t('header.pause') : t('header.start')}
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
-            <Square size={15} /> 停止
+            <Square size={15} /> {t('header.stop')}
           </button>
           <button
             type="button"
@@ -665,19 +686,19 @@ export const RecorderPage: React.FC<{
               }
             }}
           >
-            <Crosshair size={15} /> {selectionMode ? '取消选择' : '选择元素'}
+            <Crosshair size={15} /> {selectionMode ? t('header.cancelSelection') : t('header.selectElement')}
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || agentTaskRunning} onClick={generate}>
-            <Code2 size={16} /> {busy ? '正在处理…' : code ? '重新生成脚本' : '生成脚本'}
+            <Code2 size={16} /> {busy ? t('header.processing') : code ? t('header.regenerateScript') : t('header.generateScript')}
           </button>
           <button className="btn btn-primary" disabled={!sessionId || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('CREATE_TEST')}>
-            <Code2 size={16} /> 录制步骤生成并验证测试
+            <Code2 size={16} /> {t('header.createVerifyTest')}
           </button>
           <button className="btn btn-secondary" disabled={!sessionId || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('EXPLORE_PAGE')}>
-            AI 探索当前页
+            {t('header.explorePage')}
           </button>
           <button type="button" className="btn btn-secondary" disabled={!sessionId || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
-            <Save size={16} /> 保存为 Case 并运行
+            <Save size={16} /> {t('header.saveAndRun')}
           </button>
         </div>
       </header>
@@ -687,10 +708,10 @@ export const RecorderPage: React.FC<{
           <div className="alert-content">
             <AlertTriangle size={17} aria-hidden="true" />
             <div className="alert-copy">
-              <strong>浏览器连接或操作未完成</strong>
+              <strong>{t('header.errorTitle')}</strong>
               <p>{error}</p>
               <details className="alert-details">
-                <summary>查看错误详情</summary>
+                <summary>{t('header.errorDetails')}</summary>
                 <pre>{JSON.stringify({ sessionId, targetUrl: pendingUrlRef.current ?? url, connection: socketState }, null, 2)}</pre>
               </details>
             </div>
@@ -701,43 +722,48 @@ export const RecorderPage: React.FC<{
               className="btn btn-secondary btn-sm"
               onClick={() => sessionId ? navigateBrowser(pendingUrlRef.current ?? url) : void createSession()}
             >
-              重试
+              {t('header.retry')}
             </button>
           </div>
         </section>
       )}
 
-      <section className="recorder-natural-flow" aria-labelledby="recorder-natural-flow-title">
+      {embedded && <nav className="recorder-explore-mobile-nav" aria-label={workspaceT('mobile.explore.navigation')}>
+        {(['browser', 'task'] as const).map((panel) => <button key={panel} type="button" aria-pressed={exploreMobilePanel === panel} className={exploreMobilePanel === panel ? 'is-current' : ''} onClick={() => setExploreMobilePanel(panel)}>{workspaceT(`mobile.explore.${panel}`)}</button>)}
+      </nav>}
+      <div className="recorder-explore-layout">
+      <section className="recorder-explore-task">
+      <details className="recorder-natural-flow" open={naturalFlowOpen} onToggle={(event) => setNaturalFlowOpen(event.currentTarget.open)} aria-labelledby="recorder-natural-flow-title">
+        <summary id="recorder-natural-flow-title">{t('naturalFlow.title')}</summary>
+        <div className="recorder-natural-flow-body">
         <div className="recorder-natural-flow-prompt">
-          <label id="recorder-natural-flow-title" htmlFor="recorder-natural-flow-input">自然语言操作流程</label>
+          <label htmlFor="recorder-natural-flow-input">{t('naturalFlow.promptLabel')}</label>
           <textarea
             id="recorder-natural-flow-input"
             value={requirement}
             onChange={(event) => setRequirement(event.target.value)}
-            placeholder="例如：打开浏览器并访问 uniqlo.com，选择裤子分类，进入第一个商品详情页，然后加入购物车。"
+            placeholder={t('naturalFlow.placeholder')}
             rows={3}
           />
           <details className="recorder-trusted-domains">
-            <summary>官网验证域名（可选）</summary>
+            <summary>{t('naturalFlow.trustedDomains')}</summary>
             <input
-              aria-label="官网验证域名"
+              aria-label={t('naturalFlow.trustedDomainsLabel')}
               value={trustedDomainsText}
               onChange={(event) => setTrustedDomainsText(event.target.value)}
-              placeholder="例如 selenium.dev；多个域名用逗号分隔"
+              placeholder={t('naturalFlow.trustedDomainsPlaceholder')}
             />
-            <small>用于确认“官网”目标。留空时 Agent 不会把搜索结果中的品牌词当作官网证明。</small>
+            <small>{t('naturalFlow.trustedDomainsHelp')}</small>
           </details>
         </div>
         <div className="recorder-natural-flow-actions">
-          <p>{browserStrategy === 'agent'
-            ? 'Agent 由 AI 根据实时页面提出候选，Jev 在多种安全动作之间选择；所有动作都会重新验证并检查页面结果。'
-            : 'Fast 由 AI 提出候选并优先按 AI 排序选择；除非平台策略要求，否则跳过 Jev。所有动作仍会重新验证目标并检查页面结果。'} 脚本只收录已执行且可复用的操作，并附加页面证据断言。</p>
+          <p>{t(browserStrategy === 'agent' ? 'naturalFlow.agentDescription' : 'naturalFlow.fastDescription')} {t('naturalFlow.scriptDescription')}</p>
           <div>
             <label className="recorder-strategy-control">
-              <span>策略</span>
-              <select aria-label="浏览执行策略" value={browserStrategy} disabled={Boolean(pendingAgentGoal || aiTask.busy || agentTaskRunning)} onChange={(event) => setBrowserStrategy(event.target.value as 'fast' | 'agent')}>
-                <option value="agent">Agent · AI + Jev</option>
-                <option value="fast">Fast · AI 优先</option>
+              <span>{t('naturalFlow.strategy')}</span>
+              <select aria-label={t('naturalFlow.strategyLabel')} value={browserStrategy} disabled={Boolean(pendingAgentGoal || aiTask.busy || agentTaskRunning)} onChange={(event) => setBrowserStrategy(event.target.value as 'fast' | 'agent')}>
+                <option value="agent">{t('naturalFlow.agentStrategy')}</option>
+                <option value="fast">{t('naturalFlow.fastStrategy')}</option>
               </select>
             </label>
             <button
@@ -748,52 +774,53 @@ export const RecorderPage: React.FC<{
             >
               <CirclePlay size={15} aria-hidden="true" />
               {pendingAgentGoal || aiTask.busy || agentTaskRunning
-                ? `${browserStrategy === 'agent' ? 'Agent' : 'Fast'} 正在执行…`
-                : browserStrategy === 'agent' ? 'AI + Jev 执行流程' : 'Fast 快速执行'}
+                ? t(browserStrategy === 'agent' ? 'naturalFlow.agentRunning' : 'naturalFlow.fastRunning')
+                : t(browserStrategy === 'agent' ? 'naturalFlow.agentStart' : 'naturalFlow.fastStart')}
             </button>
             {canGenerateAgentScript && (
               <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void generateFromAgent()}>
-                <Code2 size={15} aria-hidden="true" /> {busy ? '正在生成脚本…' : '从已验证过程生成脚本'}
+                <Code2 size={15} aria-hidden="true" /> {busy ? t('naturalFlow.generatingScript') : t('naturalFlow.generateFromVerified')}
               </button>
             )}
           </div>
           {agentScriptSource && (
             <small role="status">
-              脚本来源：{agentScriptSource.actionCount} 个成功操作 · {agentScriptSource.jevCount} 次 Jev 决策 · {agentScriptSource.assertionCount} 条页面断言。保存后仍需运行验证。
+              {t('naturalFlow.scriptSource', { actions: agentScriptSource.actionCount, decisions: agentScriptSource.jevCount, assertions: agentScriptSource.assertionCount })}
             </small>
           )}
         </div>
-      </section>
+        </div>
+      </details>
 
       <ContextTaskProgress task={aiTask.task} error={aiTask.error} />
-
+      </section>
+      <section className="recorder-explore-browser">
       <div className="recorder-urlbar">
         <input
           ref={urlInputRef}
           className="recorder-url-input"
-          aria-label="浏览器地址"
+          aria-label={t('naturalFlow.browserAddress')}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && navigateBrowser(url)}
-          placeholder="输入网址"
+          placeholder={t('naturalFlow.addressPlaceholder')}
         />
-        <button type="button" className="btn btn-secondary btn-icon" aria-label="后退" title="后退" disabled={!sessionId} onClick={() => send('back')}>←</button>
-        <button type="button" className="btn btn-secondary btn-icon" aria-label="前进" title="前进" disabled={!sessionId} onClick={() => send('forward')}>→</button>
-        <button type="button" className="btn btn-secondary btn-icon" aria-label="刷新" title="刷新" disabled={!sessionId} onClick={() => send('reload')}><RotateCw size={16} /></button>
+        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.back')} title={t('naturalFlow.back')} disabled={!sessionId} onClick={() => send('back')}>←</button>
+        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.forward')} title={t('naturalFlow.forward')} disabled={!sessionId} onClick={() => send('forward')}>→</button>
+        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.reload')} title={t('naturalFlow.reload')} disabled={!sessionId} onClick={() => send('reload')}><RotateCw size={16} /></button>
         {!sessionId ? (
-          <button type="button" className="btn btn-primary" disabled={busy || restoreCheckedProjectId !== projectId} onClick={createSession}>启动浏览器</button>
+          <button type="button" className="btn btn-primary" disabled={busy || restoreCheckedProjectId !== projectId} onClick={createSession}>{t('naturalFlow.startBrowser')}</button>
         ) : (
-          <button type="button" className="btn btn-secondary" onClick={closeSession}>关闭浏览器</button>
+          <button type="button" className="btn btn-secondary" onClick={closeSession}>{t('naturalFlow.closeBrowser')}</button>
         )}
       </div>
 
-      <div className="recorder-workspace">
         <section className="recorder-panel recorder-browser-panel">
           <div className="recorder-panel-heading">
-            <strong>浏览器视图</strong>
-            <span className="recorder-keyboard-hint" id="recorder-keyboard-help">选择模式：悬停预览 · 点击锁定 · Esc 取消</span>
-            <span className="recorder-browser-meta" title={`${frame?.title || '远程浏览器画面'} · ${frame?.url || url}`}>
-              {frame?.title || '远程浏览器画面'} · {frame?.url || url}
+            <strong>{t('browser.view')}</strong>
+            <span className="recorder-keyboard-hint" id="recorder-keyboard-help">{t('browser.keyboardHint')}</span>
+            <span className="recorder-browser-meta" title={`${frame?.title || t('browser.remoteScreen')} · ${frame?.url || url}`}>
+              {frame?.title || t('browser.remoteScreen')} · {frame?.url || url}
             </span>
           </div>
           <div
@@ -801,7 +828,7 @@ export const RecorderPage: React.FC<{
             className="recorder-browser-viewport"
             role="region"
             tabIndex={0}
-            aria-label="远程浏览器交互视图"
+            aria-label={t('browser.interactiveView')}
             aria-describedby="recorder-keyboard-help"
             onClick={browserClick}
             onMouseMove={browserPointerMove}
@@ -816,17 +843,17 @@ export const RecorderPage: React.FC<{
             }}
           >
             {frame?.image ? (
-              <img className="recorder-browser-image" draggable={false} src={`data:image/jpeg;base64,${frame.image}`} alt="远程浏览器实时画面" />
+              <img className="recorder-browser-image" draggable={false} src={`data:image/jpeg;base64,${frame.image}`} alt={t('browser.imageAlt')} />
             ) : (
               <div className="recorder-browser-empty">
                 <MousePointer2 size={22} aria-hidden="true" />
-                <strong>浏览器画面将在这里显示</strong>
-                <span>启动浏览器后即可开始录制与拾取定位器</span>
+                <strong>{t('browser.emptyTitle')}</strong>
+                <span>{t('browser.emptyDescription')}</span>
               </div>
             )}
           </div>
           {frame?.tabs && frame.tabs.length > 1 && (
-            <div className="recorder-browser-tabs" role="group" aria-label="浏览器标签页">
+            <div className="recorder-browser-tabs" role="group" aria-label={t('browser.tabs')}>
               {frame.tabs.map((item) => (
                 <button
                   type="button"
@@ -842,50 +869,51 @@ export const RecorderPage: React.FC<{
             </div>
           )}
         </section>
-
+      </section>
+      <section className="recorder-explore-steps">
         <section className={`recorder-panel recorder-inspector-panel${locatorTraceEvents.length ? ' has-locator-trace' : ''}${selectionMode || pickedElement ? ' has-element-evidence' : ''}`}>
           {(selectionMode || pickedElement) && (
             <div className="recorder-element-evidence" aria-live="polite">
               <div className="recorder-element-evidence-heading">
-                <strong>{selectionMode ? '选择模式 · 悬停预览' : '已锁定元素'}</strong>
-                {selectionMode && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { send('cancel_pick'); setSelectionMode(false); }}>取消</button>}
+                <strong>{t(selectionMode ? 'selection.mode' : 'selection.selected')}</strong>
+                {selectionMode && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { send('cancel_pick'); setSelectionMode(false); }}>{t('selection.cancel')}</button>}
               </div>
-              {selectionMode && frame?.hovered && <p>当前：{frame.hovered.role || frame.hovered.tag} · {frame.hovered.name || frame.hovered.text || '无可访问名称'}</p>}
+              {selectionMode && frame?.hovered && <p>{t('selection.current', { element: `${frame.hovered.role || frame.hovered.tag} · ${frame.hovered.name || frame.hovered.text || t('selection.noAccessibleName')}` })}</p>}
               {pickedElement && <>
-                <p>{pickedElement.role || pickedElement.tag} · {pickedElement.name || pickedElement.text || '无名称'}{pickedElement.value_redacted ? ' · 敏感值已脱敏' : ''}</p>
-                <small>{pickedElement.parent_summary || '无父级摘要'}{pickedElement.bounding_box ? ` · ${pickedElement.bounding_box.width}×${pickedElement.bounding_box.height}` : ''}{pickedElement.frame_path?.length ? ` · Frame ${pickedElement.frame_path.join(' › ')}` : ''}{pickedElement.shadow_path?.length ? ` · Shadow ${pickedElement.shadow_path.join(' › ')}` : ''}</small>
-                {pickedElement.attributes && <details><summary>元素属性与 Locator 预览</summary><pre>{JSON.stringify(pickedElement.attributes, null, 2)}</pre><ul>{(pickedElement.ranked_candidates ?? pickedElement.candidates ?? []).slice(0, 8).map((candidate, index) => <li key={`${candidate.kind}-${candidate.value}-${index}`}>{candidate.locator || `${candidate.kind}: ${candidate.value}`}</li>)}</ul></details>}
+                <p>{pickedElement.role || pickedElement.tag} · {pickedElement.name || pickedElement.text || t('selection.noName')}{pickedElement.value_redacted ? ` · ${t('selection.sensitiveRedacted')}` : ''}</p>
+                <small>{pickedElement.parent_summary || t('selection.noParentSummary')}{pickedElement.bounding_box ? ` · ${t('selection.size', { width: pickedElement.bounding_box.width, height: pickedElement.bounding_box.height })}` : ''}{pickedElement.frame_path?.length ? ` · ${t('selection.frame', { path: pickedElement.frame_path.join(' › ') })}` : ''}{pickedElement.shadow_path?.length ? ` · ${t('selection.shadow', { path: pickedElement.shadow_path.join(' › ') })}` : ''}</small>
+                {pickedElement.attributes && <details><summary>{t('selection.details')}</summary><pre>{JSON.stringify(pickedElement.attributes, null, 2)}</pre><ul>{(pickedElement.ranked_candidates ?? pickedElement.candidates ?? []).slice(0, 8).map((candidate, index) => <li key={`${candidate.kind}-${candidate.value}-${index}`}>{candidate.locator || t('locator.candidateLabel', { kind: candidate.kind, value: candidate.value })}</li>)}</ul></details>}
               </>}
             </div>
           )}
           <div className="recorder-steps-heading">
             <div>
-              <strong>执行步骤</strong>
+              <strong>{t('steps.title')}</strong>
               <span className="recorder-step-count">{steps.length}</span>
             </div>
-            <select aria-label="添加断言" defaultValue="" onChange={(e) => { if (e.target.value) addAssertion(e.target.value as StepAction); e.target.value = ''; }}>
-              <option value="">+ 添加断言</option>
-              <option value="assert_visible">元素可见</option>
-              <option value="assert_text">包含文本</option>
-              <option value="assert_url">URL 匹配</option>
-              <option value="assert_title">标题匹配</option>
-              <option value="assert_count">元素数量</option>
+            <select aria-label={t('steps.addAssertion')} defaultValue="" onChange={(e) => { if (e.target.value) addAssertion(e.target.value as StepAction); e.target.value = ''; }}>
+              <option value="">+ {t('steps.addAssertion')}</option>
+              <option value="assert_visible">{t('steps.assertVisible')}</option>
+              <option value="assert_text">{t('steps.assertText')}</option>
+              <option value="assert_url">{t('steps.assertUrl')}</option>
+              <option value="assert_title">{t('steps.assertTitle')}</option>
+              <option value="assert_count">{t('steps.assertCount')}</option>
             </select>
           </div>
 
           {locatorTraceEvents.length > 0 && (
             <div className="recorder-locator-trace">
-              <strong>Locator Decision</strong>
+              <strong>{t('locator.title')}</strong>
               <div className={`recorder-locator-summary${locatorVerificationMetadata.verified === true ? ' is-verified' : locatorVerificationMetadata.verified === false ? ' is-unverified' : ''}`} role="status">
                 <span>
-                  Decision Engine: {locatorEngine}
-                  {locatorModel ? ` · Model ${locatorModel}` : ''}
-                  {locatorLatency ? ` · Latency ${locatorLatency}` : ''}
-                  {' · Selected '}{String(locatorDecisionMetadata.candidate_id ?? 'unavailable')}
-                  {' · '}{typeof locatorDecisionMetadata.candidate_count === 'number' ? locatorDecisionMetadata.candidate_count : '—'} 候选
+                  {t('locator.decisionEngine', { engine: locatorEngine })}
+                  {locatorModel ? ` · ${t('locator.model', { model: locatorModel })}` : ''}
+                  {locatorLatency ? ` · ${locatorLatency}` : ''}
+                  {' · '}{t('locator.selected', { id: String(locatorDecisionMetadata.candidate_id ?? t('locator.unknown')) })}
+                  {' · '}{t('locator.candidateCount', { count: typeof locatorDecisionMetadata.candidate_count === 'number' ? locatorDecisionMetadata.candidate_count : '—' })}
                 </span>
                 <span>
-                  Verification: {locatorVerificationMetadata.verified === true ? 'PASS' : locatorVerificationMetadata.verified === false ? 'FAILED' : 'UNKNOWN'}
+                  {t('locator.verification', { status: locatorVerificationMetadata.verified === true ? 'PASS' : locatorVerificationMetadata.verified === false ? 'FAILED' : 'UNKNOWN' })}
                   {typeof locatorDecisionMetadata.selected_locator === 'string' ? ` · ${locatorDecisionMetadata.selected_locator}` : ''}
                   {verificationFacts.length > 0 ? ` · ${verificationFacts.join(' · ')}` : ''}
                 </span>
@@ -894,7 +922,7 @@ export const RecorderPage: React.FC<{
             </div>
           )}
 
-          <div className="recorder-steps-list">
+          <div className="recorder-steps-list" role="region" aria-label={t('steps.title')} tabIndex={0}>
             {steps.map((step, index) => {
               const evidence = step.evidence;
               const aiCandidateId = typeof evidence?.ai_analysis?.candidate_id === 'string' ? evidence.ai_analysis.candidate_id : null;
@@ -903,100 +931,101 @@ export const RecorderPage: React.FC<{
               return (
                 <div key={step.id} className="recorder-step-item">
                   <div className="recorder-step-row">
-                    <select className="recorder-step-field recorder-step-action" aria-label="步骤类型" value={step.action} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
-                      {actions.map((action) => <option key={action} value={action}>{labels[action]}</option>)}
+                    <select className="recorder-step-field recorder-step-action" aria-label={t('steps.actionType')} value={step.action} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
+                      {actions.map((action) => <option key={action} value={action}>{actionLabel(action)}</option>)}
                     </select>
-                    <input className="recorder-step-field recorder-step-description" aria-label="步骤说明" value={step.description} onChange={(e) => updateStep(index, { description: e.target.value })} />
+                    <input className="recorder-step-field recorder-step-description" aria-label={t('steps.description')} value={step.description} onChange={(e) => updateStep(index, { description: e.target.value })} />
                     {actionInputs(step, index)}
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm recorder-step-pick"
-                      title="从内置浏览器拾取此步骤定位器；页面点击不会触发业务动作"
+                      title={t('steps.pickTitle')}
                       disabled={!sessionId || !isConnected || locatorAnalysisBusy}
                       onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); setSelectionMode(true); send('pick_element', { step_action: step.action }); }}
                     >
-                      <Crosshair size={14} />{pickTargetStep === step.id ? '请在页面点击' : '拾取'}
+                      <Crosshair size={14} />{pickTargetStep === step.id ? t('steps.pickPrompt') : t('steps.pick')}
                     </button>
                     <div className="recorder-step-controls">
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label="重新验证当前定位器" title="重新验证当前定位器" disabled={!sessionId || !step.locator || locatorAnalysisBusy} onClick={() => verifyCandidate(step)}><RotateCw size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label="上移步骤" title="上移" disabled={index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label="下移步骤" title="下移" disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label="删除步骤" title="删除" onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.reverify')} title={t('steps.reverify')} disabled={!sessionId || !step.locator || locatorAnalysisBusy} onClick={() => verifyCandidate(step)}><RotateCw size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.moveUp')} title={t('steps.moveUp')} disabled={index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.moveDown')} title={t('steps.moveDown')} disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
+                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.delete')} title={t('steps.delete')} onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                   {evidence && <details className="recorder-step-evidence">
-                    <summary>元素证据 v{evidence.schema_version} · {evidence.locator_candidates.length} 个 Locator · {evidence.status === 'available' ? '证据完整' : evidence.status === 'stale' ? '页面可能已变化' : '部分证据缺失'}</summary>
+                    <summary>{t('steps.evidenceSummary', { version: evidence.schema_version, count: evidence.locator_candidates.length, status: t(evidence.status === 'available' ? 'steps.evidenceAvailable' : evidence.status === 'stale' ? 'steps.evidenceStale' : 'steps.evidencePartial') })}</summary>
                     <div className="recorder-evidence-actions">
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestAiLocator(step)}>{aiAnalysisStep === step.id ? 'AI 分析中…' : '请求 AI 分析'}</button>
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestJevLocator(step)}>{jevDecisionStep === step.id ? 'Jev 决策中…' : '请求 Jev 决策'}</button>
-                      <span>{evidence.ai_analysis?.status === 'available' ? `AI: ${String(evidence.ai_analysis.provider)} · ${String(evidence.ai_analysis.reason || '')}` : evidence.ai_analysis ? `AI: 不可用 (${String(evidence.ai_analysis.reason)})` : 'AI: 尚未分析'}</span>
-                      <span>{evidence.jev_analysis?.status === 'available' ? `Jev: ${String(evidence.jev_analysis.candidate_id)}` : evidence.jev_analysis ? `Jev: 不可用 (${String(evidence.jev_analysis.reason || evidence.jev_analysis.provider)})` : 'Jev: 尚未请求'}</span>
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestAiLocator(step)}>{aiAnalysisStep === step.id ? t('steps.analyzing') : t('steps.requestAiAnalysis')}</button>
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => void requestJevLocator(step)}>{jevDecisionStep === step.id ? t('steps.jevDeciding') : t('steps.requestJevDecision')}</button>
+                      <span>{evidence.ai_analysis?.status === 'available' ? t('steps.aiAvailable', { provider: String(evidence.ai_analysis.provider), reason: String(evidence.ai_analysis.reason || '') }) : evidence.ai_analysis ? t('steps.aiUnavailable', { reason: String(evidence.ai_analysis.reason) }) : t('steps.aiNotAnalyzed')}</span>
+                      <span>{evidence.jev_analysis?.status === 'available' ? t('steps.jevAvailable', { candidate: String(evidence.jev_analysis.candidate_id) }) : evidence.jev_analysis ? t('steps.jevUnavailable', { reason: String(evidence.jev_analysis.reason || evidence.jev_analysis.provider) }) : t('steps.jevNotRequested')}</span>
                     </div>
-                    {conflict && <p className="recorder-decision-conflict" role="status">AI 与 Jev 推荐不同候选。没有自动覆盖；请选择并重新验证：AI {aiCandidateId} · Jev {jevCandidateId}</p>}
+                    {conflict && <p className="recorder-decision-conflict" role="status">{t('steps.decisionConflict', { ai: aiCandidateId, jev: jevCandidateId })}</p>}
                     <div className="recorder-candidate-list">
                       {evidence.locator_candidates.map((candidate, candidateIndex) => {
                         const aiRecommended = candidate.candidate_id === aiCandidateId && evidence.ai_analysis?.status === 'available';
                         const jevRecommended = candidate.candidate_id === jevCandidateId && evidence.jev_analysis?.status === 'available';
                         const verification = candidate.verification;
                         return <div className="recorder-candidate" key={`${candidate.candidate_id ?? candidateIndex}-${candidate.kind}-${candidate.value}`}>
-                          <div><strong>{candidate.kind}</strong><code>{candidate.locator || `${candidate.kind}: ${candidate.value}${candidate.name ? ` · ${candidate.name}` : ''}`}</code><small>{verification?.match_count ?? '—'} 匹配 · {verification?.unique ? '唯一' : verification?.unique === false ? '有歧义' : '未验证'} · {verification?.visible ? '可见' : verification?.visible === false ? '不可见' : '状态未知'} · {verification?.verified ? '已验证' : '待验证'}</small></div>
+                          <div><strong>{candidate.kind}</strong><code>{candidate.locator || `${candidate.kind}: ${candidate.value}${candidate.name ? ` · ${candidate.name}` : ''}`}</code><small>{t('steps.candidateMatches', { count: verification?.match_count ?? '—' })} · {verification?.unique ? t('steps.candidateUnique') : verification?.unique === false ? t('steps.candidateAmbiguous') : t('steps.candidateNotVerified')} · {verification?.visible ? t('steps.candidateVisible') : verification?.visible === false ? t('steps.candidateNotVisible') : t('steps.candidateVisibilityUnknown')} · {verification?.verified ? t('steps.candidateVerified') : t('steps.candidateVerificationPending')}</small></div>
                           <div className="recorder-candidate-actions">
-                            <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate)}>{step.locator?.value === candidate.value && step.locator?.kind === candidate.kind ? '验证当前' : '验证并使用'}</button>
-                            {aiRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'ai')}>使用 AI</button>}
-                            {jevRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'jev')}>使用 Jev</button>}
+                            <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate)}>{step.locator?.value === candidate.value && step.locator?.kind === candidate.kind ? t('steps.validateCurrent') : t('steps.verifyAndUse')}</button>
+                            {aiRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'ai')}>{t('steps.useAi')}</button>}
+                            {jevRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'jev')}>{t('steps.useJev')}</button>}
                           </div>
                         </div>;
                       })}
                     </div>
-                    {evidence.missing.length > 0 && <small>缺少：{evidence.missing.join('、')}</small>}
-                    <small>目标：{String(evidence.element.name || evidence.element.text || evidence.element.tag || '未知')} · 页面 {String(evidence.context.url || '未知')} · {String(evidence.context.captured_at || '')}</small>
+                    {evidence.missing.length > 0 && <small>{t('steps.missingEvidence', { items: evidence.missing.join(', ') })}</small>}
+                    <small>{t('steps.target', { element: String(evidence.element.name || evidence.element.text || evidence.element.tag || t('steps.noAccessibleTarget')), url: String(evidence.context.url || t('steps.noAccessibleTarget')), capturedAt: String(evidence.context.captured_at || '') })}</small>
                   </details>}
                 </div>
               );
             })}
-            {!steps.length && <div className="recorder-steps-empty">浏览器交互会自动记录为步骤，也可以通过“添加断言”补充验证条件。</div>}
+            {!steps.length && <div className="recorder-steps-empty">{t('steps.noSteps')}</div>}
           </div>
 
           <details className="recorder-case-settings">
-            <summary>用例和文件设置</summary>
+            <summary>{t('settings.title')}</summary>
             <div className="recorder-settings-grid">
-              <label>Case 名称<input aria-label="Case 名称" value={caseName} onChange={(e) => setCaseName(e.target.value)} /></label>
-              <label>测试函数名<input aria-label="测试函数名" value={testName} onChange={(e) => setTestName(e.target.value)} /></label>
-              <label>项目文件路径<input aria-label="项目文件路径" value={filePath} onChange={(e) => setFilePath(e.target.value)} /></label>
-              <label>优先级<select value={priority} onChange={(e) => setPriority(e.target.value as TestCasePriority)}><option value="P1">高优先级</option><option value="P2">中优先级</option><option value="P3">低优先级</option></select></label>
-              <label>Test Suite / Module<input aria-label="Test Suite / Module" value={suiteName} onChange={(e) => setSuiteName(e.target.value)} placeholder="Test Suite / Module" /></label>
-              <label>Case tags<input aria-label="Case tags" value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="标签，逗号分隔" /></label>
-              <label>Pytest markers<input aria-label="Pytest markers" value={markersText} onChange={(e) => setMarkersText(e.target.value)} placeholder="pytest marker，逗号分隔" /></label>
+              <label>{t('settings.caseName')}<input aria-label={t('settings.caseName')} value={caseName} onChange={(e) => setCaseName(e.target.value)} /></label>
+              <label>{t('settings.testFunction')}<input aria-label={t('settings.testFunction')} value={testName} onChange={(e) => setTestName(e.target.value)} /></label>
+              <label>{t('settings.projectFile')}<input aria-label={t('settings.projectFile')} value={filePath} onChange={(e) => setFilePath(e.target.value)} /></label>
+              <label>{t('settings.priority')}<select value={priority} onChange={(e) => setPriority(e.target.value as TestCasePriority)}><option value="P1">{t('settings.high')}</option><option value="P2">{t('settings.medium')}</option><option value="P3">{t('settings.low')}</option></select></label>
+              <label>{t('settings.suite')}<input aria-label={t('settings.suite')} value={suiteName} onChange={(e) => setSuiteName(e.target.value)} placeholder={t('settings.suite')} /></label>
+              <label>{t('settings.tags')}<input aria-label={t('settings.tags')} value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder={t('settings.tagsPlaceholder')} /></label>
+              <label>{t('settings.markers')}<input aria-label={t('settings.markers')} value={markersText} onChange={(e) => setMarkersText(e.target.value)} placeholder={t('settings.markersPlaceholder')} /></label>
             </div>
           </details>
 
           <div className="recorder-editor-panel">
             <div className="recorder-panel-heading">
-              <strong>生成的 Python 脚本</strong>
+              <strong>{t('script.title')}</strong>
               <div className="recorder-editor-actions">
                 <span>Playwright</span>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || !steps.length || busy} onClick={() => void optimize()}>AI 优化录制</button>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={!sessionId || !steps.length || busy} onClick={() => void optimize()}>{t('script.optimize')}</button>
                 {code && (
                   <>
-                    <button type="button" className="btn btn-secondary btn-sm" aria-label="重新生成 Python 脚本" title="按当前执行步骤重新生成，替换当前脚本内容" disabled={!sessionId || busy} onClick={generate}>
-                      <RotateCw size={13} aria-hidden="true" /> 重新生成
+                    <button type="button" className="btn btn-secondary btn-sm" aria-label={t('script.regenerateAria')} title={t('script.regenerateTitle')} disabled={!sessionId || busy} onClick={generate}>
+                      <RotateCw size={13} aria-hidden="true" /> {t('script.regenerate')}
                     </button>
                     <button type="button" className="btn btn-primary btn-sm" disabled={!sessionId || busy} onClick={() => void openRecordedCaseInStudio()}>
-                      <Code2 size={13} aria-hidden="true" /> 保存用例并在代码工作台打开
+                      <Code2 size={13} aria-hidden="true" /> {t('script.saveOpen')}
                     </button>
                   </>
                 )}
               </div>
             </div>
-            {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label="录制优化对照"><button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>Raw · {optimization.raw_steps.length} 步</button> <button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>Optimized · {optimization.optimized_steps.length} 步</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · 待运行验证</p><details><summary>查看优化依据</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
+            {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label={t('script.optimizationComparison')}><button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>{t('script.raw', { count: optimization.raw_steps.length })}</button> <button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>{t('script.optimized', { count: optimization.optimized_steps.length })}</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · {t('script.needsVerification')}</p><details><summary>{t('script.optimizationBasis')}</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
             <div className="recorder-editor-surface">
               <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} readOnly onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
               {showCodeFallback && !editorReady && (
-                <textarea aria-label="生成的 Python 脚本" value={code} readOnly spellCheck={false} />
+                <textarea aria-label={t('script.textarea')} value={code} readOnly spellCheck={false} />
               )}
             </div>
           </div>
         </section>
+      </section>
       </div>
     </div>
   );

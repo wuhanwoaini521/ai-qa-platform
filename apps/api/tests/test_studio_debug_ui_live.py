@@ -23,6 +23,7 @@ from uvicorn import Config, Server
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 LIVE_STUDIO_ENABLED = os.getenv("AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE") == "1"
+BROWSER_CHANNEL = os.environ.get("AI_QA_ACCEPTANCE_BROWSER_CHANNEL") or None
 
 
 @pytest.fixture(autouse=True)
@@ -139,11 +140,13 @@ async def test_api_client_workspace_directory_is_scoped(client):
     reason="Set AI_QA_RUN_LIVE_STUDIO_ACCEPTANCE=1 to run the real UI/debugpy acceptance",
 )
 async def test_real_studio_edit_debug_run_and_failure_acceptance(
-    client, tmp_path: Path, disabled_external_health_probes
+    client, tmp_path: Path, disabled_external_health_probes, monkeypatch: pytest.MonkeyPatch
 ):
     """Exercise Studio through Vite, Chromium, the authenticated API, and real debugpy."""
     assert importlib.metadata.version("playwright") == "1.62.0"
 
+    monkeypatch.setattr(settings, "runtime_dir", tmp_path / "runtime")
+    monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path / "artifacts")
     evidence_root = Path(os.getenv("AI_QA_STUDIO_EVIDENCE_DIR", tmp_path / "evidence")).resolve()
     evidence_dir = evidence_root / f"studio-{uuid4().hex[:10]}"
     screenshot_dir = evidence_dir / "screenshots"
@@ -159,7 +162,7 @@ async def test_real_studio_edit_debug_run_and_failure_acceptance(
     project_id = project_response.json()["id"]
 
     steps_path = "tests/test_studio_debug.py"
-    steps_source = """# TODO: replace through the real Studio editor, then save.
+    steps_source = f"""# TODO: replace through the real Studio editor, then save.
 from playwright.sync_api import expect, sync_playwright
 
 
@@ -175,7 +178,7 @@ def calculate(value):
 
 def test_debug_steps():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         try:
             page = browser.new_page()
             page.set_content("<title>Studio Debug</title><h1 id='status'>Ready</h1>")
@@ -197,7 +200,7 @@ def test_pause_target():
     assert True
 """
     failure_path = "tests/test_studio_failure.py"
-    failure_source = """import os
+    failure_source = f"""import os
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -205,7 +208,7 @@ from playwright.sync_api import expect, sync_playwright
 
 def test_failure_has_browser_evidence():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         try:
             page = browser.new_page()
             page.set_content("<title>Failure target</title><h1>Observed state</h1>")
@@ -264,7 +267,7 @@ def test_failure_has_browser_evidence():
         await _wait_for_http(f"http://127.0.0.1:{web_port}/", vite)
 
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(headless=True, channel=BROWSER_CHANNEL)
             page = await browser.new_page(viewport={"width": 1440, "height": 960})
             page.set_default_timeout(15_000)
             page.on("pageerror", lambda error: console_errors.append(str(error)))
@@ -294,7 +297,10 @@ def test_failure_has_browser_evidence():
             await page.goto(studio_url + steps_path, wait_until="commit", timeout=45_000)
             editor = page.locator(".monaco-editor")
             await expect(editor).to_be_visible(timeout=30_000)
-            await expect(page.get_by_role("button", name=_localized("Debug", "调试"))).to_be_enabled(timeout=30_000)
+            debug_action = page.locator(".studio-editor-tabs button.studio-tool").filter(
+                has_text=_localized("Debug", "调试")
+            )
+            await expect(debug_action).to_be_enabled(timeout=30_000)
             await page.screenshot(path=str(screenshot_dir / "studio-before-edit.png"), full_page=True)
             layout = await page.evaluate("""() => {
               const selectors = [".content-viewport", ".workspace-shell", ".workspace-grid", ".workspace-main-scroll", ".studio-container", ".studio-editor-pane", ".studio-editor-surface", ".monaco-editor", "section[aria-label*=调试器]"];
@@ -320,7 +326,7 @@ def test_failure_has_browser_evidence():
                 1,
             )
             await editor.click(position={"x": 180, "y": 20})
-            await page.keyboard.press("Meta+Home" if sys.platform == "darwin" else "Control+Home")
+            await page.keyboard.press("Meta+ArrowLeft" if sys.platform == "darwin" else "Home")
             await page.keyboard.press("Shift+End")
             await page.keyboard.insert_text("# Edited and saved through the real Studio editor.")
             save_button = page.get_by_role("button", name=_localized("Save", "保存"))
@@ -354,7 +360,7 @@ def test_failure_has_browser_evidence():
                 )
             )
             async with session_response_info as response_info:
-                await page.get_by_role("button", name=_localized("Debug", "调试")).click()
+                await debug_action.click()
             session_response = await response_info.value
             assert session_response.status < 400, await session_response.text()
             session_id = (await session_response.json())["id"]
@@ -430,7 +436,7 @@ def test_failure_has_browser_evidence():
                 )
             )
             async with repeated_response_info as response_info:
-                await page.get_by_role("button", name=_localized("Debug", "调试")).click()
+                await debug_action.click()
             repeated_response = await response_info.value
             assert repeated_response.status < 400, await repeated_response.text()
             repeated_id = (await repeated_response.json())["id"]
@@ -442,14 +448,14 @@ def test_failure_has_browser_evidence():
             # Exercise pause and stop against a distinct, deliberately long-running test.
             await page.goto(studio_url + pause_path, wait_until="domcontentloaded")
             await expect(page.locator(".monaco-editor")).to_be_visible(timeout=30_000)
-            await expect(page.get_by_role("button", name=_localized("Debug", "调试"))).to_be_enabled(timeout=30_000)
+            await expect(debug_action).to_be_enabled(timeout=30_000)
             pause_response_info = page.expect_response(
                 lambda response: (
                     response.request.method == "POST" and response.url.rstrip("/").endswith("/api/debug/sessions")
                 )
             )
             async with pause_response_info as response_info:
-                await page.get_by_role("button", name=_localized("Debug", "调试")).click()
+                await debug_action.click()
             pause_response = await response_info.value
             assert pause_response.status < 400, await pause_response.text()
             pause_id = (await pause_response.json())["id"]
@@ -507,6 +513,63 @@ def test_failure_has_browser_evidence():
             )
             await page.screenshot(path=str(screenshot_dir / "studio-failure-evidence.png"), full_page=True)
 
+            # A Debug deep link must keep the linked run available in the existing browser drawer.
+            failure_response = await client.get("/api/failures", params={"project_id": project_id})
+            assert failure_response.status_code == 200, failure_response.text
+            failure = next(item for item in failure_response.json() if item["run_id"] == run_id)
+            mode_targets = {
+                "explore": f"http://127.0.0.1:{web_port}/workspace/{project_id}?stage=discover&view=discover",
+                "write-tests": (
+                    f"http://127.0.0.1:{web_port}/workspace/{project_id}?stage=automation&view=code"
+                    f"&file={steps_path.replace('/', '%2F')}"
+                ),
+                "ai-repair": (
+                    f"http://127.0.0.1:{web_port}/workspace/{project_id}?stage=failure&view=results"
+                    f"&runId={run_id}&failureId={failure['id']}"
+                ),
+            }
+            mode_viewports = (
+                ("desktop", {"width": 1440, "height": 960}),
+                ("tablet", {"width": 768, "height": 1024}),
+                ("narrow", {"width": 390, "height": 844}),
+            )
+            mode_metrics: dict[str, dict[str, object]] = {}
+            for mode_name, mode_url in mode_targets.items():
+                await page.goto(mode_url, wait_until="domcontentloaded")
+                await expect(page.locator(".workspace-mode-tab.is-current")).to_be_visible(timeout=30_000)
+                await expect(page.locator(".workspace-mode-tab")).to_have_count(4)
+                if mode_name == "explore":
+                    await expect(page.locator(".qd-load-status")).to_have_count(0, timeout=30_000)
+                if mode_name == "ai-repair":
+                    await expect(page.locator('.failure-workflow-attempt [role="status"]')).to_have_count(
+                        0, timeout=30_000
+                    )
+                if mode_name == "write-tests":
+                    await expect(page.locator(".monaco-editor")).to_be_visible(timeout=30_000)
+                for size_name, viewport in mode_viewports:
+                    await page.set_viewport_size(viewport)
+                    metrics = await page.evaluate(
+                        "({width: innerWidth, documentWidth: document.documentElement.scrollWidth})"
+                    )
+                    assert metrics["documentWidth"] <= metrics["width"], (mode_name, size_name, metrics)
+                    mode_metrics.setdefault(mode_name, {})[size_name] = metrics
+                    await page.screenshot(
+                        path=str(screenshot_dir / f"mode-{mode_name}-{size_name}.png"), full_page=True
+                    )
+
+            await page.set_viewport_size({"width": 1440, "height": 960})
+            await page.goto(
+                f"{studio_url}{failure_path}&runId={run_id}&failureId={failure['id']}",
+                wait_until="domcontentloaded",
+            )
+            await expect(page.locator(".monaco-editor")).to_be_visible(timeout=30_000)
+            await page.locator(".lc-studio-tools > summary").click()
+            await page.get_by_role("button", name=_localized("Show browser & live run", "显示浏览器与实时运行")).click()
+            workflow_link = page.get_by_role("link", name="Open Workflow")
+            await expect(workflow_link).to_be_visible(timeout=15_000)
+            assert run_id in (await workflow_link.get_attribute("href") or "")
+            await page.screenshot(path=str(screenshot_dir / "debug-linked-run-browser.png"), full_page=True)
+
         assert not api_errors, api_errors
         assert not console_errors, console_errors
         summary = {
@@ -518,6 +581,7 @@ def test_failure_has_browser_evidence():
                 "trace_excerpt": trace[-1000:],
             },
             "responsive_metrics": responsive_metrics,
+            "mode_responsive_metrics": mode_metrics,
             "api_errors": api_errors,
             "console_errors": console_errors,
             "screenshots": [str(path.relative_to(evidence_root)) for path in sorted(screenshot_dir.glob("*.png"))],

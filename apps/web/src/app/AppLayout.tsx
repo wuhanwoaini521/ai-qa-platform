@@ -59,7 +59,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
 
   return (
     <div className="app-container">
-      <div className="app-frame">
+      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}`}>
         <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
         <Header
           title={title}
@@ -68,7 +68,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
         />
 
         <div className="app-body">
-          <Navigation />
+          <Navigation compact={workspaceRoute} />
           <div className="app-main">
             <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
               <ReadinessNotice />

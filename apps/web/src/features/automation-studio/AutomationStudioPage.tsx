@@ -12,6 +12,7 @@ import { FileOpModalState, SidebarTab } from './types';
 import { errorText } from './errorText';
 import { locatorLabel, type RecorderStep } from './recorderSteps';
 import { resolveStudioRunTarget } from './runTarget';
+import { defaultWorkspaceTestFile } from './defaultWorkspaceTestFile';
 import { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
 import { useEditorTabs } from './hooks/useEditorTabs';
 import { useWorkspaceGit } from './hooks/useWorkspaceGit';
@@ -59,6 +60,7 @@ export interface AutomationStudioPageProps {
   initialDebugFailureId?: string | null;
   workspaceAutomationSetup?: 'no-case' | 'unbound' | null;
   workspaceAutomationSetupKey?: string;
+  workspaceMobilePanel?: 'code' | 'browser' | 'steps' | 'logs';
   onStartRecording?: () => void;
   onSelectCases?: () => void;
 }
@@ -78,6 +80,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   initialDebugFailureId,
   workspaceAutomationSetup,
   workspaceAutomationSetupKey,
+  workspaceMobilePanel,
   onStartRecording,
   onSelectCases,
 }) => {
@@ -196,11 +199,14 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
     if (workspaceAutomationSetup && workspaceAutomationSetupKey) setSetupCaseId(workspaceAutomationSetupKey);
     return editor.openFile(path);
   };
-  const openSidebarFile = (path: string) => {
-    void openStudioFile(path);
+  const openSidebarFile = (path: string, line?: number) => {
+    void openStudioFile(path).then(() => {
+      if (line && line > 0) setSourceFocus({ path, line });
+    });
     if (embedded && window.matchMedia('(max-width: 820px)').matches) setShowFiles(false);
   };
   const openStudioFileRef = useRef(openStudioFile);
+  const defaultFileOpenedForProject = useRef<string | null>(null);
   openStudioFileRef.current = openStudioFile;
   const showAutomationSetup = Boolean(workspaceAutomationSetup && setupCaseId !== workspaceAutomationSetupKey);
   const assistant = useQAAssistant({
@@ -219,6 +225,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   }, [embedded, run.activeRunId]);
   const hasRunRuntime = Boolean(run.activeRunId || (!studioContext.taskId && studioContext.runId));
   const runtimeId = run.activeRunId ?? studioContext.taskId ?? studioContext.runId ?? '';
+  const browserRunId = run.activeRunId ?? (!studioContext.taskId ? studioContext.runId ?? null : null);
   const runtimeKind = hasRunRuntime ? 'run' : 'task';
   const studioRuntime = useRuntimeSnapshot(runtimeKind, runtimeId);
   useEffect(()=>{if(showBrowser)browserDrawerRef.current?.focus();},[showBrowser]);
@@ -340,6 +347,19 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       refreshTestsRef.current();
     });
   }, [initialOpenFilePath]);
+
+  useEffect(() => {
+    if (!embedded || !currentProjectId || !['code', 'debug'].includes(workspaceView ?? '') || defaultFileOpenedForProject.current === currentProjectId) return;
+    if (initialOpenFilePath || query.get('caseId') || query.get('testCaseId') || query.get('file')) {
+      defaultFileOpenedForProject.current = currentProjectId;
+      return;
+    }
+    if (showAutomationSetup || editor.activeTabPath) return;
+    const firstTestFile = defaultWorkspaceTestFile(workspace.allFilePaths);
+    if (!firstTestFile) return;
+    defaultFileOpenedForProject.current = currentProjectId;
+    void openStudioFileRef.current(firstTestFile);
+  }, [currentProjectId, embedded, editor.activeTabPath, initialOpenFilePath, query, showAutomationSetup, workspace.allFilePaths, workspaceView]);
 
   useEffect(() => {
     if (!initialDebugNodeId || !currentProjectId) return;
@@ -500,12 +520,12 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
         context={{ ...studioContext, projectId: currentProjectId, runId: runtimeKind === 'run' ? runtimeId : undefined, taskId: runtimeKind === 'task' ? runtimeId : undefined }}
         projectId={currentProjectId}
         snapshot={studioRuntime.snapshot}
-        onOpenDetails={run.activeRunId ? () => setShowBrowser(true) : undefined}
+        onOpenDetails={browserRunId ? () => setShowBrowser(true) : undefined}
       />}
       {showContext&&<div className="lc-studio-context"><div className="lc-toolbar"><strong>{lc('context')}</strong><select aria-label={lc('context')} value={linkedCase?.id??''} onChange={e=>{const item=projectCases.find(c=>c.id===e.target.value);setQuery({...Object.fromEntries(query),caseId:e.target.value});if(item?.binding)void openStudioFile(item.binding.file_path);}}><option value="">{lc('selectCase')}</option>{projectCases.map(item=><option key={item.id} value={item.id}>{item.test_model?.display_id||item.id.slice(-6)} · {item.title}</option>)}</select>{linkedCase&&<><button className="btn btn-secondary btn-sm" onClick={()=>setShowKnowledge(true)}>{lc('inspectKnowledge')}</button>{linkedCase.requirement_id&&<Link className="btn btn-secondary btn-sm" to={`/projects/${currentProjectId}/requirements/${linkedCase.requirement_id}?tab=coverage`}>{lc('riskCoverage')}</Link>}<button className="btn btn-secondary btn-sm" onClick={()=>void openStudioFile('data/shop.json')}>{lc('dataEdit')}</button></>}</div>{linkedCase?.test_model&&<><p className="lc-caption">{linkedCase.test_model.intent} · {Object.values(linkedCase.test_model.coverage).flat().join(' · ')}</p><details><summary>{lc('data')} · {lc('oracles')}</summary><pre>{JSON.stringify({data:linkedCase.test_model.data,oracles:linkedCase.test_model.oracles},null,2)}</pre></details></>}{recorderSteps.length>0&&<div className="lc-recorder-steps"><span className="lc-caption">{lc('recordedSteps',{count:recorderSteps.length})}</span><ol>{recorderSteps.map(step=><li key={step.step_id??step.evidence_id}><code>{step.action??'—'}</code> <code>{locatorLabel(step.locator)}</code>{step.evidence_id&&<span className="lc-caption"> · {lc('recordedStepEvidence',{id:step.evidence_id})}</span>}{step.url&&<span className="lc-caption"> · {step.url}</span>}</li>)}</ol></div>}</div>}
       {showCommands&&<CommandPalette onClose={()=>setShowCommands(false)} commands={[{label:lc('runCurrent'),hint:'Ctrl+Enter',run:()=>{void saveAndRun();}},{label:lc('sourceDocument'),hint:'Ctrl+P',run:()=>setShowQuickOpen(true)},{label:lc('showBrowser'),run:()=>setShowBrowser(true)},{label:lc('showAssistant'),run:()=>setShowAssistant(true)},...(linkedCase?[{label:lc('inspectKnowledge'),run:()=>setShowKnowledge(true)}]:[])]}/>}
       {showKnowledge&&linkedCase&&<KnowledgeDrawer projectId={currentProjectId} entityId={linkedCase.id} onClose={()=>setShowKnowledge(false)}/>}
-    <div className="studio-container" style={{flex:1,height:'auto',minHeight:0}}>
+    <div className={`studio-container${workspaceMobilePanel === 'logs' ? ' is-workspace-mobile-logs' : ''}`} style={{flex:1,height:'auto',minHeight:0}}>
       {/* Quick Open Dialog (Cmd+P) */}
       {showQuickOpen && (
         <QuickOpen
@@ -859,7 +879,7 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       {showBrowser&&<div className="lc-studio-run-overlay" onKeyDownCapture={handleBrowserDrawerKeyDown}>
         <button type="button" className="lc-studio-run-backdrop" tabIndex={-1} aria-label={lc('closeRunDrawer')} onClick={closeBrowserDrawer}/>
         <aside ref={browserDrawerRef} className="lc-studio-run-drawer" id="studio-run-drawer" role="dialog" aria-modal="true" aria-label={lc('runtimeDrawer')} tabIndex={-1}>
-          <StudioRunPanel key={currentProjectId} runId={run.activeRunId} projectId={currentProjectId} context={{...studioContext,file:editor.activeTab?.path??studioContext.file}} onClose={closeBrowserDrawer} onStep={async(path,line)=>{await openStudioFile(path);setSourceFocus({path,line});}}/>
+          <StudioRunPanel key={currentProjectId} runId={browserRunId} projectId={currentProjectId} context={{...studioContext,file:editor.activeTab?.path??studioContext.file}} onClose={closeBrowserDrawer} onStep={async(path,line)=>{await openStudioFile(path);setSourceFocus({path,line});}}/>
         </aside>
       </div>}
       {showAssistant&&<QAAssistantPanel
