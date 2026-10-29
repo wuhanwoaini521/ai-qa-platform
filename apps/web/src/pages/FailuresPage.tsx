@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import {
   AgentTask,
   AIFailureDiagnosisResponse,
@@ -70,6 +71,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const currentProjectId = selectedProjectId || projects[0]?.id || null;
 
   const [failures, setFailures] = useState<FailureRecord[]>([]);
+  const [failuresLoading, setFailuresLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedFailure, setSelectedFailure] = useState<FailureRecord | null>(
     null,
@@ -106,11 +108,9 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
     // A persisted terminal state must explain itself, also after a reload.
     if (analysis.status === 'CANCELLED') {
       setDiagnosisError(t('diagnosisCancelled'));
-    } else if (
-      analysis.status === 'FAILED' ||
-      analysis.status === 'TIMEOUT' ||
-      analysis.status === 'INTERRUPTED'
-    ) {
+    } else if (analysis.status === 'TIMEOUT') {
+      setDiagnosisError(t('diagnosisTimedOut'));
+    } else if (analysis.status === 'FAILED' || analysis.status === 'INTERRUPTED') {
       const lastRunEvent = [...analysis.events]
         .reverse()
         .find((event) => event.type.startsWith('run.'));
@@ -174,13 +174,15 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const selectedAnalysis = analysisHistory.find(
     (item) => item.id === selectedAnalysisId,
   );
+  const analysisRunning = diagnosing || selectedAnalysis?.status === 'RUNNING';
   const verificationRunStatus = verificationRun?.status ??
     repairWorkflow?.verification_run_status ??
     selectedAnalysis?.result.verification_run_status;
   useEffect(() => {
     if (
       !selectedFailure?.id ||
-      (repairWorkflow?.state !== 'VERIFYING_FIX' &&
+      (selectedAnalysis?.status !== 'RUNNING' &&
+        repairWorkflow?.state !== 'VERIFYING_FIX' &&
         !['QUEUED', 'RUNNING'].includes(verificationRunStatus ?? '') &&
         !['QUEUED', 'RUNNING'].includes(repairWorkflow?.retry_run_status ?? ''))
     )
@@ -207,7 +209,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       active = false;
       window.clearInterval(timer);
     };
-  }, [selectedFailure?.id, selectedAnalysisId, verificationRunStatus, repairWorkflow?.retry_run_status]);
+  }, [selectedFailure?.id, selectedAnalysisId, selectedAnalysis?.status, verificationRunStatus, repairWorkflow?.state, repairWorkflow?.retry_run_status]);
 
   useEffect(() => () => diagnosisController.current?.abort(), []);
 
@@ -315,7 +317,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const primaryActions = analysisHistory.length > 0
     ? workflowActions.filter((action) => action !== 'START_ANALYSIS')
     : workflowActions;
-  const workflowPrimaryAction = diagnosing
+  const workflowPrimaryAction = analysisRunning
     ? 'ANALYZING'
     : primaryActionForWorkflow(diagnosisState, primaryActions);
   const canStartRepairTaskAsPrimary = canStartRepairTask &&
@@ -323,7 +325,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   const primaryAction = canStartRepairTaskAsPrimary ? 'RUN_DIAGNOSIS' : workflowPrimaryAction;
   const repairTaskStopped = Boolean(repairTask && ['BLOCKED', 'FAILED', 'CANCELLED', 'COMPLETED'].includes(repairTask.status));
   const showReanalysis = analysisHistory.length > 0 && (
-    (!canStartRepairTaskAsPrimary && (workflowActions.includes('START_ANALYSIS') || diagnosing)) ||
+    (!canStartRepairTaskAsPrimary && (workflowActions.includes('START_ANALYSIS') || analysisRunning)) ||
     repairTaskStopped
   );
   const reanalysisBlockedReason = diagnosisState === 'FAILED' && repairApplied
@@ -377,6 +379,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   };
 
   const fetchFailures = async () => {
+    setFailuresLoading(true);
     try {
       const data = await api.getFailures(currentProjectId || undefined);
       setFailures(data);
@@ -397,6 +400,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
       setFailures([]);
       setSelectedFailure(null);
       setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFailuresLoading(false);
     }
   };
 
@@ -594,10 +599,12 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
           ) {
             terminal = true;
             setDiagnosisError(
-              event.message ||
-                (event.type === 'run.cancelled'
-                  ? t('diagnosisCancelled')
-                  : t('diagnosisStreamIncomplete')),
+              event.type === 'run.timeout'
+                ? t('diagnosisTimedOut')
+                : event.message ||
+                  (event.type === 'run.cancelled'
+                    ? t('diagnosisCancelled')
+                    : t('diagnosisStreamIncomplete')),
             );
           }
         },
@@ -947,7 +954,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 primaryDisabled={primaryActionDisabled}
                 showPrimaryAction={showFailurePrimaryAction && !repairWorkflowLoading && !repairWorkflowError}
                 showReanalysis={showReanalysis}
-                reanalysisPending={diagnosing}
+                reanalysisPending={analysisRunning}
                 workflowLoading={repairWorkflowLoading}
                 workflowLoadError={repairWorkflowError}
                 onRetryWorkflowLoad={() => setRepairWorkflowLoadAttempt((attempt) => attempt + 1)}
@@ -1143,7 +1150,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         </div>
                         <AIExecutionTimeline
                           events={repairProposal.execution_trace ?? []}
-                          running={diagnosing}
+                          running={analysisRunning}
                         />
                       </div>
                     </details>
@@ -1312,10 +1319,10 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 </section>
               )}
 
-              {(diagnosing || diagnosisEvents.length > 0 || analysisHistory.length > 0 || diagnosisError) && (
+              {(analysisRunning || diagnosisEvents.length > 0 || analysisHistory.length > 0 || diagnosisError) && (
                 <FailureWorkflowPanel
                   events={diagnosisEvents}
-                  running={diagnosing}
+                  running={analysisRunning}
                   history={analysisHistory}
                   selectedId={selectedAnalysisId}
                   failureCreatedAt={selectedFailure.created_at}
@@ -1328,7 +1335,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   workflowLoading={repairWorkflowLoading}
                   workflowError={repairWorkflowError}
                   primaryActionReason={primaryActionReason}
-                  primaryActionPending={diagnosing}
+                  primaryActionPending={analysisRunning}
                   showPrimaryAction={
                     !repairWorkflowError && primaryAction !== 'RUN_DIAGNOSIS' &&
                     (workflowActions.length > 0 || primaryAction === 'BLOCKED')
@@ -1457,6 +1464,17 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   message={t('loadFailed', { message: loadError })}
                   onRetry={() => void fetchFailures()}
                 />
+              ) : failuresLoading ? (
+                <p role="status">{t('loadingFailures')}</p>
+              ) : failures.length === 0 ? (
+                <div className="failure-empty-state">
+                  <Bug size={22} aria-hidden="true" />
+                  <h2>{t('emptyQueueTitle')}</h2>
+                  <p>{t('emptyQueueDescription')}</p>
+                  <Link className="btn btn-secondary btn-sm" to={currentProjectId ? `/runs?projectId=${encodeURIComponent(currentProjectId)}` : '/runs'}>
+                    <History size={14} aria-hidden="true" />{t('openRunHistory')}
+                  </Link>
+                </div>
               ) : (
                 t('selectPrompt')
               )}

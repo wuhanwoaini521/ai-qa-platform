@@ -15,6 +15,8 @@ from app.adapters.playwright.proxy import browser_proxy_options, launch_chromium
 from app.ports.browser_runtime import BrowserPage, BrowserRuntimeSession, BrowserSnapshot
 from app.settings import get_config
 
+_RESOURCE_CLOSE_TIMEOUT_SECONDS = 5
+
 
 def _headless_chrome_user_agent(browser_version: str) -> str:
     system_name = platform.system()
@@ -72,7 +74,11 @@ class PlaywrightBrowserRuntime:
         self._event_loop = None
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
+        self._shutdown_lock = asyncio.Lock()
         self._expiry_task: asyncio.Task[None] | None = None
+        self._playwright_stop_task: asyncio.Task[None] | None = None
+        self._closing_tasks: set[asyncio.Task] = set()
+        self._closing_all = False
 
     @staticmethod
     def is_timeout_error(error: Exception) -> bool:
@@ -93,7 +99,13 @@ class PlaywrightBrowserRuntime:
             self._playwright = None
             self._lock = asyncio.Lock()
             self._lifecycle_lock = asyncio.Lock()
+            self._shutdown_lock = asyncio.Lock()
+            self._playwright_stop_task = None
+            self._closing_tasks.clear()
+            self._closing_all = False
         self._event_loop = current_loop
+        if self._playwright_stop_task is not None:
+            await self._stop_playwright()
         if self._playwright is None:
             factory = self._playwright_factory
             if factory is None:
@@ -141,7 +153,11 @@ class PlaywrightBrowserRuntime:
         browser_config = get_config().browser
         viewport = viewport or {"width": browser_config.viewport_width, "height": browser_config.viewport_height}
         headless = browser_config.headless if headless is None else headless
+        if self._closing_all:
+            raise RuntimeError("Browser runtime is shutting down")
         async with self._lifecycle_lock:
+            if self._closing_all:
+                raise RuntimeError("Browser runtime is shutting down")
             playwright = await self._start()
             try:
                 proxy = browser_proxy_options()
@@ -285,34 +301,89 @@ class PlaywrightBrowserRuntime:
         return state
 
     async def close_session(self, session_id: str) -> None:
-        async with self._lifecycle_lock:
-            async with self._lock:
-                session = self._sessions.pop(session_id, None)
-                resources = self._resources.pop(session_id, None)
-            if session is not None:
-                for resource in (resources.context, resources.browser) if resources else ():
-                    try:
-                        await resource.close()
-                    except Exception:
-                        pass
-            await self._stop_if_idle()
+        if self._closing_all:
+            return
+        task = asyncio.current_task()
+        if task is not None:
+            self._closing_tasks.add(task)
+        try:
+            async with self._lifecycle_lock:
+                if self._closing_all:
+                    return
+                async with self._lock:
+                    session = self._sessions.pop(session_id, None)
+                    resources = self._resources.pop(session_id, None)
+                if session is not None:
+                    if session.status not in {"CRASHED", "EXPIRED"}:
+                        session.status = "CLOSED"
+                    for resource in (resources.context, resources.browser) if resources else ():
+                        try:
+                            await resource.close()
+                        except Exception:
+                            pass
+                await self._stop_if_idle()
+        finally:
+            if task is not None:
+                self._closing_tasks.discard(task)
 
     async def close_all(self) -> None:
-        async with self._lifecycle_lock:
-            async with self._lock:
-                sessions = list(self._sessions.values())
-                resources = list(self._resources.values())
-                self._sessions.clear()
-                self._resources.clear()
-            for session in sessions:
-                session.status = "CLOSED"
-            for item in resources:
-                for resource in (item.context, item.browser):
-                    try:
-                        await resource.close()
-                    except Exception:
-                        pass
-            await self._stop_if_idle()
+        async with self._shutdown_lock:
+            self._closing_all = True
+            closed = False
+            try:
+                current = asyncio.current_task()
+                closing = [task for task in self._closing_tasks if task is not current and not task.done()]
+                for task in closing:
+                    task.cancel()
+                if closing:
+                    _, pending = await asyncio.wait(closing, timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                    if pending:
+                        await self._stop_playwright()
+                        _, pending = await asyncio.wait(pending, timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                        if pending:
+                            raise TimeoutError("Browser session close tasks did not stop during runtime shutdown")
+                    await asyncio.gather(*closing, return_exceptions=True)
+
+                try:
+                    await asyncio.wait_for(self._lifecycle_lock.acquire(), timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    await self._stop_playwright()
+                    await asyncio.wait_for(self._lifecycle_lock.acquire(), timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                try:
+                    async with self._lock:
+                        sessions = list(self._sessions.values())
+                        resources = list(self._resources.values())
+                        self._sessions.clear()
+                        self._resources.clear()
+                    for session in sessions:
+                        session.status = "CLOSED"
+
+                    async def close_resources() -> None:
+                        for item in resources:
+                            for resource in (item.context, item.browser):
+                                try:
+                                    await resource.close()
+                                except Exception:
+                                    pass
+
+                    close_task = asyncio.create_task(close_resources())
+                    self._closing_tasks.add(close_task)
+                    close_task.add_done_callback(self._closing_tasks.discard)
+                    _, pending = await asyncio.wait({close_task}, timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                    if pending:
+                        close_task.cancel()
+                        await self._stop_playwright()
+                        _, pending = await asyncio.wait(pending, timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+                        if pending:
+                            raise TimeoutError("Browser resources did not stop during runtime shutdown")
+                    await asyncio.gather(close_task, return_exceptions=True)
+                    await self._stop_if_idle()
+                finally:
+                    self._lifecycle_lock.release()
+                closed = True
+            finally:
+                if closed:
+                    self._closing_all = False
 
     async def _stop_if_idle(self) -> None:
         if self._sessions:
@@ -321,9 +392,41 @@ class PlaywrightBrowserRuntime:
         if expiry_task is not None and expiry_task is not asyncio.current_task():
             expiry_task.cancel()
             await asyncio.gather(expiry_task, return_exceptions=True)
-        if self._playwright is not None:
-            playwright, self._playwright = self._playwright, None
-            await playwright.stop()
+        await self._stop_playwright()
+
+    async def _stop_playwright(self) -> None:
+        if self._playwright is None:
+            return
+        last_error: BaseException | None = None
+        for _ in range(2):
+            task = self._playwright_stop_task
+            if task is not None and task.done():
+                try:
+                    task.result()
+                except (Exception, asyncio.CancelledError) as error:
+                    self._playwright_stop_task = None
+                    last_error = error
+                    continue
+                self._playwright = None
+                self._playwright_stop_task = None
+                return
+            if task is None:
+                task = asyncio.create_task(self._playwright.stop(), name="browser-runtime-playwright-stop")
+                self._playwright_stop_task = task
+            _, pending = await asyncio.wait({task}, timeout=_RESOURCE_CLOSE_TIMEOUT_SECONDS)
+            if pending:
+                task.cancel()
+                raise TimeoutError("Playwright driver did not stop before the runtime shutdown deadline")
+            try:
+                task.result()
+            except (Exception, asyncio.CancelledError) as error:
+                self._playwright_stop_task = None
+                last_error = error
+                continue
+            self._playwright = None
+            self._playwright_stop_task = None
+            return
+        raise RuntimeError("Playwright driver did not stop after retry") from last_error
 
     async def navigate(self, session_id: str, url: str, *, timeout_ms: int | None = None) -> int | None:
         url_parts = urlsplit(url)

@@ -75,6 +75,19 @@
   margin-top: 4px;
 }
 
+.quality-coverage-scroll:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.quality-coverage-scroll-hint {
+  display: none;
+  margin: 0;
+  padding: 8px 12px 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
 .quality-coverage-table {
   min-width: 790px;
 }
@@ -227,6 +240,8 @@
 }
 
 @media (max-width: 700px) {
+  .quality-coverage-scroll-hint { display: block; }
+
   .quality-coverage-toolbar {
     align-items: stretch;
   }

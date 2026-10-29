@@ -43,7 +43,8 @@
     "stop": "Stop"
   },
   "tabs": {
-    "noOpenTabs": "No open tabs (Press Cmd+P to open file)"
+    "noOpenTabs": "No open tabs (Press Cmd+P to open file)",
+    "closeFile": "Close {{fileName}}"
   },
   "fileTree": {
     "newFileInside": "New File Inside",

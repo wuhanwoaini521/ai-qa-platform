@@ -36,6 +36,14 @@ from project_model.models import (
 from qa_core.ai.models import TestCaseGenerationItem as _TestCaseGenerationItem
 from test_quality_discovery import DiscoveryFixtureAI
 
+EVIDENCE_ROOT = Path(
+    os.environ.get(
+        "AI_QA_E2E_EVIDENCE_DIR",
+        str(Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation"),
+    )
+)
+BROWSER_CHANNEL = os.environ.get("AI_QA_ACCEPTANCE_BROWSER_CHANNEL") or None
+
 
 def _free_port() -> int:
     with socket.socket() as listener:
@@ -109,6 +117,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
     workspace_dir = tmp_path / "workspaces"
     workspace_dir.mkdir(exist_ok=True)
     monkeypatch.setattr(settings, "workspace_storage_dir", workspace_dir)
+    monkeypatch.setattr(settings, "runtime_dir", tmp_path / "runtime")
     monkeypatch.setattr(settings, "artifact_storage_dir", tmp_path / "artifacts")
     ai = DiscoveryFixtureAI()
     decisions = []
@@ -216,7 +225,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
         api_task = asyncio.create_task(api_server.serve())
         vite_port = _free_port()
         repository_root = Path(__file__).resolve().parents[3]
-        evidence_dir = Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation/round-3/evidence"
+        evidence_dir = EVIDENCE_ROOT / "round-3/evidence"
         evidence_dir.mkdir(parents=True, exist_ok=True)
         vite_env = {**os.environ, "VITE_DEV_API_TARGET": f"http://127.0.0.1:{api_port}"}
         vite_log = (evidence_dir / "vite.log").open("w", encoding="utf-8")
@@ -259,10 +268,10 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
 
         from playwright.async_api import async_playwright, expect
 
-        evidence_dir = Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation/round-3/evidence"
+        evidence_dir = EVIDENCE_ROOT / "round-3/evidence"
         evidence_dir.mkdir(parents=True, exist_ok=True)
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(headless=True, channel=BROWSER_CHANNEL)
             context = await browser.new_context()
             for font_host in ("https://fonts.googleapis.com/**", "https://fonts.gstatic.com/**"):
                 await context.route(font_host, lambda route: route.abort())
@@ -368,7 +377,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
 
 def test_discovered_search():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        browser = pw.chromium.launch(headless=True, channel={BROWSER_CHANNEL!r})
         try:
             page = browser.new_page()
             page.goto({target!r})
@@ -396,11 +405,14 @@ def test_discovered_search():
             binding = await response.json()
             await expect(page.get_by_text(file_path, exact=True).first).to_be_visible(timeout=10000)
             await _shot(page, path=str(evidence_dir / "automation-binding-review.png"), full_page=True)
-            await page.get_by_role("button", name="结果").click()
+            await page.locator(".workspace-mode-tab").nth(1).click()
+            await expect(page.locator(".monaco-editor")).to_be_visible(timeout=30000)
+            run_file_button = page.locator(".studio-editor-tabs button.studio-tool.is-primary")
+            await expect(run_file_button).to_be_enabled(timeout=10000)
             async with page.expect_response(
                 lambda response: response.url.endswith("/api/runs") and response.request.method == "POST"
             ) as run_response:
-                await page.get_by_role("button", name="开始运行").click()
+                await run_file_button.click()
             started_response = await run_response.value
             assert started_response.status == 201, await started_response.text()
             test_run = await started_response.json()
@@ -432,7 +444,7 @@ def test_discovered_search():
         assert foreign_binding.status_code == 422
 
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(headless=True, channel=BROWSER_CHANNEL)
             context = await browser.new_context()
             for font_host in ("https://fonts.googleapis.com/**", "https://fonts.gstatic.com/**"):
                 await context.route(font_host, lambda route: route.abort())
@@ -488,7 +500,7 @@ def test_discovered_search():
             assert row["last_run_id"] == test_run["id"] and row["last_run_status"] == "PASSED"
             assert row["coverage_status"] == "VERIFIED"
             assert automation["last_run_id"] == test_run["id"] and automation["last_run_status"] == "PASSED"
-            evidence_dir = Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation/round-3/evidence"
+            evidence_dir = EVIDENCE_ROOT / "round-3/evidence"
             evidence_dir.mkdir(parents=True, exist_ok=True)
             await _shot(page, path=str(evidence_dir / "quality-map-verified.png"), full_page=True)
             await page.reload(wait_until="commit")
@@ -506,9 +518,7 @@ def test_discovered_search():
 
             screenshot_phase = os.environ.get("ROUND4_SCREENSHOT_PHASE", "before")
             assert screenshot_phase in {"before", "after"}
-            round4_evidence = (
-                Path(__file__).resolve().parents[3] / ".ai-runs/night-continuation/round-4/evidence" / screenshot_phase
-            )
+            round4_evidence = EVIDENCE_ROOT / "round-4/evidence" / screenshot_phase
             round4_evidence.mkdir(parents=True, exist_ok=True)
             # Ids must stay within the 36-character column contract the PostgreSQL schema enforces.
             failed_run_id, failed_execution_id = (f"r4-{uuid4().hex}" for _ in range(2))

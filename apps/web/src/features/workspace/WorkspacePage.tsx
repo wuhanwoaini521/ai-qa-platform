@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, FileCode2, GitBranch, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Search, Sparkles, Workflow, X } from 'lucide-react';
+import { ArrowRight, Bug, FileCode2, GitBranch, History, MonitorPlay, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Play, Search, Sparkles, Workflow, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useProjectScope, useRouteProjectScope } from '../../app/ProjectScope';
 import { buildProjectDisplayNames } from '../../app/projectSelectionModel';
@@ -11,21 +11,25 @@ import {
   resolveCanonicalFile,
   writeWorkspaceContext,
   type WorkspaceContext,
+  type WorkspaceMode,
   type WorkspaceStage,
   type WorkspaceView,
+  workspaceModeForContext,
 } from '../../app/workspaceContext';
 import { RequirementsPage } from '../requirements/RequirementsPage';
 import { TestCasesPage } from '../test-cases/TestCasesPage';
 import { FailuresPage } from '../../pages/FailuresPage';
 import { useRunStore } from '../runs/useRunStore';
 import { useRuntimeSnapshot } from '../runtime/useRuntimeSnapshot';
+import { RuntimeBrowser } from '../runtime/RuntimeBrowser';
 import { RuntimeDetail, type RuntimeTab } from '../runtime/RuntimeDetail';
+import { RuntimeTimeline } from '../runtime/RuntimeTimeline';
 import { WorkspaceRunResult } from './WorkspaceRunResult';
 import { QualityDiscoveryPanel } from './QualityDiscoveryPanel';
 import { failureSourceLocation } from '../failures/failureWorkspaceModel';
 import { WorkspaceRunDock, type WorkspaceRunConfig } from './WorkspaceRunDock';
 import { bindingForSelectedCase, configForRerun, defaultWorkspaceGoal, workspaceGoalTarget, workspaceRunCaseLabel } from './workspaceRunModel';
-import { workspacePanelMode } from './workspaceLayoutModel';
+import { clampWorkspaceDebugSplitRatio, WORKSPACE_DEBUG_SPLIT_DEFAULT, workspacePanelMode } from './workspaceLayoutModel';
 import type { AgentGoalPreview, AgentTask, AutomationBinding, FailureRecord, Project, Requirement, TestCase, TestRun } from '../../types';
 import type { RuntimeSnapshot } from '../../types/runtime';
 import { runtimeActive } from '../runtime/runtimeModel';
@@ -42,6 +46,7 @@ interface WorkspaceLayoutPreference {
   contextOpen: boolean;
   contextWidth: number;
   inspectorWidth: number;
+  debugSplitRatio: number;
   inspectorTab: InspectorTab;
 }
 
@@ -50,12 +55,13 @@ const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutPreference = {
   contextOpen: true,
   contextWidth: 230,
   inspectorWidth: 380,
+  debugSplitRatio: WORKSPACE_DEBUG_SPLIT_DEFAULT,
   inspectorTab: 'context',
 };
 
-function readWorkspaceLayout(): WorkspaceLayoutPreference {
+function readWorkspaceLayout(debugWorkspace = false): WorkspaceLayoutPreference {
   const narrowScreen = window.matchMedia('(max-width: 600px)').matches;
-  const defaultContextOpen = narrowScreen ? false : DEFAULT_WORKSPACE_LAYOUT.contextOpen;
+  const defaultContextOpen = narrowScreen || debugWorkspace ? false : DEFAULT_WORKSPACE_LAYOUT.contextOpen;
   try {
     const stored = window.sessionStorage.getItem(WORKSPACE_LAYOUT_KEY);
     if (!stored) return { ...DEFAULT_WORKSPACE_LAYOUT, contextOpen: defaultContextOpen };
@@ -68,6 +74,9 @@ function readWorkspaceLayout(): WorkspaceLayoutPreference {
       inspectorWidth: typeof value.inspectorWidth === 'number' && Number.isFinite(value.inspectorWidth)
         ? Math.min(640, Math.max(300, value.inspectorWidth))
         : DEFAULT_WORKSPACE_LAYOUT.inspectorWidth,
+      debugSplitRatio: typeof value.debugSplitRatio === 'number'
+        ? clampWorkspaceDebugSplitRatio(value.debugSplitRatio)
+        : WORKSPACE_DEBUG_SPLIT_DEFAULT,
       inspectorTab: value.inspectorTab === 'ai' || value.inspectorTab === 'run' ? value.inspectorTab : 'context',
     };
   } catch {
@@ -75,6 +84,12 @@ function readWorkspaceLayout(): WorkspaceLayoutPreference {
   }
 }
 
+const workspaceModes: { mode: WorkspaceMode; view: WorkspaceView; Icon: typeof Search }[] = [
+  { mode: 'explore', view: 'browser', Icon: Search },
+  { mode: 'write', view: 'code', Icon: FileCode2 },
+  { mode: 'debug', view: 'debug', Icon: Bug },
+  { mode: 'repair', view: 'results', Icon: Sparkles },
+];
 const workspaceStages: { stage: MainWorkspaceStage; view: WorkspaceView }[] = [
   { stage: 'requirement', view: 'requirement' },
   { stage: 'discover', view: 'discover' },
@@ -82,7 +97,12 @@ const workspaceStages: { stage: MainWorkspaceStage; view: WorkspaceView }[] = [
   { stage: 'automation', view: 'code' },
   { stage: 'result', view: 'results' },
 ];
-const automationViews: WorkspaceView[] = ['code', 'browser', 'debug'];
+const modeViews: Record<WorkspaceMode, WorkspaceView[]> = {
+  explore: ['browser', 'discover', 'requirement'],
+  write: ['cases', 'code'],
+  debug: ['debug', 'results'],
+  repair: [],
+};
 const stageForView: Record<WorkspaceView, WorkspaceStage> = {
   requirement: 'requirement',
   discover: 'discover',
@@ -105,6 +125,8 @@ export function WorkspacePage() {
   const fallbackStage = context.stage ?? 'requirement';
   const view = context.view ?? (fallbackStage === 'automation' ? 'code' : fallbackStage === 'result' || fallbackStage === 'failure' ? 'results' : fallbackStage);
   const stage = context.stage ?? stageForView[view];
+  const activeMode = workspaceModeForContext({ stage, view });
+  const isWorkbenchHeader = activeMode === 'debug' || activeMode === 'explore';
   const runtimeKind = context.taskId ? 'task' : 'run';
   const runtimeId = context.taskId ?? context.runId ?? '';
   const runtime = useRuntimeSnapshot(runtimeKind, runtimeId);
@@ -129,12 +151,14 @@ export function WorkspacePage() {
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const [compactContextOpen, setCompactContextOpen] = useState<boolean | null>(null);
+  const [debugMobilePanel, setDebugMobilePanel] = useState<'code' | 'browser' | 'steps' | 'logs'>('code');
   const [layoutPreference, setLayoutPreference] = useState(() => {
-    const preference = readWorkspaceLayout();
-    return stage === 'automation' ? { ...preference, contextOpen: false } : preference;
+    const preference = readWorkspaceLayout(view === 'debug');
+    return stage === 'automation' && view !== 'debug' ? { ...preference, contextOpen: false } : preference;
   });
-  const { contextOpen: storedContextOpen, contextWidth, inspectorWidth, inspectorTab } = layoutPreference;
+  const { contextOpen: storedContextOpen, contextWidth, inspectorWidth, debugSplitRatio, inspectorTab } = layoutPreference;
   const workspaceGridRef = useRef<HTMLDivElement>(null);
+  const debugSplitRef = useRef<HTMLDivElement>(null);
   const previousCompactWorkspace = useRef<boolean | null>(null);
   const panelModeInput = {
     viewportWidth,
@@ -197,11 +221,19 @@ export function WorkspacePage() {
   }, [layoutPreference]);
 
   useEffect(() => {
-    if (stage === 'automation') {
+    if (stage !== 'automation') return;
+    if (view === 'debug') {
+      if (!isCompactWorkspace) setLayoutPreference((current) => current.contextOpen ? current : { ...current, contextOpen: true });
+    } else {
       setLayoutPreference((current) => current.contextOpen ? { ...current, contextOpen: false } : current);
-      setCompactContextOpen(null);
     }
-  }, [stage]);
+    setCompactContextOpen(null);
+  }, [isCompactWorkspace, stage, view]);
+
+  useEffect(() => {
+    if (stage !== 'failure' || isCompactWorkspace) return;
+    setLayoutPreference((current) => current.contextOpen ? current : { ...current, contextOpen: true });
+  }, [isCompactWorkspace, stage]);
 
   useLayoutEffect(() => {
     if (previousCompactWorkspace.current !== null && previousCompactWorkspace.current !== isCompactWorkspace) {
@@ -245,6 +277,14 @@ export function WorkspacePage() {
     ...current,
     inspectorWidth: Math.min(inspectorMaxWidth, Math.max(inspectorMinWidth, nextWidth)),
   }));
+  const resizeDebugSplit = (clientX: number) => {
+    const bounds = debugSplitRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const availableWidth = bounds.width - 8;
+    const ratio = clampWorkspaceDebugSplitRatio((clientX - bounds.left - 4) / availableWidth);
+    setLayoutPreference((current) => ({ ...current, debugSplitRatio: ratio }));
+  };
+  const isMobileWorkspace = viewportWidth <= 820;
 
   const isAnalysisTask = runtime.snapshot?.task?.type === 'ANALYZE_REQUIREMENT';
   const analysisRunning = analysisStarting || Boolean(
@@ -908,27 +948,49 @@ export function WorkspacePage() {
   const workspaceHeading = !projectId
     ? t('title')
     : view === 'results'
-      ? t('result.analysisTitle')
+      ? stage === 'failure' ? t('modes.repair') : t('result.analysisTitle')
       : t(`pageHeadings.${view}`);
   const workspaceEyebrow = projectId
     ? `${t('projectWorkspace')} · ${projectDisplayNames.get(projectId) ?? project?.name ?? projectId}`
     : t('projectWorkspace');
+  const renderModeNavigation = (inline: boolean) => projectId ? <nav className={`workspace-mode-nav${inline ? ' is-inline' : ''}`} aria-label={t('modes.navigation')}>
+    {workspaceModes.map(({ mode, view: defaultView, Icon }) => <button
+      key={mode}
+      type="button"
+      aria-current={activeMode === mode ? 'page' : undefined}
+      aria-label={mode === 'debug' && resultFailed ? `${t(`modes.${mode}`)} · ${t('modes.latestRunFailed')}` : t(`modes.${mode}`)}
+      className={`workspace-mode-tab${activeMode === mode ? ' is-current' : ''}${mode === 'debug' && resultFailed ? ' has-failure' : ''}`}
+      onClick={() => {
+        if (mode === 'repair') {
+          const failure = currentFailure ?? failures[0];
+          updateContext({ failureId: failure?.id, runId: failure?.run_id, stage: 'failure', view: 'results' });
+        } else {
+          setView(defaultView);
+        }
+      }}
+    >
+      <Icon size={15} aria-hidden="true" />
+      <span>{t(`modes.${mode}`)}</span>
+      {mode === 'debug' && resultFailed && <i className="workspace-mode-status is-failed" aria-hidden="true" />}
+    </button>)}
+  </nav> : null;
 
   return (
-    <div className={`workspace-shell${stage === 'result' ? ' is-result-stage' : ''}`}>
-      <header className="workspace-heading">
+    <div className={`workspace-shell is-${activeMode}${stage === 'result' ? ' is-result-stage' : ''}`}>
+      <header className={`workspace-heading${isWorkbenchHeader ? ' is-workbench-heading' : ''}`}>
         <div>
           <span className="workspace-eyebrow">{workspaceEyebrow}</span>
           <h1 title={workspaceHeading}>{workspaceHeading}</h1>
           <p>{t('subtitle')}</p>
         </div>
+        {isWorkbenchHeader && renderModeNavigation(true)}
         <div className="workspace-heading-actions">
           {selectedRequirement && <span className="workspace-context-chip"><GitBranch size={14} aria-hidden="true" />{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
           {projectId && stage !== 'result' && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
             {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
             <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
           </button>}
-          {projectId && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setView('browser')}>{t('automationViews.record')}</button>}
+          {projectId && view !== 'browser' && <button type="button" className="btn btn-secondary btn-sm workspace-browser-shortcut" onClick={() => setView('browser')}>{t('modeViews.browser')}</button>}
           {projectId && <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>}
           {projectId && view !== 'discover' && (!currentRun || stage !== 'result') && <WorkspaceRunDock
             caseLabel={workspaceRunCaseLabel(dockCase?.test_model?.display_id, dockCase?.id, stage === 'failure' ? failureDockName : undefined)}
@@ -1003,6 +1065,7 @@ export function WorkspacePage() {
           </span>
         </button>
       </nav>}
+      {!isWorkbenchHeader && renderModeNavigation(false)}
 
       {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
       {!projectId ? (
@@ -1013,9 +1076,9 @@ export function WorkspacePage() {
         </section>
       ) : (
         <>
-        <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${isContextStacked ? ' is-context-stacked' : ''}${showInspector ? ' has-inspector' : ''}${isInspectorModal ? ' is-inspector-modal' : ''}`}>
+        <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px`, '--workspace-debug-editor-ratio': `${debugSplitRatio}fr`, '--workspace-debug-browser-ratio': `${1 - debugSplitRatio}fr` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${view === 'browser' ? ' is-explore-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${isContextStacked ? ' is-context-stacked' : ''}${showInspector ? ' has-inspector' : ''}${isInspectorModal ? ' is-inspector-modal' : ''}`}>
           <aside id="workspace-context-panel" className="workspace-context-panel" aria-label={t('context.title')}>
-            <div className="workspace-panel-heading"><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div>
+            <div className="workspace-panel-heading"><div><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div><button type="button" className="btn btn-icon btn-sm workspace-context-close" aria-label={t('context.hidePanel')} onClick={() => setShowWorkspaceContext(() => false)}><X size={15} aria-hidden="true" /></button></div>
             {['requirement', 'discover'].includes(stage) && <section className="workspace-context-group">
               <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3></div>
               {!contextDataLoaded
@@ -1043,6 +1106,18 @@ export function WorkspacePage() {
                   </button>}
                   emptyState={<p className="workspace-muted">{t('context.noCases')}</p>}
                 />}
+            </section>}
+            {stage === 'automation' && view === 'debug' && <section className="workspace-context-group workspace-recent-runs" aria-label={t('context.recentRuns')}>
+              <div className="workspace-group-heading"><h3>{t('context.recentRuns')}</h3><span>{runs.length}</span></div>
+              <WorkspaceContextList
+                items={runs}
+                limit={8}
+                filterText={(item) => `${item.id} ${item.status} ${item.requested_by ?? ''}`}
+                renderItem={(item) => <button key={item.id} type="button" className={item.id === context.runId ? 'is-selected' : ''} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'automation', view: 'debug' })}>
+                  <span className="workspace-run-status">{item.status}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
+                </button>}
+                emptyState={<p className="workspace-muted">{t('context.noRuns')}</p>}
+              />
             </section>}
             {stage === 'failure' && <section className="workspace-context-group workspace-failure-queue" aria-label={t('context.failures')}>
               <div className="workspace-group-heading"><h3>{t('context.failures')}</h3><span>{failures.length}</span></div>
@@ -1090,11 +1165,11 @@ export function WorkspacePage() {
             }}
           />}
 
-          <section className={`workspace-main-panel is-${view}-panel`} aria-label={t('main.title')}>
+          <section className={`workspace-main-panel is-${view}-panel${view === 'debug' && isMobileWorkspace ? ' is-mobile-workspace' : ''}`} aria-label={t('main.title')}>
             <div className="workspace-main-heading">
-              <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{t(`tabs.${view}`)}</h2></div>
-              {stage === 'automation' && <nav className="workspace-tool-nav" role="tablist" aria-label={t('automationViews.label')}>
-                {automationViews.map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`automationViews.${item === 'browser' ? 'record' : item}`)}</button>)}
+              <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{stage === 'failure' ? t('stage.failure') : t(`tabs.${view}`)}</h2></div>
+              {!!modeViews[activeMode].length && <nav className="workspace-tool-nav" role="tablist" aria-label={t(`modes.${activeMode}Views`)}>
+                {modeViews[activeMode].map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`modeViews.${item}`)}</button>)}
               </nav>}
             </div>
             <div className="workspace-main-scroll">
@@ -1176,25 +1251,72 @@ export function WorkspacePage() {
                 workspaceMode
                 hideRunAction
               />}
-              {(view === 'code' || view === 'debug' || view === 'browser') && <div hidden={view === 'browser'}><Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingEditor')}</div>}><AutomationStudioPage
-                key={projectId}
-                projects={projects}
-                selectedProjectId={projectId}
-                onSelectProject={selectProject}
-                onNavigateToRuns={onRunStarted}
-                onRunCreated={onRunStarted}
-                runConfig={runConfig}
-                workspaceView={view === 'debug' ? 'debug' : 'code'}
-                initialOpenFilePath={automationSetup ? null : context.file ?? automationFilePath}
-                workspaceAutomationSetup={automationSetup}
-                workspaceAutomationSetupKey={automationSetupKey}
-                onStartRecording={() => setView('browser')}
-                onSelectCases={() => setView('cases')}
-                initialOpenLineNumber={context.lineNumber ?? null}
-                initialDebugNodeId={view === 'debug' && context.failureId ? context.nodeId ?? null : null}
-                initialDebugFailureId={view === 'debug' ? context.failureId ?? null : null}
-                embedded
-              /></Suspense></div>}
+              {(view === 'code' || view === 'debug') && <div ref={view === 'debug' ? debugSplitRef : undefined} data-mobile-panel={view === 'debug' && isMobileWorkspace ? debugMobilePanel : undefined} className={view === 'debug' ? 'workspace-debug-split' : 'workspace-code-content'}>
+                <div className={view === 'debug' ? 'workspace-debug-editor' : 'workspace-code-editor'}>
+                  <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingEditor')}</div>}><AutomationStudioPage
+                    key={projectId}
+                    projects={projects}
+                    selectedProjectId={projectId}
+                    onSelectProject={selectProject}
+                    onNavigateToRuns={onRunStarted}
+                    onRunCreated={onRunStarted}
+                    runConfig={runConfig}
+                    workspaceView={view === 'debug' ? 'debug' : 'code'}
+                    initialOpenFilePath={automationSetup ? null : context.file ?? automationFilePath}
+                    workspaceAutomationSetup={automationSetup}
+                    workspaceAutomationSetupKey={automationSetupKey}
+                    onStartRecording={() => setView('browser')}
+                    onSelectCases={() => setView('cases')}
+                    initialOpenLineNumber={context.lineNumber ?? null}
+                    initialDebugNodeId={view === 'debug' && context.failureId ? context.nodeId ?? null : null}
+                    initialDebugFailureId={view === 'debug' ? context.failureId ?? null : null}
+                    workspaceMobilePanel={view === 'debug' && isMobileWorkspace ? debugMobilePanel : undefined}
+                    embedded
+                  /></Suspense>
+                </div>
+                {view === 'debug' && <div
+                  className="workspace-debug-resizer"
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label={t('mobile.resizeDebugSplit')}
+                  aria-valuemin={35}
+                  aria-valuemax={65}
+                  aria-valuenow={Math.round(debugSplitRatio * 100)}
+                  onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+                  onPointerMove={(event) => { if (event.buttons === 1) resizeDebugSplit(event.clientX); }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft') { event.preventDefault(); setLayoutPreference((current) => ({ ...current, debugSplitRatio: clampWorkspaceDebugSplitRatio(current.debugSplitRatio - 0.02) })); }
+                    if (event.key === 'ArrowRight') { event.preventDefault(); setLayoutPreference((current) => ({ ...current, debugSplitRatio: clampWorkspaceDebugSplitRatio(current.debugSplitRatio + 0.02) })); }
+                  }}
+                />}
+                {view === 'debug' && <details className="workspace-debug-runtime" open={viewportWidth > 820 || (isMobileWorkspace && debugMobilePanel === 'browser')}>
+                  <summary><MonitorPlay size={15} aria-hidden="true" /><span>{t('debugBrowser.title')}</span><small>{runtime.snapshot?.status ?? runtime.connection}</small></summary>
+                  <div className="workspace-debug-runtime-content">
+                    {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert">
+                      <strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button>
+                    </div> : runtime.snapshot ? <>
+                      <RuntimeBrowser snapshot={runtime.snapshot} projectId={projectId} onOpenSource={(path, line) => openStudio(path, line)} />
+                      {viewportWidth > 820 && <details className="workspace-debug-timeline">
+                        <summary>{t('debugBrowser.timeline')}</summary>
+                        <RuntimeTimeline snapshot={runtime.snapshot} selectedStepId={context.stepId ?? null} onSelect={(stepId) => updateContext({ stepId })} />
+                      </details>}
+                    </> : runtimeId ? <p className="workspace-debug-runtime-loading" role="status">{t('debugBrowser.loading')}</p> : <div className="workspace-debug-runtime-empty">
+                      <MonitorPlay size={24} aria-hidden="true" />
+                      <strong>{t('debugBrowser.emptyTitle')}</strong>
+                      <p>{t('debugBrowser.emptyDescription')}</p>
+                      <Link className="btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link>
+                    </div>}
+                  </div>
+                </details>}
+                {view === 'debug' && isMobileWorkspace && <section className="workspace-debug-mobile-steps" role="region" aria-label={t('mobile.debug.steps')}>
+                  {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert"><strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p><button type="button" className="btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button></div>
+                    : runtime.snapshot ? <RuntimeTimeline snapshot={runtime.snapshot} selectedStepId={context.stepId ?? null} onSelect={(stepId) => updateContext({ stepId })} />
+                      : runtimeId ? <p className="workspace-debug-runtime-loading" role="status">{t('debugBrowser.loading')}</p>
+                        : <div className="workspace-debug-runtime-empty"><MonitorPlay size={24} aria-hidden="true" /><strong>{t('debugBrowser.emptyTitle')}</strong><p>{t('debugBrowser.emptyDescription')}</p><Link className="btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link></div>}
+                </section>}
+              </div>}
               {view === 'browser' && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingBrowser')}</div>}><RecorderPage
                 projects={projects}
                 selectedProjectId={projectId}
@@ -1257,6 +1379,9 @@ export function WorkspacePage() {
                 onTaskStarted={onTaskStarted}
               />}
             </div>
+            {view === 'debug' && isMobileWorkspace && <nav className="workspace-debug-mobile-nav" aria-label={t('mobile.debug.navigation')}>
+              {(['code', 'browser', 'steps', 'logs'] as const).map((panel) => <button key={panel} type="button" aria-pressed={debugMobilePanel === panel} className={debugMobilePanel === panel ? 'is-current' : ''} onClick={() => setDebugMobilePanel(panel)}>{t(`mobile.debug.${panel}`)}</button>)}
+            </nav>}
           </section>
 
         <div className={`workspace-inspector-overlay${isInspectorModal ? ' is-modal' : ''}`} hidden={!showInspector} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInspector(false); }}>

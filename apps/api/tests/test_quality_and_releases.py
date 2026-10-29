@@ -89,6 +89,46 @@ async def test_execution_coverage_requires_recorded_binding_target(
 
 
 @pytest.mark.asyncio
+async def test_execution_coverage_excludes_ambiguous_binding_targets(client, test_db_session):
+    project = (
+        await client.post("/api/projects", json={"name": "Ambiguous coverage", "bootstrap_workspace": False})
+    ).json()
+    async with test_db_session() as session:
+        session.add_all(
+            [
+                CaseORM(id="case_a", project_id=project["id"], title="A", automation_status="AUTOMATED"),
+                CaseORM(id="case_b", project_id=project["id"], title="B", automation_status="AUTOMATED"),
+            ]
+        )
+        await session.flush()
+        for case_id in ("case_a", "case_b"):
+            session.add(
+                AutomationBindingORM(
+                    id=f"binding_{case_id}",
+                    test_case_id=case_id,
+                    workspace_id=project["id"],
+                    nodeid="tests/test_shared.py::test_shared",
+                    file_path="tests/test_shared.py",
+                    status="ACTIVE",
+                )
+            )
+        session.add(RunORM(id="ambiguous_run", project_id=project["id"], workspace_id=project["id"], status="PASSED"))
+        await session.flush()
+        session.add(
+            ExecutionORM(
+                id="ambiguous_execution",
+                run_id="ambiguous_run",
+                nodeid="tests/test_shared.py::test_shared",
+                status="PASSED",
+            )
+        )
+        await session.commit()
+
+    coverage = (await client.get(f"/api/quality/coverage?project_id={project['id']}")).json()
+    assert coverage["executed_cases_recent"] == 0
+
+
+@pytest.mark.asyncio
 async def test_quality_risk_and_coverage_exclude_other_projects(client, test_db_session):
     projects = [
         (await client.post("/api/projects", json={"name": name, "bootstrap_workspace": False})).json()["id"]

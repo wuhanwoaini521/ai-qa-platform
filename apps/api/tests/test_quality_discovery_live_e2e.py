@@ -17,7 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from app.container import get_browser_runtime, get_quality_discovery_service
+import pytest_asyncio
+from app.adapters.playwright.browser_runtime import PlaywrightBrowserRuntime
+from app.container import get_quality_discovery_service
 from app.main import app
 from app.services.decision_service import DecisionService
 from app.services.quality_discovery_service import QualityDiscoveryService
@@ -76,6 +78,72 @@ class _Site(BaseHTTPRequestHandler):
         pass
 
 
+@pytest.fixture
+def live_discovery_site():
+    site = ThreadingHTTPServer(("127.0.0.1", 0), _Site)
+    thread = threading.Thread(target=site.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{site.server_port}/"
+    finally:
+        site.shutdown()
+        site.server_close()
+        thread.join(timeout=2)
+
+
+@pytest_asyncio.fixture
+async def discovery_runtime_cleanup(client):
+    tracked = []
+    yield tracked
+
+    current = asyncio.current_task()
+    for service, project_id, runtime in tracked:
+        runs = await service.list(project_id, limit=100)
+        run_ids = [run.id for run in runs]
+        for run in runs:
+            if run.status not in service.TERMINAL:
+                await service.stop(run.id)
+
+        executors = [service._tasks[run_id] for run_id in run_ids if run_id in service._tasks]
+        pending_executors = set()
+        if executors:
+            _, pending_executors = await asyncio.wait(executors, timeout=3)
+        for task in pending_executors:
+            task.cancel()
+
+        # Runtime shutdown owns cancellation of stalled close tasks and stops its Playwright driver.
+        await asyncio.wait_for(runtime.close_all(), timeout=30)
+        if executors:
+            _, pending_executors = await asyncio.wait(executors, timeout=3)
+        if pending_executors:
+            await asyncio.wait_for(runtime.close_all(), timeout=30)
+            _, pending_executors = await asyncio.wait(pending_executors, timeout=3)
+        assert not pending_executors, [task.get_name() for task in pending_executors]
+
+        finalizers = list(service._finalization_tasks)
+        if finalizers:
+            _, pending_finalizers = await asyncio.wait(finalizers, timeout=5)
+            for task in pending_finalizers:
+                task.cancel()
+            if pending_finalizers:
+                await asyncio.gather(*pending_finalizers, return_exceptions=True)
+
+        await asyncio.sleep(0)
+        pending = [
+            task
+            for task in asyncio.all_tasks()
+            if task is not current and not task.done() and task.get_name().startswith("quality-discovery")
+        ]
+        assert not pending, [task.get_name() for task in pending]
+        assert not runtime._sessions and not runtime._resources
+        assert runtime._expiry_task is None
+        assert runtime._playwright is None
+        assert runtime._playwright_stop_task is None
+        assert not runtime._closing_tasks
+        assert not runtime._closing_all
+        assert all(run.status in service.TERMINAL for run in await service.list(project_id, limit=100))
+
+
 def _control(elements: list[dict], name: str) -> dict:
     match = next((item for item in elements if item.get("name") == name), None)
     assert match is not None, f"no control named {name!r} in the live inventory: {elements}"
@@ -120,12 +188,10 @@ async def _read_stream(client, run_id: str, *, budget_seconds: float, ready) -> 
 @pytest.mark.integration
 @pytest.mark.e2e
 async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights(
-    client, test_db_session, tmp_path, monkeypatch
+    client, test_db_session, tmp_path, monkeypatch, live_discovery_site, discovery_runtime_cleanup
 ):
     pytest.importorskip("playwright")
-    site = ThreadingHTTPServer(("127.0.0.1", 0), _Site)
-    threading.Thread(target=site.serve_forever, daemon=True).start()
-    target = f"http://127.0.0.1:{site.server_port}/"
+    target = live_discovery_site
     workspace_dir = tmp_path / "workspaces"
     workspace_dir.mkdir(exist_ok=True)
     monkeypatch.setattr(settings, "workspace_storage_dir", workspace_dir)
@@ -159,18 +225,18 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     monkeypatch.setattr(DecisionService, "choose", choose_candidate)
     monkeypatch.setattr(DecisionService, "ask_score", lambda *_args, **_kwargs: None)
 
+    runtime = PlaywrightBrowserRuntime()
     service = QualityDiscoveryService(
         test_db_session,
-        browser_runtime=get_browser_runtime(),
+        browser_runtime=runtime,
         decisions=DecisionService(),
         provider_factory=lambda: ai,
         workspace_service=WorkspaceService(base_dir=workspace_dir),
     )
     monkeypatch.setattr(service, "_assert_real_ai_available", lambda: None)
-    app.dependency_overrides[get_quality_discovery_service] = lambda: service
+    monkeypatch.setitem(app.dependency_overrides, get_quality_discovery_service, lambda: service)
 
     # Record what the real adapter produced, so the streamed frames can be tied back to it.
-    runtime = get_browser_runtime()
     captured: list[bytes] = []
     painted: list[int] = []
     real_capture = runtime.capture_frame
@@ -192,9 +258,11 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
 
     project = await client.post("/api/projects", json={"name": "Live discovery acceptance"})
     assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+    discovery_runtime_cleanup.append((service, project_id, runtime))
     created = await client.post(
         "/api/discovery/runs",
-        json={"project_id": project.json()["id"], "start_url": target, "mode": "EXPLORE"},
+        json={"project_id": project_id, "start_url": target, "mode": "EXPLORE"},
     )
     assert created.status_code == 202, created.text
     run_id = created.json()["id"]
@@ -258,5 +326,3 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     # 5. Nothing was invented when the AI fixture was in use: every decision is attributed.
     assert all(item["provider"] == "jev-controlled-fixture" for item in run["result"]["decisions"])
     assert "ai.unavailable" not in kinds, "the fixture AI reported an outage"
-    app.dependency_overrides.pop(get_quality_discovery_service, None)
-    site.shutdown()

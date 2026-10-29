@@ -77,7 +77,13 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           </div>
         ))}
       </div>
-      <div className="studio-debug-details" style={{ minHeight: 0, flex: 1, display: 'grid' }}>
+      <div
+        className="studio-debug-details"
+        role="region"
+        aria-label={t('debug.details')}
+        tabIndex={0}
+        style={{ minHeight: 0, flex: 1, display: 'grid' }}
+      >
         <div style={{ minWidth: 0, overflow: 'auto', borderRight: '1px solid var(--ui-line)', padding: '7px 10px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{t('debug.callStack')}</div>
           {frames.length ? frames.map((frame) => (

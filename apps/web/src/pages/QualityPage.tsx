@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Target,
   AlertTriangle,
+  Activity,
   CheckCircle2,
   XCircle,
   RefreshCw,
@@ -362,6 +363,27 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         </div>
 
         <div className="stat-card">
+          <div className="stat-icon is-blue">
+            <Activity size={20} />
+          </div>
+          <div className="stat-details">
+            <div className="stat-title">{t('metricExecutionCoverage')}</div>
+            <div className="stat-value">
+              {coverage ? `${coverage.execution_coverage_pct}%` : '--'}
+            </div>
+            <div className="stat-subtitle">
+              {coverage
+                ? t('casesExecutedRecent', {
+                    executed: coverage.executed_cases_recent,
+                    total: coverage.total_test_cases,
+                  })
+                : coverageSourceError
+                  ? t('coverageSourceUnavailable')
+                  : loadingMetrics ? t('coverageLoading') : t('casesZero')}
+            </div>
+          </div>
+        </div>
+        <div className="stat-card">
           <div className="stat-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)' }}>
             <AlertTriangle size={20} />
           </div>
@@ -448,7 +470,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           <div className="quality-coverage-count" role="status">
             {t('coverageResultCount', { visible: filteredCoverage.length, total: coverage?.requirement_details.length ?? 0 })}
           </div>
-          <div className="table-responsive quality-coverage-scroll">
+          <p className="quality-coverage-scroll-hint">{t('coverageScrollHint')}</p>
+          <div
+            className="table-responsive quality-coverage-scroll"
+            role="region"
+            aria-label={t('coverageTitle')}
+            aria-description={t('coverageScrollHint')}
+            tabIndex={0}
+          >
             <table className="data-table quality-coverage-table">
               <thead>
                 <tr>

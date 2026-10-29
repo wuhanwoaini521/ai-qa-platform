@@ -1986,9 +1986,24 @@ button, input, select, textarea {
   color: var(--ui-ink-muted);
   font-family: var(--font-mono);
   font-size: 12px;
-  cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
+
+.studio-tab-select {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-tab-select:focus-visible { outline: 2px solid var(--ui-primary-strong); outline-offset: 2px; }
 
 .studio-tab:hover {
   background: rgba(255, 255, 255, 0.7);
@@ -2133,6 +2148,11 @@ button, input, select, textarea {
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(200px, 1.4fr);
   overflow: auto;
   scrollbar-width: thin;
+}
+
+.studio-debug-details:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
 @media (max-width: 600px) {
@@ -4456,6 +4476,17 @@ button, input, select, textarea {
   gap: 14px;
   min-width: 0;
 }
+.dashboard-first-project { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; }
+.dashboard-first-project h2 { margin: 0; font-size: 15px; }
+.dashboard-first-project p { margin: 4px 0 0; color: var(--ink-muted); font-size: 12px; line-height: 1.5; }
+.dashboard-first-project > .btn { flex: 0 0 auto; }
+.dashboard-run-link { padding: 0; color: var(--accent-blue); background: transparent; border: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.dashboard-run-link:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+@media (max-width: 600px) {
+  .dashboard-first-project { align-items: stretch; flex-direction: column; }
+  .dashboard-first-project > .btn { align-self: flex-start; }
+}
 
 /* Dashboard hierarchy: one compact action rail and one shared metric surface, then run evidence. */
 
@@ -5213,4 +5244,22 @@ button, input, select, textarea {
   .lc-studio-toolbar { padding: 8px 10px; }
   .lc-studio-breadcrumb { gap: 6px; font-size: 12px; }
   .lc-studio-tools-menu { position: fixed; top: auto; right: 10px; width: min(280px, calc(100vw - 20px)); }
+}
+
+.app-sidebar.is-workspace-compact .sidebar-collapse-toggle { display: none; }
+@media (min-width: 601px) {
+  .app-sidebar.is-workspace-compact { flex: 0 0 72px; width: 72px; min-width: 72px; max-width: 72px; }
+}
+.app-frame.is-workspace-route .content-viewport.is-workspace { padding: 14px 16px; }
+.content-viewport.is-workspace:not(.is-workspace-result) { display: flex; flex-direction: column; gap: 12px; }
+.content-viewport.is-workspace:not(.is-workspace-result) > .workspace-shell { flex: 1 1 0; height: auto; min-height: 0; }
+.failure-select-prompt { display: grid; min-height: 300px; place-items: center; padding: 24px; text-align: center; }
+.failure-empty-state { display: grid; width: min(100%, 460px); justify-items: center; gap: 10px; color: var(--ink-muted); }
+.failure-empty-state > svg { color: var(--accent-blue); }
+.failure-empty-state h2 { color: var(--ink); font-size: 16px; font-weight: 650; }
+.failure-empty-state p { max-width: 420px; font-size: 12px; line-height: 1.65; }
+.failure-empty-state .btn { margin-top: 4px; }
+@media (max-width: 600px) {
+  .app-frame.is-workspace-route .content-viewport.is-workspace { padding: 8px; }
+  .failure-select-prompt { min-height: 240px; padding: 18px; }
 }

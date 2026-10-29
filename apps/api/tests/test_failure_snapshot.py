@@ -320,6 +320,12 @@ def test_checkout(page):
                         fallback_used=False,
                     )
 
+            workflow_service = FailureWorkflowService(service)
+            analysis_id = await workflow_service._history_create(failure["id"])
+
+            async def persist_progress(event):
+                await workflow_service._history_append(analysis_id, event)
+
             proposal = await service.generate_repair_proposal(
                 failure["id"],
                 diagnosis_override=FailureAnalysisResponse(
@@ -331,9 +337,15 @@ def test_checkout(page):
                 ),
                 resolved_classification="LOCATOR_CHANGED",
                 decision_service=LocatorDecisionService(decision_service=JevChoice()),
+                on_event=persist_progress,
             )
             await session.commit()
-            workflow = await FailureWorkflowService(service).get_repair_workflow(failure["id"])
+            workflow = await workflow_service.get_repair_workflow(failure["id"])
+            recorded = next(
+                row for row in await workflow_service._history_list(failure["id"]) if row["id"] == analysis_id
+            )
+            event_types = {event["type"] for event in recorded["events"]}
+            assert {"repair.progress", "locator_history_started", "decision_started"} <= event_types
             assert proposal.verified is True
             assert proposal.decision_summary["verification_source"] == "playwright"
             assert proposal.verification_replay.status == "RESTORED"

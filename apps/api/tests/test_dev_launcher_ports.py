@@ -36,6 +36,9 @@ def test_a_listening_port_is_skipped(task_module):
     listener, port = _listening_port()
     try:
         assert task_module._port_is_in_use(port) is True
+        listener.settimeout(1)
+        probe_connection, _ = listener.accept()
+        probe_connection.close()
         assert task_module._available_port(port) != port
     finally:
         listener.close()

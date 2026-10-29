@@ -1268,3 +1268,192 @@ pnpm -r typecheck && pnpm -r lint
 - 真实 Chromium + 真后端 + 真 SQLite：`.ai-runs/overnight-delivery/rounds/r18b_cancel_acceptance.py` → **14/14 PASS，`failed: []`，无控制台错误**（证据 `rounds/r18b-cancel-acceptance.json`，截图 `rounds/screenshots/hotfix1-*.png`）。任务 `48fc9096fc144559b529c99c951e4526`：07:15:33 创建 → 07:15:35 点取消（`cancel_requested_at=07:15:35.739`）→ 07:15:37 `CANCELLED`，`lease_owner=null`、`finished_at` 有值、`task.cancel_requested` ×1 + `task.cancelled` ×1、`diagnose` 步骤 `CANCELLED`、再次取消 409。
 
 **5) 判定**：`B2` **PARTIAL**。单进程与「请求/终态分离」的语义已修复并有真实浏览器证据；PostgreSQL 上的并发与 fencing 由测试覆盖；但**没有第二台主机**，`MULTI_INSTANCE_PASS` 仍为 BLOCKED，`RELEASE_CANDIDATE_PASS` 仍为 BLOCKED（B1、B3 未动）。
+
+---
+
+## 3.12 Round 15（2026-10-24：UX 审计、设计方向与 Direction C 选择）
+
+- `.ai-runs/2026-10-24-ux-redesign/audit/` 完成了代码路径和信息架构审计；未声称真实浏览器复现，结论及证据级别保留在各报告中。
+- Pencil 方向 A（IDE Native）、B（Flow Native）、C（Adaptive Workspace）均为概念稿；方向对比见 `.ai-runs/2026-10-24-ux-redesign/design-comparison.md`。推荐 C：复用现有 Workspace、Test Explorer、Monaco、BrowserRuntime、Task/Run Runtime、FailureWorkflow 和现有上下文布局，不引入第二套流程/运行时。
+- 本轮开发只在收到明确选择后开始；C 的实现和初步验收见 §3.13，不能把概念稿当作 live-app 证据。
+
+## 3.13 Round 16（2026-10-25：Direction C Adaptive Workspace 第一轮实现与部分验收）
+
+### 实际完成
+
+- 在 `apps/web/src/app/workspaceContext.ts` 增加 `WorkspaceMode` 与 `workspaceModeForContext`，以测试覆盖的 URL context 映射 Explore、Write Tests、Debug、AI Repair；`WorkspacePage.tsx` 以四模式替代五阶段导航，仍复用现有 Workspace views。
+- Dashboard 的 Recent Runs 打开所选 run；首项目 CTA 指向 `/projects?create=1`，复用 Projects 现有创建对话框。
+- Workers 操作错误变为可见且本地化，并补充表单/滚动区的可访问性；Recorder 用户可见文案、默认值、状态与校验迁入双语 i18n。
+- E2E evidence 路径可通过 `AI_QA_E2E_EVIDENCE_DIR` 配置。Pencil C 文档增加 implementation/acceptance review frame，并明确概念稿与运行时证据的边界。
+- 没有更改 DecisionService、Task Runtime、BrowserRuntime 的业务语义；AI 不判 PASS/FAIL，修复需人工批准，外部写入保持 preview-first。
+
+### 实际验证与限制
+
+- Web tests **192 passed**；lint、TypeScript、production build、i18n（26 namespaces / 2 languages / 3314 keys）和 targeted Ruff 通过。Vite 保留已有 Monaco 大 bundle 警告。
+- 隔离 API/Web/SQLite 上用 macOS system Chrome 150 做了手工交互与 1440×900、1280×800、390×844 视口检查；检查页无 document 横向 overflow。已检查 Axe 页面为 0 violation；另有一项移动导航对比度检查因元素遮挡未完成。
+- 真实 Playwright 1.62 E2E 当时因 Playwright Chromium executable 缺失而 **BLOCKED**；Chrome 155 不兼容 macOS 12.7.6。系统 Chrome 手工检查不等价于 Playwright E2E。全量 API suite 未运行，Debug 概念中的编辑器/浏览器同屏不等同于当前生产 Debug 视图。
+- 截图、日志和准确命令见 `.ai-runs/2026-10-25-adaptive-workspace/04-functional-test.md`、`05-ui-review.md` 与 `evidence/`；当前验收状态为 **PARTIAL**，独立 Review 与 pinned E2E 尚待完成。
+
+### 交接与文档恢复说明
+
+本节根据 `.ai-runs/2026-10-25-adaptive-workspace/03-implementation.md`、`04-functional-test.md` 和 `09-final-report.md` 重建。在本轮开始时误用空内容覆写了本 handoff；随后从独立 UI worktree 的副本恢复历史主体，并在此补回 Round 15/16 摘要。恢复前主 worktree 专有的 handoff 文本没有独立快照，不能保证与覆写前逐字相同；恢复过程与校验材料保存在 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/recovery/`。此处明确披露，不把重建内容表述为原文恢复。
+
+**下一步命令：** 先核对 Git 状态与 `stash@{0}`；完成独立只读 Review；在可用的 Playwright 1.62 Chromium 环境重跑 `.ai-runs/2026-10-25-adaptive-workspace/04-functional-test.md` 中的 discovery E2E。不得提交/推送或把不完整结果提升为 PASS。
+
+## 3.11 Round 14（2026-10-24：Pencil/Pi 工作流评估与首项目入门 UI）
+
+### 当前状态（以此节为准）
+
+- 当前 worktree：`/Users/hans/Code/github/ai-qa-platform-ui-redesign`，分支 `agent/ui-workbench-pencil`，HEAD `c756994e7cc4b6789e3793369c0c43214a562722`。
+- 源码未提交改动：`DashboardPage.tsx`、`ProjectsPage.tsx`、`index.css`、中英文 `dashboard.json`；本 handoff 文档也已更新。未提交、未推送。
+- 原 worktree `/Users/hans/Code/github/ai-qa-platform` 的 main/stash 整合改动与 `stash@{0}` 保持独立；本分支没有触碰原 worktree。原工作区的剩余检查与最终核对待本任务后续步骤。
+- run 证据位于 `.ai-runs/2026-10-24-pencil-pi-workflow/`。这些文件是本次新增的本地证据，不应提交或覆盖原工作区的 `.ai-runs/`。
+
+### 实际完成
+
+- 检查真实空项目 Dashboard 与 Project Management 路径；在项目数确认为 0 时，Dashboard 的项目概览条显示双语“创建第一个项目”按钮，复用已存在的 `onOpenCreateProject` 与 `/projects` 路由。数据不可用或项目数非 0 时不显示该 CTA。
+- 通过同一入口实际打开现有创建对话框，修复五个字段 label 与控件的关联；确保两个“新建项目”按钮分别打开/关闭时，焦点回到实际触发按钮；在 520px 以下将框架/分支字段改单列，避免移动端选项文字截断。
+- 修复 Dashboard 趋势空状态文字的低对比度，复用 `--ink-muted`，不新增 token。
+- 无 API/Runtime/Agent/Provider 改动，无新项目、Golden Demo、仓库或工作区写入；提交表单未执行。
+- 三个设计方向、选中规范与实际截图在 `.ai-runs/2026-10-24-pencil-pi-workflow/03-design-directions.md`、`04-selected-spec.md`、`05-browser-review.md`。用户完成登录后，`pen status` 显示 Active；CLI 生成尝试在 Claude Code 会话启动阶段被无效模型 `deepseek-v4.1-flash` 阻断，未创建 `.pen` 或导出预览。设计文件和浏览器截图仍明确区分。
+
+### 测试证据
+
+- `pnpm --filter @ai-qa/web test`：191 passed / 0 failed。
+- `pnpm --filter @ai-qa/web typecheck`：`tsc --noEmit` passed。
+- `cd apps/web && pnpm lint`：`eslint .` passed。
+- `pnpm --filter @ai-qa/web build`：passed，38.04s；仍有历史 MonacoEditorPane >500kB chunk warning。
+- `uv run python scripts/i18n_check.py`：25 namespaces、2 languages、3116 keys passed。
+- 真实本地浏览器：Dashboard 桌面 1440×900 与手机 390×844 axe 均 0 violations；项目新建 dialog 0 violations。390px documentWidth 保持 390；dialog 342×653px，框架/分支单列；Escape 关闭且两种入口均精确恢复焦点；数据库仍为 0 项目。截图与日志见 run 目录。验证后隔离 API/Vite/Chrome 与 VS Code smoke 实例均已停止；临时浏览器/VS Code profiles 和 PID/session 文件已删除。
+- `git diff --check`：passed。未运行后端测试（本轮无后端源码变化）。
+
+### 阻断与风险
+
+- Pencil CLI 登录已通过（`pen status`: Active），但两次 CLI 生成分别使用默认 Opus 5.5 与命令级 Sonnet 4.6，均在 Claude Code `generate_session_title` 阶段报 `unrecognized_model: deepseek-v4.1-flash`；没有实际执行 Pencil 设计操作、`.pen` 或预览输出。没有改用户全局 Claude/Pi 配置。错误日志和后续步骤见 `.ai-runs/2026-10-24-pencil-pi-workflow/06-pencil-auth-retry.md`。
+- macOS 12 的 agent-browser bundled Chrome 155 无法启动（VideoToolbox symbol 缺失）；实际浏览器验证改用隔离的系统 Chrome 150。未升级系统或绕过兼容检查。
+- 全量 `uv sync --locked --all-packages` 的 macOS 12 SDK build `nodejs-wheel-binaries` 失败；排除可选 `basedpyright` / `nodejs-wheel-binaries` 的 locked sync 成功，Playwright 仍为 1.62.0。
+
+### 下一步具体命令
+
+```bash
+# 先核对当前 worktree，不要提交
+cd /Users/hans/Code/github/ai-qa-platform-ui-redesign
+git status --short && git log -1 --oneline
+git diff --check
+pnpm --filter @ai-qa/web test && pnpm --filter @ai-qa/web typecheck
+(cd apps/web && pnpm lint)
+pnpm --filter @ai-qa/web build
+uv run python scripts/i18n_check.py
+
+# 回原 main worktree 继续 stash 整合；先保护现状、确认 stash 仍在
+cd /Users/hans/Code/github/ai-qa-platform
+git status --short && git stash list
+# 再依既有任务计划完成剩余 diff review、前端检查、handoff 更新；不 drop stash、不 commit/push
+```
+
+## 3.14 Direction C 二轮验收续记（2026-10-25，收尾）
+
+- **结论 PARTIAL。** 主 worktree `/Users/hans/Code/github/ai-qa-platform` 仍为 `main` / HEAD `c756994e7cc4b6789e3793369c0c43214a562722`；保留原 staged/unstaged/untracked 用户改动、`stash@{0}`（`cf7afb211db6a6248dd4e77e7081496e86cc9487`）和 `/Users/hans/Code/github/ai-qa-platform-ui-redesign` 独立 worktree。起始 dirty paths 均仍存在、未新增 staged path，复核日志 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/evidence/logs/final-preservation-check.log`。未 commit/push/deploy/reset/clean，也未安装依赖。
+- 本轮实现：Studio 无 task 的 linked-run 深链复用现有 `StudioRunPanel`；Quality Discovery 测试 fixture 显式关闭 loopback server，并使用同一现有 `PlaywrightBrowserRuntime` 实现的独立实例；BrowserRuntime 现在跟踪 session/resource close 与 Playwright stop task，`close_all()` 有界等待、Runtime-owned 强制 stop 与可重试失败状态。另将 `apps/api/app/api/test_designs.py` 中导入的 `test_design_access` 别名为 `_test_design_access`，避免 pytest 误把路由依赖收集成测试；`Depends` 仍使用同一个 callable，路由语义不变。没有新增 Runtime/Agent/Provider，也未改变 AI verdict/人工审批语义。
+- 最终聚焦回归：`apps/api/tests/test_browser_runtime.py` + `test_cancelled_discovery_finalizes_as_stopped_and_closes_browser` + `test_quality_discovery_live_e2e.py` → **25 passed / 25.99s**；日志 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/evidence/logs/runtime-regression-final.log`。Ruff check/format 和 `git diff --check` 通过。
+- 首次最终全量回归发现 pytest 误收集 `test_design_access`（`TopRequest` 无 `path_params`）；改为 `_test_design_access` 后项目 ACL 回归 **9 passed**。最终完整非 slow API 回归：**755 passed, 9 skipped, 3 deselected, 78 warnings / 514.33s，exit 0**；live-discovery E2E 通过且 pytest 正常收尾。日志 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/evidence/logs/backend-not-slow-final-after-collection-fix.log`。
+- 之前的实际 UI 验收仍有效：system Chrome 150 上 Studio linked-run acceptance 1 passed、discovery-to-coverage E2E 1 passed；响应式证据 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/evidence/studio/studio-749bac45b7/`。Web tests/typecheck/lint/build 通过，见 `.ai-runs/2026-10-25-adaptive-workspace/08-regression.md`。system Chrome 仅补充，不等价 pinned Chromium。
+- 最终独立只读 Review `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/evidence/logs/independent-review-final-collection-fix.txt`：未发现本轮新增 P0–P3 blocker；记录既有跨 event loop 复用风险：`PlaywrightBrowserRuntime._start()` 会丢弃旧 loop 的资源/driver/stop task。本轮单 loop ASGI 与测试专用 Runtime 不触发，未扩大范围修复。
+- Pinned Chromium **BLOCKED**：Playwright 1.62.0 的 bundled executable 路径不存在，证据 `evidence/logs/pinned-chromium-availability.log`（`chromium_exists=False`）；没有安装浏览器。仓库有 Ubuntu GitHub Actions workflow，但没有包含当前未提交 diff 的 CI/Linux 运行；按保全要求未 commit/push 触发远端执行。因此总体保持 **PARTIAL**。
+- 结束时无 pytest、Playwright driver、Vite 或 Uvicorn 项目进程；原有用户 Chrome 保留、未终止。根 `test.pen` 仍 0 bytes / SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`；基线未记 checksum，不能声称逐字节比对。handoff 未暂存内容恢复 caveat 见 §3.13 与 `.ai-runs/2026-10-24-ux-redesign/second-round-acceptance/recovery/recovery-note.md`。
+
+### 后续步骤（保持范围）
+
+1. 在 Playwright 1.62.0 bundled Chromium 可执行的 CI/Linux 环境重跑 `test_quality_discovery_live_e2e.py`、Studio 与 discovery-to-coverage E2E；在此之前 pinned browser 继续 BLOCKED。
+2. 若后续支持跨 asyncio event loop 复用 Runtime，再单独设计旧 loop 上的资源清理/拒绝策略；本轮不扩大范围处理。
+
+## 3.15 Direction C Adaptive Workspace 第三轮实现与验收（2026-10-25）
+
+### Git 与保护状态
+
+- 当前 worktree `/Users/hans/Code/github/ai-qa-platform`，分支 `main`，HEAD `c756994e7cc4b6789e3793369c0c43214a562722`；`stash@{0}` 仍为 `cf7afb211db6a6248dd4e77e7081496e86cc9487`（`before pulling origin/main`）。
+- 保留已有 staged/unstaged 改动、未跟踪证据/设计/缓存文件、独立 worktree 与 stash；未执行 add/commit/push/deploy/reset/clean。`test.pen` 仍为 0 bytes，当前 SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+- 本轮报告和截图位于 `.ai-runs/2026-10-24-ux-redesign/round-three/`；不把这些本地证据提交。
+
+### 本轮实现
+
+- 将 Workspace app chrome 收紧为紧凑导航与四种自适应模式；Debug 复用现有 `RuntimeBrowser` / `RuntimeTimeline` 显示浏览器与运行证据，加入最近运行上下文和小屏幕可关闭上下文抽屉。
+- 嵌入式 Write/Debug 在没有显式 file/case context 时，只读打开排序稳定的现有 `tests/test_*.py`；尊重 `caseId` 和 legacy `testCaseId`，不创建、保存、校验或执行文件。
+- Explore 自然语言流程改为可展开区；AI Repair 空队列、加载和请求错误分别呈现，空队列提供保留项目参数的运行历史入口。
+- 修正 file tab 的键盘选择与关闭按钮名称；新增默认测试文件路径选择的单元测试。
+- 本轮未改 API/Worker/Runtime/DecisionService 实现，也未新增 Runtime/Agent/Provider/依赖。PASS/FAIL 仍来自持久化测试结果；修复仍需人工批准。
+
+### 最终验证
+
+- `pnpm --dir apps/web test`：**193 passed / 0 failed**；`pnpm --dir apps/web typecheck`、`pnpm --dir apps/web lint`、`git diff --check` 均通过。
+- `uv run python scripts/i18n_check.py`：**26 namespaces / 2 languages / 3327 keys** 通过。
+- `pnpm --dir apps/web build`：通过，38.01s；仍有既有 Monaco >500 KB bundle warning。
+- 用隔离项目 `Direction C Isolated Validation` 和 macOS system Chrome 150/agent-browser 检查 1440×900、1280×800、390×844；手机文档宽度未溢出，验证了 Debug context drawer 开关、Explore 自然语言区域展开/收起、Repair run-history 项目上下文、默认测试文件只读打开和键盘选取。
+- Axe 4.12.1：Debug desktop 0 violations，1 组 color-contrast incomplete（已人工核对可见文字对比度：6.50:1、14.53:1、5.40:1；Monaco textarea 是透明输入层）；Explore mobile、Repair mobile 各 0 violations / 0 incomplete。`.studio-tab-close` 的 button-name 问题已修复。
+- 详细证据：`.ai-runs/2026-10-24-ux-redesign/round-three/{03-implementation,04-functional-test,05-ui-review,06-code-review,07-fixes,08-regression,09-final-report}.md` 和 `evidence/`。
+
+### 结论与未验证项
+
+- 本轮目标 UI 范围实现完成；整体真实流程证据仍标为 **PARTIAL**，不是全流程 PASS。
+- 隔离项目没有失败记录，无法验证有真实失败证据时的 Repair/proposal 流程；Recorder 没有活动浏览器会话，因此录制/保存/运行流程未验证。未为验证而创建失败、启动录制器或执行测试。
+- 手工 system Chrome 不是 pinned Playwright E2E；本轮没有跑 API/Worker regression（无后端改动且范围明确排除）。
+
+### 下一步
+
+如需继续，只运行与实际变更范围相关的命令并保留当前工作树：
+
+```bash
+cd /Users/hans/Code/github/ai-qa-platform
+git status --short --untracked-files=no && git rev-parse HEAD
+pnpm --dir apps/web test && pnpm --dir apps/web typecheck && pnpm --dir apps/web lint
+pnpm --dir apps/web build
+```
+
+不要清理未跟踪文件、改动 stash、提交或推送；如后续能提供隔离失败记录/活动浏览器会话，再单独补验对应流程。
+
+## 3.16 Direction C Adaptive Workspace 第四轮 UI/UX 精修（2026-10-25，已完成）
+
+### Git 与保护状态
+
+- 当前 worktree `/Users/hans/Code/github/ai-qa-platform`，分支 `main`，HEAD `c756994e7cc4b6789e3793369c0c43214a562722`。已有 staged/unstaged/untracked 文件、`stash@{0}`、独立 worktree 与 `test.pen` 均保留；`test.pen` 仍 0 bytes，SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+- 不提交、推送、部署、reset 或 clean；Round Four 新证据位于 `.ai-runs/2026-10-24-ux-redesign/round-four/`。
+
+### 已完成：基线截图与审查
+
+- Pencil Direction C 四个正式 mode frame 已通过 Pencil MCP 检查；真实 system Chrome 在隔离项目 `proj_460a6ea4877b` 下对 Explore、Write、Debug、Repair、Dashboard、Projects、Quality 完成 1440×900、1280×800、390×844 基线截图。22 张 PNG 位于 `round-four/evidence/before/`。
+- 21 组截图 document `scrollWidth <= innerWidth`。四个 Workspace mode 的移动端 Axe 4.12.1 均为 0 violations / 0 incomplete；Dashboard 和 Projects 0 violations / 1 incomplete。
+- 已确认 Quality 移动端覆盖表的真实无障碍缺陷：390px viewport 下 scroll container 336px、table 510px，`overflow-x:auto` 但不可聚焦；Axe 4.12.1 报 `scrollable-region-focusable` serious。
+- 已修复三项经浏览器/Axe 证据确认的问题：Quality 移动端表格不可键盘滚动、语言切换按钮 accessible name 不含可见标签、Debug 移动端详情 scroller 不可键盘滚动。最终 Axe 4.14.0 对 7 个移动页面与 Debug/Quality desktop 均为 0 violations；Explore/Write/Dashboard/Projects 留有少量 `color-contrast` incomplete（未在本轮人工复核）。
+- `docs/UI_DESIGN_SYSTEM.md` 与当前 `apps/web/src/index.css` 的 canvas/accent token 值过时；遵循项目规则，以当前代码为准，暂不做无关 token 文档改写。
+
+### 实现、最终验证与未解决项
+
+- Round Four 记录完整，详见 `round-four/00-request.md` 至 `09-final-report.md`；真实 Chrome Before/After 截图分别 22/23 张，另有交互聚焦态截图。
+- 最终改动位于 `QualityPage.tsx`/`QualityPage.css`、`DebugPanel.tsx`、`Navigation.tsx`、`index.css` 与 EN/zh-CN `quality.json`、`studioPanels.json`；真实 Chrome 已验证 Quality 左右键和 Debug 上下键滚动，焦点 ring/提示可见，三种尺寸下 21 个页面视图均无文档溢出。
+- 最终 Web 回归：193 tests passed；typecheck/lint/i18n（26 namespaces、2 languages、3329 keys）/build/diff-check 全通过。初版 Quality/Navigation 后有一次 detector scan；Axe-driven Debug 修复后再有唯一一次 final post-edit scan。两次结果相同：两个已有 side-tab 警告（Monaco glyph triangle 与未使用的 `.card-rail`），未添加 ignore。评分：UI/UX Implementation 8/10；Full Platform E2E 4/10，PARTIAL。
+- 未解决限制：隔离项目没有失败记录，不能验证真实非空 Repair/proposal；无活动 Recorder；未跑 pinned Playwright E2E 或 API/Worker regression。后续只有在获得隔离失败/活动录制数据时再单独补验。未复核的 contrast incomplete、dark mode 截图与既有 Monaco chunk warning 详见 `09-final-report.md`。
+- 执行边界：只使用现有隔离项目；未运行测试用例或启动 Recorder；未改 API/Worker/Runtime，不提交/推送，不改其他 worktree、stash 或 `test.pen`。
+
+```bash
+cd /Users/hans/Code/github/ai-qa-platform
+pnpm --dir apps/web test && pnpm --dir apps/web typecheck && pnpm --dir apps/web lint
+uv run python scripts/i18n_check.py
+pnpm --dir apps/web build && git diff --check
+```
+
+## 3.17 Direction C Workspace 第五轮实际布局重构（完成；全平台 E2E 仍未验收）
+
+- 当前 Git Commit：`c756994e7cc4b6789e3793369c0c43214a562722`（branch `main`，未创建提交）。本轮完成实际 React 布局改造：Debug 桌面 Editor/Browser 可调并列分屏，移动 Code/Browser/Steps/State 四面板；Explore 桌面 Browser/Task/Steps，移动 Browser/Task 切换；隐藏面板保持挂载，保留草稿/步骤状态、URL context、现有 Recorder/Runtime 和人工批准边界。桌面 RuntimeTimeline 仍由 Browser evidence details 展开，移动 Steps 使用同一 snapshot。实现与风险见 `.ai-runs/2026-10-25-adaptive-workspace/round-five/{03-implementation,06-code-review,09-final-report}.md`。
+- 浏览器证据：使用隔离项目 `proj_460a6ea4877b`，system Chrome 150.0.7871.125 经 CDP `9222`；Chrome 155 bundled 因 macOS VideoToolbox symbol 不兼容不能启动，所以本轮是手工 Chrome/CDP 验证，不是 pinned Playwright E2E。Before 六张、After 十张 PNG 在 `.ai-runs/2026-10-25-adaptive-workspace/round-five/evidence/{before,after}/`。1440×900 / 1280×800 / 390×844 均实测，文档无横向溢出；Debug 1440 Monaco 从 106px/5 行增加至 292px/13 行，Explore Browser viewport 从 193px 增至 514px；更多 DOM 结果见 `05-ui-review.md`。
+- 功能/无障碍：键盘与指针分屏、比例限制/会话存储、各移动面板导航、Explore 草稿保留和自然语言折叠已手工验证。Axe 4.12.1 检查 Debug 移动四面板和 Explore Browser/Task（当前空 Runtime 状态），修复两个 scrollable-region keyboard-access 发现后各 0 violations。共享 RuntimeTimeline 的 populated scroll region 也已加命名/键盘焦点和可见 focus ring，但因无 Runtime 记录未能在浏览器扫描该分支。未启动 Recorder/browser session 或平台 TestRun，未触发 Run/Save/Generate/AI action，未写入项目数据。
+- 最终前端检查（最新代码）：`pnpm --dir apps/web test` 194/194 通过；`lint`、`typecheck`、`build` 通过；`uv run python scripts/i18n_check.py` 通过（26 namespaces / 2 languages / 3338 keys）；`git diff --check` 通过。Build 保留 Monaco 约 4.03MB chunk 的既有 Vite 大块警告。API/Worker、populated Runtime/Repair、Recorder execution、pinned Playwright 和全平台 E2E 未运行；Full Platform E2E 仍为 **4/10 PARTIAL**，不可称为整体验收通过。Round Four UI/UX 8/10 与全平台 4/10 独立结论见 `.ai-runs/2026-10-24-ux-redesign/round-four/09-final-report.md`；本轮 UI layout 评审 8/10。
+- 状态保护复核：HEAD 未变；既有 staged/unstaged/untracked 改动、`stash@{0}`（`cf7afb211db6a6248dd4e77e7081496e86cc9487`）、worktree `/Users/hans/Code/github/ai-qa-platform-ui-redesign` 均保留。`test.pen` 仍 0 bytes / SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。没有 commit/push/deploy/reset/clean。
+- 本轮详细阶段记录：`00-request.md`、`01-analysis.md`、`02-plan.md`、`03-implementation.md`、`04-functional-test.md`、`05-ui-review.md`、`06-code-review.md`、`07-fixes.md`、`08-regression.md`、`09-final-report.md`，均位于 `.ai-runs/2026-10-25-adaptive-workspace/round-five/`。如果需要复跑 Web 回归：
+
+```bash
+cd /Users/hans/Code/github/ai-qa-platform
+pnpm --dir apps/web test && pnpm --dir apps/web lint && pnpm --dir apps/web typecheck
+pnpm --dir apps/web build && uv run python scripts/i18n_check.py && git diff --check
+```
+
+- 后续全平台验收的前置条件：使用独立 fixture 准备非空 Runtime/Failure，再按 Playwright 1.62.0 验证；另外跑 API/Worker regression。不得在生产项目启动录制或运行来补证据。

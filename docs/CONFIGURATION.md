@@ -13,7 +13,7 @@ Secrets stay out of the YAML file. Secret fields must be empty or use `${ENV_NAM
 | `database` | SQLAlchemy engine and pool construction; URL changes require restart |
 | `ai` | AI provider registry, completion timeout/retries, shared request and daily budgets, per-run budget guard |
 | `jev` | Decision Settings, Jev HTTP provider, confidence acceptance, repair trust gate and fallback policy |
-| `repair` | optional analysis auto-start after failure, repair mode, Jev requirement and rollback policy |
+| `repair` | optional analysis auto-start after failure, bounded analysis timeout, repair mode, Jev requirement and rollback policy |
 | `browser` | Playwright launch, proxy, navigation/action/session timeout, viewport and locale |
 | `run` | default local run timeout and worker parallel-run cap |
 | `pytest` | API and worker timeout, worker count and default pytest arguments |

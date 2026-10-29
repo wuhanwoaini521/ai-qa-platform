@@ -104,12 +104,16 @@ class QualityIntelligenceService:
         draft_count = sum(1 for c in test_cases if c.automation_status == "DRAFT")
         automated_count = sum(1 for c in test_cases if c.automation_status == "AUTOMATED")
 
+        case_ids = {case.id for case in test_cases}
+        cases_by_target: dict[tuple[str, str], set[str]] = {}
+        for binding in bindings:
+            if binding.status in {"ACTIVE", "VALIDATED"} and binding.test_case_id in case_ids:
+                cases_by_target.setdefault((binding.workspace_id, binding.nodeid), set()).add(binding.test_case_id)
         executed_cases_count = len(
             {
-                binding.test_case_id
-                for binding in bindings
-                if binding.status in {"ACTIVE", "VALIDATED"}
-                and (binding.workspace_id, binding.nodeid) in executed_targets
+                next(iter(case_ids_for_target))
+                for target, case_ids_for_target in cases_by_target.items()
+                if len(case_ids_for_target) == 1 and target in executed_targets
             }
         )
 

@@ -1088,7 +1088,6 @@ class FailureWorkflowService:
         if start_new_analysis is None:
             raise ValueError("Analysis claim state is required")
         if start_new_analysis:
-            await self._prepare_analysis(failure_id, analysis_id)
             self._schedule_analysis(
                 failure_id,
                 analysis_id,
@@ -1174,6 +1173,7 @@ class FailureWorkflowService:
         budget = float(get_config().repair.analysis_timeout_seconds)
         try:
             async with asyncio.timeout(budget):
+                await self._prepare_analysis(failure_id, analysis_id)
                 await self._analyze(
                     failure_id,
                     analysis_id,
@@ -1363,11 +1363,15 @@ class FailureWorkflowService:
         repair = await self._ensure_locator_repair(failure_id, analysis_id)
         active_stage = "context"
         stage_started: dict[str, float] = {}
+        published_event_ids: set[str] = set()
 
         async def publish(event: AITraceEvent, result: dict[str, Any] | None = None):
+            if event.event_id in published_event_ids:
+                return
             event.metadata = {**event.metadata, "analysis_id": analysis_id}
             event = AITraceEvent.model_validate(SensitiveRedactor.redact_value(event.model_dump(mode="json")))
             await self._history_append(analysis_id, event, result=result)
+            published_event_ids.add(event.event_id)
             self._fan_out(analysis_id, event)
 
         async def step(
@@ -1656,6 +1660,7 @@ class FailureWorkflowService:
                             resolved_classification=resolved_classification.value,
                             decision_service=self.decisions,
                             evidence_execution_id=evidence_execution_id,
+                            on_event=publish,
                         )
                         await self.failures.transaction.commit()
                     except (ValueError, OSError) as error:

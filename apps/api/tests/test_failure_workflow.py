@@ -1403,12 +1403,11 @@ async def test_ui_candidates_stream_the_actual_decision_engine_without_claiming_
     async with test_db_session() as session:
         service = get_failure_service(session)
         service.orchestrator = ProductionQAOrchestrator(ai_provider=FakeAIProvider())
-        events = [
-            event
-            async for event in FailureWorkflowService(
-                service, LocatorDecisionService(decision_service=decision)
-            ).stream(failure_id)
-        ]
+        workflow = FailureWorkflowService(service, LocatorDecisionService(decision_service=decision))
+        events = [event async for event in workflow.stream(failure_id)]
+        persisted = (await workflow.list_history(failure_id))[0]["events"]
+        event_ids = [event["event_id"] for event in persisted]
+        assert len(event_ids) == len(set(event_ids))
         inspection = next(event for event in events if event.stage == "inspection" and event.status == "COMPLETED")
         assert inspection.metadata["candidate_count"] == 4
         assert len(decision.calls) == 1
@@ -1706,6 +1705,55 @@ async def test_failed_model_is_redacted_and_persisted_without_success(client, te
             "verified": False,
             "changes_applied": False,
         }
+
+
+@pytest.mark.asyncio
+async def test_analysis_setup_failure_is_persisted_as_terminal(client, test_db_session, monkeypatch):
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+
+    async def fail_setup(*_args, **_kwargs):
+        raise RuntimeError("analysis setup failure")
+
+    monkeypatch.setattr(FailureWorkflowService, "_prepare_analysis", fail_setup)
+    async with test_db_session() as session:
+        workflow = FailureWorkflowService(get_failure_service(session))
+        events = [event async for event in workflow.stream(failure_id)]
+        record = (await workflow.list_history(failure_id))[0]
+
+    assert events[-1].type == "run.failed"
+    assert record["status"] == "FAILED"
+    assert record["result"]["block_reason"] == "ANALYSIS_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_late_terminal_event_cannot_overwrite_completed_analysis(client, test_db_session):
+    from qa_core.ai.trace import make_trace_event
+
+    _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
+    async with test_db_session() as session:
+        workflow = FailureWorkflowService(get_failure_service(session))
+        events = [event async for event in workflow.stream(failure_id)]
+        analysis_id = events[-1].metadata["analysis_id"]
+        failure = await workflow.failures.get_failure_state(failure_id)
+        await workflow._history_append(
+            analysis_id,
+            make_trace_event(
+                failure.run_id,
+                "run.failed",
+                stage="workflow",
+                title="late failure",
+                status="FAILED",
+                message="late failure",
+            ),
+            result={"diagnosis": {"root_cause": "late"}},
+        )
+        record = (await workflow.list_history(failure_id))[0]
+
+    assert record["status"] == "COMPLETED"
+    assert record["events"][-1]["type"] == "run.completed"
+    assert record["result"].get("diagnosis")
+    assert record["result"]["diagnosis"].get("root_cause") != "late"
+    assert not any(event.get("title") == "late failure" for event in record["events"])
 
 
 @pytest.mark.asyncio

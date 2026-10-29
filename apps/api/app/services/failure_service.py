@@ -496,12 +496,31 @@ class FailureService:
         resolved_classification: str | None = None,
         decision_service: LocatorDecisionService | None = None,
         evidence_execution_id: str | None = None,
+        on_event: Callable[[AITraceEvent], Awaitable[None]] | None = None,
     ) -> LocatorRepairProposal:
         failure = await self.failure_repo.get_by_id(failure_id)
         if not failure:
             raise ValueError(f"Failure record not found: {failure_id}")
 
+        async def report_progress(phase: str, status: str, message: str) -> None:
+            if on_event is not None:
+                await on_event(
+                    make_trace_event(
+                        failure.run_id,
+                        "repair.progress",
+                        stage="proposal",
+                        step_id=f"repair:{failure_id}:{phase}:{status.lower()}",
+                        title=phase.replace("_", " ").title(),
+                        status=status,
+                        message=message,
+                        metadata={"phase": phase},
+                        case_execution_id=failure.execution_id,
+                    )
+                )
+
+        await report_progress("failure_context", "COMPLETED", "Failure record loaded")
         stored_analysis = await self._latest_trusted_failure_analysis(failure_id)
+        await report_progress("diagnosis_context", "COMPLETED", "Trusted diagnosis history loaded")
         if resolved_classification is None and stored_analysis:
             resolved_classification = str((stored_analysis.get("diagnosis") or {}).get("classification") or "") or None
         evidence_execution_id = evidence_execution_id or failure.execution_id
@@ -509,6 +528,7 @@ class FailureService:
         snapshot, encrypted_storage_state = await self.get_failure_snapshot(
             evidence_execution_id, browser_session=browser_session, page_evidence=page_evidence
         )
+        await report_progress("failure_evidence", "COMPLETED", "Failure page evidence loaded")
         original_run = await self.run_repo.get_by_id(failure.run_id)
         observed_locator = snapshot.failed_locator or self._observed_failed_locator(page_evidence)
         failing_loc = self._require_locator_failure(
@@ -550,6 +570,7 @@ class FailureService:
             raise LocatorRepairNotApplicableError(
                 "REPAIR_TARGET_BLOCKED: no policy-allowed automation source contains the failed locator."
             )
+        await report_progress("repair_source", "COMPLETED", "Allowed repair source mapped")
         if source_content:
             source_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         if diagnosis_override is not None:
@@ -622,6 +643,7 @@ class FailureService:
         verification_session = None
         live_page_available = False
         if ranked and current_url:
+            await report_progress("verification_page", "RUNNING", "Preparing isolated candidate verification context")
             restored_storage_state = False
             if encrypted_storage_state and snapshot.storage_state_status == "AVAILABLE":
                 try:
@@ -711,9 +733,27 @@ class FailureService:
                 }
             )
         if ranked:
+            await report_progress(
+                "verification_page",
+                "COMPLETED" if live_page_available else "BLOCKED",
+                "Candidate page context is ready" if live_page_available else "Live candidate page is unavailable",
+            )
             await self.failure_repo.update_failure_snapshot(evidence_execution_id, snapshot)
             # Jev reserves its budget in another session; release SQLite's snapshot write lock first.
             await self.transaction.commit()
+            await report_progress("candidate_evidence", "COMPLETED", "Observed locator candidates are ready")
+            if on_event is not None:
+                await on_event(
+                    make_trace_event(
+                        failure.run_id,
+                        "locator_candidates_prepared",
+                        stage="candidate_generation",
+                        title="Locator candidates prepared",
+                        message=f"{len(ranked)} observed candidate(s); live page available: {live_page_available}",
+                        metadata={"candidate_count": len(ranked), "live_page_available": live_page_available},
+                        case_execution_id=evidence_execution_id,
+                    )
+                )
 
         if ranked:
             try:
@@ -729,6 +769,7 @@ class FailureService:
                     ),
                     case_execution_id=evidence_execution_id,
                     step_id=f"repair:{failure_id}",
+                    on_event=on_event,
                     require_jev=(
                         get_config().repair.require_jev or not get_config().jev.failure_policy.allow_local_fallback
                     ),

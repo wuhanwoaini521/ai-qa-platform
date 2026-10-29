@@ -25,14 +25,12 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
       {tabs.map((tab) => {
         const isActive = tab.path === activeTabPath && !showDiffView;
         return (
-          <div
-            key={tab.path}
-            className={`studio-tab ${isActive ? 'is-active' : ''}`}
-            onClick={() => onSelectTab(tab.path)}
-          >
-            {tab.isDirty && <span className="tab-dot" aria-hidden="true" />}
-            <span className="studio-tab-name">{tab.name}</span>
-            <button className="studio-tab-close" onClick={(e) => onCloseTab(tab.path, e)}>
+          <div key={tab.path} className={`studio-tab ${isActive ? 'is-active' : ''}`}>
+            <button type="button" className="studio-tab-select" aria-pressed={isActive} onClick={() => onSelectTab(tab.path)}>
+              {tab.isDirty && <span className="tab-dot" aria-hidden="true" />}
+              <span className="studio-tab-name">{tab.name}</span>
+            </button>
+            <button type="button" className="studio-tab-close" aria-label={t('tabs.closeFile', { fileName: tab.name })} onClick={(e) => onCloseTab(tab.path, e)}>
               <X size={12} />
             </button>
           </div>

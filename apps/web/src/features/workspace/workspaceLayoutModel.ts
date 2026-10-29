@@ -1,5 +1,14 @@
 export const WORKSPACE_MIN_MAIN_WIDTH = 820;
 export const WORKSPACE_STUDIO_MIN_MAIN_WIDTH = 960;
+export const WORKSPACE_DEBUG_SPLIT_DEFAULT = 0.58;
+export const WORKSPACE_DEBUG_SPLIT_MIN = 0.35;
+export const WORKSPACE_DEBUG_SPLIT_MAX = 0.65;
+
+export function clampWorkspaceDebugSplitRatio(ratio: number): number {
+  return Number.isFinite(ratio)
+    ? Math.min(WORKSPACE_DEBUG_SPLIT_MAX, Math.max(WORKSPACE_DEBUG_SPLIT_MIN, ratio))
+    : WORKSPACE_DEBUG_SPLIT_DEFAULT;
+}
 
 const WORKSPACE_CONTEXT_STACK_BREAKPOINT = 820;
 const WORKSPACE_INSPECTOR_MODAL_BREAKPOINT = 1280;

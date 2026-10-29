@@ -17,6 +17,7 @@
   },
   "debug": {
     "title": "Python Debugger",
+    "details": "Call stack, local variables, and debug console",
     "controls": "Debugger controls",
     "callStack": "CALL STACK",
     "variables": "LOCALS",

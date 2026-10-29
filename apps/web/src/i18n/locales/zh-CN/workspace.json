@@ -25,38 +25,32 @@
     "results": "结果"
     ,"canvas": "工作流画布"
   },
-  "automationViews": {
-    "label": "自动化工具",
-    "code": "代码",
+  "modes": {
+    "navigation": "工作模式",
+    "explore": "探索",
+    "write": "编写测试",
+    "debug": "调试",
+    "repair": "AI 修复",
+    "latestRunFailed": "最近一次运行失败",
+    "exploreViews": "探索视图",
+    "writeViews": "测试编写视图",
+    "debugViews": "调试视图"
+  },
+  "modeViews": {
     "browser": "浏览器",
-    "record": "浏览器录制",
-    "debug": "调试"
+    "discover": "覆盖探索",
+    "requirement": "需求",
+    "cases": "测试用例",
+    "code": "自动化代码",
+    "debug": "调试器",
+    "results": "运行结果"
   },
-  "journey": { "requirement": "需求", "discover": "发现", "cases": "用例", "automation": "自动化", "result": "结果" },
+  "mobile": {
+    "resizeDebugSplit": "调整编辑器与浏览器面板，使用左右方向键微调",
+    "debug": { "navigation": "调试面板", "code": "代码", "browser": "浏览器", "steps": "步骤", "logs": "状态" },
+    "explore": { "navigation": "探索面板", "browser": "浏览器", "task": "任务" }
+  },
   "quick": { "requirement": "工作区 · 需求", "cases": "工作区 · 用例", "failures": "工作区 · 失败队列", "recorder": "工作区 · 浏览器录制", "searchPlaceholder": "搜索需求、用例、失败或录制", "destinations": "工作区快捷入口" },
-  "journeyFacts": {
-    "loading": "正在读取项目数据",
-    "noRequirements": "尚无需求",
-    "discover": "探索产品并对照需求与覆盖",
-    "requirementCount": "{{count}} 项需求",
-    "analyzing": "分析中",
-    "noCases": "尚无用例",
-    "caseCount": "{{count}} 条用例",
-    "caseCountScoped": "当前需求 {{count}} 条用例",
-    "bindingCount": "{{bound}}/{{total}} 已绑定",
-    "bindingCountScoped": "当前需求 {{bound}}/{{total}} 已绑定",
-    "noRun": "尚无运行记录",
-    "latestAnalysis": "最近 QA 分析：{{status}}",
-    "analysisStatus": {
-      "RUNNING": "分析中",
-      "SUCCESS": "成功",
-      "FAILED": "失败",
-      "BLOCKED": "已阻塞",
-      "REFERENCE": "参考结果"
-    },
-    "runStatus": "本次运行 {{status}} · 已保存 {{saved}}/{{total}} 条逐例结果"
-  },
-  "stages": "工作阶段",
   "stage": {
     "requirement": "需求分析",
     "cases": "测试用例",
@@ -185,6 +179,15 @@
       "execute": "真实运行当前绑定的自动化用例",
       "diagnose": "结果、失败和重跑都留在当前工作区"
     }
+  },
+  "debugBrowser": {
+    "title": "实时浏览器证据",
+    "emptyTitle": "选择一次运行以检查浏览器证据",
+    "emptyDescription": "从上下文面板选择最近一次执行；如有浏览器画面和执行时间线，将显示在此处。",
+    "loading": "正在加载所选运行证据…",
+    "loadError": "无法加载所选运行证据。",
+    "openRuns": "打开运行历史",
+    "timeline": "执行时间线"
   },
   "main": {
     "title": "工作内容",

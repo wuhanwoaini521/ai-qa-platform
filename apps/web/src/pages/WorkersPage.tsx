@@ -19,6 +19,7 @@ import {
   WorkerStatus,
 } from '../types';
 import { api } from '../api/client';
+import { APIError } from '../api/errors';
 
 export const WorkersPage: React.FC = () => {
   const { t } = useTranslation('workers');
@@ -35,6 +36,10 @@ export const WorkersPage: React.FC = () => {
   const [newIpAddress, setNewIpAddress] = useState<string>('127.0.0.1');
   const [newConcurrency, setNewConcurrency] = useState<number>(4);
   const [registering, setRegistering] = useState<boolean>(false);
+  const [actionError, setActionError] = useState('');
+  const operationError = (error: unknown) => error instanceof APIError && error.status === 403
+    ? t('permissionDenied')
+    : t('operationFailed', { error: error instanceof Error ? error.message : String(error) });
 
   // Jobs State
   const [jobs, setJobs] = useState<ExecutionJob[]>([]);
@@ -76,6 +81,7 @@ export const WorkersPage: React.FC = () => {
     e.preventDefault();
     if (!newHostname) return;
     try {
+      setActionError('');
       setRegistering(true);
       const created = await api.registerWorker({
         hostname: newHostname,
@@ -90,6 +96,7 @@ export const WorkersPage: React.FC = () => {
       fetchClusterAndWorkers();
     } catch (err) {
       console.error('Failed to register worker', err);
+      setActionError(operationError(err));
     } finally {
       setRegistering(false);
     }
@@ -97,20 +104,24 @@ export const WorkersPage: React.FC = () => {
 
   const handleDeleteWorker = async (workerId: string) => {
     try {
+      setActionError('');
       await api.deleteWorker(workerId);
       setWorkers(workers.filter((w) => w.id !== workerId));
       fetchClusterAndWorkers();
     } catch (err) {
       console.error('Failed to deregister worker', err);
+      setActionError(operationError(err));
     }
   };
 
   const handleCancelJob = async (jobId: string) => {
     try {
+      setActionError('');
       const updated = await api.cancelJob(jobId);
       setJobs(jobs.map((j) => (j.id === jobId ? updated : j)));
     } catch (err) {
       console.error('Failed to cancel job', err);
+      setActionError(operationError(err));
     }
   };
 
@@ -171,6 +182,8 @@ export const WorkersPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {actionError && !showRegisterModal && <div className="alert alert-error" role="alert">{actionError}</div>}
 
       {/* Cluster Stats Grid */}
       <div className="stats-grid">
@@ -280,7 +293,7 @@ export const WorkersPage: React.FC = () => {
             <h3>{t('workersTitle')}</h3>
             <span className="text-secondary text-sm">{t('workersHint')}</span>
           </div>
-          <div className="table-responsive">
+          <div className="table-responsive" role="region" aria-label={t('workersTitle')} aria-description={t('tableScrollHint')} tabIndex={0}>
             <table className="data-table worker-table">
               <thead>
                 <tr>
@@ -361,7 +374,7 @@ export const WorkersPage: React.FC = () => {
             <h3>{t('jobsTitle')}</h3>
             <span className="text-secondary text-sm">{t('jobsHint')}</span>
           </div>
-          <div className="table-responsive">
+          <div className="table-responsive" role="region" aria-label={t('jobsTitle')} aria-description={t('tableScrollHint')} tabIndex={0}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -431,18 +444,20 @@ export const WorkersPage: React.FC = () => {
       {/* Modal: Register Worker */}
       {showRegisterModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '480px' }}>
+          <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="register-worker-title" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
-              <h3>{t('registerTitle')}</h3>
-              <button className="btn-icon" onClick={() => setShowRegisterModal(false)}>
+              <h3 id="register-worker-title">{t('registerTitle')}</h3>
+              <button type="button" className="btn-icon" aria-label={t('common:close')} onClick={() => { setShowRegisterModal(false); setActionError(''); }}>
                 &times;
               </button>
             </div>
             <form onSubmit={handleRegisterWorker}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {actionError && <div className="alert alert-error" role="alert">{actionError}</div>}
                 <div className="form-group">
-                  <label>{t('fieldHostname')}</label>
+                  <label htmlFor="worker-hostname">{t('fieldHostname')}</label>
                   <input
+                    id="worker-hostname"
                     type="text"
                     className="form-control"
                     required
@@ -452,8 +467,9 @@ export const WorkersPage: React.FC = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>{t('fieldIpAddress')}</label>
+                  <label htmlFor="worker-ip-address">{t('fieldIpAddress')}</label>
                   <input
+                    id="worker-ip-address"
                     type="text"
                     className="form-control"
                     placeholder="10.0.1.25"
@@ -462,8 +478,9 @@ export const WorkersPage: React.FC = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>{t('fieldMaxConcurrency')}</label>
+                  <label htmlFor="worker-max-concurrency">{t('fieldMaxConcurrency')}</label>
                   <input
+                    id="worker-max-concurrency"
                     type="number"
                     min="1"
                     max="64"

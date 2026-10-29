@@ -17,6 +17,7 @@
   },
   "debug": {
     "title": "Python 调试器",
+    "details": "调用堆栈、局部变量与调试控制台",
     "controls": "调试控制",
     "callStack": "调用堆栈",
     "variables": "局部变量",

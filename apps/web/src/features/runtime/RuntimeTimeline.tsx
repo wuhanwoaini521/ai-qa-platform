@@ -56,7 +56,7 @@ export function RuntimeTimeline({ snapshot, selectedStepId, onSelect }: {
       </div>
       <span className={`rt-recorded-badge${active ? ' is-live' : ''}`}>{active ? t('live') : t('recorded')}</span>
     </div>
-    {!spans.length ? <p className="rt-empty">{t('noTimeline')}</p> : <div className="rt-timeline-scroll">
+    {!spans.length ? <p className="rt-empty">{t('noTimeline')}</p> : <div className="rt-timeline-scroll" role="region" aria-label={t('timelineLabel')} tabIndex={0}>
       <div className="rt-timeline-body">
         <div className="rt-timeline-axis" style={{ gridTemplateColumns: `${leftColumn}px minmax(0, 1fr) ${rightColumn}px` }}>
           <span>{t('step')}</span><div>{[0, 0.25, 0.5, 0.75, 1].map((tick) => <code key={tick} style={{ left: `${tick * 100}%` }}>{((domain * tick) / 1000).toFixed(0)}s</code>)}</div><span>{t('durationLabel')}</span>
