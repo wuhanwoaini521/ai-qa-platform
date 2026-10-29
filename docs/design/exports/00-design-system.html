@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter%3Awght%40100..900&family=JetBrains+Mono%3Awght%40100..800&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      *, ::before, ::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body style="background-color: #ffffff">
+    <div
+      data-pencil-name="00 · Design System — AI QA Platform"
+      style="align-items: flex-start; background-color: #ffffff; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; height: fit-content; justify-content: flex-start; overflow: hidden; padding: 40px; width: 1480px"
+    >
+      <div
+        data-pencil-name="Cover Head"
+        style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex-shrink: 0; gap: 8px; height: fit-content; justify-content: flex-start; width: 100%"
+      >
+        <div
+          data-pencil-name="Brand Row"
+          style="align-items: center; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: row; flex-shrink: 0; gap: 10px; height: fit-content; justify-content: flex-start; width: fit-content"
+        >
+          <div
+            data-pencil-name="Logo"
+            style="align-items: center; background-color: #1c2942; border-radius: 8px; box-sizing: border-box; display: flex; flex-direction: row; flex-shrink: 0; gap: 0px; height: 30px; justify-content: center; width: 30px"
+          >
+            <div
+              data-pencil-name="Mark"
+              style="box-sizing: border-box; color: #ffffff; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 700; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+            >
+              QA
+            </div>
+          </div>
+          <div
+            data-pencil-name="Brand"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            AI QA Platform
+          </div>
+          <div
+            data-pencil-name="Version"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            UI Design System v1 · 2026-10-29
+          </div>
+        </div>
+        <div
+          data-pencil-name="Cover Title"
+          style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 34px; font-style: normal; font-weight: 700; letter-spacing: -0.8px; line-height: normal; text-align: left; white-space: nowrap"
+        >
+          高保真设计稿
+        </div>
+        <div
+          data-pencil-name="Cover Sub"
+          style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: 20px; text-align: left; width: 1100px"
+        >
+          按 docs/UI_DESIGN_SYSTEM.md 的 token
+          与布局原语还原三张核心页面：平台总览、用例分析、运行结果。所有颜色、间距、圆角均来自
+          apps/web/src/index.css 的 :root。
+        </div>
+      </div>
+      <div
+        data-pencil-name="Token Row"
+        style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: row; flex-shrink: 0; gap: 16px; height: fit-content; justify-content: flex-start; width: 100%"
+      >
+        <div
+          data-pencil-name="Swatch 画布"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #f3f7fd; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            画布
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --canvas
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #f3f7fd
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 面板"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #ffffff; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            面板
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --surface
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #ffffff
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 分隔线"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #e5ebf4; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            分隔线
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --line
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #e5ebf4
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 正文"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #1c2942; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            正文
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --ink
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #1c2942
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 次级正文"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #5d6b82; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            次级正文
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --ink-muted
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #5d6b82
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 品牌主色"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #1d5bd7; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            品牌主色
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --accent-blue
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #1d5bd7
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 成功"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #146c43; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            成功
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --accent-green
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #146c43
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 警告"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #805400; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            警告
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --accent-amber
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #805400
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch 失败"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #b42333; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            失败
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --accent-red
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #b42333
+          </div>
+        </div>
+        <div
+          data-pencil-name="Swatch AI"
+          style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start"
+        >
+          <div
+            data-pencil-name="Chip"
+            style="background-color: #5d4bcf; border-radius: 8px; border: 1px solid #e5ebf4; box-sizing: border-box; flex-shrink: 0; height: 44px; width: 100%"
+          ></div>
+          <div
+            data-pencil-name="Swatch Label"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            AI
+          </div>
+          <div
+            data-pencil-name="Swatch Token"
+            style='box-sizing: border-box; color: #8795aa; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%'
+          >
+            --accent-violet
+          </div>
+          <div
+            data-pencil-name="Swatch Hex"
+            style='box-sizing: border-box; color: #5d6b82; font-family: "JetBrains Mono", system-ui, sans-serif; font-size: 9px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap'
+          >
+            #5d4bcf
+          </div>
+        </div>
+      </div>
+      <div
+        data-pencil-name="Meta Row"
+        style="align-items: flex-start; background-color: #00000000; box-sizing: border-box; display: flex; flex-direction: row; flex-shrink: 0; gap: 16px; height: fit-content; justify-content: flex-start; width: 100%"
+      >
+        <div
+          data-pencil-name="Meta 布局原语"
+          style="align-items: flex-start; background-color: #f5f8fc; border-radius: 10px; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start; padding: 14px"
+        >
+          <div
+            data-pencil-name="Meta Head"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            布局原语
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · --sidebar-w 240 / --toolbar-h 50
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 内容区 --sp-5 24px 间距
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 卡片 --r-card 10px + 1px 描边
+          </div>
+        </div>
+        <div
+          data-pencil-name="Meta 字体"
+          style="align-items: flex-start; background-color: #f5f8fc; border-radius: 10px; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start; padding: 14px"
+        >
+          <div
+            data-pencil-name="Meta Head"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            字体
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · --font-sans 系统栈（无外部 CDN）
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · --font-mono 用于 ID / locator / 计数
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 字号 10–34px，标题 700 字重
+          </div>
+        </div>
+        <div
+          data-pencil-name="Meta 状态语义"
+          style="align-items: flex-start; background-color: #f5f8fc; border-radius: 10px; box-sizing: border-box; display: flex; flex-direction: column; flex: 1 1 0; gap: 6px; height: fit-content; justify-content: flex-start; padding: 14px"
+        >
+          <div
+            data-pencil-name="Meta Head"
+            style="box-sizing: border-box; color: #1c2942; font-family: Inter, system-ui, sans-serif; font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: 0px; line-height: normal; text-align: left; white-space: nowrap"
+          >
+            状态语义
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 绿 / 蓝 / 琥珀 / 红 / 紫只用于状态
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 状态必须同时有文字，不靠颜色
+          </div>
+          <div
+            data-pencil-name="Meta Item"
+            style="box-sizing: border-box; color: #5d6b82; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0px; line-height: normal; text-align: left; width: 100%"
+          >
+            · 中性态用 --ink-muted + --line
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
