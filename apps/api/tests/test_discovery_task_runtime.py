@@ -274,3 +274,50 @@ async def test_startup_recovery_pauses_runs_a_dead_process_left_running(test_db_
     assert paused.status == DiscoveryStatus.PAUSED.value
     assert "restarted" in (paused.error or "")
     assert (await service.get(completed)).status == DiscoveryStatus.COMPLETED.value
+
+
+@pytest.mark.asyncio
+async def test_startup_recovery_does_not_overwrite_a_run_that_finishes_during_scan(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    update = service._update
+
+    async def complete_before_recovery_update(candidate_id: str, **values):
+        if candidate_id == run_id and values.get("status") == DiscoveryStatus.PAUSED.value:
+            await update(candidate_id, status=DiscoveryStatus.COMPLETED.value, error="finished concurrently")
+        return await update(candidate_id, **values)
+
+    monkeypatch.setattr(service, "_update", complete_before_recovery_update)
+
+    assert await service.recover_interrupted_runs() == 0
+
+    current = await service.get(run_id)
+    assert current.status == DiscoveryStatus.COMPLETED.value
+    assert current.error == "finished concurrently"
+    assert not any(event["type"] == "run.paused" for event in current.result.get("events", []))
+    assert run_id not in service._event_seq
+
+
+@pytest.mark.asyncio
+async def test_startup_recovery_rolls_back_status_when_pause_event_persistence_fails(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    update = QualityDiscoveryRepository.update
+
+    async def update_then_fail(repository, candidate_id: str, **values):
+        row = await update(repository, candidate_id, **values)
+        if candidate_id == run_id and values.get("status") == DiscoveryStatus.PAUSED.value:
+            raise RuntimeError("simulated failure before recovery transaction commit")
+        return row
+
+    monkeypatch.setattr(QualityDiscoveryRepository, "update", update_then_fail)
+
+    with pytest.raises(RuntimeError, match="before recovery transaction commit"):
+        await service.recover_interrupted_runs()
+
+    current = await service.get(run_id)
+    assert current.status == DiscoveryStatus.RUNNING.value
+    assert not any(event["type"] == "run.paused" for event in current.result.get("events", []))
+    assert run_id not in service._event_seq

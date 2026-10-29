@@ -1,7 +1,7 @@
 # Agent 交接文档 / Agent Handoff
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
-> **当前有效状态见 §3.17；本文较早章节中的“当前”分支、HEAD、环境和待办均为历史快照。**
+> **当前有效状态见 §3.18；本文较早章节中的“当前”分支、HEAD、环境和待办均为历史快照。**
 > 禁止把聊天记录或未跟踪的临时日志作为唯一进度来源。
 
 ## 1. 当前任务目标
@@ -1023,3 +1023,88 @@ pnpm --dir apps/web build && uv run python scripts/i18n_check.py && git diff --c
 ```
 
 - 后续全平台验收的前置条件：使用独立 fixture 准备非空 Runtime/Failure，再按 Playwright 1.62.0 验证；另外跑 API/Worker regression。不得在生产项目启动录制或运行来补证据。
+
+## 3.18 Bounded Autonomous R&D Mission (2026-10-28; PARTIAL)
+
+### Objective / authorized scope
+
+Establish a bounded reusable R&D workflow, audit/extend the existing Pi team, create a portable knowledge base, research LangGraph/Browser Use/Skyvern, perform an independent architecture challenge, make a narrow existing-Execution-Core correction, review/test it, and update delivery documentation. Preserve root safety invariants, existing TaskRuntime/BrowserRuntime/DecisionService/Provider owners, deterministic Pytest verdicts, the deferred architecture gate, and all original dirty worktree state.
+
+### Git / workspace state
+
+- Isolated worktree: `/Users/hans/Code/github/ai-qa-platform-autonomous-rd`
+- Branch: `agent/autonomous-rd-2026-10-28`
+- HEAD/base: `245c00cacd946c8dea59991807af6b873fcdaf1d` (no mission commit yet)
+- Original `/Users/hans/Code/github/ai-qa-platform` worktree was already heavily dirty and remains dirty. This mission made no source edits there, but early test invocations briefly ran from its CWD before the worktree mismatch was noticed. The cited final backend and Node evidence was rerun from the isolated mission worktree; the API harness defaults to per-test SQLite and the explicit PostgreSQL runs targeted only disposable `aiqa_test`. Do not describe the original worktree as untouched.
+- No push, PR, merge, deploy, force operation, or production write occurred. A pinned test-only `embedded-postgres==18.6.3` package was installed only in a dedicated temporary venv; no project lockfile or system service changed. User authorization now covers a normal development-branch push and Draft PR after exact-file/remote preflight and preview; no remote action has yet occurred.
+
+### Completed changes / evidence
+
+- Added Pi adapters `.pi/agents/technology-scout.md`, `knowledge-curator.md`, `architecture-critic.md`; added tool-independent `engineering-knowledge/team-definition.md` and `.agents/skills/framework-research/`. Existing `pi-subagents@0.82.1` pin and foreground-only settings are retained. Real fresh `technology-scout` and `knowledge-curator` children in this worktree confirmed their role instructions; the Architecture Critic completed the separate design challenge. Scout/Curator allowlists remain policy-level, not OS sandboxes.
+- Added `engineering-knowledge/` Markdown index, records, templates, lesson/pattern, proposed ADR, and controlled comparison protocol. Recorded cross-project reusable findings separately from platform-only evidence.
+- Official tag/release/license/manifest facts source-verified: LangGraph `1.2.18`/MIT; Browser Use `0.13.14`/MIT; Skyvern `v1.0.56`/AGPL-3.0. Skyvern's FastAPI `<0.137` cap conflicts with project-resolved `0.141.1`. No framework installed or executed; no compatibility, cost, or legal conclusion. Eight other candidates remain unverified.
+- Independent architecture challenge recorded at `docs/architecture-review/architecture-debate-2026-10-28.md`. Keep A as current runtime baseline; Candidate B remains challenged/provisional; Architecture Gate is **DEFERRED / NOT PASSED**.
+- Fixed Quality Discovery startup recovery race: recovery uses exact scanned status plus existing ORM optimistic versioning; status and `run.paused` persistence now share a transaction; live notifications publish only after commit. No API/schema/migration/runtime-owner change.
+- Added race and transaction-failure regression tests in `apps/api/tests/test_discovery_task_runtime.py`.
+- Updated `docs/ROADMAP.md`, `.pi/team/{README,OPERATING_MODEL,QUALITY_GATES,ROADMAP,BACKLOG,DECISIONS}.md`, `docs/architecture-review/implementation-roadmap.md`, verification/decision evidence, this handoff, and `.ai-runs/2026-10-28-bounded-autonomous-r-d-workflow/`.
+
+### Actual verification
+
+- Focused post-review parent rerun: `../ai-qa-platform/.venv/bin/python -m pytest apps/api/tests/test_discovery_task_runtime.py -q` from mission worktree — **15 passed in 3.37s**, SQLite fixture only.
+- Independent fresh-context QA Engineer rerun of the same command — **15 passed in 3.40s**, exit 0; confirmed per-test `tmp_path` SQLite, `AI_QA_TEST_DATABASE_URL` unset, `_NoBrowser` fixture, no external provider/browser/service or production data.
+- Ruff final checks: `../ai-qa-platform/.venv/bin/ruff check <three touched Python files>` — PASS; `ruff format --check <same files>` — PASS, already formatted. `git diff --check` — PASS.
+- Independent fresh-context `reviewer` inspected the three code files, root `AGENTS.md`, Roadmap §0, ORM versioning and callers. **No issues found; OK with notes.** Reviewer did not run tests. Residual note: PostgreSQL/multi-process behavior unvalidated.
+- Release Engineer preflight: PARTIAL / not release-ready; no staged files, branch has no upstream, remote was not contacted, tracked diff/check clean, documentation/AI-run inventory is untracked. PostgreSQL remains blocked; no push/PR preview authorization used.
+- PostgreSQL gate **BLOCKED**: no Docker/Podman/PostgreSQL client/server tools; psycopg/psycopg2 absent; only `asyncpg` present; localhost ports 5432 refused (`connect_ex=61`). Do not install/start a database without separate authorization.
+- No full API/web suite, browser fixture, candidate benchmark, provider call/spend, legal review, frontend change, or desktop visual test. These remain NOT RUN or DEFERRED.
+
+### Open gates / exact next actions
+
+1. Re-run touched Python Ruff lint/format check and 15-test SQLite slice after any review-driven change; run `git diff --check` and lightweight Markdown/link/profile sanity checks.
+2. Finish updating the `.ai-runs` final report and verify all roadmap/backlog/status statements agree; keep mission overall PARTIAL.
+3. PostgreSQL and multi-process recovery verification require an isolated disposable DB/process environment. Until available, mark BLOCKED and do not claim Sprint A/B or overall architecture acceptance.
+4. Browser Use/Skyvern comparison is NOT RUN; require a scoped isolated loopback PoC, legal review for AGPL implications, explicit provider/spend and cleanup gates before execution.
+5. Inspect the exact final Git diff, secrets, branch ancestry/upstream, tests and PR body. Do not commit/push/open a remote PR until the user confirms the exact preview. If no authorization, leave the isolated branch as a local uncommitted partial delivery.
+
+Recovery commands:
+
+```bash
+cd /Users/hans/Code/github/ai-qa-platform-autonomous-rd
+git status --short --branch
+git rev-parse HEAD
+../ai-qa-platform/.venv/bin/python -m pytest apps/api/tests/test_discovery_task_runtime.py -q
+```
+
+### Superseding continuation — 2026-10-28 (current verified state)
+
+This addendum supersedes the initial PostgreSQL-blocked and original-worktree-untouched statements above. The earlier `.ai-runs/.../09-final-report.md` remains a valid snapshot of the state before temporary PostgreSQL provisioning; this addendum records the later continuation.
+
+#### Worktree and authorization
+
+- Worktree: `/Users/hans/Code/github/ai-qa-platform-autonomous-rd`; branch `agent/autonomous-rd-2026-10-28`; HEAD remains `245c00cacd946c8dea59991807af6b873fcdaf1d`. The refreshed 67-path stage matches the preview; no unstaged/untracked files remain. The P2 Worker-test finding is closed by follow-up Reviewer (OK); no mission commit exists.
+- The original main worktree is still dirty. Early test commands briefly used its CWD; final evidence listed below was rerun from the mission worktree. Do not clean, reset, or otherwise alter the original worktree.
+- User has authorized a normal push to the development branch and a Draft PR, subject to reviewing exact paths, GitHub target/remote/PR state, and the external-write preview. No push/PR/merge/deploy has occurred; stop if a fast-forward is not possible.
+
+#### PostgreSQL and recovery evidence
+
+- Provisioned isolated PostgreSQL **18.6** with `embedded-postgres==18.6.3` in `/tmp/aiqa-rd-postgres-20261028-venv`; data/socket under `/tmp/aiqa-rd-postgres-20261028`; loopback-only port `55432`; throwaway database `aiqa_test`. The existing test fixture drops/recreates `public`, so no shared database was used. After testing, `pg_ctl -D /tmp/aiqa-rd-postgres-20261028/pgdata -m fast -w stop` confirmed `server stopped`; port probe returned `connect_ex=61`. Only the exact run-owned data dir, temporary venv, and `/tmp/aiqa-rd-kb-reuse-20261028.py` scratch script were removed and verified absent. No system-wide service, project dependency, or lockfile changed.
+- From the mission worktree, `../ai-qa-platform/.venv/bin/python -m pytest apps/api/tests/test_discovery_task_runtime.py -q` — **15 passed** on SQLite (5.92s); the same command with `AI_QA_TEST_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:55432/aiqa_test` — **15 passed** on PostgreSQL 18.6 (6.61s).
+- Independent Reviewer found a P2 gap in the initial concurrent-Worker test: seeing both Worker IDs across an eventual queue did not prove overlap. The assertion now requires both IDs among `ASSIGNED`/`RUNNING` jobs in one snapshot.
+- Post-fix focused concurrency selection: SQLite **1 passed, 4 deselected in 21.60s**; PostgreSQL 18.6 **1 passed, 4 deselected in 19.81s**.
+- Post-fix `apps/api/tests/test_worker_process_integration.py -q`: SQLite **5 passed, 3 datetime-adapter deprecation warnings in 60.20s**; PostgreSQL 18.6 **5 passed in 57.86s**. This exercises two concurrent Worker subprocesses, crash recovery, cancellation, timeout, and stale/late-result protection; it does not establish general lease/fencing guarantees.
+- Follow-up fresh-context Reviewer verified the same-snapshot `ASSIGNED`/`RUNNING` assertion closes the P2, found no new issue, and returned **OK**. Reviewer did not run tests. Release Engineer: **PARTIAL / not release-ready for merge**; exact 67-path scope and staged whitespace passed, but tests were not independently rerun and comprehensive credential/data scanning remains unverified. Parent separately inspected the live public repo/default branch, branch-protection status and PR list; no commit/remote write has occurred. A Draft PR is authorized as partial-only; no merge/deploy.
+- Additional focused concurrent-write/restart tests in `test_quality_discovery.py` (**2 passed**) and `test_job_reliability.py` (**4 passed**) passed. Cancellation/late-result selections were exercised on both database backends, but one PostgreSQL output was truncated; no aggregate count is claimed.
+- These results do **not** establish production PostgreSQL 16 behavior, multiple API-process Recovery ownership, durable lease/fencing generations, or the full Sprint A–C contracts.
+
+#### Knowledge, workflow, and frontend evidence
+
+- Cross-agent knowledge reuse succeeded in a bounded experiment against SQLAlchemy **2.0.54** (the repository lock version): a stale ORM flush raised `StaleDataError`; unguarded bulk DML bypassed the ORM version guard; a conditional version predicate rejected the stale write. The experiment used in-memory SQLite and does not prove platform-wide concurrency safety. `engineering-knowledge/patterns/conditional-recovery.md` remains **EXPERIMENTAL**.
+- Team guidance now requires checking for safe, pinned temporary infrastructure before declaring an applicable gate blocked, and adds preview-first normal-push/Draft-PR instructions to the existing workflow (no new delivery skill or agent runtime).
+- From the mission worktree with Node `v24.21.0`, `node --test apps/web/tests/runtime-model.test.mjs apps/web/tests/workspace-run-dock-model.test.mjs` — **17 passed**. No frontend source changed; this is not full Web or desktop/browser acceptance.
+
+#### Current mission status and remaining gates
+
+- Sprint A/B/C/D remain **PARTIAL**; Sprint E is **BLOCKED / NOT RUN**. Browser Use/Skyvern remain uninstalled/unexecuted; no local model endpoint or provider cost cap was available, and legal/compatibility review remains incomplete.
+- Architecture Gate remains **DEFERRED / NOT PASSED**. Do not broaden claims beyond the tested recovery/worker paths or infer PostgreSQL 16/multi-API acceptance.
+- This mission continuation did not rerun the full API/repository suites, frontend lint/typecheck/build, browser/desktop acceptance, framework POC, provider spend, legal assessment, or a comprehensive secret scan. Historical project-wide results elsewhere in this handoff are separate evidence and must not be attributed to this mission.
+- See `.ai-runs/2026-10-28-bounded-autonomous-r-d-workflow/11-continuation.md` for the evidence and command matrix. Before delivery: finish the doc/link/credential-pattern checks, stop and clean only this run's temporary PostgreSQL/scratch resources, stage the exact paths in `.ai-runs/2026-10-28-bounded-autonomous-r-d-workflow/12-final-delivery-preview.md`, and compare/review the complete staged diff against that preview. The remote state was inspected read-only; no push/PR has occurred. Proceed only within the explicit authorization and stop if the remote moved or a normal push is not possible.

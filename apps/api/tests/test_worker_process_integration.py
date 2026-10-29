@@ -157,7 +157,8 @@ async def worker_factory(live_api: LiveApi, tmp_path: Path, admin_token: str):
     started: list[WorkerProcess] = []
 
     def start(**extra_env: str) -> WorkerProcess:
-        worker = WorkerProcess.start(live_api, tmp_path / "worker.log", admin_token, **extra_env)
+        log_path = tmp_path / f"worker-{len(started) + 1}.log"
+        worker = WorkerProcess.start(live_api, log_path, admin_token, **extra_env)
         started.append(worker)
         return worker
 
@@ -276,11 +277,100 @@ async def test_cancelling_the_job_stops_the_running_worker_and_frees_the_slot(
     stopped = await _wait_for_run(client, slow["id"], {"CANCELLED"}, timeout=30.0)
     assert stopped["status"] == "CANCELLED"
 
+    # A delayed success from the worker that owned the cancelled job must not resurrect the job
+    # or append executions to the cancelled run.
+    late_result = await client.post(
+        f"/api/jobs/{running['id']}/result",
+        json={"worker_id": running["assigned_worker_id"], "result": {"exit_code": 0, "total": 1, "passed": 1}},
+    )
+    assert late_result.status_code == 409, late_result.text
+    still_cancelled = (await client.get(f"/api/runs/{slow['id']}")).json()
+    assert still_cancelled["status"] == "CANCELLED"
+    assert still_cancelled["executions"] == []
+
     # The worker is still alive and its concurrency slot is free: a second run executes normally.
     follow_up = await _create_worker_run(client, project_id, "tests/test_worker_live_ok.py::test_worker_live_ok")
     done = await _wait_for_run(client, follow_up["id"], TERMINAL)
     assert done["status"] == "PASSED", (done.get("log_output"), worker.log())
     assert worker.process.poll() is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_worker_processes_claim_distinct_jobs(client: AsyncClient, worker_factory) -> None:
+    prefix = f"multi-worker-{os.getpid()}-{time.time_ns()}"
+    worker_names = {f"{prefix}-a", f"{prefix}-b"}
+    workers = [
+        worker_factory(WORKER_ID=f"{prefix}-id-a", WORKER_NAME=f"{prefix}-a"),
+        worker_factory(WORKER_ID=f"{prefix}-id-b", WORKER_NAME=f"{prefix}-b"),
+    ]
+
+    deadline = time.monotonic() + 20.0
+    registered = []
+    while time.monotonic() < deadline:
+        response = await client.get("/api/workers")
+        assert response.status_code == 200, response.text
+        registered = [item for item in response.json() if item["hostname"] in worker_names]
+        if {item["hostname"] for item in registered} == worker_names:
+            break
+        await asyncio.sleep(0.1)
+    assert {item["hostname"] for item in registered} == worker_names, registered
+    expected_worker_ids = {item["id"] for item in registered}
+    assert len(expected_worker_ids) == 2
+
+    files = {
+        f"tests/test_multi_worker_{index}.py": (
+            f"import time\n\ndef test_multi_worker_{index}():\n    time.sleep(6)\n    assert True\n"
+        )
+        for index in range(8)
+    }
+    project_id = await _create_project_with_files(client, files)
+    runs = [
+        await _create_worker_run(
+            client,
+            project_id,
+            f"tests/test_multi_worker_{index}.py::test_multi_worker_{index}",
+        )
+        for index in range(8)
+    ]
+
+    assigned_jobs: dict[str, dict[str, Any]] = {}
+    assigned_worker_ids: set[str] = set()
+    active_worker_ids: set[str] = set()
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        for run in runs:
+            response = await client.get("/api/jobs", params={"run_id": run["id"]})
+            assert response.status_code == 200, response.text
+            jobs = response.json()
+            assert len(jobs) == 1, jobs
+            assigned_jobs[run["id"]] = jobs[0]
+        assigned_worker_ids = {job["assigned_worker_id"] for job in assigned_jobs.values() if job["assigned_worker_id"]}
+        active_worker_ids = {
+            job["assigned_worker_id"]
+            for job in assigned_jobs.values()
+            if job["status"] in {"ASSIGNED", "RUNNING"} and job["assigned_worker_id"]
+        }
+        # Require both worker processes to own outstanding work in the same observed snapshot;
+        # seeing both IDs eventually across a queue would also pass a serialized execution path.
+        if active_worker_ids == expected_worker_ids:
+            break
+        await asyncio.sleep(0.2)
+    assert assigned_worker_ids == expected_worker_ids, assigned_jobs
+    assert active_worker_ids == expected_worker_ids, {
+        "active_worker_ids": active_worker_ids,
+        "expected_worker_ids": expected_worker_ids,
+        "jobs": assigned_jobs,
+    }
+
+    finished_runs = await asyncio.gather(*(_wait_for_run(client, run["id"], TERMINAL, timeout=60.0) for run in runs))
+    failed_runs = [
+        {"id": run["id"], "status": run["status"], "log": (run.get("log_output") or "")[-1000:]}
+        for run in finished_runs
+        if run["status"] != "PASSED"
+    ]
+    assert not failed_runs, failed_runs
+    assert all(run["total"] == 1 and len(run["executions"]) == 1 for run in finished_runs)
+    assert all(worker.process.poll() is None for worker in workers)
 
 
 @pytest.mark.asyncio

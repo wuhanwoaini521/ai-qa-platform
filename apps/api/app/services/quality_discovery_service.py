@@ -876,16 +876,22 @@ class QualityDiscoveryService(
     async def recover_interrupted_runs(self) -> int:
         """Pause runs a previous process left queued or running so they can be resumed."""
         async with self.session_factory() as session:
-            stale = [row.id for row in await QualityDiscoveryRepository(session).list_non_terminal()]
-        for run_id in stale:
-            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
-            await self._update(
+            stale = [(row.id, row.status) for row in await QualityDiscoveryRepository(session).list_non_terminal()]
+        recovered = 0
+        for run_id, scanned_status in stale:
+            updated = await self._update(
                 run_id,
+                expected_statuses=(scanned_status,),
                 status=DiscoveryStatus.PAUSED.value,
                 error="The process restarted while this exploration was running; resume it to continue.",
+                persisted_event=("run.paused", "服务重启后探索已暂停，可以继续。", None),
             )
-            await self._event(run_id, "run.paused", "服务重启后探索已暂停，可以继续。")
-        return len(stale)
+            if updated is None:
+                continue
+            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
+            self._publish_event(run_id, "run.paused", "服务重启后探索已暂停，可以继续。")
+            recovered += 1
+        return recovered
 
     async def _wait_if_paused(self, run_id: str) -> None:
         event = self._resume_events.setdefault(run_id, asyncio.Event())
@@ -894,23 +900,42 @@ class QualityDiscoveryService(
             return
 
     async def _event(self, run_id: str, event_type: str, message: str, metadata: dict[str, Any] | None = None) -> None:
-        def change(result):
-            events = result.setdefault("events", [])
-            events.append(
-                {
-                    "id": uuid4().hex[:12],
-                    "type": event_type,
-                    "message": message[:300],
-                    "metadata": metadata or {},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            del events[: -get_config().discovery.max_events]
+        await self._change_result(
+            run_id,
+            lambda result: self._append_persisted_event(result, event_type, message, metadata),
+        )
+        self._publish_event(run_id, event_type, message, metadata)
 
-        await self._change_result(run_id, change)
-        seq = self._event_seq.get(run_id, 0) + 1
-        self._event_seq[run_id] = seq
-        self.live.publish(run_id, event_payload(event_type, seq=seq, message=message, metadata=metadata))
+    @staticmethod
+    def _append_persisted_event(
+        result: dict[str, Any],
+        event_type: str,
+        message: str,
+        metadata: dict[str, Any] | None,
+    ) -> None:
+        events = result.setdefault("events", [])
+        events.append(
+            {
+                "id": uuid4().hex[:12],
+                "type": event_type,
+                "message": message[:300],
+                "metadata": metadata or {},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        del events[: -get_config().discovery.max_events]
+
+    def _publish_event(
+        self,
+        run_id: str,
+        event_type: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.live.publish(
+            run_id,
+            event_payload(event_type, seq=self._live_seq(run_id), message=message, metadata=metadata),
+        )
 
     # --- live stream ---------------------------------------------------------------------------
 
@@ -1127,11 +1152,33 @@ class QualityDiscoveryService(
                     raise
                 await asyncio.sleep(0.01 * (attempt + 1))
 
-    async def _update(self, run_id: str, **values) -> QualityDiscoveryRunORM | None:
+    async def _update(
+        self,
+        run_id: str,
+        *,
+        expected_statuses: tuple[str, ...] | None = None,
+        persisted_event: tuple[str, str, dict[str, Any] | None] | None = None,
+        **values,
+    ) -> QualityDiscoveryRunORM | None:
         for attempt in range(5):
             try:
                 async with self.session_factory() as session:
-                    row = await QualityDiscoveryRepository(session).update(run_id, **values)
+                    repo = QualityDiscoveryRepository(session)
+                    update_values = values
+                    if persisted_event is not None:
+                        current = await repo.get(run_id)
+                        if current is None or (
+                            expected_statuses is not None and current.status not in expected_statuses
+                        ):
+                            return None
+                        result = json.loads(json.dumps(current.result or {}))
+                        self._append_persisted_event(result, *persisted_event)
+                        update_values = {**values, "result": result}
+                    row = await repo.update(
+                        run_id,
+                        expected_statuses=expected_statuses,
+                        **update_values,
+                    )
                     await session.commit()
                     return row
             except (StaleDataError, OperationalError) as exc:
