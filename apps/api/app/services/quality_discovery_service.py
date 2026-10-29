@@ -891,19 +891,26 @@ class QualityDiscoveryService(
         """Pause runs a previous process left queued or running so they can be resumed."""
         async with self.session_factory() as session:
             stale = [
-                row.id
+                (row.id, row.status)
                 for row in await QualityDiscoveryRepository(session).list_non_terminal()
                 if _run_is_stale(row, self.STALE_AFTER_SECONDS)
             ]
-        for run_id in stale:
-            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
-            await self._update(
+        recovered = 0
+        for run_id, expected_status in stale:
+            message = "服务重启后探索已暂停，可以继续。"
+            row = await self._update(
                 run_id,
+                expected_statuses=(expected_status,),
                 status=DiscoveryStatus.PAUSED.value,
                 error="The process restarted while this exploration was running; resume it to continue.",
+                persisted_event=("run.paused", message),
             )
-            await self._event(run_id, "run.paused", "服务重启后探索已暂停，可以继续。")
-        return len(stale)
+            if row is None:
+                continue
+            recovered += 1
+            self._live_status(run_id, DiscoveryStatus.PAUSED.value, "探索已暂停，可以继续。")
+            self._publish_event(run_id, "run.paused", message)
+        return recovered
 
     async def _wait_if_paused(self, run_id: str) -> None:
         event = self._resume_events.setdefault(run_id, asyncio.Event())
@@ -912,20 +919,37 @@ class QualityDiscoveryService(
             return
 
     async def _event(self, run_id: str, event_type: str, message: str, metadata: dict[str, Any] | None = None) -> None:
-        def change(result):
-            events = result.setdefault("events", [])
-            events.append(
-                {
-                    "id": uuid4().hex[:12],
-                    "type": event_type,
-                    "message": message[:300],
-                    "metadata": metadata or {},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            del events[: -get_config().discovery.max_events]
+        await self._change_result(
+            run_id, lambda result: self._append_persisted_event(result, event_type, message, metadata)
+        )
+        self._publish_event(run_id, event_type, message, metadata)
 
-        await self._change_result(run_id, change)
+    @staticmethod
+    def _append_persisted_event(
+        result: dict[str, Any],
+        event_type: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        events = result.setdefault("events", [])
+        events.append(
+            {
+                "id": uuid4().hex[:12],
+                "type": event_type,
+                "message": message[:300],
+                "metadata": metadata or {},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        del events[: -get_config().discovery.max_events]
+
+    def _publish_event(
+        self,
+        run_id: str,
+        event_type: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         seq = self._event_seq.get(run_id, 0) + 1
         self._event_seq[run_id] = seq
         self.live.publish(run_id, event_payload(event_type, seq=seq, message=message, metadata=metadata))
@@ -1096,10 +1120,20 @@ class QualityDiscoveryService(
                         detail = self._safe_error(projection_error)
                         message = f"quality map finalization failed: {detail}"
                         error = f"{error}; {message}" if error else message
-                await self._update(
-                    run_id, status=status, error=error, finished_at=utc_now() if status in self.TERMINAL else None
+                message = error or f"探索状态：{status}"
+                # The terminal status and its event must land together: a crash between two commits
+                # would leave a finished run without the event that explains it.
+                updated = await self._update(
+                    run_id,
+                    expected_statuses=(row.status,),
+                    status=status,
+                    error=error,
+                    finished_at=utc_now() if status in self.TERMINAL else None,
+                    persisted_event=(f"run.{status.lower()}", message),
                 )
-                await self._event(run_id, f"run.{status.lower()}", error or f"探索状态：{status}")
+                if updated is None:
+                    return
+                self._publish_event(run_id, f"run.{status.lower()}", message)
                 self.live.publish(
                     run_id,
                     event_payload(
@@ -1146,10 +1180,21 @@ class QualityDiscoveryService(
                 await asyncio.sleep(0.01 * (attempt + 1))
 
     async def _update(self, run_id: str, **values) -> QualityDiscoveryRunORM | None:
+        expected_statuses = values.pop("expected_statuses", None)
+        persisted_event = values.pop("persisted_event", None)
         for attempt in range(5):
             try:
                 async with self.session_factory() as session:
-                    row = await QualityDiscoveryRepository(session).update(run_id, **values)
+                    repo = QualityDiscoveryRepository(session)
+                    row = await repo.update(run_id, expected_statuses=expected_statuses, **values)
+                    if row is None:
+                        await session.rollback()
+                        return None
+                    if persisted_event is not None:
+                        event_type, message = persisted_event
+                        result = json.loads(json.dumps(row.result or {}))
+                        self._append_persisted_event(result, event_type, message)
+                        await repo.update(run_id, result=result)
                     await session.commit()
                     return row
             except (StaleDataError, OperationalError) as exc:

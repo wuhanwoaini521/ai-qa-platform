@@ -280,5 +280,164 @@ async def test_startup_recovery_pauses_runs_a_dead_process_left_running(test_db_
     paused = await service.get(abandoned)
     assert paused.status == DiscoveryStatus.PAUSED.value
     assert "restarted" in (paused.error or "")
+    assert [event["type"] for event in paused.result["events"]] == ["run.paused"]
     assert (await service.get(live)).status == DiscoveryStatus.RUNNING.value
     assert (await service.get(completed)).status == DiscoveryStatus.COMPLETED.value
+
+
+@pytest.mark.asyncio
+async def test_startup_recovery_does_not_overwrite_a_run_changed_after_scan(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value, age_seconds=3600)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    published: list[tuple[str, str]] = []
+    service._live_status = lambda *_args: published.append(("status", _args[1]))
+    service._publish_event = lambda _run_id, event_type, *_args: published.append(("event", event_type))
+    original_update = service._update
+
+    async def finish_before_recovery_update(_run_id, **values):
+        if values.get("expected_statuses"):
+            await original_update(_run_id, status=DiscoveryStatus.COMPLETED.value)
+        return await original_update(_run_id, **values)
+
+    monkeypatch.setattr(service, "_update", finish_before_recovery_update)
+
+    assert await service.recover_interrupted_runs() == 0
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.COMPLETED.value
+    assert run.result.get("events", []) == []
+    assert published == []
+
+
+@pytest.mark.asyncio
+async def test_startup_recovery_rolls_back_status_when_event_persistence_fails(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value, age_seconds=3600)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    def fail_event_persistence(*_args, **_kwargs):
+        raise RuntimeError("event persistence failed")
+
+    monkeypatch.setattr(service, "_append_persisted_event", fail_event_persistence)
+
+    with pytest.raises(RuntimeError, match="event persistence failed"):
+        await service.recover_interrupted_runs()
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.RUNNING.value
+    assert run.result.get("events", []) == []
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_run_persists_status_and_terminal_event_together(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.COMPLETED.value
+    assert run.finished_at is not None
+    assert [event["type"] for event in run.result["events"]] == ["run.completed"]
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_run_publishes_only_after_the_commit(test_db_session, monkeypatch, caplog):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    caplog.set_level("ERROR", logger="app.quality_discovery")
+
+    def fail_live_publish(*_args, **_kwargs):
+        raise RuntimeError("live broadcast failed")
+
+    monkeypatch.setattr(service.live, "publish", fail_live_publish)
+
+    # A broadcast failure happens after the write; it must not roll the terminal state back.
+    with pytest.raises(RuntimeError, match="live broadcast failed"):
+        await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.COMPLETED.value
+    assert [event["type"] for event in run.result["events"]] == ["run.completed"]
+    await asyncio.sleep(0)
+    # The failure is still traceable even though the caller got the exception.
+    assert "Discovery finalization failed error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_run_rolls_back_status_when_event_persistence_fails(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    published: list[str] = []
+    service._publish_event = lambda _run_id, event_type, *_args: published.append(event_type)
+
+    def fail_event_persistence(*_args, **_kwargs):
+        raise RuntimeError("event persistence failed")
+
+    monkeypatch.setattr(service, "_append_persisted_event", fail_event_persistence)
+
+    with pytest.raises(RuntimeError, match="event persistence failed"):
+        await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.RUNNING.value
+    assert run.finished_at is None
+    assert run.result.get("events", []) == []
+    assert published == []
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_run_does_not_overwrite_a_status_changed_after_it_started(test_db_session, monkeypatch):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+    original_update = service._update
+
+    async def finish_before_the_final_write(_run_id, **values):
+        if values.get("expected_statuses"):
+            await original_update(_run_id, status=DiscoveryStatus.COMPLETED.value)
+        return await original_update(_run_id, **values)
+
+    monkeypatch.setattr(service, "_update", finish_before_the_final_write)
+
+    await service._finish(run_id, DiscoveryStatus.FAILED.value, "late failure")
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.COMPLETED.value
+    assert run.result.get("events", []) == []
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_run_twice_does_not_duplicate_its_terminal_event(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+    await service._finish(run_id, DiscoveryStatus.COMPLETED.value, None)
+
+    run = await service.get(run_id)
+    assert run.status == DiscoveryStatus.COMPLETED.value
+    assert [event["type"] for event in run.result["events"]] == ["run.completed"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_finishes_produce_exactly_one_terminal_event(test_db_session):
+    project_id = await _project(test_db_session)
+    run_id = await _run_row(test_db_session, project_id, DiscoveryStatus.RUNNING.value)
+    service = QualityDiscoveryService(test_db_session, browser_runtime=_NoBrowser())
+
+    await asyncio.gather(
+        service._finish(run_id, DiscoveryStatus.COMPLETED.value, None),
+        service._finish(run_id, DiscoveryStatus.FAILED.value, "late failure"),
+        return_exceptions=True,
+    )
+
+    run = await service.get(run_id)
+    assert run.status in {DiscoveryStatus.COMPLETED.value, DiscoveryStatus.FAILED.value}
+    events = run.result["events"]
+    assert len(events) == 1
+    assert events[0]["type"] == f"run.{run.status.lower()}"

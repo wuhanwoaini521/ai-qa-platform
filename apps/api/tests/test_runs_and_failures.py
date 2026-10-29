@@ -1790,3 +1790,41 @@ async def test_run_stream_updates_equal_length_rolling_log(client, test_db_sessi
         finally:
             await stream.aclose()
         assert run.id not in event_bus._subscribers
+
+
+@pytest.mark.asyncio
+async def test_a_run_is_persisted_before_its_finish_event_is_broadcast(
+    client: AsyncClient, test_db_session, monkeypatch
+):
+    project = (await client.post("/api/projects", json={"name": "Terminal write ordering"})).json()
+    async with test_db_session() as session:
+        run = await TestRunRepository(session).create_run(
+            TestRunCreate(project_id=project["id"], workspace_id=project["id"])
+        )
+        await session.commit()
+        run_id = run.id
+
+    published: list[str] = []
+
+    async def publish_then_fail(_run_id, event):
+        published.append(event["type"])
+        if event["type"] == "RUN_FINISHED":
+            raise RuntimeError("broadcast failed")
+
+    monkeypatch.setattr(event_bus, "publish", publish_then_fail)
+    suite = SuiteExecutionResult(
+        exit_code=0,
+        total=1,
+        passed=1,
+        results=[SingleTestResult(nodeid="tests/test_page.py::test_ok", status=TestExecutionStatus.PASSED)],
+    )
+    async with test_db_session() as session:
+        service = make_test_run_service(TestRunRepository(session), WorkspaceRepository(session), WorkspaceService())
+        # The broadcast happens after the terminal write: a failing subscriber must not undo it.
+        with pytest.raises(RuntimeError, match="broadcast failed"):
+            await service.persist_suite_result(run_id, suite)
+
+    final = (await client.get(f"/api/runs/{run_id}")).json()
+    assert final["status"] == RunStatus.PASSED.value
+    assert final["passed"] == 1
+    assert published[-1] == "RUN_FINISHED"
