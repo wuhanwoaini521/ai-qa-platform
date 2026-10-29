@@ -19,6 +19,7 @@
   - Protect existing user changes.
   - Prefer clean, structured, incremental commits.
   - Run relevant tests and linters before committing.
+- **Quality Verdicts**: Use `docs/QUALITY_GATES.md` for `PASS` / `PARTIAL` / `FAIL` / `BLOCKED` / `UNKNOWN` and the evidence each requires.
 - **Architecture Boundaries**:
   - `apps/web`: React + TypeScript + Vite frontend.
   - `apps/api`: FastAPI domain services & REST endpoints.
