@@ -70,9 +70,15 @@ class QualityDiscoveryRepository:
         await self.session.flush()
         return row
 
-    async def update(self, run_id: str, **values) -> QualityDiscoveryRunORM | None:
+    async def update(
+        self,
+        run_id: str,
+        *,
+        expected_statuses: tuple[str, ...] | None = None,
+        **values,
+    ) -> QualityDiscoveryRunORM | None:
         row = await self.get(run_id)
-        if row is None:
+        if row is None or (expected_statuses is not None and row.status not in expected_statuses):
             return None
         for name, value in values.items():
             setattr(row, name, value)
