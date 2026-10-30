@@ -159,11 +159,13 @@
       "passed": "Passed",
       "cancelled": "Cancelled",
       "task-completed": "Task complete",
+      "task-paused": "Task paused",
       "task-failed": "Task failed",
       "task-blocked": "Task needs attention",
       "task-cancelled": "Task cancelled"
     },
-    "taskFinished": "The workflow task is complete; no TestRun was created."
+    "taskFinished": "The workflow task is complete; no TestRun was created.",
+    "taskPaused": "The workflow task is paused; view its progress in task details."
   },
   "aiRun": {
     "title": "AI Run",
@@ -482,6 +484,7 @@
     "currentRunAndLogs": "Current run and logs",
     "live": "Live events",
     "runContext": "Run context",
+    "inspector": "Run inspector",
     "currentTask": "Current task",
     "case": "Test case",
     "environment": "Environment",

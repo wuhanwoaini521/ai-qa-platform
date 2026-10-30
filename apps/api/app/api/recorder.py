@@ -9,6 +9,7 @@ from project_model.models import (
 )
 
 from app.api.authz import authenticate_websocket_stream, has_permission, require_permission
+from app.api.project_acl import enforce_project_access
 from app.container import get_recorder_workflow_service, recorder_service
 from app.services.ai_runtime import build_ai_orchestrator
 from app.services.recorder_service import (
@@ -25,12 +26,21 @@ from app.services.recorder_workflow_service import RecorderWorkflowService
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
 
 
+async def _get_accessible_session(session_id: str, user: User):
+    session = await recorder_service.get(session_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    await enforce_project_access(user, session.project_id)
+    return session
+
+
 @router.post("/sessions")
 async def create_recorder_session(
     data: RecorderSessionCreate,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
     workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
 ):
+    await enforce_project_access(user, data.project_id)
     try:
         created = await workflow.create_session(user.id, data)
     except LookupError as error:
@@ -53,9 +63,7 @@ async def get_recorder_session(
     session_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     return recorder_service.session_status(session)
 
 
@@ -65,9 +73,7 @@ async def generate_case(
     request: RecorderGenerateRequest,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     return {"code": generate_python_case(request), "project_id": recorder_service.session_status(session)["project_id"]}
 
 
@@ -77,9 +83,7 @@ async def analyze_recorder_locator(
     step_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     try:
         return await recorder_service.analyze_locator_with_ai(session, step_id)
     except LookupError as error:
@@ -96,9 +100,7 @@ async def decide_recorder_locator_with_jev(
     step_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     try:
         return await recorder_service.request_jev_locator_decision(session, step_id)
     except LookupError as error:
@@ -118,6 +120,7 @@ async def save_recorded_case(
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
     workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
 ):
+    await _get_accessible_session(session_id, user)
     try:
         return await workflow.save_case(session_id, user.id, request)
     except LookupError as error:
@@ -134,9 +137,7 @@ async def optimize_recording(
     request: RecorderGenerateRequest,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    await _get_accessible_session(session_id, user)
     if not request.steps or len(request.steps) > 500:
         raise HTTPException(status_code=400, detail="Optimize between 1 and 500 recorded steps.")
     import json
@@ -239,6 +240,7 @@ async def close_recorder_session(
     session_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
+    await _get_accessible_session(session_id, user)
     await recorder_service.close(session_id, user.id)
     return {"closed": True}
 
@@ -252,6 +254,11 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
         return
     session = await recorder_service.get(session_id, user.id)
     if not session:
+        await websocket.close(code=4404, reason="Recorder session not found")
+        return
+    try:
+        await enforce_project_access(user, session.project_id)
+    except HTTPException:
         await websocket.close(code=4404, reason="Recorder session not found")
         return
     recorder_service.touch(session)

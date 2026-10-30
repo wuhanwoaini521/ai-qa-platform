@@ -9,6 +9,7 @@ interface RequirementToolbarProps {
   onNewRequirement: () => void;
   onAnalyze?: () => void;
   analysisRunning?: boolean;
+  showEntryActions?: boolean;
 }
 
 export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
@@ -17,6 +18,7 @@ export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
   onNewRequirement,
   onAnalyze,
   analysisRunning = false,
+  showEntryActions = true,
 }) => {
   const { t } = useTranslation('requirements');
   const { t: lifecycleT } = useTranslation('lifecycle');
@@ -29,6 +31,7 @@ export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
         </p>
       </div>
       <div className="requirement-toolbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {showEntryActions && <>
         <button
           className={`btn btn-secondary${onAnalyze ? ' btn-sm' : ''}`}
           disabled={projects.length === 0}
@@ -44,6 +47,7 @@ export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
         >
           <Plus size={16} /> {t('toolbarNewRequirement')}
         </button>
+        </>}
         {onAnalyze && <button type="button" className="btn btn-primary btn-sm" disabled={analysisRunning} onClick={onAnalyze}>
           <Sparkles size={14} aria-hidden="true" /> {lifecycleT(analysisRunning ? 'analyzing' : 'analyze')}
         </button>}

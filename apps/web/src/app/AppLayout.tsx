@@ -54,12 +54,14 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const workspaceResultsRoute = workspaceRoute && (
     workspaceStage === 'result' || (!workspaceStage && workspaceView === 'results')
   );
+  const graphiteRoute = location.pathname === '/' || location.pathname === '/projects' ||
+    location.pathname.startsWith('/projects/') || location.pathname === '/quality' || workspaceRoute;
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
 
   return (
     <div className="app-container">
-      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}`}>
+      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${graphiteRoute ? ' is-graphite' : ''}`}>
         <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
         <Header
           title={title}
@@ -68,7 +70,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
         />
 
         <div className="app-body">
-          <Navigation compact={workspaceRoute} />
+          <Navigation compact={workspaceRoute} graphite={graphiteRoute} />
           <div className="app-main">
             <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
               <ReadinessNotice />

@@ -616,6 +616,13 @@
 .workspace-no-case p { margin: 0; }
 .workspace-empty h2 { margin: 8px 0 4px; font-size: 17px; }
 .workspace-empty p { color: var(--ink-muted); font-size: 12px; }
+.requirement-start-state { display: grid; justify-items: center; gap: 10px; min-height: 230px; }
+.requirement-start-state > svg { color: var(--accent-blue); }
+.requirement-start-state h2 { margin: 0; }
+.requirement-start-state p { max-width: 56ch; margin: 0; line-height: 1.5; }
+.requirement-start-state .workspace-empty-actions { justify-content: center; }
+.requirement-load-error { min-height: 72px; }
+.requirement-detail-state { padding: 32px !important; color: var(--ink-muted); text-align: center; }
 
 .workspace-shell .lc-page { max-width: none; padding: 0; }
 .workspace-shell .lc-breadcrumb { display: none; }
@@ -755,6 +762,7 @@
 .workspace-run-launcher.is-task-failed .workspace-dock-indicator,
 .workspace-run-launcher.is-task-blocked .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
 .workspace-run-launcher.is-passed .workspace-dock-indicator { color: var(--accent-green); background: var(--accent-green-soft); }
+.workspace-run-launcher.is-task-paused .workspace-dock-indicator { color: var(--accent-amber); background: var(--accent-amber-soft); }
 .workspace-run-launcher.is-running .workspace-dock-indicator,
 .workspace-run-launcher.is-preparing .workspace-dock-indicator { animation: workspace-live-pulse 1.6s ease-out infinite; }
 
@@ -800,6 +808,7 @@
 .workspace-run-dock.is-task-failed .workspace-dock-indicator,
 .workspace-run-dock.is-task-blocked .workspace-dock-indicator { color: var(--accent-red); background: var(--accent-red-soft); }
 .workspace-run-dock.is-passed .workspace-dock-indicator { color: var(--accent-green); background: var(--accent-green-soft); }
+.workspace-run-dock.is-task-paused .workspace-dock-indicator { color: var(--accent-amber); background: var(--accent-amber-soft); }
 .workspace-run-dock strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-run-dock small { overflow: hidden; color: var(--ink-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-run-dock-context,
@@ -1951,7 +1960,7 @@
 .content-viewport.is-workspace .workspace-shell.is-explore { grid-template-rows: auto minmax(0, 1fr); }
 .workspace-heading.is-workbench-heading { flex-wrap: nowrap; align-items: center; gap: 14px; }
 .workspace-mode-nav.is-inline { flex: 1 1 420px; width: auto; max-width: 720px; gap: 6px; }
-.workspace-mode-nav.is-inline .workspace-mode-tab { min-height: 38px; padding-block: 5px; }
+.workspace-mode-nav.is-inline .workspace-mode-tab { min-height: 38px; padding: 5px 8px; gap: 6px; }
 .workspace-grid.is-debug-view,
 .workspace-grid.is-explore-view { height: calc(100dvh - 230px); min-height: 520px; }
 .workspace-grid.is-debug-view.is-context-collapsed,
@@ -1960,6 +1969,12 @@
 .workspace-grid.is-explore-view .workspace-main-scroll { min-height: 0; padding: 0; overflow: hidden; }
 .workspace-grid.is-debug-view .workspace-main-scroll,
 .workspace-grid.is-explore-view .workspace-main-scroll { display: flex; flex-direction: column; }
+@media (min-width: 821px) {
+  .workspace-shell.is-write .workspace-main-scroll { display: flex; min-height: 0; overflow: hidden; }
+  .workspace-shell.is-write .workspace-code-content,
+  .workspace-shell.is-write .workspace-code-editor { min-height: 0; }
+  .workspace-shell .recorder-page.is-embedded .recorder-natural-flow-prompt textarea { height: 54px; min-height: 54px; scroll-margin-block: 4px; }
+}
 .workspace-grid.is-explore-view .workspace-main-scroll > .recorder-page.is-embedded { display: flex; flex-direction: column; }
 .workspace-grid.is-debug-view .workspace-main-scroll > .workspace-debug-split { display: grid; grid-template-columns: minmax(0, var(--workspace-debug-editor-ratio, 0.58fr)) 8px minmax(320px, var(--workspace-debug-browser-ratio, 0.42fr)); }
 .workspace-grid.is-debug-view .workspace-main-panel,
@@ -1970,7 +1985,12 @@
 .workspace-debug-resizer:hover::after,
 .workspace-debug-resizer:focus-visible::after { background: var(--accent-blue); }
 .workspace-debug-resizer:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
-.workspace-debug-editor .studio-debug-panel { flex: 0 0 112px; min-height: 90px; max-height: 124px; }
+.workspace-debug-editor .studio-debug-disclosure { flex: 0 0 auto; min-height: 0; border-top: 1px solid var(--line); }
+.workspace-debug-editor .studio-debug-disclosure > summary { flex: 0 0 auto; min-height: 32px; padding: 6px 12px; color: var(--ink-soft); font-size: 11px; cursor: pointer; }
+.workspace-debug-editor .studio-debug-disclosure[open] { display: flex; flex: 0 0 160px; flex-direction: column; min-height: 140px; max-height: 176px; overflow: hidden; }
+.workspace-debug-editor .studio-debug-disclosure-content { display: none; flex: 0 0 127px; height: 127px; min-height: 0; overflow: auto; }
+.workspace-debug-editor .studio-debug-disclosure[open] .studio-debug-disclosure-content { display: flex; }
+.workspace-debug-editor .studio-debug-disclosure-content .studio-debug-panel { flex: 1 1 auto; min-height: 0; max-height: none; }
 .workspace-debug-editor .studio-bottom-panels:not(.is-collapsed) { flex: 0 0 auto; height: min(var(--studio-dock-height, 220px), 104px); }
 .workspace-debug-mobile-nav { display: none; }
 .workspace-debug-mobile-steps { display: none; }
@@ -1980,7 +2000,7 @@
 .workspace-shell .recorder-page.is-embedded .recorder-actions:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; border-radius: var(--r-sm); }
 .workspace-shell .recorder-page.is-embedded .recorder-actions .btn { min-height: 30px; padding: 5px 8px; font-size: 10px; }
 .workspace-shell .recorder-explore-mobile-nav { display: none; }
-.workspace-shell .recorder-explore-layout { display: grid; flex: 1 1 auto; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); grid-template-rows: minmax(140px, .42fr) minmax(180px, .58fr); grid-template-areas: 'browser task' 'browser steps'; gap: 8px; overflow: hidden; }
+.workspace-shell .recorder-explore-layout { display: grid; flex: 1 1 auto; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); grid-template-rows: minmax(36px, 72px) minmax(0, 1fr); grid-template-areas: 'browser task' 'browser steps'; gap: 8px; overflow: hidden; }
 .workspace-shell .recorder-explore-task { grid-area: task; display: grid; min-width: 0; min-height: 0; align-content: start; gap: 6px; overflow: auto; }
 .workspace-shell .recorder-explore-browser { grid-area: browser; display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); gap: 7px; }
 .workspace-shell .recorder-explore-browser .recorder-urlbar { min-height: 42px; padding: 4px; }
@@ -1988,7 +2008,7 @@
 .workspace-shell .recorder-explore-browser .recorder-panel { min-height: 0; }
 .workspace-shell .recorder-explore-browser .recorder-browser-viewport { min-height: 0; }
 .workspace-shell .recorder-explore-steps { grid-area: steps; min-width: 0; min-height: 0; }
-.workspace-shell .recorder-explore-steps .recorder-inspector-panel { height: 100%; min-height: 0; grid-template-rows: auto minmax(60px, .6fr) auto minmax(90px, 1fr); gap: 6px; padding: 7px; }
+.workspace-shell .recorder-explore-steps .recorder-inspector-panel { height: 100%; min-height: 0; grid-template-rows: auto minmax(180px, .8fr) auto minmax(90px, 1fr); gap: 6px; padding: 7px; }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-locator-trace { grid-template-rows: auto minmax(60px, .5fr) minmax(70px, .7fr) auto minmax(90px, 1fr); }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-element-evidence { grid-template-rows: auto auto minmax(60px, .6fr) auto minmax(90px, 1fr); }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-locator-trace.has-element-evidence { grid-template-rows: auto auto minmax(60px, .5fr) minmax(70px, .7fr) auto minmax(90px, 1fr); }
@@ -2079,4 +2099,257 @@
   .workspace-shell .recorder-page.is-embedded[data-mobile-panel='task'] .recorder-explore-layout { grid-template-rows: minmax(240px, auto) minmax(320px, auto); }
   .workspace-debug-mobile-nav { gap: 2px; padding-inline: 5px; }
   .workspace-debug-mobile-nav button { min-height: 42px; font-size: 10px; }
+}
+
+@media (min-width: 1151px) {
+/* Graphite workspace surfaces inherit the approved studio palette without changing runtime state. */
+.app-frame.is-graphite .workspace-shell.is-debug,
+.app-frame.is-graphite .workspace-shell.is-explore { gap: 10px; color: var(--ink); }
+.app-frame.is-graphite .workspace-heading.is-workbench-heading { min-height: 52px; }
+.app-frame.is-graphite .workspace-heading.is-workbench-heading > div > p { display: none; }
+.app-frame.is-graphite .workspace-main-heading { min-height: 40px; padding-block: 4px; }
+.app-frame.is-graphite .workspace-main-heading .workspace-eyebrow { display: none; }
+.app-frame.is-graphite .workspace-shell.is-write .lc-studio-toolbar,
+.app-frame.is-graphite .workspace-shell.is-debug .lc-studio-toolbar { padding-block: 6px; }
+.app-frame.is-graphite .workspace-shell.is-write .studio-editor-tabs,
+.app-frame.is-graphite .workspace-shell.is-debug .studio-editor-tabs { padding-block: 4px; }
+.app-frame.is-graphite .workspace-heading .workspace-eyebrow { color: var(--graphite-mint); font: 10px var(--font-mono); letter-spacing: .09em; }
+.app-frame.is-graphite .workspace-heading h1 { color: var(--ink); font-size: 17px; }
+.app-frame.is-graphite .workspace-heading p { color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-mode-nav.is-inline { gap: 4px; }
+.app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab { color: var(--ink-muted); border-color: transparent; background: transparent; }
+.app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab:hover:not(.is-current) { color: var(--ink); background: var(--surface-hover); }
+.app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab.is-current { color: var(--graphite-mint); border-color: var(--line); background: var(--graphite-mint-soft); box-shadow: none; }
+.app-frame.is-graphite .workspace-heading-actions { gap: 6px; }
+.app-frame.is-graphite .workspace-context-chip,
+.app-frame.is-graphite .workspace-live-label { border-color: var(--line); background: var(--surface-inset); color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-grid.is-debug-view,
+.app-frame.is-graphite .workspace-grid.is-explore-view { gap: 8px; }
+.app-frame.is-graphite .workspace-context-panel,
+.app-frame.is-graphite .workspace-main-panel,
+.app-frame.is-graphite .workspace-inspector { border-color: var(--line); border-radius: 7px; background: var(--surface); box-shadow: none; }
+.app-frame.is-graphite .workspace-panel-heading { border-color: var(--line); }
+.app-frame.is-graphite .workspace-panel-heading h2,
+.app-frame.is-graphite .workspace-main-heading h2 { color: var(--ink); }
+.app-frame.is-graphite .workspace-group-heading h3 { color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-context-list > button,
+.app-frame.is-graphite .workspace-context-list > a { color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-context-list > button:hover,
+.app-frame.is-graphite .workspace-context-list > a:hover { background: var(--surface-hover); }
+.app-frame.is-graphite .workspace-context-list > button.is-selected,
+.app-frame.is-graphite .workspace-context-list > a.is-selected { border-color: var(--line-strong); background: var(--surface-active); box-shadow: inset 2px 0 var(--graphite-mint); color: var(--ink); }
+.app-frame.is-graphite .workspace-context-filter { border-color: var(--line); background: var(--graphite-canvas); }
+.app-frame.is-graphite .workspace-main-heading { border-color: var(--line); }
+.app-frame.is-graphite .workspace-tool-nav .workspace-view-tab { color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-tool-nav .workspace-view-tab.is-current { border-color: var(--line-strong); background: var(--surface-raised); color: var(--graphite-mint); }
+.app-frame.is-graphite .workspace-debug-resizer:hover::after,
+.app-frame.is-graphite .workspace-debug-resizer:focus-visible::after,
+.app-frame.is-graphite .workspace-context-resizer:hover::after,
+.app-frame.is-graphite .workspace-context-resizer:focus-visible::after { background: var(--graphite-mint); }
+.app-frame.is-graphite .studio-container { gap: 8px; padding: 8px; background: var(--graphite-canvas); }
+.app-frame.is-graphite .studio-sidebar,
+.app-frame.is-graphite .studio-editor-pane { border-color: var(--line); border-radius: 7px; background: var(--surface); box-shadow: none; }
+.app-frame.is-graphite .studio-sidebar-header,
+.app-frame.is-graphite .studio-editor-tabs { border-color: var(--line); }
+.app-frame.is-graphite .studio-sidebar-header,
+.app-frame.is-graphite .studio-editor-tabs,
+.app-frame.is-graphite .studio-editor-pane > header { background: var(--surface-raised); color: var(--ink-muted); }
+.app-frame.is-graphite .studio-editor-pane { color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .studio-statusbar { display: flex; border-color: var(--line); background: var(--surface-frame); color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-debug-editor .studio-debug-panel,
+.app-frame.is-graphite .workspace-debug-editor .studio-bottom-panels { border-color: var(--line); background: var(--surface); color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-debug-runtime,
+.app-frame.is-graphite .workspace-debug-timeline { border-color: var(--line); border-radius: 7px; background: var(--surface); }
+.app-frame.is-graphite .workspace-debug-runtime > summary,
+.app-frame.is-graphite .workspace-debug-timeline > summary { color: var(--ink); }
+.app-frame.is-graphite .workspace-debug-runtime-content,
+.app-frame.is-graphite .workspace-debug-timeline .rt-timeline { border-color: var(--line); }
+.app-frame.is-graphite .workspace-debug-runtime-empty > svg { color: var(--graphite-mint); }
+.app-frame.is-graphite .rt-shell { border-color: var(--line); border-radius: 6px; background: var(--surface); box-shadow: none; }
+.app-frame.is-graphite .rt-status.status-completed,
+.app-frame.is-graphite .rt-status.status-passed { color: var(--graphite-mint); }
+.app-frame.is-graphite .rt-status.status-failed,
+.app-frame.is-graphite .rt-status.status-error { color: var(--graphite-red); }
+.app-frame.is-graphite .rt-timeline-row,
+.app-frame.is-graphite .rt-timeline-axis { border-color: var(--line-soft); }
+.app-frame.is-graphite .rt-recorded-badge { color: var(--graphite-mint); border-color: var(--line-strong); background: var(--surface-inset); }
+.app-frame.is-graphite .workspace-run-launcher,
+.app-frame.is-graphite .workspace-run-dock { border-color: var(--line-strong); background: var(--surface-raised); color: var(--ink); }
+.app-frame.is-graphite .workspace-run-dock-context,
+.app-frame.is-graphite .workspace-run-dock-progress { background: var(--surface-inset); }
+.app-frame.is-graphite .workspace-shell .recorder-page.is-embedded { color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-page.is-embedded .recorder-page-heading h2 { color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-page.is-embedded .recorder-page-heading h2 svg { color: var(--graphite-mint); }
+.app-frame.is-graphite .workspace-shell .recorder-project-label { border-color: var(--line); background: var(--surface-raised); color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-shell .recorder-natural-flow,
+.app-frame.is-graphite .workspace-shell .recorder-urlbar,
+.app-frame.is-graphite .workspace-shell .recorder-panel,
+.app-frame.is-graphite .workspace-shell .recorder-inspector-panel { border-color: var(--line); border-radius: 7px; background: var(--surface); box-shadow: none; color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-natural-flow > summary,
+.app-frame.is-graphite .workspace-shell .recorder-panel-heading { border-color: var(--line); color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-shell .recorder-browser-viewport { background: var(--graphite-canvas); }
+.app-frame.is-graphite .workspace-shell .recorder-browser-empty { color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-shell .recorder-browser-empty strong { color: var(--ink-soft); }
+.app-frame.is-graphite .workspace-shell .recorder-browser-empty svg { border-color: var(--line); background: var(--surface-raised); color: var(--graphite-mint); }
+.app-frame.is-graphite .workspace-shell .recorder-urlbar .recorder-url-input { border-color: var(--line); background: var(--graphite-canvas); color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-steps-heading,
+.app-frame.is-graphite .workspace-shell .recorder-steps-list,
+.app-frame.is-graphite .workspace-shell .recorder-case-settings,
+.app-frame.is-graphite .workspace-shell .recorder-editor-panel { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-steps-list,
+.app-frame.is-graphite .workspace-shell .recorder-step-item { border-color: var(--line-soft); }
+.app-frame.is-graphite .workspace-shell .recorder-step-field,
+.app-frame.is-graphite .workspace-shell .recorder-natural-flow-prompt textarea,
+.app-frame.is-graphite .workspace-shell .recorder-strategy-control select { border-color: var(--line-strong); background: var(--graphite-canvas); color: var(--ink); }
+.app-frame.is-graphite .workspace-shell .recorder-step-field::placeholder,
+.app-frame.is-graphite .workspace-shell .recorder-natural-flow-prompt textarea::placeholder { color: var(--ink-muted); }
+.app-frame.is-graphite .workspace-shell .recorder-explore-layout { grid-template-columns: minmax(0, 1.65fr) minmax(360px, .9fr); grid-template-rows: minmax(36px, 72px) minmax(0, 1fr); gap: 8px; }
+.app-frame.is-graphite .workspace-shell .recorder-explore-task { gap: 8px; }
+.app-frame.is-graphite .workspace-shell .recorder-explore-steps .recorder-inspector-panel { padding: 10px; }
+.app-frame.is-graphite .workspace-shell .recorder-page.is-embedded .recorder-natural-flow > summary { color: var(--graphite-mint); }
+.app-frame.is-graphite .workspace-shell .recorder-explore-mobile-nav { border-color: var(--line); background: var(--surface); }
+}
+
+@media (min-width: 1151px) {
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading > div:first-child { flex: 0 1 360px; }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-eyebrow { max-width: min(36vw, 460px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-frame.is-graphite .workspace-mode-nav.is-inline { display: grid; flex: 1 1 340px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; min-width: 320px; }
+  .app-frame.is-graphite .workspace-mode-nav.is-inline .workspace-mode-tab { min-width: 0; gap: 5px; padding-inline: 5px; font-size: 10px; white-space: nowrap; }
+  .app-frame.is-graphite .workspace-mode-nav.is-inline .workspace-mode-tab > span { overflow: visible; text-overflow: clip; white-space: nowrap; }
+}
+
+@media (min-width: 1280px) and (max-width: 1699px) {
+  .app-frame.is-graphite .workspace-result-workspace { grid-template-columns: minmax(160px, .8fr) minmax(420px, 2.45fr) minmax(240px, 1.35fr) minmax(260px, 1.45fr); }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-cases { grid-template-columns: minmax(300px, 2.5fr) minmax(180px, .9fr) minmax(215px, 1.1fr) minmax(240px, 1.2fr); }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-repair { grid-template-columns: minmax(160px, .8fr) minmax(190px, 1fr) minmax(300px, 2.3fr) minmax(240px, 1.2fr); }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-context { grid-template-columns: minmax(160px, .8fr) minmax(190px, 1fr) minmax(160px, .8fr) minmax(300px, 2.3fr); }
+  .app-frame.is-graphite .workspace-result-workspace:not(.has-repair-panel).is-focus-cases { grid-template-columns: minmax(300px, 2.5fr) minmax(190px, .9fr) minmax(240px, 1.2fr); }
+  .app-frame.is-graphite .workspace-result-workspace:not(.has-repair-panel).is-focus-detail { grid-template-columns: minmax(160px, .8fr) minmax(420px, 2.7fr) minmax(240px, 1.2fr); }
+  .app-frame.is-graphite .workspace-result-workspace:not(.has-repair-panel).is-focus-context { grid-template-columns: minmax(160px, .8fr) minmax(190px, 1fr) minmax(300px, 2.3fr); }
+  .app-frame.is-graphite .workspace-run-context > header strong { overflow-wrap: anywhere; white-space: normal; }
+  .app-frame.is-graphite .workspace-run-context > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-frame.is-graphite .workspace-run-context > dl > div { grid-template-columns: 1fr; gap: 3px; }
+  .app-frame.is-graphite .workspace-case-navigator.is-compact > header > div:first-child .workspace-eyebrow {
+    display: block;
+    min-width: 0;
+    overflow: visible;
+    font-size: 8px;
+    letter-spacing: .04em;
+    line-height: 1.25;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .app-frame.is-graphite .workspace-run-context > dl > div:first-child { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1151px) and (max-width: 1599px) {
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading {
+    display: grid;
+    grid-template-columns: minmax(250px, .9fr) minmax(440px, 1.1fr);
+    align-items: center;
+    gap: 8px 14px;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading > div:first-child {
+    min-width: 0;
+    grid-column: 1;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-eyebrow {
+    max-width: none;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading h1 {
+    max-width: none;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-mode-nav.is-inline {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-heading-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
+
+/* Results: keep the case/evidence surface wide and group run context with repair. */
+.workspace-result-workspace {
+  grid-template-columns: minmax(185px, .72fr) minmax(0, 2.7fr) minmax(290px, 1.05fr);
+}
+.workspace-result-inspector {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+.workspace-result-inspector > .workspace-repair-workspace,
+.workspace-result-inspector > .workspace-run-context { min-width: 0; }
+.workspace-result-workspace.is-focus-cases { grid-template-columns: minmax(280px, 1fr) minmax(0, 2.5fr) minmax(270px, .9fr); }
+.workspace-result-workspace.is-focus-detail { grid-template-columns: minmax(170px, .7fr) minmax(0, 3.2fr) minmax(270px, .9fr); }
+.workspace-result-workspace.is-focus-repair,
+.workspace-result-workspace.is-focus-context { grid-template-columns: minmax(165px, .7fr) minmax(0, 2.35fr) minmax(340px, 1.15fr); }
+.workspace-result-inspector .workspace-repair-workspace.is-compact,
+.workspace-result-inspector .workspace-run-context.is-compact { min-height: 68px; }
+.workspace-context-chip-label { color: var(--ink-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.workspace-context-chip { max-width: min(280px, 24vw); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-context-chip-case { max-width: min(320px, 28vw); }
+@media (min-width: 1280px) and (max-width: 1699px) {
+  /* The legacy four-panel Graphite rule is superseded by the grouped inspector above. */
+  .app-frame.is-graphite .workspace-result-workspace {
+    grid-template-columns: minmax(185px, .72fr) minmax(0, 2.7fr) minmax(290px, 1.05fr);
+  }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-cases {
+    grid-template-columns: minmax(280px, 1fr) minmax(0, 2.5fr) minmax(270px, .9fr);
+  }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-detail {
+    grid-template-columns: minmax(170px, .7fr) minmax(0, 3.2fr) minmax(270px, .9fr);
+  }
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-repair,
+  .app-frame.is-graphite .workspace-result-workspace.is-focus-context {
+    grid-template-columns: minmax(165px, .7fr) minmax(0, 2.35fr) minmax(340px, 1.15fr);
+  }
+}
+@container workspace-result (max-width: 900px) {
+  .workspace-result-workspace { grid-template-columns: minmax(170px, .8fr) minmax(0, 2fr); }
+  .workspace-result-inspector { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .workspace-result-workspace { grid-template-columns: minmax(0, 1fr); }
+  .workspace-result-inspector { grid-column: auto; grid-template-columns: minmax(0, 1fr); }
+  .workspace-heading-actions .workspace-context-chip { max-width: 100%; }
+}
+@media (min-width: 1700px) {
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading {
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) minmax(520px, 648px) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 14px;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading > div:first-child {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 260px;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-mode-nav.is-inline {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    min-width: 520px;
+    max-width: 648px;
+  }
+  .app-frame.is-graphite .workspace-heading.is-workbench-heading .workspace-heading-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
 }

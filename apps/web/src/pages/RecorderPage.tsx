@@ -89,7 +89,7 @@ export const RecorderPage: React.FC<{
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
   const [exploreMobilePanel, setExploreMobilePanel] = useState<'browser' | 'task'>('browser');
-  const [naturalFlowOpen, setNaturalFlowOpen] = useState(embedded);
+  const [naturalFlowOpen, setNaturalFlowOpen] = useState(() => embedded && window.matchMedia('(max-width: 820px)').matches);
   const [pendingAgentGoal, setPendingAgentGoal] = useState<PendingAgentGoal | null>(null);
   const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number } | null>(null);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);

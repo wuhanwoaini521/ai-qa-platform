@@ -11,6 +11,7 @@ import {
   retryGuidance,
   runtimeStatusKey,
   runtimeNeedsTerminalRefresh,
+  runtimeActive,
 } from '../src/features/runtime/runtimeModel.ts';
 
 test('Runtime header shows unavailable timings without inventing zeros', () => {
@@ -114,6 +115,11 @@ test('Recovery labels and prompts follow the task type', () => {
   assert.match(retryGuidance('EXPLORE_PAGE'), /page-exploration step/);
   assert.match(retryGuidance('REVIEW_TEST'), /test-review step/);
   assert.match(retryGuidance('UNKNOWN'), /workflow step/);
+});
+
+test('a paused workflow is inactive and should not be polled or cancelled as running', () => {
+  assert.equal(runtimeActive('PAUSED'), false);
+  assert.equal(runtimeActive('RUNNING'), true);
 });
 
 test('Runtime status labels normalize known workflow states', () => {

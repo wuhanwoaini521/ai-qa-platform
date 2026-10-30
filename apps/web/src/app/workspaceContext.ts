@@ -128,6 +128,24 @@ export function readWorkspaceContext(
   return context;
 }
 
+export function resolveLineNumberForFile(
+  targetFile: string | undefined,
+  currentFile: string | undefined,
+  requestedLineNumber: number | undefined,
+  currentLineNumber: number | undefined,
+): number | undefined {
+  const sameKnownFile = Boolean(targetFile && currentFile && targetFile === currentFile);
+  return requestedLineNumber ?? (sameKnownFile ? currentLineNumber : undefined);
+}
+
+export function shouldPreserveRunExecutionNode(
+  view: WorkspaceView | undefined,
+  nodeId: string | undefined,
+  runNodeIds: readonly string[],
+): boolean {
+  return (view === 'results' || view === 'debug' || view === 'code') && Boolean(nodeId && runNodeIds.includes(nodeId));
+}
+
 export function workspaceModeForContext(context: Pick<WorkspaceContext, 'stage' | 'view'>): WorkspaceMode {
   if (context.stage === 'failure') return 'repair';
   if (context.view === 'debug' || context.view === 'results') return 'debug';

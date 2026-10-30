@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, buildScopedHref, readWorkspaceContext, resolveCanonicalFile, workspaceModeForContext, writeWorkspaceContext } =
+const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, buildScopedHref, readWorkspaceContext, resolveCanonicalFile, resolveLineNumberForFile, shouldPreserveRunExecutionNode, workspaceModeForContext, writeWorkspaceContext } =
   await import('../src/app/workspaceContext.ts');
 const { withProjectId } = await import('../src/app/projectPaths.ts');
 
@@ -50,6 +50,13 @@ test('context updates preserve unrelated view state and replace stale entity IDs
   assert.equal(params.get('line'), null);
 });
 
+test('retains source line context only when opening the same file', () => {
+  assert.equal(resolveLineNumberForFile('tests/test_a.py', 'tests/test_a.py', undefined, 12), 12);
+  assert.equal(resolveLineNumberForFile('tests/test_b.py', 'tests/test_a.py', undefined, 12), undefined);
+  assert.equal(resolveLineNumberForFile('tests/test_b.py', 'tests/test_a.py', 24, 12), 24);
+  assert.equal(resolveLineNumberForFile(undefined, undefined, undefined, 12), undefined);
+});
+
 test('maps existing Workspace views to the four adaptive modes', () => {
   for (const view of ['requirement', 'discover', 'browser']) {
     assert.equal(workspaceModeForContext({ view }), 'explore');
@@ -61,6 +68,19 @@ test('maps existing Workspace views to the four adaptive modes', () => {
     assert.equal(workspaceModeForContext({ view }), 'debug');
   }
   assert.equal(workspaceModeForContext({ stage: 'failure', view: 'results' }), 'repair');
+});
+
+test('preserves a selected run node in Results, Debug, and Write Tests only when that run contains it', () => {
+  const nodeId = 'tests/test_login.py::test_login';
+  const runNodeIds = [nodeId, 'tests/test_cart.py::test_cart'];
+
+  assert.equal(shouldPreserveRunExecutionNode('results', nodeId, runNodeIds), true);
+  assert.equal(shouldPreserveRunExecutionNode('debug', nodeId, runNodeIds), true);
+  assert.equal(shouldPreserveRunExecutionNode('code', nodeId, runNodeIds), true);
+  assert.equal(shouldPreserveRunExecutionNode('cases', nodeId, runNodeIds), false);
+  assert.equal(shouldPreserveRunExecutionNode('debug', 'tests/test_other.py::test_other', runNodeIds), false);
+  assert.equal(shouldPreserveRunExecutionNode('debug', undefined, runNodeIds), false);
+  assert.equal(shouldPreserveRunExecutionNode('debug', nodeId, []), false);
 });
 
 test('round trips the Workspace Discover stage and view', () => {

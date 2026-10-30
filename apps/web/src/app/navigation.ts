@@ -23,7 +23,9 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
         ? `/projects/${projectId}/requirements`
         : '/requirements';
     case 'test_cases':
-      return '/test-cases';
+      return projectId
+        ? `/projects/${encodeURIComponent(projectId)}/test-cases`
+        : '/test-cases';
     case 'automation':
       return projectId ? `/workspace/${projectId}?view=code` : '/projects';
     case 'runs':

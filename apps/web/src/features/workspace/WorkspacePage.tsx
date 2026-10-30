@@ -9,6 +9,8 @@ import {
   buildWorkspaceHref,
   readWorkspaceContext,
   resolveCanonicalFile,
+  resolveLineNumberForFile,
+  shouldPreserveRunExecutionNode,
   writeWorkspaceContext,
   type WorkspaceContext,
   type WorkspaceMode,
@@ -116,7 +118,6 @@ export function WorkspacePage() {
   const view = context.view ?? (fallbackStage === 'automation' ? 'code' : fallbackStage === 'result' || fallbackStage === 'failure' ? 'results' : fallbackStage);
   const stage = context.stage ?? stageForView[view];
   const activeMode = workspaceModeForContext({ stage, view });
-  const isWorkbenchHeader = activeMode === 'debug' || activeMode === 'explore';
   const runtimeKind = context.taskId ? 'task' : 'run';
   const runtimeId = context.taskId ?? context.runId ?? '';
   const runtime = useRuntimeSnapshot(runtimeKind, runtimeId);
@@ -407,6 +408,19 @@ export function WorkspacePage() {
     // newly opened Explore workspace into a selected requirement/case context.
     if (view === 'discover' && !context.requirementId && !context.testCaseId) return;
     const selectedCase = cases.find((item) => item.id === context.testCaseId);
+    const selectedRun = context.runId
+      ? runs.find((item) => item.id === context.runId)
+        ?? (runLive.run?.id === context.runId ? runLive.run : undefined)
+      : undefined;
+    // Keep URL execution context while the selected run is still resolving. Once
+    // its saved executions load, validate the node against that run's records.
+    const selectedRunNodeIds = selectedRun?.executions.map((item) => item.nodeid)
+      ?? (context.runId && context.nodeId ? [context.nodeId] : []);
+    const preserveRunExecutionContext = shouldPreserveRunExecutionNode(
+      view,
+      context.nodeId,
+      selectedRunNodeIds,
+    );
     const selectedCaseRequirementId = selectedCase?.requirement_id;
     const requirementId = selectedCaseRequirementId && requirements.some((item) => item.id === selectedCaseRequirementId)
       ? selectedCaseRequirementId
@@ -432,13 +446,13 @@ export function WorkspacePage() {
         testDesignId: nextCase?.test_design_id ?? undefined,
         automationBindingId: nextCase?.binding?.id,
         file: resolveCanonicalFile(context, nextCase?.binding?.file_path),
-        lineNumber: preserveFailureDebugContext ? context.lineNumber : undefined,
-        nodeId: preserveFailureDebugContext ? context.nodeId : nextCase?.binding?.nodeid,
+        lineNumber: preserveFailureDebugContext || preserveRunExecutionContext ? context.lineNumber : undefined,
+        nodeId: preserveFailureDebugContext || preserveRunExecutionContext ? context.nodeId : nextCase?.binding?.nodeid,
         stage: context.stage ?? 'requirement',
       }, true);
     }
     // URL remains the source of truth after the first actual data load.
-  }, [projectId, contextDataLoaded, requirements, cases, context.requirementId, context.testCaseId, context.testDesignId, context.automationBindingId, context.nodeId, context.stage, view]);
+  }, [projectId, contextDataLoaded, requirements, cases, runs, runLive.run?.id, runLive.run?.executions, context.requirementId, context.testCaseId, context.testDesignId, context.automationBindingId, context.runId, context.nodeId, context.stage, view]);
 
   function updateContext(patch: Partial<WorkspaceContext>, replace = false) {
     setSearchParams((current) => writeWorkspaceContext(current, {
@@ -600,9 +614,11 @@ export function WorkspacePage() {
   const analysisFailed = !analysisRunning && ['FAILED', 'BLOCKED'].includes(latestAnalysisRecord?.status ?? '');
   const project = projects.find((item: Project) => item.id === projectId);
   const projectDisplayNames = buildProjectDisplayNames(projects);
+  const taskRuntimeStatus = runtime.snapshot?.status ?? task?.status;
   const completedGoalResult = stage === 'result'
     && task?.type === 'QA_GOAL'
-    && !runtimeActive(runtime.snapshot?.status ?? task.status);
+    && taskRuntimeStatus !== 'PAUSED'
+    && !runtimeActive(taskRuntimeStatus ?? '');
   const resultFailed = Boolean(currentRun && ['FAILED', 'ERROR'].includes(currentRun.status))
     || Boolean(task && ['FAILED', 'BLOCKED'].includes(runtime.snapshot?.status ?? task.status));
 
@@ -627,16 +643,19 @@ export function WorkspacePage() {
     }, true);
   }, [contextDataLoaded, stage, currentFailure?.test_nodeid, currentRun?.id, currentRun?.nodeids, currentRun?.executions, cases, context.nodeId, context.testCaseId, context.requirementId]);
 
-  const openStudio = (filePath?: string, lineNumber?: number) => updateContext({
-    testCaseId: selectedCase?.id ?? context.testCaseId,
-    automationBindingId: binding?.id ?? context.automationBindingId,
-    file: filePath ?? context.file ?? binding?.file_path,
-    lineNumber,
-    nodeId: binding?.nodeid ?? context.nodeId,
-    returnTo: 'workspace',
-    stage: 'automation',
-    view: 'code',
-  });
+  const openStudio = (filePath?: string, lineNumber?: number) => {
+    const targetFile = filePath ?? context.file ?? binding?.file_path;
+    updateContext({
+      testCaseId: selectedCase?.id ?? context.testCaseId,
+      automationBindingId: binding?.id ?? context.automationBindingId,
+      file: targetFile,
+      lineNumber: resolveLineNumberForFile(targetFile, context.file, lineNumber, context.lineNumber),
+      nodeId: binding?.nodeid ?? context.nodeId,
+      returnTo: 'workspace',
+      stage: 'automation',
+      view: 'code',
+    });
+  };
 
   const openRecordedCase = (saved: Awaited<ReturnType<typeof api.saveRecorderCase>>, filePath: string) => {
     setCases((current) => [
@@ -928,15 +947,16 @@ export function WorkspacePage() {
 
   return (
     <div className={`workspace-shell is-${activeMode}${stage === 'result' ? ' is-result-stage' : ''}`}>
-      <header className={`workspace-heading${isWorkbenchHeader ? ' is-workbench-heading' : ''}`}>
+      <header className="workspace-heading is-workbench-heading">
         <div>
           <span className="workspace-eyebrow">{workspaceEyebrow}</span>
           <h1 title={workspaceHeading}>{workspaceHeading}</h1>
           <p>{t('subtitle')}</p>
         </div>
-        {isWorkbenchHeader && renderModeNavigation(true)}
+        {renderModeNavigation(true)}
         <div className="workspace-heading-actions">
-          {selectedRequirement && <span className="workspace-context-chip"><GitBranch size={14} aria-hidden="true" />{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
+          {selectedRequirement && <span className="workspace-context-chip" title={selectedRequirement.title}><GitBranch size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.requirement')}:</span>{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
+          {selectedCase && <span className="workspace-context-chip workspace-context-chip-case" title={selectedCase.title}><Workflow size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.case')}:</span>{selectedCase.test_model?.display_id ?? selectedCase.title}</span>}
           {projectId && stage !== 'result' && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
             {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
             <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
@@ -978,8 +998,6 @@ export function WorkspacePage() {
           {(context.taskId || context.runId) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails()}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button>}
         </div>
       </header>
-
-      {!isWorkbenchHeader && renderModeNavigation(false)}
 
       {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
       {!projectId ? (

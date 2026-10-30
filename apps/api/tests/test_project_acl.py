@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 from app.persistence.models import FailureRecordORM as FailureRow
-from app.persistence.models import ProjectORM, TeamMemberORM, TeamORM
+from app.persistence.models import ProjectORM, TeamMemberORM, TeamORM, WorkspaceORM
 from app.persistence.models import QualityDiscoveryRunORM as QualityDiscoveryRunRow
 from app.persistence.models import TestExecutionORM as ExecutionRow
 from app.persistence.models import TestRunORM as RunRow
@@ -116,6 +116,62 @@ async def test_foreign_project_resources_are_invisible(client: AsyncClient, test
         assert (await outsider.get(f"/api/requirements/{req_id}")).status_code == 404
 
 
+async def test_workspace_acl_resolves_canonical_project_and_row_ids(client: AsyncClient, test_db_session):
+    project_id = await _create_project(client, "ACL Canonical Workspace")
+    owner_email = "acl.workspace.owner@example.com"
+    owner_id = await _create_user(client, owner_email)
+    outsider_email = "acl.workspace.outsider@example.com"
+    await _create_user(client, outsider_email)
+    assert (await client.patch(f"/api/projects/{project_id}", json={"owner_id": owner_id})).status_code == 200
+
+    workspace_id = "ws_acl_canonical"
+    async with test_db_session() as session:
+        session.add(WorkspaceORM(id=workspace_id, project_id=project_id, path="", branch="main"))
+        await session.commit()
+
+    async with await _as(client, owner_email) as owner:
+        for identifier in (project_id, workspace_id):
+            saved = await owner.put(
+                f"/api/workspaces/{identifier}/file", json={"path": "recorder.py", "content": f"{identifier} content"}
+            )
+            assert saved.status_code == 200, saved.text
+            tree = await owner.get(f"/api/workspaces/{identifier}/files")
+            assert tree.status_code == 200 and tree.json()
+            file = await owner.get(f"/api/workspaces/{identifier}/file", params={"path": "recorder.py"})
+            assert file.status_code == 200
+            assert file.json()["content"] == f"{identifier} content"
+
+    async with await _as(client, outsider_email) as outsider:
+        for identifier in (project_id, workspace_id):
+            assert (await outsider.get(f"/api/workspaces/{identifier}/files")).status_code == 404
+            assert (
+                await outsider.get(f"/api/workspaces/{identifier}/file", params={"path": "recorder.py"})
+            ).status_code == 404
+            denied_write = await outsider.put(
+                f"/api/workspaces/{identifier}/file", json={"path": "recorder.py", "content": "injected"}
+            )
+            assert denied_write.status_code == 404
+        nonexistent = "ws_acl_missing"
+        assert (await outsider.get(f"/api/workspaces/{nonexistent}/files")).status_code == 404
+        assert (
+            await outsider.get(f"/api/workspaces/{nonexistent}/file", params={"path": "recorder.py"})
+        ).status_code == 404
+        assert (
+            await outsider.put(
+                f"/api/workspaces/{nonexistent}/file", json={"path": "recorder.py", "content": "injected"}
+            )
+        ).status_code == 404
+
+    async with await _as(client, owner_email) as owner:
+        for identifier in (project_id, workspace_id):
+            unchanged = await owner.get(f"/api/workspaces/{identifier}/file", params={"path": "recorder.py"})
+            assert unchanged.status_code == 200
+            assert unchanged.json()["content"] == f"{identifier} content"
+
+    # Administrators retain the unrestricted behavior for unknown workspace identifiers.
+    assert (await client.get("/api/workspaces/ws_acl_missing/files")).status_code == 200
+
+
 async def test_workspace_git_routes_are_project_scoped(client: AsyncClient, test_db_session):
     """The git/PR router shares the /workspaces/{id} prefix, so it needs the same guard.
 
@@ -164,6 +220,125 @@ async def test_discovery_stream_ticket_is_project_scoped(client: AsyncClient, te
     # The administrator (and any member) can still obtain the ticket.
     allowed = await client.post("/api/auth/stream-ticket", json={"kind": "discovery", "resource_id": "qd_acl"})
     assert allowed.status_code == 200
+
+
+async def test_recorder_project_acl_blocks_foreign_create_session_and_ticket(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.api.recorder import recorder_service
+    from app.container import get_recorder_workflow_service
+    from app.main import app
+    from app.ports.browser_runtime import BrowserRuntimeSession
+    from app.services.recorder_service import RecorderSession
+
+    foreign = await _create_project(client, "ACL Recorder Private")
+    owned = await _create_project(client, "ACL Recorder Owned")
+    email = "acl.recorder.outsider@example.com"
+    user_id = await _create_user(client, email)
+    assert (await client.patch(f"/api/projects/{owned}", json={"owner_id": user_id})).status_code == 200
+    workflow = AsyncMock()
+    monkeypatch.setitem(app.dependency_overrides, get_recorder_workflow_service, lambda: workflow)
+
+    async with await _as(client, email) as outsider:
+        denied_create = await outsider.post(
+            "/api/recorder/sessions", json={"project_id": foreign, "start_url": "about:blank"}
+        )
+        assert denied_create.status_code == 404
+        workflow.create_session.assert_not_awaited()
+
+        # A live, owner-matched recorder session in a foreign project exercises ACL rather than
+        # merely the recorder's independent owner check.
+        session = RecorderSession(
+            id="recorder_acl_foreign",
+            owner_id=user_id,
+            project_id=foreign,
+            runtime_session=BrowserRuntimeSession(id="browser_acl_foreign"),
+        )
+        recorder_service._sessions[session.id] = session
+        try:
+            assert (await outsider.get(f"/api/recorder/sessions/{session.id}")).status_code == 404
+            ticket = await outsider.post(
+                "/api/auth/stream-ticket", json={"kind": "recorder", "resource_id": session.id}
+            )
+            assert ticket.status_code == 404
+
+            owner_session = RecorderSession(
+                id="recorder_acl_owner",
+                owner_id=user_id,
+                project_id=owned,
+                runtime_session=BrowserRuntimeSession(id="browser_acl_owner"),
+            )
+            recorder_service._sessions[owner_session.id] = owner_session
+            assert (await outsider.get(f"/api/recorder/sessions/{owner_session.id}")).status_code == 200
+            assert (
+                await outsider.post(
+                    "/api/auth/stream-ticket", json={"kind": "recorder", "resource_id": owner_session.id}
+                )
+            ).status_code == 200
+        finally:
+            recorder_service._sessions.pop(session.id, None)
+            recorder_service._sessions.pop("recorder_acl_owner", None)
+
+    # Admin remains unrestricted for a session they own.
+    admin = await client.get("/api/auth/me")
+    admin_id = admin.json()["user"]["id"]
+    admin_session = RecorderSession(
+        id="recorder_acl_admin",
+        owner_id=admin_id,
+        project_id=foreign,
+        runtime_session=BrowserRuntimeSession(id="browser_acl_admin"),
+    )
+    recorder_service._sessions[admin_session.id] = admin_session
+    try:
+        assert (await client.get(f"/api/recorder/sessions/{admin_session.id}")).status_code == 200
+        assert (
+            await client.post("/api/auth/stream-ticket", json={"kind": "recorder", "resource_id": admin_session.id})
+        ).status_code == 200
+    finally:
+        recorder_service._sessions.pop(admin_session.id, None)
+
+
+async def test_recorder_websocket_rechecks_project_acl_before_streaming(client: AsyncClient, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.api import recorder as recorder_api
+    from app.api.recorder import recorder_service
+    from app.ports.browser_runtime import BrowserRuntimeSession
+    from app.services.auth_service import AuthService
+    from app.services.recorder_service import RecorderSession
+    from project_model.models import UserRole
+
+    foreign = await _create_project(client, "ACL Recorder WebSocket Private")
+    email = "acl.recorder.websocket@example.com"
+    user_id = await _create_user(client, email)
+    session = RecorderSession(
+        id="recorder_acl_websocket",
+        owner_id=user_id,
+        project_id=foreign,
+        runtime_session=BrowserRuntimeSession(id="browser_acl_websocket"),
+    )
+    recorder_service._sessions[session.id] = session
+    user = SimpleNamespace(id=user_id, role=UserRole.QA_ENGINEER)
+    ticket = AuthService().issue_stream_ticket(user_id, f"recorder:{session.id}")
+
+    class FakeWebSocket:
+        close_code = None
+        close_reason = None
+
+        async def close(self, *, code, reason=None):
+            self.close_code = code
+            self.close_reason = reason
+
+    websocket = FakeWebSocket()
+    monkeypatch.setattr(recorder_api, "authenticate_websocket_stream", AsyncMock(return_value=user))
+    try:
+        await recorder_api.recorder_stream(websocket, session.id)
+        assert ticket
+        assert websocket.close_code == 4404
+        assert websocket.close_reason == "Recorder session not found"
+    finally:
+        recorder_service._sessions.pop(session.id, None)
 
 
 async def test_legacy_project_without_owner_is_admin_only(client: AsyncClient, test_db_session):

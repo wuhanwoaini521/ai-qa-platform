@@ -10,6 +10,7 @@ import {
   useParams,
 } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
+import { dashboardExecutionHref } from '../pages/dashboardModel';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { AppLayout } from './AppLayout';
 import { useProjectScope, useRouteProjectScope } from './ProjectScope';
@@ -60,11 +61,36 @@ const LibraryPage = lazy(() =>
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
   const navigate = useNavigate();
+  const { projects, selectedProjectId, loading, error } = useProjectScope();
   return (
     <DashboardPage
+      projects={projects}
+      selectedProjectId={selectedProjectId}
+      projectLoading={loading}
+      projectError={error}
       onNavigate={nav.toTab}
-      onOpenTask={(id) => navigate(`/tasks?taskId=${encodeURIComponent(id)}`)}
+      onOpenTask={(task) => {
+        const inputRequirementId = task.inputs.requirement_id;
+        const contextRequirementId = task.context.requirement_id;
+        const requirementId = typeof inputRequirementId === 'string'
+          ? inputRequirementId
+          : typeof contextRequirementId === 'string' ? contextRequirementId : undefined;
+        navigate(buildWorkflowHref({
+          projectId: task.project_id ?? selectedProjectId ?? undefined,
+          requirementId,
+          taskId: task.id,
+        }));
+      }}
       onOpenRun={nav.toRun}
+      onOpenExecution={(run, execution) => {
+        const href = dashboardExecutionHref(run, execution, selectedProjectId);
+        if (!href) {
+          nav.toRun(run.id);
+          return;
+        }
+        navigate(href);
+      }}
+      onOpenRunnableTest={(testCaseId) => navigate(buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, testCaseId, stage: 'cases', view: 'cases' }))}
       onOpenCreateProject={() => navigate('/projects?create=1')}
     />
   );
@@ -73,7 +99,7 @@ const DashboardRoute: React.FC = () => {
 const ProjectsRoute: React.FC = () => {
   const { projectId } = useParams();
   const nav = useAppNavigation();
-  const { projects, loading, refresh, createProject, selectProject } =
+  const { projects, loading, error, selectedProjectId, refresh, createProject, selectProject } =
     useProjectScope();
   useRouteProjectScope(projectId);
 
@@ -81,6 +107,8 @@ const ProjectsRoute: React.FC = () => {
     <ProjectsPage
       projects={projects}
       loading={loading}
+      error={error}
+      selectedProjectId={selectedProjectId}
       onRefresh={refresh}
       onCreateProject={async (data) => {
         await createProject(data);

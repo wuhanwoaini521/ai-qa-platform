@@ -21,4 +21,40 @@ type MonacoWorkerGlobal = typeof globalThis & {
 };
 
 // Bundling Monaco locally avoids the default CDN dependency and keeps the editor usable offline.
+monaco.editor.defineTheme('graphite-workspace', {
+  base: 'vs-dark',
+  inherit: true,
+  rules: [
+    { token: '', foreground: 'E7EFEC', background: '111619' },
+    { token: 'comment', foreground: '788985' },
+    { token: 'string', foreground: 'A6D5C1' },
+    { token: 'number', foreground: 'E6AE68' },
+    { token: 'keyword', foreground: 'C3B6FF' },
+    { token: 'type', foreground: '9BBEFF' },
+  ],
+  colors: {
+    'editor.background': '#111619',
+    'editor.foreground': '#E7EFEC',
+    'editorLineNumber.foreground': '#788985',
+    'editorLineNumber.activeForeground': '#A1B0AC',
+    'editorCursor.foreground': '#A6D5C1',
+    'editor.selectionBackground': '#263A35',
+    'editor.inactiveSelectionBackground': '#263136',
+    'editor.lineHighlightBackground': '#182226',
+    'editorGutter.background': '#111619',
+    'editorIndentGuide.background': '#29363B',
+    'editorIndentGuide.activeBackground': '#405057',
+    'editorWidget.background': '#1B2428',
+    'editorWidget.border': '#344148',
+    'editorSuggestWidget.background': '#1B2428',
+    'editorSuggestWidget.border': '#344148',
+    'editorSuggestWidget.selectedBackground': '#263136',
+    'editorHoverWidget.background': '#1B2428',
+    'editorHoverWidget.border': '#344148',
+    'scrollbarSlider.background': '#53616866',
+    'scrollbarSlider.hoverBackground': '#53616899',
+    'scrollbarSlider.activeBackground': '#536168CC',
+  },
+});
+
 loader.config({ monaco });

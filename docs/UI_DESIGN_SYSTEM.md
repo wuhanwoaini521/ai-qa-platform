@@ -12,6 +12,7 @@ React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用�
 - 页面保持浅色 QA SaaS 风格：浅灰蓝画布、白色内容面板、深色正文、靛蓝主操作；绿色/琥珀/玫瑰色只表达成功、警告、失败等语义。
 - App Shell（导航、顶栏、Studio 全屏框架）维持现有导航结构与设计 token；页面内容通过共享页面组件建立层级。
 - 阴影、渐变和高饱和装饰用于层级提示，不替代正文对比度或状态文字。
+- Direction A — Graphite Developer Studio 用于桌面 Dashboard 与 Workspace Debug/Explore；本任务 `.ai-runs/2026-10-27-graphite-fidelity-recovery/00-request.md` 明确扩展到 Projects、Requirements、Test Explorer、Write Tests、Results、AI Repair 与 Quality。扩展页面沿用既有内容/交互，不新增页面 IA；其他路由仍保持现有方向。Graphite 颜色以 `:root` 的 `--graphite-*` tokens 为源，通过 `.app-frame.is-graphite` 映射语义变量，不能在功能样式中复制色值。
 
 ## 设计 Tokens
 
@@ -22,18 +23,18 @@ React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用�
 
 | 用途 | Token | 当前基准 |
 | --- | --- | --- |
-| 页面画布 | `--canvas` / `--bg-app` | `#f5f7fc` |
-| 面板表面 | `--surface` `--surface-raised` `--surface-inset` / `--bg-card` | `#ffffff` |
-| 正文 | `--ink` / `--text-main` / `--ui-ink` | `#14162b` |
-| 次级正文 | `--ink-soft` `--ink-muted` / `--text-muted` | `#68708a` / `#626b80` |
-| 分隔线 | `--line` `--line-strong` / `--border-color` | `#e3e7f2` / `#e7eaf5` |
-| 品牌主色 | `--accent-blue` / `--primary` | `#4f46e5` / `#6366f1` |
-| 聚焦轮廓 | `--ui-focus` | `rgba(99, 102, 241, 0.32)` |
+| 页面画布 | `--canvas` / `--bg-app` | `#f3f7fd` |
+| 面板表面 | `--surface` `--surface-raised` `--surface-inset` / `--bg-card` | `#ffffff` / `#f5f8fc`（inset） |
+| 正文 | `--ink` / `--text-main` / `--ui-ink` | `#1c2942` |
+| 次级正文 | `--ink-soft` `--ink-muted` / `--text-muted` | `#40516f` / `#5d6b82` |
+| 分隔线 | `--line` `--line-soft` `--line-strong` / `--border-color` | `#e5ebf4` / `#eff3f9` / `#d8e2f0` |
+| 品牌主色 | `--accent-blue` / `--primary` | `#1d5bd7` |
+| 聚焦轮廓 | `--ui-focus` | `rgba(37, 99, 235, 0.28)` |
 | 成功/警告/失败/AI | `--accent-green` `--accent-amber` `--accent-red` `--accent-violet` | 仅用于对应状态 |
-| 圆角阶梯 | `--r-xs` `--r-sm` `--r-card` `--r-lg` `--r-pill` | 输入、小面板、卡片、主容器 |
-| 间距阶梯 | `--sp-1` … `--sp-7` | 4/8/12/16/24/32…（不要随手 9px/11px） |
-| 尺寸骨架 | `--sidebar-w` `--toolbar-h` | 侧栏与顶栏 |
-| 动效 | `--dur` `--ease` | 只用于反馈与空间变化 |
+| 圆角阶梯 | `--r-xs` `--r-sm` `--r-md` `--r-card` `--r-lg` `--r-xl` `--r-pill` | 6/8/8/10/12/14px，胶囊为 999px |
+| 间距阶梯 | `--sp-1` … `--sp-7` | 4/8/12/16/24/32/48px；栅格使用 `--sp-grid` |
+| 尺寸骨架 | `--sidebar-w` `--toolbar-h` `--workspace-pad` | 240px / 50px / 20px |
+| 动效 | `--dur-fast` `--dur` `--ease` | 120/180ms，只用于反馈与空间变化 |
 
 旧变量（如 `--color-primary`、`--surface-primary`、`--ui-*` 别名族）作为兼容层保留在 `:root`。
 新增样式优先使用语义 token；迁移旧页面时再逐步删去别名，避免一次性改动破坏功能页面。
@@ -60,9 +61,9 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 
 ### 圆角、阴影、间距
 
-- 圆角使用 `--ui-r-xs`、`--ui-r-sm`、`--ui-r-md`、`--ui-r-lg`，分别适用于输入控件、小面板、卡片和主要容器。
-- 阴影使用 `--ui-shadow-xs/sm/md/lg`。普通数据卡片以轻阴影和边框为主。
-- 间距使用 `--sp-1` 至 `--sp-6`（4、8、12、16、24、32px）。页面主内容默认 24px 间距，窄屏收至 10–14px。
+- 圆角使用 `--r-xs`、`--r-sm`、`--r-card`、`--r-lg`、`--r-xl`，分别用于控件、内层面板、卡片和主要容器。
+- 阴影使用 `--shadow-xs/sm/md/lg`。普通数据卡片以轻阴影和边框为主。
+- 间距使用 `--sp-1` 至 `--sp-7`（4、8、12、16、24、32、48px）；卡片网格用 `--sp-grid`，页面区块用 `--sp-section`。
 
 ## 布局原语
 
@@ -97,6 +98,13 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 - 所有耗时操作有进行中状态；破坏性操作有确认；只读执行有明确状态标签。
 - 动画只表达“正在发生什么”和“空间变化”，不做装饰性渐变或无限扫描动画。
 
+### Round Six 页面模式
+
+- Dashboard 的执行概览与项目/需求/用例数量分区呈现，不重复统计同一总执行数；注意事项保留可追踪的状态文字。
+- Projects 使用紧凑注册表；加载失败与创建失败必须提供反馈，加载错误可重试；表格滚动限制在自身容器内。
+- Quality 顶部五项指标共享 `.quality-metrics` 语义网格；评分方法使用原生 `<details>`；视图切换使用方向键可操作的 ARIA tabs。风险分数、覆盖计算、发布门禁和 AI/人工裁定均由既有业务服务负责，样式不得改变其含义。
+- Explore 的任务步骤和 Debug 的代码/日志/运行面板在窄屏可切换；Task 面板需保留可见高度，长列表在面板内部滚动，不能压缩到 0px。
+
 ## 响应式规则
 
 - `1050px`：统计卡片按可用宽度重排；多栏 Test Cases、Runs、Tasks 页面转为单栏；宽表使用容器内横向滚动。
@@ -124,7 +132,7 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 - 尊重 `prefers-reduced-motion: reduce`，减少动画与平滑滚动。
 - 语义错误使用 `role="alert"`；禁用动作说明原因；可展开日志和详情使用原生 `details/summary` 或等价键盘可访问控件。
 - 表格状态、Worker 浏览器标签和负载应同时提供可读文本，不将颜色作为唯一信息。
-- 自定义控件的语义：Tab 用 `role="tab"` + `aria-selected`，折叠用 `aria-expanded`，尺寸调整用
+- 自定义控件的语义：Tab 用 `role="tablist"` / `role="tab"` / `role="tabpanel"` + `aria-selected` 和方向键导航，折叠用 `aria-expanded`，尺寸调整用
   `role="separator"` + `aria-valuenow/valuemin/valuemax` + 键盘方向键，拖拽必须有键盘等价路径。
 - 不做正式 WCAG 认证声明；这里只覆盖可观察到的无障碍问题。
 

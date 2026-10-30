@@ -1,0 +1,26 @@
+{
+  "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "packages": [
+    {
+      "source": "npm:pi-subagents@0.82.1",
+      "prompts": [],
+      "skills": ["skills/pi-subagents"]
+    }
+  ],
+  "subagents": {
+    "projectRootResolution": "git-root",
+    "asyncByDefault": false,
+    "autoResume": false,
+    "scheduledRuns": { "enabled": false },
+    "disabledFeatures": [
+      "agent-management",
+      "missions",
+      "workflow-scripts",
+      "watchdog",
+      "panes",
+      "preflight",
+      "lane-management",
+      "spawn-budget-grants"
+    ]
+  }
+}

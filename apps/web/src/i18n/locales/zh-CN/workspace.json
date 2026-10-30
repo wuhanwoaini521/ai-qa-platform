@@ -159,11 +159,13 @@
       "passed": "运行通过",
       "cancelled": "已取消",
       "task-completed": "任务已完成",
+      "task-paused": "任务已暂停",
       "task-failed": "任务失败",
       "task-blocked": "任务需要处理",
       "task-cancelled": "任务已取消"
     },
-    "taskFinished": "工作流任务已完成；本次没有创建 TestRun。"
+    "taskFinished": "工作流任务已完成；本次没有创建 TestRun。",
+    "taskPaused": "工作流任务已暂停；可在任务详情中查看进度。"
   },
   "aiRun": {
     "title": "AI Run",
@@ -482,6 +484,7 @@
     "currentRunAndLogs": "当前运行与日志",
     "live": "实时事件",
     "runContext": "Run 上下文",
+    "inspector": "运行检查器",
     "currentTask": "当前任务",
     "case": "测试用例",
     "environment": "环境",

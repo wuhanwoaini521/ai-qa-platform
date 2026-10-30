@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Download, FileText, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Project, Requirement } from '../../types';
 import { useRequirements } from './hooks/useRequirements';
@@ -78,6 +79,28 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
 
   const { selectedReq } = reqs;
   const requirementSelection = buildRequirementSelectionModel(reqs.requirements, selectedReq);
+  const noRequirements = !reqs.loading && !reqs.loadError && reqs.requirements.length === 0 && projects.length > 0;
+  const emptyRequirementsState = (
+    <section className="workspace-empty requirement-start-state" aria-labelledby="requirement-start-title">
+      <FileText size={24} aria-hidden="true" />
+      <h2 id="requirement-start-title">{t('emptyStartTitle')}</h2>
+      <p>{t('emptyStartDescription')}</p>
+      <div className="workspace-empty-actions">
+        <button type="button" className="btn btn-primary" onClick={() => reqForm.open(selectedProjectId || projects[0]?.id || '')}>
+          <Plus size={14} aria-hidden="true" />{t('toolbarNewRequirement')}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={jira.handleOpenJiraModal}>
+          <Download size={14} aria-hidden="true" />{t('toolbarImportFromJira')}
+        </button>
+      </div>
+    </section>
+  );
+  const requirementLoadError = (
+    <div className="workspace-error requirement-load-error" role="alert">
+      <span>{t(reqs.loadError === 'forbidden' ? 'listLoadForbidden' : 'listLoadFailed')}</span>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={reqs.refresh}>{t('listRetry')}</button>
+    </div>
+  );
 
   const handleWorkspaceAnalysis = async () => {
     if (!selectedReq || !onStartAnalysis || analysisRunning) return;
@@ -165,6 +188,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           }
           onAnalyze={workspaceMode && selectedReq ? handleWorkspaceAnalysis : undefined}
           analysisRunning={analysisRunning}
+          showEntryActions={!noRequirements}
         />
       </div>
       {analysisStartError && <div className="workspace-error" role="alert">{analysisStartError}</div>}
@@ -183,74 +207,69 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           </div>
         </div>
       ) : workspaceMode ? (
-          selectedReq ? (
-            <div className="workspace-requirement-detail">
-              <RequirementLifecyclePanel
-                key={selectedReq.id}
-                requirement={selectedReq}
-                onChanged={reqs.setSelectedReq}
-                onCaseCreated={onCaseCreated}
-                onStartAnalysis={workspaceMode ? () => onStartAnalysis?.(selectedReq) ?? Promise.resolve() : undefined}
-                analysisRunning={analysisRunning}
-                showAnalyzeAction={!workspaceMode}
-                showJourney={false}
-              />
-            </div>
-          ) : (
-            <div className="workspace-empty"><p>{t('pageSelectRequirement')}</p></div>
-          )
+        reqs.loading ? (
+          <div className="workspace-empty" role="status">{t('listLoading')}</div>
+        ) : reqs.loadError ? requirementLoadError
+          : noRequirements ? emptyRequirementsState
+            : selectedReq ? (
+              <div className="workspace-requirement-detail">
+                <RequirementLifecyclePanel
+                  key={selectedReq.id}
+                  requirement={selectedReq}
+                  onChanged={reqs.setSelectedReq}
+                  onCaseCreated={onCaseCreated}
+                  onStartAnalysis={() => onStartAnalysis?.(selectedReq) ?? Promise.resolve()}
+                  analysisRunning={analysisRunning}
+                  showAnalyzeAction={false}
+                  showJourney={false}
+                />
+              </div>
+            ) : (
+              <div className="workspace-empty"><p>{t('pageSelectRequirement')}</p></div>
+            )
       ) : (
         <div className="lc-requirements-layout">
           <RequirementList
             requirements={reqs.requirements}
             loading={reqs.loading}
+            loadError={reqs.loadError}
             selectedReq={selectedReq}
             onSelect={handleSelectRequirement}
           />
 
-          {selectedReq ? (
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-            >
-              <RequirementLifecyclePanel
-                key={selectedReq.id}
-                requirement={selectedReq}
-                onChanged={reqs.setSelectedReq}
-                onCaseCreated={onCaseCreated}
-              />
-              {!selectedReq.qa_model && (
-                <>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => void ai.handleAnalyzeRequirementAI()}
-                  >
-                    {t('analysisTitle')}
-                  </button>
-                  <TestDesignPanel
-                    testDesigns={designs.testDesigns}
-                    onGenerateDesigns={ai.handleGenerateDesignsAI}
-                    onAddManualDesign={() => designForm.open(selectedReq.id)}
-                    onGenerateCases={ai.handleGenerateCasesAI}
+          {reqs.loading ? (
+            <div className="card"><div className="card-body requirement-detail-state" role="status">{t('listLoading')}</div></div>
+          ) : reqs.loadError ? requirementLoadError
+            : noRequirements ? emptyRequirementsState
+              : selectedReq ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <RequirementLifecyclePanel
+                    key={selectedReq.id}
+                    requirement={selectedReq}
+                    onChanged={reqs.setSelectedReq}
+                    onCaseCreated={onCaseCreated}
                   />
-                </>
+                  {!selectedReq.qa_model && (
+                    <>
+                      <button className="btn btn-secondary" onClick={() => void ai.handleAnalyzeRequirementAI()}>
+                        {t('analysisTitle')}
+                      </button>
+                      <TestDesignPanel
+                        testDesigns={designs.testDesigns}
+                        onGenerateDesigns={ai.handleGenerateDesignsAI}
+                        onAddManualDesign={() => designForm.open(selectedReq.id)}
+                        onGenerateCases={ai.handleGenerateCasesAI}
+                      />
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="card">
+                  <div className="card-body requirement-detail-state">{t('pageSelectRequirement')}</div>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="card">
-              <div
-                className="card-body"
-                style={{
-                  padding: '40px',
-                  textAlign: 'center',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {t('pageSelectRequirement')}
-              </div>
-            </div>
-          )}
         </div>
-        )}
+      )}
 
       <RequirementAnalysisModal
         progressEvents={ai.analysisProgress.events}

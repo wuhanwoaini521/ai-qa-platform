@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Project, ProjectCreate, FrameworkType } from '../types';
-import { Plus, FolderGit2, Code2, FileText } from 'lucide-react';
+import { Plus, FolderGit2, Code2, FileText, Search } from 'lucide-react';
 import { NavTab } from '../components/Navigation';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
+import './ProjectsPage.css';
 
 interface ProjectsPageProps {
   projects: Project[];
   loading: boolean;
+  error: string | null;
+  selectedProjectId: string | null;
   onRefresh: () => void;
   onCreateProject: (data: ProjectCreate) => Promise<void>;
   onSelectProject: (id: string) => void;
@@ -19,6 +22,8 @@ interface ProjectsPageProps {
 export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   projects,
   loading,
+  error,
+  selectedProjectId,
   onCreateProject,
   onSelectProject,
   onRefresh,
@@ -30,6 +35,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [searchParams] = useSearchParams();
   const [demoBusy,setDemoBusy]=useState(false);
   const [demoError,setDemoError]=useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(() => searchParams.get('create') === '1');
   const createProjectTriggerRef = useRef<HTMLButtonElement>(null);
   const createProjectDialogRef = useRef<HTMLDivElement>(null);
@@ -42,9 +48,14 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     bootstrap_workspace: true,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
   const projectDisplayNames = buildProjectDisplayNames(projects);
+  const currentProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const visibleProjects = projects.filter((project) => !normalizedQuery || [project.name, project.description, project.repository_url, project.framework_type].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)));
   const closeProjectDialog = useCallback(() => {
     setIsModalOpen(false);
+    setCreateError('');
     if (searchParams.get('create') === '1') navigate('/projects', { replace: true });
   }, [navigate, searchParams]);
 
@@ -86,6 +97,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     if (!formData.name.trim()) return;
     try {
       setSubmitting(true);
+      setCreateError('');
       await onCreateProject(formData);
       closeProjectDialog();
       setFormData({
@@ -96,21 +108,23 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         framework_type: 'playwright_python',
         bootstrap_workspace: true,
       });
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+    <div className="projects-page">
+      <header className="projects-page-header">
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('titles:projects')}</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('subtitle')}</p>
+          <h2>{t('titles:projects')}</h2>
+          <p>{t('subtitle')}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="projects-page-actions">
           <Link className="btn btn-secondary" to="/library">{t('assetIndex')}</Link>
-          <button className="btn btn-secondary" disabled={demoBusy} onClick={async () => {
+          <button className="btn btn-ghost" disabled={demoBusy} onClick={async () => {
             setDemoBusy(true);
             setDemoError('');
             try {
@@ -124,31 +138,65 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               setDemoBusy(false);
             }
           }}>{demoBusy ? lc('loading') : lc('openGoldenDemo')}</button>
-          <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+          <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
             <Plus size={16} /> {t('createProject')}
           </button>
         </div>
-      </div>
-      {demoError&&<p role="alert" className="lc-notice lc-error">{demoError}</p>}
+      </header>
+      {demoError && <p role="alert" className="lc-notice lc-error">{demoError}</p>}
+      {error && projects.length > 0 && <div className="async-state async-state-warning projects-load-warning" role="status">
+        <span>{t('projectLoadFailed')}</span><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={onRefresh}>{t('common:refresh')}</button>
+      </div>}
 
-      <div className="card">
-        <div className="card-body" style={{ padding: 0 }}>
+      {!loading && currentProject && <section className="card project-current-workspace" aria-labelledby="current-project-workspace-title">
+        <div className="project-current-copy">
+          <span>{t('currentProject')}</span>
+          <h3 id="current-project-workspace-title">{projectDisplayNames.get(currentProject.id) ?? currentProject.name}</h3>
+          <p>{currentProject.repository_url || t('localWorkspace')} · {currentProject.framework_type} · {t('columnBranch')}: <code>{currentProject.default_branch}</code></p>
+        </div>
+        <div className="project-current-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => { onSelectProject(currentProject.id); onNavigate('requirements', currentProject.id); }}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</button>
+          <button type="button" className="btn btn-primary" onClick={() => { onSelectProject(currentProject.id); onNavigate('workspace', currentProject.id); }}><Code2 size={14} aria-hidden="true" />{t('openWorkspace')}</button>
+        </div>
+      </section>}
+
+      <section className="card project-registry" aria-label={t('titles:projects')}>
+        <div className="project-registry-heading">
+          <strong>{t('projectCount', { count: projects.length })}</strong>
+          {projects.length > 1 && <label className="project-search">
+            <Search size={14} aria-hidden="true" />
+            <span className="project-search-visually-hidden">{t('searchProjects')}</span>
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('searchProjects')} />
+          </label>}
+          <span>{t('registryHint')}</span>
+        </div>
+        <div className="card-body project-registry-body">
           {loading ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              {t('common:loadingProjects')}
+            <div className="projects-loading">{t('common:loadingProjects')}</div>
+          ) : error && projects.length === 0 ? (
+            <div className="projects-empty-state" role="alert">
+              <FolderGit2 size={32} aria-hidden="true" />
+              <strong>{t('projectLoadFailed')}</strong>
+              <button type="button" className="btn btn-secondary" onClick={onRefresh}>{t('common:refresh')}</button>
             </div>
           ) : projects.length === 0 ? (
-            <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <FolderGit2 size={36} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+            <div className="projects-empty-state">
+              <FolderGit2 size={36} aria-hidden="true" />
+              <div className="projects-empty-title">
                 {t('emptyTitle')}
               </div>
-              <p style={{ fontSize: '13px', maxWidth: '400px', margin: '0 auto 16px' }}>
+              <p className="projects-empty-copy">
                 {t('emptyDescription')}
               </p>
-              <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+              <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
                 <Plus size={16} /> {t('createProject')}
               </button>
+            </div>
+          ) : visibleProjects.length === 0 ? (
+            <div className="projects-empty-state" role="status">
+              <Search size={28} aria-hidden="true" />
+              <strong>{t('noProjectsMatch')}</strong>
+              <button type="button" className="btn btn-secondary" onClick={() => setSearchQuery('')}>{t('clearSearch')}</button>
             </div>
           ) : (
             <div
@@ -170,70 +218,70 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               }}
             >
               <p className="projects-table-scroll-hint">{t('tableSwipeHint')}</p>
-              <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('columnName')}</th>
-                  <th>{t('columnFramework')}</th>
-                  <th>{t('columnRepositoryUrl')}</th>
-                  <th>{t('columnBranch')}</th>
-                  <th>{t('common:created')}</th>
-                  <th style={{ textAlign: 'right' }}>{t('common:actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <Link to={`/projects/${p.id}`} onClick={()=>onSelectProject(p.id)} style={{ fontWeight: 600, color: 'var(--text-main)' }}>{projectDisplayNames.get(p.id) ?? p.name}</Link>
-                      {p.description && (
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {p.description}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <span className="badge badge-draft">{p.framework_type}</span>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                      {p.repository_url || <span style={{ color: 'var(--text-muted)' }}>{t('localWorkspace')}</span>}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{p.default_branch}</td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                      {new Date(p.created_at).toLocaleDateString()}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '6px' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          title={t('viewRequirements')}
-                          onClick={() => {
-                            onSelectProject(p.id);
-                            onNavigate('requirements', p.id);
-                          }}
-                        >
-                          <FileText size={13} />
-                        </button>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          title={t('openInAutomationStudio')}
-                          onClick={() => {
-                            onSelectProject(p.id);
-                            onNavigate('automation', p.id);
-                          }}
-                        >
-                          <Code2 size={13} /> {t('studio')}
-                        </button>
-                      </div>
-                    </td>
+              <table className="data-table project-registry-table">
+                <thead>
+                  <tr>
+                    <th>{t('columnName')}</th>
+                    <th>{t('columnFramework')}</th>
+                    <th>{t('columnWorkspace')}</th>
+                    <th>{t('common:created')}</th>
+                    <th className="project-actions-heading">{t('common:actions')}</th>
                   </tr>
-                ))}
-              </tbody>
+                </thead>
+                <tbody>
+                  {visibleProjects.map((p) => (
+                    <tr key={p.id} className={p.id === selectedProjectId ? 'is-current-project' : undefined}>
+                      <td className="project-name-cell">
+                        <Link to={`/projects/${p.id}`} className="project-name" onClick={() => onSelectProject(p.id)}>
+                          {projectDisplayNames.get(p.id) ?? p.name}
+                        </Link>
+                        {p.description && <div className="project-description">{p.description}</div>}
+                      </td>
+                      <td><span className="badge badge-draft">{p.framework_type}</span></td>
+                      <td>
+                        <div className="project-workspace-cell">
+                          <span className="project-repository" title={p.repository_url || t('localWorkspace')}>
+                            {p.repository_url || t('localWorkspace')}
+                          </span>
+                          <span className="project-branch">{t('columnBranch')}: <code>{p.default_branch}</code></span>
+                        </div>
+                      </td>
+                      <td className="project-created-date">{new Date(p.created_at).toLocaleDateString()}</td>
+                      <td className="project-actions-cell">
+                        <div className="project-row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            title={t('viewRequirements')}
+                            aria-label={t('viewRequirements')}
+                            onClick={() => {
+                              onSelectProject(p.id);
+                              onNavigate('requirements', p.id);
+                            }}
+                          >
+                            <FileText size={13} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            title={t('openWorkspace')}
+                            onClick={() => {
+                              onSelectProject(p.id);
+                              onNavigate('workspace', p.id);
+                            }}
+                          >
+                            <Code2 size={13} aria-hidden="true" /> {t('openWorkspace')}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Create Project Modal */}
       {isModalOpen && (
@@ -252,6 +300,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 </button>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
+                {createError && <div className="async-state async-state-error project-create-error" role="alert">{t('createFailed', { message: createError })}</div>}
                 <div className="form-group">
                   <label className="form-label" htmlFor="project-name">{t('modalNameLabel')}</label>
                   <input

@@ -12,6 +12,7 @@ export type WorkspaceRunDockStatus =
   | 'passed'
   | 'cancelled'
   | 'task-completed'
+  | 'task-paused'
   | 'task-failed'
   | 'task-blocked'
   | 'task-cancelled';
@@ -73,6 +74,7 @@ export function workspaceRunDockState(
   else if (runStatus === 'PASSED') status = 'passed';
   else if (runStatus === 'CANCELLED') status = 'cancelled';
   else if (taskStatus === 'COMPLETED') status = 'task-completed';
+  else if (taskStatus === 'PAUSED') status = 'task-paused';
   else if (taskStatus === 'FAILED' || taskStatus === 'ERROR') status = 'task-failed';
   else if (taskStatus === 'BLOCKED') status = 'task-blocked';
   else if (taskStatus === 'CANCELLED') status = 'task-cancelled';

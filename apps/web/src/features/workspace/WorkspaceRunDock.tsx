@@ -72,6 +72,7 @@ export function WorkspaceRunDock({
   };
   const runStatus = run?.status ?? null;
   const { status, active, failed, passed, taskTerminal } = workspaceRunDockState(runStatus, taskStatus);
+  const taskPaused = status === 'task-paused';
   const activeExecution = run?.executions.find((item) => item.status === 'RUNNING');
   const completed = run?.executions.filter((item) => item.finished_at).length ?? 0;
   const total = run?.executions.length || run?.total || 0;
@@ -182,6 +183,11 @@ export function WorkspaceRunDock({
               <>
                 <strong>{t('dock.aiPlanRunning')}</strong>
                 <small>{taskStep || t('dock.preparing')}</small>
+              </>
+            ) : taskPaused ? (
+              <>
+                <strong>{t(`dock.status.${status}`)}</strong>
+                <small>{t('dock.taskPaused')}</small>
               </>
             ) : taskTerminal ? (
               <>

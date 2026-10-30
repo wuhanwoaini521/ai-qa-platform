@@ -73,7 +73,7 @@ const ICON_STROKE = 1.6;
 const SIDEBAR_COLLAPSED_KEY = 'ai-qa.sidebar-collapsed';
 
 /** Project context and searchable destinations in an expandable navigation rail. */
-export const Navigation: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = ({ compact = false, graphite = false }) => {
   const { t } = useTranslation('nav');
   const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
@@ -234,7 +234,7 @@ export const Navigation: React.FC<{ compact?: boolean }> = ({ compact = false })
   };
 
   return (
-    <aside className={`app-sidebar${isCollapsed ? ' is-collapsed' : ''}${compact ? ' is-workspace-compact' : ''}`}>
+    <aside className={`app-sidebar${isCollapsed ? ' is-collapsed' : ''}${compact ? ' is-workspace-compact' : ''}${graphite ? ' is-graphite-rail' : ''}`}>
       <div className="sidebar-header">
         <div className="sidebar-logo-icon" title={t('common:appName')} aria-hidden="true">
           QA

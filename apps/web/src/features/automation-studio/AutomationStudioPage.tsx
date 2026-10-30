@@ -231,16 +231,13 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   useEffect(()=>{if(showBrowser)browserDrawerRef.current?.focus();},[showBrowser]);
   const linkedCase=projectCases.find(item=>item.id===query.get('caseId'));
   const [recorderSteps,setRecorderSteps]=useState<RecorderStep[]>([]);
-  // A recorded case should show its recorded steps without hunting through the tools menu.
   const contextAutoOpenedRef = useRef(false);
   useEffect(() => {
-    // A recorded case should show its recorded steps without hunting through the tools menu.
     if (contextAutoOpenedRef.current || !embedded || recorderSteps.length === 0) return;
     contextAutoOpenedRef.current = true;
-    setShowContext(true);
+    // Preserve the existing compact mobile workflow; desktop context stays collapsed by default.
+    if (window.matchMedia('(max-width: 820px)').matches) setShowContext(true);
   }, [embedded, recorderSteps.length]);
-
-
   const linkedCaseId = query.get('caseId');
   useEffect(() => {
     setRecorderSteps([]);
@@ -276,6 +273,14 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
       ]);
     },
   });
+  const debugPanelShouldAutoOpen = ['starting', 'running', 'paused', 'error'].includes(debug.state)
+    || Boolean(initialDebugNodeId || debugPreparationError);
+  const debugPanelDisclosureRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (debugPanelShouldAutoOpen && debugPanelDisclosureRef.current) {
+      debugPanelDisclosureRef.current.open = true;
+    }
+  }, [debugPanelShouldAutoOpen]);
   const startDebug = async (nodeid: string, failureId?: string | null) => {
     setDebugPreparationError('');
     if (!await editor.saveAll()) {
@@ -296,6 +301,20 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
   ) ? activeFilePath : null;
 
   const problemCount = problems.validationIssues.length + Object.values(languageIssues).flat().length;
+  const useDesktopDebugDisclosure = embedded && preset === 'debug' && !workspaceMobilePanel;
+  const debugPanelContent = (
+    <DebugPanel
+      state={debugPreparationError ? 'error' : debug.state}
+      nodeid={debug.targetNodeid}
+      error={debugPreparationError || debug.error}
+      frames={debug.frames}
+      locals={debug.locals}
+      output={debug.output}
+      breakpointBindings={debug.breakpointBindings}
+      hasHitBreakpoint={debug.hasHitBreakpoint}
+      onSelectFrame={debug.selectFrame}
+    />
+  );
 
   fetchFilesRef.current = workspace.fetchFiles;
   openFileRef.current = openStudioFile;
@@ -816,22 +835,18 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           onToggleBreakpoint={toggleBreakpoint}
           initialFocusLineNumber={sourceFocus && sourceFocus.path === editor.activeTab?.path ? sourceFocus.line : initialOpenLineNumber ?? undefined}
           executionLocation={executionLocation}
+          embedded={embedded}
         />}
 
         </div>
 
         {(preset === 'debug' || debug.state !== 'idle' || initialDebugNodeId || debugPreparationError) && (
-          <DebugPanel
-            state={debugPreparationError ? 'error' : debug.state}
-            nodeid={debug.targetNodeid}
-            error={debugPreparationError || debug.error}
-            frames={debug.frames}
-            locals={debug.locals}
-            output={debug.output}
-            breakpointBindings={debug.breakpointBindings}
-            hasHitBreakpoint={debug.hasHitBreakpoint}
-            onSelectFrame={debug.selectFrame}
-          />
+          useDesktopDebugDisclosure ? (
+            <details ref={debugPanelDisclosureRef} className="studio-debug-disclosure">
+              <summary>{t('editor.debugTest')}</summary>
+              <div className="studio-debug-disclosure-content">{debugPanelContent}</div>
+            </details>
+          ) : debugPanelContent
         )}
 
         {/* Resizable, collapsible bottom dock: problems + quick run output */}
