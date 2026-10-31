@@ -1468,3 +1468,12 @@ git diff --check
 - 文件：`RequirementLifecyclePanel.tsx`、`index.css`（`.flow-strip` 等）、`lifecycle.json`（zh/en）。
 - 验证：`tsc`、ESLint、前端 234 passed、i18n、`vite build` 通过；截图 `evidence/requirement-flow-strip.png`。
 - 未做：流程条“运行与结果”完成态尚未接运行数据；断言卡仍无直达本次运行结果的入口。
+
+## 3.52 Overnight product improvement batch（2026-11-01，分支 feat/overnight-product-improvement）
+
+- **分支/提交：** `feat/overnight-product-improvement`，HEAD `f32c810`（相对 main 9 个提交，详见 `.ai-runs/2026-11-01-overnight-product-improvement/final-handoff.md`）。未 push。
+- **交付：** 断言↔TestRun 真实关联（函数级 pairing、7 态、伪造拒绝、ACL）；结果页返回需求上下文；409 冲突恢复文案；录制变量抽取（QA_BASE_URL / QA_DATA_*，0 新依赖）；只读探针清单。
+- **独立审查：** `software-architect`（4 P0）、`critical-reviewer`（BLOCK，2 P0——已修并复验）、`product-strategist`（4 个实现级缺陷——已修）、`research-scout`（选型：录制变量）。
+- **验证：** 干净检出 37 passed + tsc；广泛回归 527 passed / 7 skipped；前端 234 passed；Ruff/i18n/build 通过；真实浏览器截图（登录后三视口）。
+- **仍缺：** 用例级（非函数级）断言映射；Jenkins 无 nodeids 的运行；录制变量浏览器端到端；探针数据清理；项目级 SUT 地址；失败→修复→重跑闭环。
+- **注意：** 本轮曾出现「提交引用了未提交文件导致 HEAD 不可构建」的问题，已通过补提交与 `git worktree` 干净检出验证修复；后续提交前必须做干净检出验证。
