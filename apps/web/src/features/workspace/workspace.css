@@ -1724,6 +1724,15 @@
   border-radius: 0;
   background: transparent;
 }
+.workspace-shell .workspace-requirement-detail .lc-gap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.workspace-shell .workspace-requirement-detail .lc-gap > span { flex: 1 1 320px; min-width: 0; }
+.workspace-shell .workspace-requirement-detail .lc-gap > .btn,
+.workspace-shell .workspace-requirement-detail .lc-gap > .badge,
+.workspace-shell .workspace-requirement-detail .lc-gap > .lc-run-state { flex: 0 0 auto; }
 .workspace-shell .workspace-requirement-detail .lc-gap strong {
   min-width: 66px;
   color: var(--accent-blue);
