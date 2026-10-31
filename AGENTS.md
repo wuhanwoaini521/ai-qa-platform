@@ -119,7 +119,7 @@ Historical mobile requirements in prompts, TODOs, and design documents are **OUT
 
 Follow `docs/UI_DESIGN_SYSTEM.md`.
 
-The active desktop design direction is **Graphite Developer Studio**.
+The active desktop design direction is **Warm Light Editorial Workspace** (see `docs/UI_DESIGN_SYSTEM.md`).
 
 Prefer existing design tokens, components, navigation patterns, and layout primitives. Avoid introducing competing visual systems.
 
