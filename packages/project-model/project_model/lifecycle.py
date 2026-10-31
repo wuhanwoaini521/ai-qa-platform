@@ -263,6 +263,18 @@ class TestOracle(DocumentModel):
     criterion_ids: list[str] = Field(default_factory=list, max_length=30)
 
 
+class CaseAssertion(DocumentModel):
+    """An executable expectation owned by one test case and bound to a test function."""
+
+    id: str = Field(pattern=r"^TCA-[A-Za-z0-9-]+$", max_length=64)
+    criterion_id: str = Field(min_length=1, max_length=64)
+    statement: str = Field(min_length=8, max_length=400)
+    check: str = Field(default="", max_length=400)
+    # Filled when a generated script containing marker comments is saved.
+    nodeid: str = Field(default="", max_length=300)
+    source_assertion_id: str = Field(default="", max_length=64)
+
+
 class ModernTestModel(DocumentModel):
     display_id: str = Field(default="", max_length=64)
     intent: str = Field(min_length=1, max_length=1500)
@@ -272,6 +284,7 @@ class ModernTestModel(DocumentModel):
     technique: str = Field(default="happy_path", max_length=50)
     data: dict[str, Any] = Field(default_factory=dict)
     oracles: list[TestOracle] = Field(default_factory=list, max_length=20)
+    assertions: list[CaseAssertion] = Field(default_factory=list, max_length=30)
     evidence: list[Literal["Screenshot", "DOM", "Network", "Trace", "Logs"]] = Field(default_factory=list, max_length=5)
     missing: list[str] = Field(default_factory=list, max_length=20)
 

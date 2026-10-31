@@ -8,7 +8,7 @@ from qa_core.ai.budget import BudgetExceededError
 from qa_core.ai.provider import AIProviderError
 
 from app.api.authz import require_permission
-from app.api.project_acl import project_path_access, requirement_id_access
+from app.api.project_acl import case_access, project_path_access, requirement_id_access
 from app.container import (
     get_golden_demo_service,
     get_project_knowledge_service,
@@ -161,6 +161,20 @@ class AssertionScriptSavePayload(BaseModel):
     path: str = Field(min_length=1, max_length=200)
     code: str = Field(min_length=1)
     assertion_ids: list[str] = Field(min_length=1, max_length=30)
+
+
+@router.get("/test-cases/{case_id}/assertions", dependencies=[Depends(case_access)])
+async def case_assertions(
+    case_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Case assertions with their bound test function's latest real execution."""
+    try:
+        return await service.case_assertions(case_id)
+    except LookupError as error:
+        raise HTTPException(404, "Test case not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @router.delete(

@@ -944,6 +944,18 @@ export const api = {
     }),
 
   // Test Cases
+  getCaseAssertions: (caseId: string) =>
+    request<{
+      case_id: string;
+      assertions: {
+        id: string;
+        criterion_id: string;
+        statement: string;
+        nodeid?: string;
+        state: string;
+        run?: { run_id: string; execution_status: string; finished_at: string | null } | null;
+      }[];
+    }>(`/test-cases/${encodeURIComponent(caseId)}/assertions`),
   getTestCases: (projectId?: string) => {
     const query = projectId ? `?project_id=${projectId}` : '';
     return request<TestCase[]>(`/test-cases${query}`);

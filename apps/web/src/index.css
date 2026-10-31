@@ -5956,3 +5956,13 @@ button, input, select, textarea {
 .recorder-variables li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); }
 .recorder-variables code { color: var(--brand); font-size: var(--fs-xs); }
 .recorder-variables li span { max-width: 220px; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }
+
+/* Case-level assertions bound to their own test function. */
+.case-assertions { display: grid; gap: 6px; margin: 12px 0; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.case-assertions-heading { display: flex; align-items: baseline; gap: 8px; }
+.case-assertions-heading strong { font-size: var(--fs-label); }
+.case-assertions-heading span { color: var(--ink-muted); font-size: var(--fs-xs); }
+.case-assertions ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.case-assertion-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.case-assertion-row code { color: var(--accent-blue); font: 600 11px/1.5 var(--font-mono); }
+.case-assertion-statement { flex: 1 1 260px; min-width: 0; color: var(--ink-soft); font-size: var(--fs-xs); }

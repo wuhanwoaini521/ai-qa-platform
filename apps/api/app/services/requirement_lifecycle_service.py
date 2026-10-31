@@ -788,6 +788,65 @@ class RequirementLifecycleService:
         if not navigates:
             raise ValueError("Generated script never navigates (page.goto) to the page it asserts on")
 
+    async def case_assertions(self, case_id):
+        """Case-level assertions, with nodeids derived from the requirement's saved scripts.
+
+        Deriving at read time keeps one source of truth (the requirement document) and means a case
+        adopted before the script existed still reports the right test function.
+        """
+        async with self.repository_scope() as repositories:
+            case = await repositories.test_cases.get_by_id(case_id)
+            if case is None:
+                raise LookupError(case_id)
+            requirement = (
+                await repositories.requirements.get_by_id(case.requirement_id) if case.requirement_id else None
+            )
+            model = dict(case.test_model or {})
+            assertions = [dict(entry) for entry in (model.get("assertions") or [])]
+            project_id = case.project_id
+            document = (
+                RequirementDocument.model_validate(requirement.qa_model)
+                if requirement is not None and requirement.qa_model
+                else None
+            )
+        pairing_by_criterion: dict[str, str] = {}
+        if document is not None:
+            for binding in document.scripts:
+                for pairing in binding.nodeid_criteria:
+                    for criterion in pairing.criterion_ids:
+                        pairing_by_criterion.setdefault(criterion, pairing.nodeid)
+        for entry in assertions:
+            entry["nodeid"] = entry.get("nodeid") or pairing_by_criterion.get(entry.get("criterion_id", ""), "")
+        latest: dict[str, dict] = {}
+        nodeids = [entry["nodeid"] for entry in assertions if entry.get("nodeid")]
+        if nodeids:
+            for execution, run in await RunHistoryRepository().get_latest_executions_with_runs(nodeids, project_id):
+                latest.setdefault(
+                    execution.nodeid,
+                    {
+                        "run_id": run.id,
+                        "run_status": getattr(run.status, "value", run.status),
+                        "execution_status": getattr(execution.status, "value", execution.status),
+                        "finished_at": (execution.finished_at or run.finished_at).isoformat()
+                        if (execution.finished_at or run.finished_at)
+                        else None,
+                        "artifact_count": len(execution.artifact_paths or []),
+                    },
+                )
+        items = []
+        for entry in assertions:
+            record = latest.get(entry.get("nodeid") or "")
+            items.append(
+                {
+                    **entry,
+                    "state": record["execution_status"]
+                    if record
+                    else ("NEVER_RUN" if entry.get("nodeid") else "UNBOUND"),
+                    "run": record,
+                }
+            )
+        return {"case_id": case_id, "assertions": items}
+
     async def discard_assertion(self, requirement_id, assertion_id):
         """Forget an assertion (used when its text can no longer be turned into a test)."""
         _title, _desc, _project_id, document, raw, _ctx, _cases = await self._load(requirement_id)
@@ -1029,6 +1088,25 @@ class RequirementLifecycleService:
             from project_model.lifecycle import TestScenario
 
             scenario = TestScenario.model_validate(design.scenario_model)
+            requirement_document = (
+                RequirementDocument.model_validate(requirement.qa_model) if requirement.qa_model else None
+            )
+            covered = set(scenario.coverage.criterion_ids)
+            adopted_assertions = [
+                assertion
+                for assertion in (requirement_document.assertions if requirement_document else [])
+                if assertion.adopted and assertion.criterion_id in covered
+            ]
+            case_assertions = [
+                {
+                    "id": f"TCA-{assertion.id.removeprefix('ASR-')}",
+                    "criterion_id": assertion.criterion_id,
+                    "statement": assertion.statement,
+                    "check": assertion.check,
+                    "source_assertion_id": assertion.id,
+                }
+                for assertion in adopted_assertions
+            ]
             data = await validate_case_model(
                 repositories.requirements,
                 repositories.test_designs,
@@ -1041,6 +1119,7 @@ class RequirementLifecycleService:
                     expected_result="\n".join(scenario.expected_outcomes),
                     priority=scenario.priority,
                     test_model=ModernTestModel(
+                        assertions=case_assertions,
                         intent=scenario.intent,
                         scenario_id=scenario.id,
                         coverage=scenario.coverage,
