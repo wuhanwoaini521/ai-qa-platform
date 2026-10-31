@@ -174,6 +174,8 @@ async def save_assertion_script(
         return await service.save_assertion_script(
             requirement_id, path=payload.path, code=payload.code, assertion_ids=payload.assertion_ids
         )
+    except RequirementAnalysisBusy as error:
+        raise HTTPException(409, str(error)) from error
     except FileExistsError as error:
         raise HTTPException(409, str(error)) from error
     except ValueError as error:

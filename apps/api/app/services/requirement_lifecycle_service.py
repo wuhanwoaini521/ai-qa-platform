@@ -926,12 +926,30 @@ class RequirementLifecycleService:
                     "error_message": (execution.error_message or "")[:300],
                 }
             async with self.repository_scope() as repositories:
-                runs = await repositories.test_runs.list_runs(project_id, limit=15)
+                runs = await repositories.test_runs.list_runs(project_id, limit=25)
             for run in runs:
-                if getattr(run.status, "value", run.status) in {"QUEUED", "RUNNING"}:
-                    for nodeid in run.nodeids or []:
-                        if nodeid in nodeid_index:
-                            active_paths.add(nodeid_index[nodeid].path)
+                run_status = getattr(run.status, "value", run.status)
+                for nodeid in run.nodeids or []:
+                    if nodeid not in nodeid_index:
+                        continue
+                    if run_status in {"QUEUED", "RUNNING"}:
+                        active_paths.add(nodeid_index[nodeid].path)
+                    if nodeid in latest:
+                        continue
+                    # Terminal run without execution rows (Jenkins, collection error, stale cancel):
+                    # report the run-level truth instead of pretending nothing ever ran.
+                    if run_status in {"PASSED", "FAILED", "CANCELLED", "ERROR", "SKIPPED"}:
+                        latest[nodeid] = {
+                            "run_id": run.id,
+                            "run_status": run_status,
+                            "nodeid": nodeid,
+                            "execution_status": None,
+                            "finished_at": (run.finished_at or run.created_at).isoformat()
+                            if (run.finished_at or run.created_at)
+                            else None,
+                            "artifact_count": len(getattr(run, "external_artifacts", []) or []),
+                            "error_message": "",
+                        }
         assertions = []
         for item in document.assertions:
             binding = next((candidate for candidate in bindings if item.id in candidate.assertion_ids), None)

@@ -362,3 +362,84 @@ def test_unmarked(page: Page):
         assert "no '# criterion:' marker" in response.json()["detail"]
     finally:
         _stop()
+
+
+async def _seed_binding(client, test_db_session, *, criteria: str = "Valid code reduces the total"):
+    project_id, requirement_id, assertion_id = await _seed_adopted(client, criteria=criteria)
+    await client.post(
+        f"/api/requirements/{requirement_id}/assertions/script/save",
+        json={"path": "tests/test_total.py", "code": SCRIPT, "assertion_ids": [assertion_id]},
+    )
+    return project_id, requirement_id, assertion_id
+
+
+@pytest.mark.asyncio
+async def test_run_error_without_execution_records_reports_blocked(client, test_db_session):
+    project_id, requirement_id, _ = await _seed_binding(client, test_db_session)
+    try:
+        nodeid = "tests/test_total.py::test_total_is_discounted"
+        async with test_db_session() as session:
+            repository = TestRunRepository(session)
+            run = await repository.create_run(
+                TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+            )
+            await repository.update_run_status(run.id, RunStatus.ERROR, total=0, passed=0, failed=0)
+            await session.commit()
+        body = (await client.get(f"/api/requirements/{requirement_id}/assertions/runs")).json()
+        assert body["assertions"][0]["state"] == "BLOCKED"
+    finally:
+        _stop()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_run_without_executions_reports_cancelled(client, test_db_session):
+    project_id, requirement_id, _ = await _seed_binding(client, test_db_session)
+    try:
+        nodeid = "tests/test_total.py::test_total_is_discounted"
+        async with test_db_session() as session:
+            repository = TestRunRepository(session)
+            run = await repository.create_run(
+                TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+            )
+            await repository.update_run_status(run.id, RunStatus.CANCELLED, total=0, passed=0, failed=0)
+            await session.commit()
+        body = (await client.get(f"/api/requirements/{requirement_id}/assertions/runs")).json()
+        assert body["assertions"][0]["state"] == "CANCELLED"
+    finally:
+        _stop()
+
+
+@pytest.mark.asyncio
+async def test_terminal_run_without_executions_reports_record_inaccessible(client, test_db_session):
+    project_id, requirement_id, _ = await _seed_binding(client, test_db_session)
+    try:
+        nodeid = "tests/test_total.py::test_total_is_discounted"
+        async with test_db_session() as session:
+            repository = TestRunRepository(session)
+            run = await repository.create_run(
+                TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+            )
+            await repository.update_run_status(run.id, RunStatus.PASSED, total=1, passed=1, failed=0)
+            await session.commit()
+        body = (await client.get(f"/api/requirements/{requirement_id}/assertions/runs")).json()
+        assert body["assertions"][0]["state"] == "RECORD_INACCESSIBLE"
+    finally:
+        _stop()
+
+
+@pytest.mark.asyncio
+async def test_queued_run_without_executions_reports_running(client, test_db_session):
+    project_id, requirement_id, _ = await _seed_binding(client, test_db_session)
+    try:
+        nodeid = "tests/test_total.py::test_total_is_discounted"
+        async with test_db_session() as session:
+            repository = TestRunRepository(session)
+            run = await repository.create_run(
+                TestRunCreate(project_id=project_id, workspace_id=project_id, nodeids=[nodeid])
+            )
+            await repository.update_run_status(run.id, RunStatus.RUNNING)
+            await session.commit()
+        body = (await client.get(f"/api/requirements/{requirement_id}/assertions/runs")).json()
+        assert body["assertions"][0]["state"] == "RUNNING"
+    finally:
+        _stop()
