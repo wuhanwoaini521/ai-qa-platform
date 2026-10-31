@@ -46,6 +46,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     default_branch: 'main',
     framework_type: 'playwright_python',
     bootstrap_workspace: true,
+    sut_base_url: '',
+    hidden_from_overview: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -107,6 +109,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         default_branch: 'main',
         framework_type: 'playwright_python',
         bootstrap_workspace: true,
+        sut_base_url: '',
+        hidden_from_overview: false,
       });
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : String(error));
@@ -236,6 +240,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           {projectDisplayNames.get(p.id) ?? p.name}
                         </Link>
                         {p.description && <div className="project-description">{p.description}</div>}
+                        {p.sut_base_url && <div className="project-description"><code>{p.sut_base_url}</code></div>}
+                        {p.hidden_from_overview && <span className="badge badge-draft">{t('hiddenFromOverview')}</span>}
                       </td>
                       <td><span className="badge badge-draft">{p.framework_type}</span></td>
                       <td>
@@ -260,6 +266,17 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                             }}
                           >
                             <FileText size={13} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            title={p.hidden_from_overview ? t('showFromOverview') : t('hideFromOverview')}
+                            onClick={async () => {
+                              await api.updateProject(p.id, { hidden_from_overview: !p.hidden_from_overview });
+                              onRefresh();
+                            }}
+                          >
+                            {p.hidden_from_overview ? t('showFromOverview') : t('hideFromOverview')}
                           </button>
                           <button
                             type="button"
@@ -336,6 +353,29 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                     value={formData.repository_url || ''}
                     onChange={(e) => setFormData({ ...formData, repository_url: e.target.value || null })}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="project-sut-url">{t('modalSutUrlLabel')}</label>
+                  <input
+                    id="project-sut-url"
+                    type="url"
+                    className="form-control"
+                    placeholder={t('modalSutUrlPlaceholder')}
+                    value={formData.sut_base_url || ''}
+                    onChange={(e) => setFormData({ ...formData, sut_base_url: e.target.value || null })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.hidden_from_overview)}
+                      onChange={(e) => setFormData({ ...formData, hidden_from_overview: e.target.checked })}
+                    />
+                    <span>{t('modalHideFromOverview')}</span>
+                  </label>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

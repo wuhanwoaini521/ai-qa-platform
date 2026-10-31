@@ -36,5 +36,11 @@
   "frameworkPytestApi": "Pytest (API Suite)",
   "frameworkCustom": "Custom Framework",
   "modalDefaultBranchLabel": "Default Branch",
-  "modalBootstrapHint": "<strong>Create runnable QA examples</strong> (Includes browser-free Pytest tests and the <code>tests/</code>, <code>pages/</code>, <code>flows/</code>, <code>components/</code> workspace structure)"
+  "modalBootstrapHint": "<strong>Create runnable QA examples</strong> (Includes browser-free Pytest tests and the <code>tests/</code>, <code>pages/</code>, <code>flows/</code>, <code>components/</code> workspace structure)",
+  "modalSutUrlLabel": "System under test URL (optional)",
+  "modalSutUrlPlaceholder": "https://app.example.com",
+  "modalHideFromOverview": "Hide from overview statistics (data kept)",
+  "hiddenFromOverview": "Hidden",
+  "hideFromOverview": "Hide from overview",
+  "showFromOverview": "Show in overview"
 }

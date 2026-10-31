@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from project_model.lifecycle import ModernTestModel, RequirementDocument, TestScenario
 
@@ -77,6 +78,22 @@ class ProjectBase(EntityBase):
     repository_url: str | None = Field(default=None, max_length=500)
     default_branch: str = Field(default="main", max_length=100)
     framework_type: FrameworkType = Field(default=FrameworkType.PLAYWRIGHT_PYTHON)
+    # System under test. Recordings and generated tests default to this address.
+    sut_base_url: str | None = Field(default=None, max_length=500)
+    # Local probe/demo projects stay in the database but leave overview statistics.
+    hidden_from_overview: bool = False
+
+    @field_validator("sut_base_url")
+    @classmethod
+    def validate_sut_base_url(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        parsed = urlparse(value)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("SUT address must be an http(s) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("SUT address must not embed credentials")
+        return value
 
 
 class ProjectCreate(ProjectBase):
@@ -91,6 +108,14 @@ class ProjectUpdate(EntityBase):
     repository_url: str | None = None
     default_branch: str | None = None
     framework_type: FrameworkType | None = None
+    sut_base_url: str | None = Field(default=None, max_length=500)
+    hidden_from_overview: bool | None = None
+
+    @field_validator("sut_base_url")
+    @classmethod
+    def validate_sut_base_url(cls, value: str | None) -> str | None:
+        return ProjectBase.validate_sut_base_url(value)
+
     # Ownership transfer / legacy claim. Only a security admin or the current owner may change these.
     owner_id: str | None = None
     team_id: str | None = None
@@ -455,6 +480,8 @@ class TestRun(EntityBase):
     parent_run_id: str | None = None
     origin_failure_id: str | None = None
     project_id: str
+    requirement_id: str | None = None
+    case_id: str | None = None
     workspace_id: str
     status: RunStatus = RunStatus.QUEUED
     requested_by: str = "user"
@@ -489,6 +516,8 @@ class TestRunCreate(BaseModel):
     parent_run_id: str | None = None
     origin_failure_id: str | None = None
     project_id: str
+    requirement_id: str | None = None
+    case_id: str | None = None
     workspace_id: str
     nodeids: list[str] = Field(default_factory=list)
     markers: list[str] = Field(default_factory=list)
@@ -550,6 +579,8 @@ class FailureRecord(EntityBase):
     evidence_bundle: dict[str, Any] = Field(default_factory=dict)
     id: str
     run_id: str
+    requirement_id: str | None = None
+    case_id: str | None = None
     execution_id: str
     test_nodeid: str
     test_name: str

@@ -106,6 +106,8 @@ class ProjectORM(Base):
     repository_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     default_branch: Mapped[str] = mapped_column(String(100), default="main")
     framework_type: Mapped[str] = mapped_column(String(50), default="playwright_python")
+    sut_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    hidden_from_overview: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     demo_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Project-level ownership. Nullable so pre-existing ("legacy") projects stay admin-only until a
     # security admin explicitly claims them; new projects always record their creator.
@@ -276,6 +278,12 @@ class TestRunORM(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    requirement_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("requirements.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    case_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_cases.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     workspace_id: Mapped[str] = mapped_column(String(36), index=True)
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", index=True)
     requested_by: Mapped[str] = mapped_column(String(100), default="user")
@@ -412,6 +420,12 @@ class FailureRecordORM(Base):
     run_id: Mapped[str] = mapped_column(String(36), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True)
     execution_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("test_executions.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    requirement_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("requirements.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    case_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("test_cases.id", ondelete="SET NULL"), nullable=True, index=True
     )
     test_nodeid: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     test_name: Mapped[str] = mapped_column(String(250), nullable=False)

@@ -225,6 +225,8 @@ class TestRunService:
             parent_run_id=orm.parent_run_id,
             origin_failure_id=orm.origin_failure_id,
             project_id=orm.project_id,
+            requirement_id=getattr(orm, "requirement_id", None),
+            case_id=getattr(orm, "case_id", None),
             workspace_id=orm.workspace_id,
             status=RunStatus(orm.status),
             requested_by=orm.requested_by,
@@ -791,6 +793,8 @@ class TestRunService:
                     )
                     failure_record = await run_repo.create_failure_record(
                         run_id=run_id,
+                        requirement_id=getattr(existing, "requirement_id", None),
+                        case_id=getattr(existing, "case_id", None),
                         execution_id=exec_orm.id,
                         test_nodeid=res.nodeid,
                         test_name=res.nodeid.split("::")[-1],

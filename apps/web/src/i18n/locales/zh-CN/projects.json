@@ -36,5 +36,11 @@
   "frameworkPytestApi": "Pytest（API 测试套件）",
   "frameworkCustom": "自定义框架",
   "modalDefaultBranchLabel": "默认分支",
-  "modalBootstrapHint": "<strong>创建可运行的 QA 示例</strong>（包含无需浏览器或外部服务的 Pytest 测试，以及 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 目录）"
+  "modalBootstrapHint": "<strong>创建可运行的 QA 示例</strong>（包含无需浏览器或外部服务的 Pytest 测试，以及 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 目录）",
+  "modalSutUrlLabel": "被测系统地址（可选）",
+  "modalSutUrlPlaceholder": "https://app.example.com",
+  "modalHideFromOverview": "从总览统计中隐藏（数据保留）",
+  "hiddenFromOverview": "已隐藏",
+  "hideFromOverview": "从总览隐藏",
+  "showFromOverview": "显示到总览"
 }

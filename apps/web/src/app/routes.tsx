@@ -216,17 +216,25 @@ const RunWorkspaceRoute: React.FC = () => {
   const requirementId = searchParams.get('requirementId') ?? undefined;
   const nodeId = searchParams.get('nodeId') ?? undefined;
   const [projectId, setProjectId] = useState('');
+  const [runContext, setRunContext] = useState<{ requirementId?: string; caseId?: string }>({});
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     let active = true;
     setProjectId('');
+    setRunContext({});
     setMissing(false);
     void api.getTestRun(runId).then((run) => {
-      if (active) setProjectId(run.project_id);
+      if (!active) return;
+      setProjectId(run.project_id);
+      // The run carries its own requirement/case identity; URL parameters only override it.
+      setRunContext({
+        requirementId: run.requirement_id ?? undefined,
+        caseId: run.case_id ?? undefined,
+      });
     }).catch(() => { if (active) setMissing(true); });
     return () => { active = false; };
   }, [runId]);
-  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, ...(requirementId ? { requirementId } : {}), ...(nodeId ? { nodeId } : {}), stage: 'result', view: 'results' })} />;
+  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, ...((requirementId ?? runContext.requirementId) ? { requirementId: requirementId ?? runContext.requirementId } : {}), ...(nodeId ? { nodeId } : {}), ...(runContext.caseId ? { testCaseId: runContext.caseId } : {}), stage: 'result', view: 'results' })} />;
   if (missing) return <Navigate replace to="/runs" />;
   return <div className="page-loading" aria-busy="true">Loading run…</div>;
 };

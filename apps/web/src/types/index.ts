@@ -110,6 +110,8 @@ export interface ProjectCreate {
   default_branch?: string;
   framework_type?: FrameworkType;
   bootstrap_workspace?: boolean;
+  sut_base_url?: string | null;
+  hidden_from_overview?: boolean;
 }
 
 export type Requirement = Omit<ApiSchema['Requirement'], 'qa_model'> & {

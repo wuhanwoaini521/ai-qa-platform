@@ -45,6 +45,11 @@ async def create_recorder_session(
     workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
 ):
     await enforce_project_access(user, data.project_id)
+    # A project's SUT address is the default starting point for a recording.
+    if data.start_url == "about:blank":
+        project = await workflow.project_repo.get_by_id(data.project_id)
+        if project is not None and project.sut_base_url:
+            data = data.model_copy(update={"start_url": project.sut_base_url})
     try:
         created = await workflow.create_session(user.id, data)
     except LookupError as error:

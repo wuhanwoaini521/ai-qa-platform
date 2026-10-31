@@ -792,6 +792,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requirements/{requirement_id}/assertions/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Assertions
+         * @description Draft assertions grounded in acceptance criteria. Drafts are never applied automatically.
+         */
+        post: operations["draft_assertions_api_requirements__requirement_id__assertions_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}/adoption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Assertion Adoption
+         * @description Record the human adoption decision for one drafted assertion.
+         */
+        post: operations["set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Assertion Script
+         * @description Return a script draft built from human-adopted assertions. Nothing is written to disk.
+         */
+        post: operations["generate_assertion_script_api_requirements__requirement_id__assertions_script_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Assertion */
+        delete: operations["discard_assertion_api_requirements__requirement_id__assertions__assertion_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/script/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Assertion Script
+         * @description Save a human-approved script and record which adopted assertions it implements.
+         */
+        post: operations["save_assertion_script_api_requirements__requirement_id__assertions_script_save_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assertion Runs
+         * @description Return each assertion with its latest real TestRun execution, or NEVER_RUN.
+         */
+        get: operations["assertion_runs_api_requirements__requirement_id__assertions_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/requirements/{requirement_id}/lifecycle/designs": {
         parameters: {
             query?: never;
@@ -3958,6 +4075,15 @@ export interface components {
             /** Storage Url */
             storage_url: string;
         };
+        /** AssertionScriptSavePayload */
+        AssertionScriptSavePayload: {
+            /** Path */
+            path: string;
+            /** Code */
+            code: string;
+            /** Assertion Ids */
+            assertion_ids: string[];
+        };
         /** AutomationBinding */
         AutomationBinding: {
             /** Test Case Id */
@@ -4020,6 +4146,11 @@ export interface components {
          * @enum {string}
          */
         AutomationStatus: "MANUAL" | "DRAFT" | "AUTOMATED";
+        /** Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post */
+        Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post: {
+            /** Adopted */
+            adopted: boolean;
+        };
         /** Body_upload_artifact_api_artifacts_upload_post */
         Body_upload_artifact_api_artifacts_upload_post: {
             /** File */
@@ -4750,6 +4881,10 @@ export interface components {
             id: string;
             /** Run Id */
             run_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Execution Id */
             execution_id: string;
             /** Test Nodeid */
@@ -4946,6 +5081,10 @@ export interface components {
             path: string;
             /** Content */
             content: string;
+            /** Expected Exists */
+            expected_exists?: boolean | null;
+            /** Expected Sha256 */
+            expected_sha256?: string | null;
         };
         /** FileNode */
         FileNode: {
@@ -5098,6 +5237,38 @@ export interface components {
              * @default
              */
             message: string;
+        };
+        /**
+         * GroundedAssertion
+         * @description An executable assertion draft that must cite the acceptance criterion it verifies.
+         */
+        GroundedAssertion: {
+            /** Id */
+            id: string;
+            /** Criterion Id */
+            criterion_id: string;
+            /** Statement */
+            statement: string;
+            /**
+             * Check
+             * @default
+             */
+            check: string;
+            /**
+             * Adopted
+             * @default false
+             */
+            adopted: boolean;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Created At
+             * @default
+             */
+            created_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -5775,6 +5946,13 @@ export interface components {
             default_branch: string;
             /** @default playwright_python */
             framework_type: components["schemas"]["FrameworkType"];
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /**
+             * Hidden From Overview
+             * @default false
+             */
+            hidden_from_overview: boolean;
             /** Id */
             id: string;
             /** Demo Kind */
@@ -5812,6 +5990,13 @@ export interface components {
             default_branch: string;
             /** @default playwright_python */
             framework_type: components["schemas"]["FrameworkType"];
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /**
+             * Hidden From Overview
+             * @default false
+             */
+            hidden_from_overview: boolean;
             /**
              * Bootstrap Workspace
              * @description Automatically initialize starter workspace directory structure
@@ -5830,6 +6015,10 @@ export interface components {
             /** Default Branch */
             default_branch?: string | null;
             framework_type?: components["schemas"]["FrameworkType"] | null;
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /** Hidden From Overview */
+            hidden_from_overview?: boolean | null;
             /** Owner Id */
             owner_id?: string | null;
             /** Team Id */
@@ -6630,6 +6819,10 @@ export interface components {
             /** Dependencies */
             dependencies?: string[];
             analysis?: components["schemas"]["RequirementAnalysis"] | null;
+            /** Assertions */
+            assertions?: components["schemas"]["GroundedAssertion"][];
+            /** Scripts */
+            scripts?: components["schemas"]["ScriptBinding"][];
             /** History */
             history?: components["schemas"]["AnalysisRecord"][];
         };
@@ -7270,6 +7463,47 @@ export interface components {
             max_replans: number;
             /** Recorder Session Id */
             recorder_session_id?: string | null;
+        };
+        /**
+         * ScriptBinding
+         * @description A test file saved from grounded assertions, recorded so runs can be traced back.
+         */
+        ScriptBinding: {
+            /** Path */
+            path: string;
+            /** Nodeids */
+            nodeids: string[];
+            /** Assertion Ids */
+            assertion_ids: string[];
+            /** Criterion Ids */
+            criterion_ids?: string[];
+            /**
+             * Provider
+             * @default
+             */
+            provider: string;
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /**
+             * Saved At
+             * @default
+             */
+            saved_at: string;
+            /** Nodeid Criteria */
+            nodeid_criteria?: components["schemas"]["ScriptNodeCriteria"][];
+        };
+        /**
+         * ScriptNodeCriteria
+         * @description Which criteria a single test function implements (assertion-level pairing).
+         */
+        ScriptNodeCriteria: {
+            /** Nodeid */
+            nodeid: string;
+            /** Criterion Ids */
+            criterion_ids?: string[];
         };
         /** SingleTestResult */
         SingleTestResult: {
@@ -8329,6 +8563,10 @@ export interface components {
             origin_failure_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Workspace Id */
             workspace_id: string;
             /** @default QUEUED */
@@ -8430,6 +8668,10 @@ export interface components {
             origin_failure_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Workspace Id */
             workspace_id: string;
             /** Nodeids */
@@ -10492,6 +10734,202 @@ export interface operations {
         };
     };
     analyze_requirement_api_requirements__requirement_id__lifecycle_analyze_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_assertions_api_requirements__requirement_id__assertions_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+                assertion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_assertion_script_api_requirements__requirement_id__assertions_script_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_assertion_api_requirements__requirement_id__assertions__assertion_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+                assertion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_assertion_script_api_requirements__requirement_id__assertions_script_save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssertionScriptSavePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assertion_runs_api_requirements__requirement_id__assertions_runs_get: {
         parameters: {
             query?: never;
             header?: never;
