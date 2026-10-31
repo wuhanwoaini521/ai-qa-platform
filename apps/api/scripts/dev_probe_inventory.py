@@ -23,6 +23,9 @@ PROBE_PREFIXES = (
     "Assertion-to-Run Slice",
     "Frozen Slice Evidence",
     "Assertion to Run (final)",
+    "Recorder E2E Probe",
+    "SUT UI probe",
+    "Locator Repair Loop",
 )
 
 
