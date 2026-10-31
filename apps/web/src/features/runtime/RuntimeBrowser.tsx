@@ -15,6 +15,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
   onOpenSource?: RuntimeSourceOpener;
 }) {
   const { t } = useTranslation('runtime');
+  const { t: tWorkspace } = useTranslation('workspace');
   const [selected, setSelected] = useState('');
   const [selectedBrowserSessionId, setSelectedBrowserSessionId] = useState<string | null>(null);
   const [channel, setChannel] = useState<
@@ -28,6 +29,15 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
   const entries = browserEntries(live.sessions, channel);
   const browserUsed = snapshot.browser_sessions.length > 0 || snapshot.events.some((event) => event.category === 'browser');
   const browserRunActive = runtimeActive(snapshot.status) || ['QUEUED', 'RUNNING'].includes(live.run?.status ?? '');
+  const runStatus = live.run?.status;
+  const executionStatus = runStatus ?? snapshot.status;
+  const executionKind = snapshot.kind === 'task' && !runStatus ? 'task' : 'run';
+  const executionStatusLabel = executionKind === 'task'
+    ? tWorkspace(`result.taskStatus.${executionStatus.toUpperCase()}`, { defaultValue: executionStatus })
+    : undefined;
+  const executionActive = runStatus
+    ? ['QUEUED', 'RUNNING'].includes(runStatus)
+    : runtimeActive(snapshot.status);
   const showLiveBrowser = browserUsed || browserRunActive;
   const recorderSessionId = snapshot.task?.recorder_session_id;
   const failures = snapshot.failures.filter((failure) => !runId || failure.test_run_id === runId);
@@ -61,7 +71,11 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
       {showLiveBrowser && <LiveBrowserPanel
         sessions={live.sessions}
         frames={live.frames}
-        runStatus={live.run?.status ?? snapshot.status}
+        runId={runId}
+        executionStatus={executionStatus}
+        executionKind={executionKind}
+        executionStatusLabel={executionStatusLabel}
+        executionActive={executionActive}
         streamStatus={live.streamStatus}
         streamError={live.error}
         onSelectedSessionChange={setSelectedBrowserSessionId}

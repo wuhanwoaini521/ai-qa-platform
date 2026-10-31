@@ -79,7 +79,21 @@
   "noConsoleOutput": "该执行未保留控制台输出。",
   "noExecutions": "没有执行任何测试 —— 具体原因见下方控制台日志。",
   "liveBrowsers": "实时测试浏览器",
+  "browserTestRun": "测试运行 {{id}}",
+  "browserRunStatus": "运行状态：{{status}}",
+  "browserTaskStatus": "任务状态：{{status}}",
+  "browserStreamStatus": "浏览器连接：{{status}}",
+  "browserStream": {
+    "idle": "未连接",
+    "connecting": "连接中",
+    "connected": "已连接",
+    "reconnecting": "正在重连",
+    "failed": "连接失败"
+  },
+  "liveFrame": "实时画面",
+  "browserSessionId": "浏览器会话",
   "waitingBrowserSession": "正在等待测试启动浏览器；仅使用 Playwright 页面或浏览器上下文 fixture 的测试会显示实时画面。",
+  "waitingTaskBrowserSession": "正在等待任务启动浏览器。",
   "noBrowserSessions": "此运行没有浏览器会话记录。普通 Python 测试不会产生浏览器画面。",
   "streamEndpointUnavailable": "实时连接接口不可用（404）。请重启后端服务并刷新页面。",
   "streamConnectionFailed": "实时连接失败（{{status}}）。请检查登录权限并刷新页面。",
@@ -92,6 +106,35 @@
   "waitingBrowserFrame": "正在等待实际浏览器画面…",
   "browserFrameUnavailable": "此会话没有可用画面",
   "lastCapturedFrame": "运行已结束 · 最后一帧",
+  "browserFrameState": {
+    "live": "实时画面",
+    "lastReceived": "最后接收画面",
+    "lastCaptured": "最后捕获画面"
+  },
+  "browserFrameAlt": {
+    "live": "{{caseName}} 的实时浏览器画面",
+    "lastReceived": "{{caseName}} 的最后接收浏览器画面",
+    "lastCaptured": "{{caseName}} 的最后捕获浏览器画面"
+  },
+  "browserRunStatusLabel": {
+    "queued": "排队中",
+    "running": "运行中",
+    "passed": "通过",
+    "failed": "失败",
+    "skipped": "已跳过",
+    "error": "错误",
+    "cancelled": "已取消"
+  },
+  "browserSessionStatus": {
+    "queued": "排队中",
+    "running": "运行中",
+    "paused": "已暂停",
+    "passed": "通过",
+    "failed": "失败",
+    "error": "错误",
+    "cancelled": "已取消",
+    "closed": "已关闭"
+  },
   "loadingBrowserSnapshot": "正在加载本次运行最后捕获的画面…",
   "browserSnapshotLoadFailed": "最后一帧加载失败，请刷新重试。",
   "browserCase": "用例",

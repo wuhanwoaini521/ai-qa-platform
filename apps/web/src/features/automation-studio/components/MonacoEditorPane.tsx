@@ -62,18 +62,10 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
   initialFocusLineNumber,
   executionLocation,
   readOnly = false,
-  embedded = false,
 }) => {
   const { t } = useTranslation('studioShell');
   const { theme } = usePreferences();
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
-  const [desktopWorkspace, setDesktopWorkspace] = useState(() => window.matchMedia('(min-width: 1151px)').matches);
-  useEffect(() => {
-    const media = window.matchMedia('(min-width: 1151px)');
-    const update = () => setDesktopWorkspace(media.matches);
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setSystemDark(media.matches);
@@ -222,7 +214,7 @@ export const MonacoEditorPane: React.FC<MonacoEditorPaneProps> = ({
           height="100%"
           language={getLanguage(activeTab.path)}
           value={activeTab.content}
-          theme={embedded && desktopWorkspace ? 'graphite-workspace' : theme === 'dark' || (theme === 'system' && systemDark) ? 'vs-dark' : 'light'}
+          theme={theme === 'dark' || (theme === 'system' && systemDark) ? 'vs-dark' : 'light'}
           onMount={handleEditorDidMount}
           options={{
             fontSize: 15,

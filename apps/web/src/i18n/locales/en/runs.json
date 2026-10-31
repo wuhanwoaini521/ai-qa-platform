@@ -79,7 +79,21 @@
   "noConsoleOutput": "This run did not keep any console output.",
   "noExecutions": "No test was executed — see the console log for the reason.",
   "liveBrowsers": "Live Test Browsers",
+  "browserTestRun": "Test run {{id}}",
+  "browserRunStatus": "Run: {{status}}",
+  "browserTaskStatus": "Task: {{status}}",
+  "browserStreamStatus": "Browser stream: {{status}}",
+  "browserStream": {
+    "idle": "not connected",
+    "connecting": "connecting",
+    "connected": "connected",
+    "reconnecting": "reconnecting",
+    "failed": "failed"
+  },
+  "liveFrame": "Live frame",
+  "browserSessionId": "Browser session",
   "waitingBrowserSession": "Waiting for the test to start a browser. Live frames require a Playwright page or browser context fixture.",
+  "waitingTaskBrowserSession": "Waiting for the task to start a browser.",
   "noBrowserSessions": "This run has no recorded browser session. Plain Python tests do not produce browser frames.",
   "streamEndpointUnavailable": "Live connection endpoint unavailable (404). Restart the backend and refresh this page.",
   "streamConnectionFailed": "Live connection failed ({{status}}). Check your login permissions and refresh this page.",
@@ -92,6 +106,35 @@
   "waitingBrowserFrame": "Waiting for the actual browser frame…",
   "browserFrameUnavailable": "No frame is available for this session",
   "lastCapturedFrame": "Run ended · Last frame",
+  "browserFrameState": {
+    "live": "Live frame",
+    "lastReceived": "Last received frame",
+    "lastCaptured": "Last captured frame"
+  },
+  "browserFrameAlt": {
+    "live": "Live browser view for {{caseName}}",
+    "lastReceived": "Last received browser frame for {{caseName}}",
+    "lastCaptured": "Last captured browser frame for {{caseName}}"
+  },
+  "browserRunStatusLabel": {
+    "queued": "Queued",
+    "running": "Running",
+    "passed": "Passed",
+    "failed": "Failed",
+    "skipped": "Skipped",
+    "error": "Error",
+    "cancelled": "Cancelled"
+  },
+  "browserSessionStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "paused": "Paused",
+    "passed": "Passed",
+    "failed": "Failed",
+    "error": "Error",
+    "cancelled": "Cancelled",
+    "closed": "Closed"
+  },
   "loadingBrowserSnapshot": "Loading the last captured frame of this run…",
   "browserSnapshotLoadFailed": "Could not load the last frame. Refresh to retry.",
   "browserCase": "Case",

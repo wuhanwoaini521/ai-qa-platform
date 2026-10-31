@@ -54,7 +54,16 @@
   "recentTasksUnavailableMessage": "Recent tasks could not be confirmed. Restore the connection and retry.",
   "attentionRun": "Review failed run",
   "attentionFailedTests": "failed tests",
-  "attentionStatuses": { "FAILED": "Failed", "ERROR": "Error", "RUNNING": "Running", "WAITING": "Waiting", "VERIFYING": "Verifying", "RETRYING": "Retrying", "PAUSED": "Paused", "BLOCKED": "Blocked" },
+  "attentionStatuses": {
+    "FAILED": "Failed",
+    "ERROR": "Error",
+    "RUNNING": "Running",
+    "WAITING": "Waiting",
+    "VERIFYING": "Verifying",
+    "RETRYING": "Retrying",
+    "PAUSED": "Paused",
+    "BLOCKED": "Blocked"
+  },
   "passRateToday": "Pass Rate Today",
   "likelyFlakyTests": "Likely Flaky Tests",
   "rerunRecoveries": "Rerun Recoveries",
@@ -94,5 +103,7 @@
   "aiAssistance": "AI assists quality work",
   "lifecycleFlow": "Quality lifecycle",
   "lifecycleFlowSubtitle": "From requirement to evidence, in order.",
-  "executionRecord": "Execution record"
+  "executionRecord": "Execution record",
+  "nextStep": "Next step",
+  "nextResolveIssue": "Resolve {{count}} open issue(s)"
 }

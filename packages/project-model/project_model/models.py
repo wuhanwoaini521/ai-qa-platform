@@ -251,6 +251,10 @@ class FileNode(BaseModel):
 class FileContentPayload(BaseModel):
     path: str
     content: str
+    # Optional compare-and-swap guard: when set, the write only happens if the file's current
+    # existence (and hash) match, so a concurrent edit is never silently overwritten.
+    expected_exists: bool | None = None
+    expected_sha256: str | None = None
 
 
 class GitChangedFile(BaseModel):

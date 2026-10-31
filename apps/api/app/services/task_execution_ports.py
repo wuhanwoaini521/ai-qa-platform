@@ -28,6 +28,7 @@ class TaskExecutionPorts:
     execute_browser_candidate: Callable[..., Any]
     recorder_storage_state: Callable[..., Any]
     call_code_ai: Callable[..., Any]
+    suggest_discovery_assertions: Callable[..., Any]
     inspect_source: Callable[..., Any]
     review_source: Callable[..., Any]
     validate_python_test: Callable[..., Any]

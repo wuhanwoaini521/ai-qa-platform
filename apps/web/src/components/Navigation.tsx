@@ -22,9 +22,15 @@ import {
 } from 'lucide-react';
 import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
-import { buildWorkspaceHref, buildScopedHref } from '../app/workspaceContext';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
-import { rewriteProjectScope, withProjectId } from '../app/projectPaths';
+import {
+  buildWorkspaceHref,
+  buildWorkflowHref,
+  buildScopedHref,
+  readExplicitRunId,
+  readWorkspaceContext,
+} from '../app/workspaceContext';
+import { clearProjectBoundContext, rewriteProjectScope, withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
 
 export type NavTab =
@@ -90,6 +96,15 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     }
   });
   const isCollapsed = compact || collapsed;
+  const workspaceContext = readWorkspaceContext(search, selectedProjectId);
+  const explicitRunId = readExplicitRunId(search);
+  const preservedRunContext = {
+    runId: explicitRunId,
+    parentRunId: workspaceContext.parentRunId,
+  };
+  const scopedProjectId = workspaceContext.projectId ?? selectedProjectId ?? undefined;
+  const scopedHref = (path: string) =>
+    buildScopedHref(path, { projectId: scopedProjectId, ...preservedRunContext });
   const languageToggleLabel = i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中';
   const searchInputRef = useRef<HTMLInputElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
@@ -133,29 +148,38 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     setSearchOpen(false);
   };
 
-  const workspaceBase = selectedProjectId ? `/workspace/${selectedProjectId}` : '/workspace';
+  const workspaceBase = explicitRunId || workspaceContext.taskId || workspaceContext.parentRunId
+    ? buildWorkflowHref({ ...workspaceContext, ...preservedRunContext, projectId: scopedProjectId })
+    : scopedProjectId
+      ? `/workspace/${encodeURIComponent(scopedProjectId)}`
+      : '/workspace';
   const workspaceRoute = pathname === '/workspace' || pathname.startsWith('/workspace/');
   const projectScopedRoute = (workspaceRoute && pathname !== '/workspace') || pathname.startsWith('/projects/');
   const handleProjectChange = (projectId: string) => {
     const nextProjectId = projectId || null;
     // Navigate before updating selection so the outgoing route cannot restore stale scope.
-    navigate(`${withProjectId(pathname, nextProjectId)}${rewriteProjectScope(search, nextProjectId)}`);
+    let nextSearch = new URLSearchParams(rewriteProjectScope(search, nextProjectId));
+    if (nextProjectId !== (workspaceContext.projectId ?? selectedProjectId)) {
+      nextSearch = clearProjectBoundContext(nextSearch);
+    }
+    const query = nextSearch.toString();
+    navigate(`${withProjectId(pathname, nextProjectId)}${query ? `?${query}` : ''}`);
     selectProject(nextProjectId);
   };
 
   const navItems: NavItem[] = [
-    { id: 'dashboard', labelKey: 'dashboard', mobileLabelKey: 'dashboardMobile', icon: LayoutDashboard, to: '/', end: true },
+    { id: 'dashboard', labelKey: 'dashboard', mobileLabelKey: 'dashboardMobile', icon: LayoutDashboard, to: scopedHref('/'), end: true },
     { id: 'workspace', labelKey: 'workspace', mobileLabelKey: 'workspaceMobile', icon: PanelsTopLeft, to: workspaceBase },
-    { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: '/projects' },
-    { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: buildScopedHref('/runs', { projectId: selectedProjectId ?? undefined }) },
-    { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: buildScopedHref('/quality', { projectId: selectedProjectId ?? undefined }) },
+    { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: scopedHref('/projects') },
+    { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: scopedHref('/runs') },
+    { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: scopedHref('/quality') },
   ];
   const visibleNavItems = compact ? navItems.filter((item) => item.id !== 'workspace') : navItems;
-  const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: '/settings' };
+  const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: scopedHref('/settings') };
   const platformItems: NavItem[] = [
-    { id: 'flaky', labelKey: 'flaky', icon: Flame, to: '/flaky' },
-    { id: 'security', labelKey: 'security', icon: Shield, to: '/security' },
-    { id: 'workers', labelKey: 'workers', icon: Server, to: '/workers' },
+    { id: 'flaky', labelKey: 'flaky', icon: Flame, to: scopedHref('/flaky') },
+    { id: 'security', labelKey: 'security', icon: Shield, to: scopedHref('/security') },
+    { id: 'workers', labelKey: 'workers', icon: Server, to: scopedHref('/workers') },
   ];
 
   const quickDestinations: QuickDestination[] = [
@@ -163,28 +187,34 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
       id: 'requirement',
       label: workspaceT('quick.requirement'),
       icon: ClipboardList,
-      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'requirement', view: 'requirement' }),
+      to: buildWorkspaceHref({ projectId: scopedProjectId, ...preservedRunContext, stage: 'requirement', view: 'requirement' }),
       keywords: ['requirement', 'requirements', '需求'],
     },
     {
       id: 'cases',
       label: workspaceT('quick.cases'),
       icon: ClipboardList,
-      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'cases', view: 'cases' }),
+      to: buildWorkspaceHref({ projectId: scopedProjectId, ...preservedRunContext, stage: 'cases', view: 'cases' }),
       keywords: ['case', 'cases', 'test', 'tests', '用例', '测试'],
     },
     {
       id: 'failures',
       label: workspaceT('quick.failures'),
       icon: Bug,
-      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'failure', view: 'results' }),
+      to: buildWorkspaceHref({
+        projectId: scopedProjectId,
+        ...preservedRunContext,
+        failureId: workspaceContext.failureId,
+        stage: 'failure',
+        view: 'results',
+      }),
       keywords: ['failure', 'failures', 'failed', '失败', '故障'],
     },
     {
       id: 'recorder',
       label: workspaceT('quick.recorder'),
       icon: Radio,
-      to: buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, stage: 'automation', view: 'browser' }),
+      to: buildWorkspaceHref({ projectId: scopedProjectId, ...preservedRunContext, stage: 'automation', view: 'browser' }),
       keywords: ['recorder', 'recording', '录制', '录制器'],
     },
   ];

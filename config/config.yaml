@@ -57,7 +57,8 @@ jev:
 
 repair:
   enabled: true
-  mode: "OFF"
+  # ASSISTED: AI proposes fixes, a human approves before any source write.
+  mode: "ASSISTED"
   auto_start_on_failure: true
   max_attempts: 2
   auto_rollback: true

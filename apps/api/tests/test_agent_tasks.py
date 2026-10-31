@@ -2439,3 +2439,85 @@ async def test_create_test_assertion_bypass_flag_is_checked_during_source_valida
 
     with pytest.raises(TaskBlocked, match="constant-true assertion"):
         await service._validate_generated(task, outputs)
+
+
+@pytest.mark.asyncio
+async def test_existing_test_case_registration_skips_expected_result_limit_check():
+    from app.services.task_test_execution_service import TaskTestExecutionService
+    from project_model.models import AutomationBindingStatus, RunStatus
+
+    existing_case = SimpleNamespace(
+        id="case-existing",
+        project_id="project-existing",
+        requirement_id=None,
+        expected_result="Existing expected result",
+    )
+    binding_updates = []
+    automation_updates = []
+    commits = []
+
+    class TestCases:
+        async def get_by_id(self, case_id):
+            assert case_id == existing_case.id
+            return existing_case
+
+        async def get_by_external_case(self, *_args):
+            pytest.fail("An explicit existing TestCase should be reused directly")
+
+        async def update_automation_status(self, case_id, status):
+            automation_updates.append((case_id, status))
+
+    class AutomationBindings:
+        async def create_or_update(self, binding):
+            binding_updates.append(binding)
+
+    class Repositories:
+        test_cases = TestCases()
+        automation_bindings = AutomationBindings()
+
+        async def commit(self):
+            commits.append(True)
+
+    @asynccontextmanager
+    async def repository_scope():
+        yield Repositories()
+
+    inputs = {
+        "test_case_id": existing_case.id,
+        "requirement": "r" * 2000,
+        "acceptance_criteria": ["The existing behavior remains verified."],
+    }
+    context = SimpleNamespace(
+        input=lambda _task, key, default=None: inputs.get(key, default),
+        repository_scope=repository_scope,
+    )
+    task = SimpleNamespace(
+        id="task-existing",
+        project_id=existing_case.project_id,
+        workspace_id="workspace-existing",
+        goal="Verify existing behavior",
+    )
+    service = TaskTestExecutionService(context)
+    result = await service._register_test_case(
+        task,
+        {
+            "generate": {"target_file": "tests/test_existing.py", "case_bindings": []},
+            "run": {
+                "status": RunStatus.PASSED.value,
+                "nodeids": ["tests/test_existing.py::test_existing"],
+                "run_id": "run-existing",
+            },
+        },
+    )
+
+    assert result == {
+        "test_case_id": existing_case.id,
+        "file_path": "tests/test_existing.py",
+        "nodeid": "tests/test_existing.py::test_existing",
+    }
+    assert existing_case.expected_result == "Existing expected result"
+    assert len(binding_updates) == 1
+    assert binding_updates[0].test_case_id == existing_case.id
+    assert binding_updates[0].status == AutomationBindingStatus.ACTIVE
+    assert automation_updates == [(existing_case.id, "AUTOMATED")]
+    assert commits == [True]

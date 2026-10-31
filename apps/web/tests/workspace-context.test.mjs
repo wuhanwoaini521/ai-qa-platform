@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildStudioHref, buildWorkflowHref, buildWorkspaceHref, buildScopedHref, readWorkspaceContext, resolveCanonicalFile, resolveLineNumberForFile, shouldPreserveRunExecutionNode, workspaceModeForContext, writeWorkspaceContext } =
-  await import('../src/app/workspaceContext.ts');
-const { withProjectId } = await import('../src/app/projectPaths.ts');
+const {
+  buildStudioHref,
+  buildWorkflowHref,
+  buildWorkspaceHref,
+  buildScopedHref,
+  readExplicitRunId,
+  readWorkspaceContext,
+  resolveCanonicalFile,
+  resolveLineNumberForFile,
+  shouldPreserveRunExecutionNode,
+  workspaceModeForContext,
+  writeWorkspaceContext,
+} = await import('../src/app/workspaceContext.ts');
+const { clearProjectBoundContext, withProjectId } = await import('../src/app/projectPaths.ts');
 
 test('reads legacy case and parent run params into the shared context', () => {
   const context = readWorkspaceContext(
@@ -28,6 +39,15 @@ test('reads legacy case and parent run params into the shared context', () => {
       stage: 'failure',
     },
   );
+
+  const aliasContext = readWorkspaceContext('?testCaseId=legacy-case-alias', 'project-3');
+  assert.equal(aliasContext.testCaseId, 'legacy-case-alias');
+});
+
+test('run island eligibility requires a non-empty explicit runId parameter', () => {
+  assert.equal(readExplicitRunId('?parentRunId=parent-run'), undefined);
+  assert.equal(readExplicitRunId('?runId=%20'), undefined);
+  assert.equal(readExplicitRunId('?runId=selected-run&parentRunId=parent-run'), 'selected-run');
 });
 
 test('context updates preserve unrelated view state and replace stale entity IDs', () => {
@@ -128,8 +148,27 @@ test('switches Workspace project scope without retaining the previous workspace 
   assert.equal(withProjectId('/workspace/project-old', ''), '/projects');
   assert.equal(withProjectId('/workspace', ''), '/projects');
   assert.equal(withProjectId('/projects/project-old/requirements', 'project-new'), '/projects/project-new/requirements');
+  assert.equal(withProjectId('/projects/project-old/requirements/req-old', 'project-new'), '/projects/project-new/requirements');
+  assert.equal(withProjectId('/projects/project-old/test-cases/case-old', 'project-new'), '/projects/project-new/test-cases');
+  assert.equal(withProjectId('/projects/project-old/studio/file/tests/test_old.py', 'project-new'), '/projects/project-new/studio');
   assert.equal(withProjectId('/projects/project-old', ''), '/projects');
   assert.equal(withProjectId('/runs', 'project-new'), '/runs');
+});
+
+test('clears project-bound query state while retaining the selected workspace view', () => {
+  const params = clearProjectBoundContext(
+    '?projectId=project-new&requirementId=req-old&testDesignId=design-old&caseId=case-old&testCaseId=legacy-case-old&bindingId=binding-old&taskId=task-old&runId=run-old&parentRunId=parent-old&failureId=failure-old&browserSessionId=browser-old&file=tests/test_old.py&line=17&nodeid=tests/test_old.py%3A%3Atest_old&nodeId=old-node&node=old-graph-node&step=step-old&target=old-target&panel=runtime&stage=automation&view=code&tab=files',
+  );
+  assert.equal(params.get('projectId'), 'project-new');
+  assert.equal(params.get('stage'), 'automation');
+  assert.equal(params.get('view'), 'code');
+  assert.equal(params.get('tab'), 'files');
+  for (const key of [
+    'requirementId', 'testDesignId', 'caseId', 'testCaseId', 'bindingId', 'taskId', 'runId', 'parentRunId',
+    'failureId', 'browserSessionId', 'file', 'line', 'nodeid', 'nodeId', 'node', 'step', 'target', 'panel',
+  ]) {
+    assert.equal(params.has(key), false, `${key} should be cleared`);
+  }
 });
 
 test('opens run progress in the Workspace drawer instead of navigating to a second runtime page', () => {
@@ -140,6 +179,12 @@ test('opens run progress in the Workspace drawer instead of navigating to a seco
   assert.equal(params.get('view'), 'results');
   assert.equal(params.get('panel'), 'runtime');
   assert.equal(buildWorkflowHref({ projectId: 'project-a' }), '/runs/tasks?projectId=project-a');
+
+  const parentHref = buildWorkflowHref({ projectId: 'project-a', parentRunId: 'parent-a' });
+  const parentParams = new URLSearchParams(parentHref.split('?')[1]);
+  assert.equal(parentParams.get('runId'), null);
+  assert.equal(parentParams.get('parentRunId'), 'parent-a');
+  assert.equal(parentParams.get('panel'), 'runtime');
 });
 
 test('keeps the file named by a deep link instead of the first bound case file', () => {
@@ -159,8 +204,10 @@ test('failure debug links keep their own file even when a case binding exists', 
   assert.equal(resolveCanonicalFile(linked, 'tests/test_shop.py'), 'tests/test_known_locator.py');
 });
 
-test('top-level links keep the project they were opened from', () => {
+test('top-level links keep the project and explicitly selected run they were opened from', () => {
   assert.equal(buildScopedHref('/runs', { projectId: 'project-a' }), '/runs?projectId=project-a');
+  assert.equal(buildScopedHref('/runs', { projectId: 'project-a', runId: 'run-a' }), '/runs?projectId=project-a&runId=run-a');
+  assert.equal(buildScopedHref('/runs', { projectId: 'project-a', parentRunId: 'parent-a' }), '/runs?projectId=project-a&parentRunId=parent-a');
   assert.equal(buildScopedHref('/quality', {}), '/quality');
   // A link from the workspace carries both, so /runs opens the same run it came from.
   assert.equal(

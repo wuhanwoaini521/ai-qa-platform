@@ -67,3 +67,7 @@ Raw command/output transcription and browser/provider provenance are in `experim
 ## Final acceptance
 
 **Overall: PARTIAL.** The source-backed architecture assessment, candidate comparison and staged target design are documented. The platform’s basic task contracts and a real local-browser baseline have bounded test evidence. The user's requirement for current official framework versions/licenses and comparative framework/AI lifecycle PoCs is not met because external source retrieval and candidate execution were unavailable. The architecture gate must remain deferred, and no migration/rewrite should start until those gaps are closed.
+
+## Supplemental update — 2026-10-31
+
+A later, narrowly scoped official-source pass verified the release metadata, dependency constraints and license files for browser-use 0.13.14, tester-army/e2e 0.22.0 with @e2e-dev/web 0.15.4, Scrapling 0.5, and Crawl4AI 0.9.5. See `framework-comparison.md` for primary-source links and the compatibility assessment. No candidate was installed or executed; seven frameworks from the original 11-framework scope remain unverified. This update does not pass Phase 5, approve a dependency, or alter the historical 2026-10-28 test results.

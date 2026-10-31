@@ -213,6 +213,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         onClick: () => onOpenTask?.(task),
       })),
   ].slice(0, 4);
+  // The overview drives one obvious next action instead of presenting equal-weight buttons.
+  const nextStep = attentionItems[0]
+    ? {
+        label: t('nextResolveIssue', { count: attentionItems.length }),
+        detail: attentionItems[0].detail,
+        onClick: attentionItems[0].onClick,
+      }
+    : focusProject
+      ? { label: t('openWorkspace'), detail: '', onClick: () => onNavigate('workspace', focusProject.id) }
+      : null;
   const dashboardSignals = [
     {
       label: t('passRateToday'),
@@ -243,7 +253,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       value: !statsUnavailable && stats?.average_test_duration_ms
         ? stats.average_test_duration_ms > 1000
           ? `${(stats.average_test_duration_ms / 1000).toFixed(1)}s`
-          : `${stats.average_test_duration_ms}ms`
+          : `${Math.round(stats.average_test_duration_ms)}ms`
         : '—',
       detailLabel: t('rerunRecoveries'),
       detailValue: countValue(stats?.rerun_recovery_count),
@@ -283,7 +293,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {focusProject ? <small>{t('projectWorkspaceMeta', { framework: focusProject.framework_type, branch: focusProject.default_branch })}</small>
               : <p>{projectLoading ? t('projectContextLoadingDescription') : projectError ? t('projectContextUnavailableDescription') : projects.length ? t('selectProjectDescription') : t('firstProjectDescription')}</p>}
           </div>
-          {focusProject ? (
+          {nextStep ? (
+            <div className="dashboard-next-step">
+              <span>{t('nextStep')}</span>
+              <button type="button" className="btn btn-primary" onClick={nextStep.onClick}>
+                <ArrowRight size={15} aria-hidden="true" />{nextStep.label}
+              </button>
+              {attentionItems[0] && focusProject && (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('workspace', focusProject.id)}>
+                  <FolderGit2 size={14} aria-hidden="true" />{t('openWorkspace')}
+                </button>
+              )}
+            </div>
+          ) : focusProject ? (
             <button type="button" className="btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
               <FolderGit2 size={15} aria-hidden="true" />{t('openWorkspace')}
             </button>
@@ -311,7 +333,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)}>
                   <span className="dashboard-journey-marker" aria-hidden="true" />
                   <span className="dashboard-journey-copy"><strong>{stepName}</strong><small>{execution.nodeid}</small></span>
-                  <code>{execution.duration_ms}ms</code>
+                  <code>{Math.round(execution.duration_ms)}ms</code>
                 </button>
               </li>;
             })}

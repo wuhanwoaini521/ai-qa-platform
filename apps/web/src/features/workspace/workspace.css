@@ -1828,8 +1828,11 @@
   cursor: pointer;
   list-style-position: inside;
 }
-.workspace-debug-runtime > summary span { flex: 1; }
-.workspace-debug-runtime > summary small { color: var(--ink-muted); font-size: 10px; font-weight: 500; }
+.workspace-debug-runtime > summary { flex-wrap: wrap; }
+.workspace-debug-runtime > summary > span { flex: 1; min-width: 0; }
+.workspace-debug-runtime > summary .workspace-debug-summary-copy { display: grid; gap: 2px; }
+.workspace-debug-runtime > summary small { display: block; min-width: 0; max-width: 100%; overflow: hidden; color: var(--ink-muted); font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-debug-runtime > summary .workspace-debug-summary-status { color: var(--ink-soft); }
 .workspace-debug-runtime-content {
   display: grid;
   flex: 1 1 auto;
@@ -2008,7 +2011,7 @@
 .workspace-shell .recorder-explore-browser .recorder-panel { min-height: 0; }
 .workspace-shell .recorder-explore-browser .recorder-browser-viewport { min-height: 0; }
 .workspace-shell .recorder-explore-steps { grid-area: steps; min-width: 0; min-height: 0; }
-.workspace-shell .recorder-explore-steps .recorder-inspector-panel { height: 100%; min-height: 0; grid-template-rows: auto minmax(180px, .8fr) auto minmax(90px, 1fr); gap: 6px; padding: 7px; }
+.workspace-shell .recorder-explore-steps .recorder-inspector-panel { height: 100%; min-height: 0; grid-template-rows: auto minmax(180px, .8fr) auto minmax(90px, 1fr); gap: 6px; padding: 7px; overflow-y: auto; }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-locator-trace { grid-template-rows: auto minmax(60px, .5fr) minmax(70px, .7fr) auto minmax(90px, 1fr); }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-element-evidence { grid-template-rows: auto auto minmax(60px, .6fr) auto minmax(90px, 1fr); }
 .workspace-shell .recorder-explore-steps .recorder-inspector-panel.has-locator-trace.has-element-evidence { grid-template-rows: auto auto minmax(60px, .5fr) minmax(70px, .7fr) auto minmax(90px, 1fr); }
@@ -2113,13 +2116,13 @@
 .app-frame.is-graphite .workspace-shell.is-debug .lc-studio-toolbar { padding-block: 6px; }
 .app-frame.is-graphite .workspace-shell.is-write .studio-editor-tabs,
 .app-frame.is-graphite .workspace-shell.is-debug .studio-editor-tabs { padding-block: 4px; }
-.app-frame.is-graphite .workspace-heading .workspace-eyebrow { color: var(--graphite-mint); font: 10px var(--font-mono); letter-spacing: .09em; }
+.app-frame.is-graphite .workspace-heading .workspace-eyebrow { color: var(--ink-faint); font: 10px var(--font-mono); letter-spacing: .09em; }
 .app-frame.is-graphite .workspace-heading h1 { color: var(--ink); font-size: 17px; }
 .app-frame.is-graphite .workspace-heading p { color: var(--ink-muted); }
 .app-frame.is-graphite .workspace-mode-nav.is-inline { gap: 4px; }
 .app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab { color: var(--ink-muted); border-color: transparent; background: transparent; }
 .app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab:hover:not(.is-current) { color: var(--ink); background: var(--surface-hover); }
-.app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab.is-current { color: var(--graphite-mint); border-color: var(--line); background: var(--graphite-mint-soft); box-shadow: none; }
+.app-frame.is-graphite .workspace-mode-nav .workspace-mode-tab.is-current { color: var(--ink); border-color: var(--line); background: var(--surface-inset); box-shadow: none; }
 .app-frame.is-graphite .workspace-heading-actions { gap: 6px; }
 .app-frame.is-graphite .workspace-context-chip,
 .app-frame.is-graphite .workspace-live-label { border-color: var(--line); background: var(--surface-inset); color: var(--ink-soft); }
@@ -2299,7 +2302,9 @@
 .workspace-result-inspector .workspace-repair-workspace.is-compact,
 .workspace-result-inspector .workspace-run-context.is-compact { min-height: 68px; }
 .workspace-context-chip-label { color: var(--ink-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
-.workspace-context-chip { max-width: min(280px, 24vw); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-context-chip { display: inline-flex; align-items: center; gap: 6px; max-width: min(280px, 24vw); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-context-chip-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-context-chip-label { flex: none; }
 .workspace-context-chip-case { max-width: min(320px, 28vw); }
 @media (min-width: 1280px) and (max-width: 1699px) {
   /* The legacy four-panel Graphite rule is superseded by the grouped inspector above. */
@@ -2352,4 +2357,35 @@
     max-width: none;
     justify-content: flex-start;
   }
+}
+
+/* --- Unified tab strip: plain labels over a hairline, ink underline for the active tab ------ */
+.workspace-shell .lc-tabs {
+  gap: 18px;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  /* Sticky tab strips must stay opaque, otherwise scrolled content shows through. */
+  background: var(--surface) !important;
+}
+.workspace-shell .lc-tabs button,
+.workspace-shell .lc-tabs a {
+  padding: 8px 2px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  box-shadow: none;
+}
+.workspace-shell .lc-tabs button:hover,
+.workspace-shell .lc-tabs a:hover { color: var(--ink); background: transparent; }
+.workspace-shell .lc-tabs button.selected,
+.workspace-shell .lc-tabs a.selected,
+.workspace-shell .lc-tabs button[aria-selected='true'] {
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  box-shadow: inset 0 -2px 0 var(--ink);
+  font-weight: 600;
 }

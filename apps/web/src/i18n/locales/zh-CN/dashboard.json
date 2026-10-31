@@ -54,7 +54,16 @@
   "recentTasksUnavailableMessage": "当前无法确认最近的任务，请恢复连接后重试。",
   "attentionRun": "检查失败运行",
   "attentionFailedTests": "个失败用例",
-  "attentionStatuses": { "FAILED": "失败", "ERROR": "错误", "RUNNING": "进行中", "WAITING": "待确认", "VERIFYING": "验证中", "RETRYING": "重试中", "PAUSED": "已暂停", "BLOCKED": "已阻塞" },
+  "attentionStatuses": {
+    "FAILED": "失败",
+    "ERROR": "错误",
+    "RUNNING": "进行中",
+    "WAITING": "待确认",
+    "VERIFYING": "验证中",
+    "RETRYING": "重试中",
+    "PAUSED": "已暂停",
+    "BLOCKED": "已阻塞"
+  },
   "passRateToday": "今日通过率",
   "likelyFlakyTests": "疑似不稳定用例",
   "rerunRecoveries": "重跑恢复次数",
@@ -94,5 +103,7 @@
   "aiAssistance": "AI 正在协助质量工作",
   "lifecycleFlow": "质量闭环",
   "lifecycleFlowSubtitle": "从需求到证据，依次流转。",
-  "executionRecord": "执行记录"
+  "executionRecord": "执行记录",
+  "nextStep": "下一步",
+  "nextResolveIssue": "处理 {{count}} 个待处理问题"
 }

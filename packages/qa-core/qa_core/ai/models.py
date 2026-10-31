@@ -155,6 +155,14 @@ class LocatorSemanticReview(BaseModel):
     risk_warning: str | None = None
 
 
+class DiscoveryAssertionSelection(BaseModel):
+    """Candidate IDs selected from redacted, observed Discovery evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_ids: list[str] = Field(default_factory=list, max_length=6)
+
+
 class CodeAssistantResponse(BaseModel):
     reply: str
     suggested_code: str | None = None

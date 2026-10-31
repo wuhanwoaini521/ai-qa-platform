@@ -606,7 +606,7 @@ def test_discovered_search():
             await _goto_app(page, f"http://127.0.0.1:{vite_port}/")
             await page.get_by_text("平台总览", exact=True).wait_for(timeout=45000)
             await page.get_by_role("link", name="项目管理").click()
-            await page.wait_for_url("**/projects")
+            await page.wait_for_function("location.pathname === '/projects'")
             await page.get_by_role("heading", name="QA 项目").first.wait_for(timeout=15000)
             await _shot(page, path=str(round4_evidence / "project-navigation-click.png"), full_page=True)
             route_metrics = []
@@ -766,7 +766,7 @@ def test_discovered_search():
             try:
                 await _goto_app(page, f"http://127.0.0.1:{vite_port}/quality")
                 await page.wait_for_selector("body")
-                await page.locator(".tab-btn").filter(has_text="发布与门禁").first.click()
+                await page.locator(".tab-btn").filter(has_text="发布门禁").first.click()
                 await page.get_by_role("button", name="新建发布").first.click()
                 modal = page.locator(".modal-overlay")
                 await modal.wait_for(state="visible", timeout=15000)

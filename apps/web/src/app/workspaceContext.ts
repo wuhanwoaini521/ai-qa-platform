@@ -69,6 +69,10 @@ function nonEmpty(params: URLSearchParams, key: string): string | undefined {
   return value || undefined;
 }
 
+export function readExplicitRunId(search: string | URLSearchParams): string | undefined {
+  return nonEmpty(paramsFrom(search), 'runId');
+}
+
 export function readWorkspaceContext(
   search: string | URLSearchParams,
   fallbackProjectId?: string | null,
@@ -198,7 +202,7 @@ export function buildWorkspaceHref(context: WorkspaceContext): string {
 }
 
 export function buildWorkflowHref(context: WorkspaceContext): string {
-  if (!context.taskId && !context.runId) return `/runs/tasks${queryFor(context)}`;
+  if (!context.taskId && !context.runId && !context.parentRunId) return `/runs/tasks${queryFor(context)}`;
 
   const workspace = buildWorkspaceHref({
     ...context,
@@ -217,10 +221,13 @@ export function buildStudioHref(context: WorkspaceContext): string {
 }
 
 /**
- * A top-level page such as `/runs` or `/quality` keeps the scope it was opened from, so leaving
- * the workspace does not silently fall back to another project.
+ * A top-level page such as `/runs` or `/quality` keeps its project and explicit run scope, so
+ * moving around the shell does not silently fall back to another project or the latest run.
  */
-export function buildScopedHref(path: string, context: Pick<WorkspaceContext, 'projectId'>): string {
+export function buildScopedHref(
+  path: string,
+  context: Pick<WorkspaceContext, 'projectId' | 'runId' | 'parentRunId'>,
+): string {
   const query = writeWorkspaceContext('', context).toString();
   return query ? `${path}?${query}` : path;
 }

@@ -1,3 +1,30 @@
+const PROJECT_BOUND_QUERY_KEYS = [
+  'requirementId',
+  'testDesignId',
+  'caseId',
+  'testCaseId',
+  'bindingId',
+  'taskId',
+  'runId',
+  'parentRunId',
+  'failureId',
+  'browserSessionId',
+  'file',
+  'line',
+  'nodeid',
+  'nodeId',
+  'node',
+  'step',
+  'target',
+  'panel',
+] as const;
+
+export function clearProjectBoundContext(search: string | URLSearchParams): URLSearchParams {
+  const params = new URLSearchParams(search);
+  for (const key of PROJECT_BOUND_QUERY_KEYS) params.delete(key);
+  return params;
+}
+
 /**
  * Keeps a project-scoped query string in step with a project switch, so `/runs?projectId=A`
  * does not silently drop back to whatever project the shell defaults to.
@@ -26,7 +53,11 @@ export function withProjectId(
   }
   const match = /^\/projects\/[^/]+(?<rest>\/.*)?$/.exec(pathname);
   if (match) {
-    return `/projects/${encodeURIComponent(projectId)}${match.groups?.rest ?? ''}`;
+    let rest = match.groups?.rest ?? '';
+    if (/^\/requirements\/[^/]+\/?$/.test(rest)) rest = '/requirements';
+    else if (/^\/test-cases\/[^/]+\/?$/.test(rest)) rest = '/test-cases';
+    else if (/^\/studio\/file(?:\/|$)/.test(rest)) rest = '/studio';
+    return `/projects/${encodeURIComponent(projectId)}${rest}`;
   }
   return pathname;
 }

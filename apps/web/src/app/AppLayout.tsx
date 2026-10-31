@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectScope } from './ProjectScope';
 import { usePreferences } from './Preferences';
 import { ReadinessNotice } from '../components/ReadinessNotice';
+import { readExplicitRunId, readWorkspaceContext } from './workspaceContext';
 
 /** Title keys per route, resolved through i18n (`titles` namespace). */
 const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
@@ -58,6 +59,9 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
     location.pathname.startsWith('/projects/') || location.pathname === '/quality' || workspaceRoute;
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
+  const selectedRunContext = readExplicitRunId(location.search)
+    ? readWorkspaceContext(location.search, selectedProjectId)
+    : null;
 
   return (
     <div className="app-container">
@@ -66,11 +70,12 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
         <Header
           title={title}
           selectedProjectId={selectedProjectId}
+          selectedRunContext={selectedRunContext}
           onSignOut={onSignOut}
         />
 
         <div className="app-body">
-          <Navigation compact={workspaceRoute} graphite={graphiteRoute} />
+          <Navigation compact={false} graphite={graphiteRoute} />
           <div className="app-main">
             <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
               <ReadinessNotice />

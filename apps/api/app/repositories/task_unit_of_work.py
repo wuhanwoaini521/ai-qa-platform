@@ -18,6 +18,7 @@ from app.repositories.job_repo import JobRepository
 from app.repositories.locator_history_repo import LocatorHistoryRepository
 from app.repositories.locator_repair_repo import LocatorRepairRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.quality_discovery_repo import QualityDiscoveryRepository
 from app.repositories.requirement_repo import RequirementRepository
 from app.repositories.runner_profile_repo import RunnerProfileRepository
 from app.repositories.task_evidence_repo import TaskEvidenceRepository
@@ -39,6 +40,7 @@ class TaskRepositoryUnitOfWork:
         self.failure_analyses = FailureAnalysisRepository(session)
         self.breakpoints = BreakpointRepository(session)
         self.projects = ProjectRepository(session)
+        self.quality_discovery = QualityDiscoveryRepository(session)
         self.requirements = RequirementRepository(session)
         self.test_cases = TestCaseRepository(session)
         self.test_designs = TestDesignRepository(session)

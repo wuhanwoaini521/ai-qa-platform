@@ -4,15 +4,18 @@
 React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用这里的 token、布局原语与状态
 规则，再考虑新增样式。**
 
-设计方向：**Modern Developer Tool + Enterprise SaaS + AI-Native IDE**——专业、克制、信息层级
-清晰，像一个工作台，而不是一个后台管理系统的卡片墙。
+设计方向：**Warm Light Editorial Workspace**——暖中性浅色画布、白色圆角卡片、1px 细边框、
+充裕留白；导航常驻文字标签；主操作使用近黑实心按钮；强调色只用一支暖橙，状态色以柔和胶囊表达。
+整体观感对齐产品参考稿：安静、明亮、信息优先，不做深色主题或霓虹装饰。
 
 ## 视觉基线
 
-- 页面保持浅色 QA SaaS 风格：浅灰蓝画布、白色内容面板、深色正文、靛蓝主操作；绿色/琥珀/玫瑰色只表达成功、警告、失败等语义。
-- App Shell（导航、顶栏、Studio 全屏框架）维持现有导航结构与设计 token；页面内容通过共享页面组件建立层级。
+- 全站单一浅色外观：暖中性画布（`#f4f3f0`）、白色内容卡片、近黑正文；不再存在深色 Graphite 页面与浅色页面的双主题。
+- App Shell 统一为左侧常驻文字导航（品牌 → 搜索 → 主导航 → 平台分组 → 设置/语言），所有路由共用同一外壳；不再按路由切换成 64px 图标栏或另一套侧栏。顶部工具栏与内容保持不透明，优先保证阅读对比度。
+- 运行状态胶囊只在 URL 明确带有 `runId` 时出现，读取现有 `useRunStore`，并返回到已有 Workspace 结果/失败面板；不推断“最近”或“最新”运行。
 - 阴影、渐变和高饱和装饰用于层级提示，不替代正文对比度或状态文字。
-- Direction A — Graphite Developer Studio 用于桌面 Dashboard 与 Workspace Debug/Explore；本任务 `.ai-runs/2026-10-27-graphite-fidelity-recovery/00-request.md` 明确扩展到 Projects、Requirements、Test Explorer、Write Tests、Results、AI Repair 与 Quality。扩展页面沿用既有内容/交互，不新增页面 IA；其他路由仍保持现有方向。Graphite 颜色以 `:root` 的 `--graphite-*` tokens 为源，通过 `.app-frame.is-graphite` 映射语义变量，不能在功能样式中复制色值。
+- `--graphite-*` 变量保留原名以兼容既有规则，但值已改为浅色系（画布 `#f4f3f0`、卡片 `#ffffff`、正文 `#17181a`、主机/强调 `#c2410c`）。它们通过 `.app-frame.is-graphite` 映射到语义变量；新增样式必须引用 token，不得复制色值。
+- 旧 `--ui-*` 与 `--text-*` 别名族统一指向同一套浅色调色板；`--ui-indigo*` 不再引入第二种品牌色，只作暖橙强调的别名。
 
 ## 设计 Tokens
 
@@ -23,18 +26,20 @@ React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用�
 
 | 用途 | Token | 当前基准 |
 | --- | --- | --- |
-| 页面画布 | `--canvas` / `--bg-app` | `#f3f7fd` |
-| 面板表面 | `--surface` `--surface-raised` `--surface-inset` / `--bg-card` | `#ffffff` / `#f5f8fc`（inset） |
-| 正文 | `--ink` / `--text-main` / `--ui-ink` | `#1c2942` |
-| 次级正文 | `--ink-soft` `--ink-muted` / `--text-muted` | `#40516f` / `#5d6b82` |
-| 分隔线 | `--line` `--line-soft` `--line-strong` / `--border-color` | `#e5ebf4` / `#eff3f9` / `#d8e2f0` |
-| 品牌主色 | `--accent-blue` / `--primary` | `#1d5bd7` |
-| 聚焦轮廓 | `--ui-focus` | `rgba(37, 99, 235, 0.28)` |
+| 页面画布 | `--canvas` / `--bg-app` | `#f4f3f0` |
+| 面板表面 | `--surface` `--surface-raised` `--surface-inset` / `--bg-card` | `#ffffff` / `#f7f6f3`（inset） |
+| 正文 | `--ink` / `--text-main` / `--ui-ink` | `#17181a` |
+| 次级正文 | `--ink-soft` `--ink-muted` / `--text-muted` | `#3f4247` / `#6e7176` |
+| 分隔线 | `--line` `--line-soft` `--line-strong` / `--border-color` | `#e6e3de` / `#efece7` / `#d8d4ce` |
+| 强调色（唯一） | `--graphite-mint` / `--ui-primary` / `--ui-indigo*` | `#c2410c`（soft `#fff1e7`） |
+| 主操作按钮 | `.btn-primary` / `--primary-hover` | `#17181a` 实心，hover `#000000` |
+| 聚焦轮廓 | `--graphite-focus` / `--ui-focus` | `rgba(194, 65, 12, 0.28)` |
 | 成功/警告/失败/AI | `--accent-green` `--accent-amber` `--accent-red` `--accent-violet` | 仅用于对应状态 |
-| 圆角阶梯 | `--r-xs` `--r-sm` `--r-md` `--r-card` `--r-lg` `--r-xl` `--r-pill` | 6/8/8/10/12/14px，胶囊为 999px |
+| 圆角阶梯 | `--r-xs` `--r-sm` `--r-md` `--r-card` `--r-lg` `--r-xl` `--r-pill` | 6/8/10/14/16/18px，胶囊为 999px |
 | 间距阶梯 | `--sp-1` … `--sp-7` | 4/8/12/16/24/32/48px；栅格使用 `--sp-grid` |
 | 尺寸骨架 | `--sidebar-w` `--toolbar-h` `--workspace-pad` | 240px / 50px / 20px |
 | 动效 | `--dur-fast` `--dur` `--ease` | 120/180ms，只用于反馈与空间变化 |
+| Shell 玻璃材质 | `--glass-shell-mix` `--glass-rail-mix` `--glass-island-mix` `--glass-border-mix` `--glass-blur` `--glass-saturation` | 仅用于顶栏、导航栏与运行状态胶囊，内容面板保持不透明 |
 
 旧变量（如 `--color-primary`、`--surface-primary`、`--ui-*` 别名族）作为兼容层保留在 `:root`。
 新增样式优先使用语义 token；迁移旧页面时再逐步删去别名，避免一次性改动破坏功能页面。
