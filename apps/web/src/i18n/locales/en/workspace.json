@@ -45,10 +45,27 @@
   },
   "mobile": {
     "resizeDebugSplit": "Resize editor and browser panes; use left and right arrow keys",
-    "debug": { "navigation": "Debug panels", "code": "Code", "browser": "Browser", "steps": "Steps", "logs": "State" },
-    "explore": { "navigation": "Explore panels", "browser": "Browser", "task": "Task" }
+    "debug": {
+      "navigation": "Debug panels",
+      "code": "Code",
+      "browser": "Browser",
+      "steps": "Steps",
+      "logs": "State"
+    },
+    "explore": {
+      "navigation": "Explore panels",
+      "browser": "Browser",
+      "task": "Task"
+    }
   },
-  "quick": { "requirement": "Workspace · Requirements", "cases": "Workspace · Test cases", "failures": "Workspace · Failure queue", "recorder": "Workspace · Browser recorder", "searchPlaceholder": "Search requirements, cases, failures, or recorder", "destinations": "Workspace quick destinations" },
+  "quick": {
+    "requirement": "Workspace · Requirements",
+    "cases": "Workspace · Test cases",
+    "failures": "Workspace · Failure queue",
+    "recorder": "Workspace · Browser recorder",
+    "searchPlaceholder": "Search requirements, cases, failures, or recorder",
+    "destinations": "Workspace quick destinations"
+  },
   "stage": {
     "requirement": "Requirement",
     "cases": "Test cases",
@@ -187,7 +204,18 @@
     "loading": "Loading selected run evidence…",
     "loadError": "Could not load the selected run evidence.",
     "openRuns": "Open run history",
-    "timeline": "Execution timeline"
+    "timeline": "Execution timeline",
+    "taskStatus": "Task: {{status}}",
+    "runStatus": "Run: {{status}}",
+    "runtimeUpdates": "Runtime updates: {{status}}",
+    "connection": {
+      "idle": "idle",
+      "connecting": "connecting",
+      "connected": "connected",
+      "reconnecting": "reconnecting",
+      "failed": "failed"
+    },
+    "recentActivity": "Recent: {{activity}}"
   },
   "main": {
     "title": "Workspace content",
@@ -221,11 +249,19 @@
     "starting": "Starting…",
     "waiting": "Waiting for next step",
     "progress": "{{completed}} / {{total}} complete · {{current}}",
-    "risk": {"low": "Low risk", "medium": "Medium risk", "high": "Approval"}
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "Approval"
+    }
   },
   "inspector": {
     "resizePanel": "Resize inspector; use left and right arrow keys to adjust",
-    "tabs": { "context": "Context", "ai": "AI plan", "run": "Run" },
+    "tabs": {
+      "context": "Context",
+      "ai": "AI plan",
+      "run": "Run"
+    },
     "title": "Inspector",
     "close": "Close Inspector",
     "liveContext": "Live context",
@@ -271,6 +307,8 @@
     "title": "Runtime status",
     "idle": "Idle",
     "noRun": "No active run in this context",
+    "loadingRun": "Loading run status",
+    "statusUnavailable": "Run status unavailable",
     "currentStep": "Current step",
     "noCurrentStep": "Waiting for a real execution event",
     "finished": "This run has ended; review the result",
@@ -305,7 +343,8 @@
       "RUNNING": "Running",
       "QUEUED": "Queued",
       "PASSED": "Run passed",
-      "CANCELLED": "Cancelled"
+      "CANCELLED": "Cancelled",
+      "SKIPPED": "Run skipped"
     },
     "runOutcome": {
       "ERROR": "Run-level error",
@@ -329,15 +368,7 @@
       "fullFailureEvidence": "Show full error and stack trace",
       "openFailure": "Open this failure"
     },
-    "executionStatus": {
-      "QUEUED": "Queued",
-      "RUNNING": "Running",
-      "PASSED": "Passed",
-      "FAILED": "Failed",
-      "ERROR": "Error",
-      "SKIPPED": "Skipped",
-      "CANCELLED": "Cancelled"
-    },
+    "executionStatus": "Execution: {{status}}",
     "viewExecutionPlan": "View execution plan",
     "planDisclosureDescription": "Open the AI Run planning panel when you need to review its plan.",
     "openExecutionPlan": "Open plan panel",
@@ -347,7 +378,12 @@
     "fullRuntime": "Run details",
     "rerun": "Rerun case",
     "filterCases": "Filter test cases",
-    "caseFilters": { "all": "All", "failed": "Failed", "passed": "Passed", "skipped": "Skipped" },
+    "caseFilters": {
+      "all": "All",
+      "failed": "Failed",
+      "passed": "Passed",
+      "skipped": "Skipped"
+    },
     "noCasesForFilter": "No cases match this filter.",
     "selectedCasePassed": "This case passed. There is no failure information for it.",
     "selectedCaseSkipped": "This case was skipped. There is no failure information for it.",
@@ -355,7 +391,15 @@
     "caseEvidenceReady": "{{count}} evidence item(s) linked to this case",
     "caseEvidenceUnavailable": "No Failure record is linked to this case yet.",
     "selectFailureToAnalyze": "Select a failed case to review its analysis and repair state here.",
-    "evidenceTabs": { "screenshot": "Screenshot", "snapshot": "Page snapshot", "dom": "DOM", "trace": "Trace", "console": "Console", "network": "Network", "source": "Source" },
+    "evidenceTabs": {
+      "screenshot": "Screenshot",
+      "snapshot": "Page snapshot",
+      "dom": "DOM",
+      "trace": "Trace",
+      "console": "Console",
+      "network": "Network",
+      "source": "Source"
+    },
     "evidenceMissing": {
       "screenshot": "No screenshot artifact is linked to this case.",
       "snapshot": "No browser page snapshot was saved for this case.",
@@ -493,7 +537,12 @@
     "eventLog": "Run events",
     "viewRuntimeDetails": "View full runtime events",
     "filterEvents": "Filter run events",
-    "eventFilters": { "all": "All", "errors": "Errors", "browser": "Browser", "ai": "AI / Jev" },
+    "eventFilters": {
+      "all": "All",
+      "errors": "Errors",
+      "browser": "Browser",
+      "ai": "AI / Jev"
+    },
     "noMatchingEvents": "No events match this filter.",
     "runtimeLoading": "Loading Run runtime events…",
     "runtimeLoadError": "Could not load Runtime events. The result page will not replace them with simulated states.",
@@ -551,6 +600,15 @@
       "CANCELLED": "Task cancelled",
       "SKIPPED": "Task skipped"
     },
+    "testRunStatus": {
+      "QUEUED": "Queued",
+      "RUNNING": "Running",
+      "PASSED": "Passed",
+      "FAILED": "Failed",
+      "SKIPPED": "Skipped",
+      "ERROR": "Error",
+      "CANCELLED": "Cancelled"
+    },
     "noRun": "No run result yet",
     "noRunDescription": "Start a run from an automated case and keep its result in this Workspace.",
     "runTitle": "Test Run",
@@ -570,7 +628,6 @@
     "executionLog": "View execution log",
     "openCase": "Return to this case",
     "goalStatus": "Goal status",
-    "executionStatus": "Execution: {{status}}",
     "status": {
       "COMPLETED": "Goal verified",
       "COMPLETED_WITH_UNRESOLVED": "Execution ended with unresolved items",
@@ -591,5 +648,6 @@
     "viewFailure": "Open Failure",
     "downloadArtifact": "Download artifact",
     "stepActivity": "Execution activity"
-  }
+  },
+  "backToRequirement": "Back to requirement"
 }

@@ -8,6 +8,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
 import { dashboardExecutionHref } from '../pages/dashboardModel';
@@ -211,6 +212,9 @@ const FailuresRoute: React.FC = () => {
 
 const RunWorkspaceRoute: React.FC = () => {
   const { runId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const requirementId = searchParams.get('requirementId') ?? undefined;
+  const nodeId = searchParams.get('nodeId') ?? undefined;
   const [projectId, setProjectId] = useState('');
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -222,7 +226,7 @@ const RunWorkspaceRoute: React.FC = () => {
     }).catch(() => { if (active) setMissing(true); });
     return () => { active = false; };
   }, [runId]);
-  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, stage: 'result', view: 'results' })} />;
+  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, ...(requirementId ? { requirementId } : {}), ...(nodeId ? { nodeId } : {}), stage: 'result', view: 'results' })} />;
   if (missing) return <Navigate replace to="/runs" />;
   return <div className="page-loading" aria-busy="true">Loading run…</div>;
 };

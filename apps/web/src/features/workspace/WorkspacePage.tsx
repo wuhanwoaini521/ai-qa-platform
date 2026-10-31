@@ -108,6 +108,8 @@ const stageForView: Record<WorkspaceView, WorkspaceStage> = {
 
 export function WorkspacePage() {
   const { t } = useTranslation('workspace');
+  const localizeStatus = (status: string, group: 'taskStatus' | 'testRunStatus') =>
+    t(`result.${group}.${status.toUpperCase()}`, { defaultValue: status });
   const { projectId: routeProjectId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
@@ -121,6 +123,7 @@ export function WorkspacePage() {
   const runtimeKind = context.taskId ? 'task' : 'run';
   const runtimeId = context.taskId ?? context.runId ?? '';
   const runtime = useRuntimeSnapshot(runtimeKind, runtimeId);
+  const latestDebugActivity = runtime.snapshot?.events.at(-1);
   const taskRunId = runtime.snapshot?.kind === 'task'
     ? [...runtime.snapshot.runs].reverse().find((item) => item.task_id === context.taskId)?.id ?? null
     : null;
@@ -814,8 +817,10 @@ export function WorkspacePage() {
     const runId = extra.runId ?? activeRunId;
     if (taskId) {
       setRuntimePanelKind('task');
-      if (extra.taskId && extra.taskId !== context.taskId) {
-        updateContext({ taskId: extra.taskId, runId: undefined });
+      if (extra.taskId && (extra.taskId !== context.taskId || 'requirementId' in extra)) {
+        const taskContext: Partial<WorkspaceContext> = { taskId: extra.taskId, runId: undefined };
+        if ('requirementId' in extra) taskContext.requirementId = extra.requirementId;
+        updateContext(taskContext);
       }
     } else if (runId) {
       setRuntimePanelKind('run');
@@ -955,8 +960,9 @@ export function WorkspacePage() {
         </div>
         {renderModeNavigation(true)}
         <div className="workspace-heading-actions">
-          {selectedRequirement && <span className="workspace-context-chip" title={selectedRequirement.title}><GitBranch size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.requirement')}:</span>{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
-          {selectedCase && <span className="workspace-context-chip workspace-context-chip-case" title={selectedCase.title}><Workflow size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.case')}:</span>{selectedCase.test_model?.display_id ?? selectedCase.title}</span>}
+          {selectedRequirement && <span className="workspace-context-chip" title={selectedRequirement.title}><GitBranch size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.requirement')}:</span><span className="workspace-context-chip-value">{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span></span>}
+          {selectedRequirement && stage !== 'requirement' && <a className="workspace-return-link" href={`/workspace/${projectId}?projectId=${projectId}&requirementId=${selectedRequirement.id}&stage=requirement`}>{t('backToRequirement')}</a>}
+          {selectedCase && <span className="workspace-context-chip workspace-context-chip-case" title={selectedCase.title}><Workflow size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.case')}:</span><span className="workspace-context-chip-value">{selectedCase.test_model?.display_id ?? selectedCase.title}</span></span>}
           {projectId && stage !== 'result' && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
             {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
             <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
@@ -1046,7 +1052,7 @@ export function WorkspacePage() {
                 limit={8}
                 filterText={(item) => `${item.id} ${item.status} ${item.requested_by ?? ''}`}
                 renderItem={(item) => <button key={item.id} type="button" className={item.id === context.runId ? 'is-selected' : ''} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'automation', view: 'debug' })}>
-                  <span className="workspace-run-status">{item.status}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
+                  <span className="workspace-run-status">{localizeStatus(item.status, 'testRunStatus')}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
                 </button>}
                 emptyState={<p className="workspace-muted">{t('context.noRuns')}</p>}
               />
@@ -1163,7 +1169,7 @@ export function WorkspacePage() {
                 }}
                 onOpenAutomation={(testCaseId, filePath) => updateContext({ testCaseId, file: filePath, nodeId: undefined, stage: 'automation', view: 'code', returnTo: 'workspace' })}
                 onOpenRun={(runId, testCaseId) => updateContext({ runId, testCaseId, taskId: undefined, failureId: undefined, stage: 'result', view: 'results' })}
-                onOpenTask={(taskId) => openRunDetails({ taskId })}
+                onOpenTask={(taskId, requirementId) => openRunDetails({ taskId, requirementId })}
               />}
               {view === 'cases' && <TestCasesPage
                 projects={projects}
@@ -1223,7 +1229,24 @@ export function WorkspacePage() {
                   }}
                 />}
                 {view === 'debug' && <details className="workspace-debug-runtime" open={viewportWidth > 820 || (isMobileWorkspace && debugMobilePanel === 'browser')}>
-                  <summary><MonitorPlay size={15} aria-hidden="true" /><span>{t('debugBrowser.title')}</span><small>{runtime.snapshot?.status ?? runtime.connection}</small></summary>
+                  <summary>
+                    <MonitorPlay size={15} aria-hidden="true" />
+                    <span className="workspace-debug-summary-copy">
+                      <span>{t('debugBrowser.title')}</span>
+                      <small className="workspace-debug-summary-status" role="status" aria-live="polite">
+                        {runtime.snapshot && <>{runtime.snapshot.kind === 'task'
+                          ? t('debugBrowser.taskStatus', { status: localizeStatus(runtime.snapshot.status, 'taskStatus') })
+                          : t('debugBrowser.runStatus', { status: localizeStatus(runtime.snapshot.status, 'testRunStatus') })} · </>}
+                        {t('debugBrowser.runtimeUpdates', {
+                          status: t(`debugBrowser.connection.${runtime.connection}`, { defaultValue: runtime.connection }),
+                        })}
+                      </small>
+                      {latestDebugActivity && <small
+                        className="workspace-debug-summary-activity"
+                        title={latestDebugActivity.summary || latestDebugActivity.title}
+                      >{t('debugBrowser.recentActivity', { activity: latestDebugActivity.summary || latestDebugActivity.title })}</small>}
+                    </span>
+                  </summary>
                   <div className="workspace-debug-runtime-content">
                     {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert">
                       <strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p>
@@ -1379,8 +1402,8 @@ export function WorkspacePage() {
             </div>}
             {inspectorTab === 'ai' && <div className="workspace-inspector-content" role="tabpanel" id="workspace-inspector-tabpanel" aria-labelledby={`workspace-inspector-tab-${inspectorTab}`} tabIndex={0}>
               {task ? <section className="workspace-inspector-section">
-                <span>{t('inspector.task')}</span><strong>{runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status}</strong><p>{task.goal}</p>
-                {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{step.status}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
+                <span>{t('inspector.task')}</span><strong>{localizeStatus(runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status, 'taskStatus')}</strong><p>{task.goal}</p>
+                {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{localizeStatus(step.status, 'taskStatus')}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
                 {!!runtime.snapshot?.decisions.length && <details className="workspace-decision-trace"><summary>{t('inspector.decisionTrace')}</summary>{runtime.snapshot.decisions.map((decision) => <p key={decision.id}><strong>{decision.selected}</strong> · {decision.name}</p>)}</details>}
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('inspector.advancedTrace')}</button>
               </section> : <p className="workspace-muted">{t('inspector.aiIdle')}</p>}
@@ -1388,7 +1411,7 @@ export function WorkspacePage() {
             </div>}
             {inspectorTab === 'run' && <div className="workspace-inspector-content" role="tabpanel" id="workspace-inspector-tabpanel" aria-labelledby={`workspace-inspector-tab-${inspectorTab}`} tabIndex={0}>
               {currentRun ? <section className="workspace-inspector-section">
-                <span>{t('inspector.run')}</span><strong>{currentRun.status}</strong>
+                <span>{t('inspector.run')}</span><strong>{localizeStatus(currentRun.status, 'testRunStatus')}</strong>
                 <p>{currentRun.passed} / {currentRun.total || '—'} {t('runtime.tests')} · {currentRun.failed} {t('dock.failed')}</p>
                 <div className="workspace-inspector-fact"><span>{t('inspector.browser')}</span><strong>{currentRun.browser}</strong></div>
                 {currentRun.log_output && <pre className="workspace-inspector-log">{currentRun.log_output.slice(-900)}</pre>}

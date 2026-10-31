@@ -190,7 +190,13 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
       setScriptSaved(true);
       knowledge.reload();
     } catch (reason) {
-      setError(String(reason));
+      const message = String(reason);
+      if (message.includes('409') || message.toLowerCase().includes('already exists')) {
+        setScriptNotice('');
+        setError(t('scriptConflict'));
+      } else {
+        setError(message);
+      }
     } finally {
       setAssertionBusy(false);
     }

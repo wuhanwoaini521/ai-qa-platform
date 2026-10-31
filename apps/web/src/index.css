@@ -5921,3 +5921,20 @@ button, input, select, textarea {
 .lc-run-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 .lc-run-state { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+.workspace-return-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid #f6d9c6;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.workspace-return-link:hover { background: #ffe6d6; }
+.workspace-return-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
