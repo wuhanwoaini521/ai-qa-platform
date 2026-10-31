@@ -1,0 +1,56 @@
+{
+  "prefixes": [
+    "AI Live Probe",
+    "Grounded Assertion Demo",
+    "Assertion-to-Run Slice",
+    "Frozen Slice Evidence",
+    "Assertion to Run (final)"
+  ],
+  "projects": [
+    {
+      "project_id": "proj_868a1e0c1dac",
+      "name": "AI Live Probe 2026-10-31",
+      "created_at": "2026-10-31T12:06:46.377718+00:00",
+      "requirements": 1,
+      "test_cases": 0,
+      "runs": 0,
+      "workspace_dir": "runtime/workspaces/proj_868a1e0c1dac"
+    },
+    {
+      "project_id": "proj_d4cd69bd6a8e",
+      "name": "Grounded Assertion Demo",
+      "created_at": "2026-10-31T13:26:08.973261+00:00",
+      "requirements": 1,
+      "test_cases": 0,
+      "runs": 0,
+      "workspace_dir": "runtime/workspaces/proj_d4cd69bd6a8e"
+    },
+    {
+      "project_id": "proj_40e029dc33c0",
+      "name": "Assertion-to-Run Slice",
+      "created_at": "2026-10-31T14:04:31.182841+00:00",
+      "requirements": 1,
+      "test_cases": 0,
+      "runs": 1,
+      "workspace_dir": "runtime/workspaces/proj_40e029dc33c0"
+    },
+    {
+      "project_id": "proj_b4f228ae7015",
+      "name": "Assertion to Run (final)",
+      "created_at": "2026-10-31T14:14:44.419099+00:00",
+      "requirements": 2,
+      "test_cases": 0,
+      "runs": 3,
+      "workspace_dir": "runtime/workspaces/proj_b4f228ae7015"
+    },
+    {
+      "project_id": "proj_3d460e6654f1",
+      "name": "Frozen Slice Evidence",
+      "created_at": "2026-10-31T14:31:13.249509+00:00",
+      "requirements": 4,
+      "test_cases": 0,
+      "runs": 4,
+      "workspace_dir": "runtime/workspaces/proj_3d460e6654f1"
+    }
+  ]
+}

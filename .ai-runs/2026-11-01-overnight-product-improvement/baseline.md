@@ -39,3 +39,21 @@ Services: API `http://127.0.0.1:8000`, Web `http://127.0.0.1:5183`.
 - No destructive data cleanup.
 - No dependency added.
 - Playwright stays 1.62.0.
+
+## P0-C：探针数据（非破坏性处理）
+
+新增只读工具 `apps/api/scripts/dev_probe_inventory.py`：列出探针项目及其 requirements / test_cases / runs，不删除任何数据。
+运行结果（`probe-inventory.json`）：
+
+| 项目 | requirements | runs |
+|---|---|---|
+| AI Live Probe 2026-10-31 | 1 | 0 |
+| Grounded Assertion Demo | 1 | 0 |
+| Assertion-to-Run Slice | 1 | 1 |
+| Assertion to Run (final) | 2 | 3 |
+| Frozen Slice Evidence | 4 | 4 |
+
+非破坏性隔离方案（未执行，需授权）：
+1. 先跑 `PYTHONPATH=apps/api uv run --no-sync python apps/api/scripts/dev_probe_inventory.py` 复核清单；
+2. 通过既有项目管理界面逐个删除（可回滚点：先 `cp runtime/ai_qa_platform.db /tmp/aiqa-backup.db`）；
+3. 若希望"保留数据但从统计隐藏"，需新增项目级 `hidden_from_overview` 字段 + 迁移——本轮未做（避免未审查的 schema 变更）。
