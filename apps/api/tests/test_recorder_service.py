@@ -91,7 +91,9 @@ def test_generator_preserves_agent_search_submission_keypress() -> None:
     )
 
     compile(source, "recorded_search.py", "exec")
-    assert '.get_by_role("textbox", name="Search", exact=True).fill(os.getenv("QA_DATA_1_SEARCH", "Selenium"))' in source
+    assert (
+        '.get_by_role("textbox", name="Search", exact=True).fill(os.getenv("QA_DATA_1_SEARCH", "Selenium"))' in source
+    )
     assert '.get_by_role("textbox", name="Search", exact=True).press("Enter")' in source
 
 

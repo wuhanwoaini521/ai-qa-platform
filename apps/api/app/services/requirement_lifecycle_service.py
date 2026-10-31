@@ -818,6 +818,18 @@ class RequirementLifecycleService:
         if unknown_markers:
             raise ValueError("Script markers cite criteria without an adopted assertion: " + ", ".join(unknown_markers))
         derived = sorted(item.id for item in adopted.values() if item.criterion_id in markers)
+        paired = []
+        marker_re = re.compile(r"#\s*criterion:\s*(AC-[A-Za-z0-9-]+)")
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test"):
+                continue
+            segment = ast.get_source_segment(code, node) or ""
+            node_criteria = sorted(set(marker_re.findall(segment)))
+            if not node_criteria:
+                raise ValueError(
+                    f"Test function {node.name} has no '# criterion:' marker; assertions would be unmappable"
+                )
+            paired.append({"nodeid": f"{path}::{node.name}", "criterion_ids": node_criteria})
         if set(derived) != set(requested):
             missing = ", ".join(sorted(set(derived) - set(requested)))
             extra = ", ".join(sorted(set(requested) - set(derived)))
@@ -828,6 +840,10 @@ class RequirementLifecycleService:
                 detail.append(f"not implemented in code {extra}")
             raise ValueError("Script markers do not match the requested assertions: " + "; ".join(detail))
 
+        ai_provider = getattr(self.orchestrator.ai_provider, "primary", self.orchestrator.ai_provider)
+        provider_name = str(getattr(ai_provider, "provider_name", "") or "")
+        model_name = str(getattr(ai_provider, "model", "") or "")
+
         workspace = WorkspaceService()
         created = False
         try:
@@ -837,17 +853,18 @@ class RequirementLifecycleService:
             existing = await workspace.read_file(project_id, path)
             if hashlib.sha256(existing.encode()).hexdigest() != hashlib.sha256(code.encode()).hexdigest():
                 raise FileExistsError("A different script already exists at this path; refusing to overwrite") from None
-        binding = ScriptBinding(
-            path=path,
-            nodeids=nodeids,
-            assertion_ids=derived,
-            criterion_ids=sorted({adopted[identifier].criterion_id for identifier in derived}),
-            provider="openai-compatible",
-            model="",
-            saved_at=utc_now().isoformat(),
-        )
-        document.scripts = [item for item in document.scripts if item.path != path][:9] + [binding]
         try:
+            binding = ScriptBinding(
+                path=path,
+                nodeids=nodeids,
+                assertion_ids=derived,
+                criterion_ids=sorted({adopted[identifier].criterion_id for identifier in derived}),
+                nodeid_criteria=paired,
+                provider=provider_name,
+                model=model_name,
+                saved_at=utc_now().isoformat(),
+            )
+            document.scripts = [item for item in document.scripts if item.path != path][:9] + [binding]
             await self._store(requirement_id, document, expected=raw, check_input_hash=False)
         except Exception:
             if created:
@@ -920,9 +937,21 @@ class RequirementLifecycleService:
             binding = next((candidate for candidate in bindings if item.id in candidate.assertion_ids), None)
             entry = None
             if binding is not None:
-                candidates = [latest[nodeid] for nodeid in binding.nodeids if nodeid in latest]
-                if candidates:
-                    entry = max(candidates, key=lambda item: item.get("finished_at") or "")
+                pairing = next(
+                    (
+                        candidate
+                        for candidate in binding.nodeid_criteria
+                        if item.criterion_id in candidate.criterion_ids
+                    ),
+                    None,
+                )
+                if pairing is not None:
+                    entry = latest.get(pairing.nodeid)
+                else:
+                    # Legacy bindings without pairing keep file-level behaviour.
+                    candidates = [latest[nodeid] for nodeid in binding.nodeids if nodeid in latest]
+                    if candidates:
+                        entry = max(candidates, key=lambda item: item.get("finished_at") or "")
             state = self._resolve_assertion_state(item.adopted, entry, active_paths, binding.path if binding else "")
             assertions.append(
                 {

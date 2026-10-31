@@ -631,7 +631,16 @@ class TaskCodeGenerationService:
                     node.func.attr != "getenv"
                     or not args
                     or not isinstance(args[0], ast.Constant)
-                    or args[0].value not in allowed_environment_variables
+                    or (
+                        args[0].value not in allowed_environment_variables
+                        and not (
+                            isinstance(args[0].value, str)
+                            and (
+                                args[0].value == "QA_BASE_URL"
+                                or args[0].value.startswith(("QA_DATA_", "QA_RECORDER_SECRET_"))
+                            )
+                        )
+                    )
                 ):
                     raise TaskBlocked("Generated test may only read approved browser environment settings.")
 

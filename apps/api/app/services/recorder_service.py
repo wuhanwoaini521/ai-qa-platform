@@ -1552,10 +1552,10 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
                 origin, rest = base
                 if rest:
                     lines.append(
-                        f"            page.goto(os.getenv(\"QA_BASE_URL\", {_py_literal(origin)}) + {_py_literal(rest)})"
+                        f'            page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}) + {_py_literal(rest)})'
                     )
                 else:
-                    lines.append(f"            page.goto(os.getenv(\"QA_BASE_URL\", {_py_literal(origin)}))")
+                    lines.append(f'            page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}))')
             else:
                 lines.append(f"            page.goto({_py_literal(step.url)})")
         elif step.action == "back":

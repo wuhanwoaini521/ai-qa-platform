@@ -252,3 +252,113 @@ async def test_assertion_runs_maps_a_real_execution(client, test_db_session):
         assert entry["run"]["finished_at"]
     finally:
         _stop()
+
+
+TWO_TESTS = """from playwright.sync_api import Page, expect
+
+
+def test_total_is_discounted(page: Page):
+    # criterion: AC-001
+    page.goto("http://127.0.0.1:5183/")
+    expect(page.locator("#total")).to_have_text("90.00")
+
+
+def test_coupon_is_rejected(page: Page):
+    # criterion: AC-002
+    page.goto("http://127.0.0.1:5183/")
+    expect(page.locator("#status")).to_have_text("invalid coupon")
+"""
+
+
+@pytest.mark.asyncio
+async def test_assertions_are_paired_with_their_own_test_function(client, test_db_session):
+    project = (await client.post("/api/projects", json={"name": "Pairing probe", "bootstrap_workspace": True})).json()
+    requirement = (
+        await client.post(
+            "/api/requirements",
+            json={
+                "project_id": project["id"],
+                "title": "Checkout",
+                "description": "Two checks",
+                "acceptance_criteria": "Valid code reduces the total\nExpired code is rejected",
+            },
+        )
+    ).json()
+    two = {
+        "assertions": [
+            {
+                "criterion_id": "AC-001",
+                "statement": "Total shows 90.00 after a 10% code",
+                "check": "read total",
+            },
+            {
+                "criterion_id": "AC-002",
+                "statement": "Expired code is rejected with a message",
+                "check": "read status",
+            },
+        ]
+    }
+    app.dependency_overrides[get_requirement_lifecycle_service] = lambda: RequirementLifecycleService(
+        TaskRepositoryScopeFactory(), Orchestrator(two)
+    )
+    try:
+        drafts = (await client.post(f"/api/requirements/{requirement['id']}/assertions/draft")).json()
+        for item in drafts:
+            await client.post(
+                f"/api/requirements/{requirement['id']}/assertions/{item['id']}/adoption", json={"adopted": True}
+            )
+        saved = await client.post(
+            f"/api/requirements/{requirement['id']}/assertions/script/save",
+            json={
+                "path": "tests/test_checkout.py",
+                "code": TWO_TESTS,
+                "assertion_ids": [item["id"] for item in drafts],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        binding = saved.json()
+        assert {pairing["nodeid"] for pairing in binding["nodeid_criteria"]} == {
+            "tests/test_checkout.py::test_total_is_discounted",
+            "tests/test_checkout.py::test_coupon_is_rejected",
+        }
+
+        project_id = project["id"]
+        async with test_db_session() as session:
+            repository = TestRunRepository(session)
+            run = await repository.create_run(TestRunCreate(project_id=project_id, workspace_id=project_id))
+            await repository.add_execution(
+                run.id,
+                "tests/test_checkout.py::test_coupon_is_rejected",
+                RunStatus.FAILED,
+                error_message="coupon accepted",
+            )
+            await repository.add_execution(run.id, "tests/test_checkout.py::test_total_is_discounted", RunStatus.PASSED)
+            await repository.update_run_status(run.id, RunStatus.FAILED, total=2, passed=1, failed=1)
+            await session.commit()
+
+        body = (await client.get(f"/api/requirements/{requirement['id']}/assertions/runs")).json()
+        states = {entry["criterion_id"]: entry["state"] for entry in body["assertions"]}
+        assert states == {"AC-001": "PASSED", "AC-002": "FAILED"}
+    finally:
+        _stop()
+
+
+@pytest.mark.asyncio
+async def test_test_function_without_criterion_marker_is_rejected(client):
+    _project_id, requirement_id, assertion_id = await _seed_adopted(client)
+    try:
+        unmarked = """from playwright.sync_api import Page
+
+
+def test_unmarked(page: Page):
+    page.goto("http://127.0.0.1:5183/")
+    assert True
+"""
+        response = await client.post(
+            f"/api/requirements/{requirement_id}/assertions/script/save",
+            json={"path": "tests/test_unmarked.py", "code": unmarked, "assertion_ids": [assertion_id]},
+        )
+        assert response.status_code == 422
+        assert "no '# criterion:' marker" in response.json()["detail"]
+    finally:
+        _stop()

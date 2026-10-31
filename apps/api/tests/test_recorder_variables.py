@@ -100,3 +100,18 @@ def test_redacted_generated_case_still_uses_required_secret_env() -> None:
     compile(source, "recorded_case.py", "exec")
     assert 'os.getenv("QA_EMAIL")' in source
     assert "Set environment variable QA_EMAIL" in source
+
+
+def test_sensitive_looking_values_are_not_turned_into_variables() -> None:
+    steps = [
+        RecorderStep(action="navigate", url="http://shop.example.test/"),
+        RecorderStep(
+            id="step-phone",
+            action="fill",
+            locator=RecorderLocator(kind="css", value="#phone"),
+            value="13800138000",
+            description="Phone",
+        ),
+    ]
+    variables = extract_variables(steps)
+    assert all(item.default != "13800138000" for item in variables)

@@ -115,6 +115,10 @@ async def draft_assertions(
     """Draft assertions grounded in acceptance criteria. Drafts are never applied automatically."""
     try:
         return await service.draft_assertions(requirement_id)
+    except BudgetExceededError as error:
+        raise HTTPException(429, str(error)) from error
+    except AIProviderError as error:
+        raise HTTPException(503, str(error)) from error
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 

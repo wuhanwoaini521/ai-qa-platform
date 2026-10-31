@@ -219,12 +219,12 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
     UNKNOWN: 'assertionStateUnknown',
   };
   const runStateLabel = (state: string) => String(t((runStateKey[state] ?? 'assertionStateUnknown') as never));
-  const EXECUTED_STATES = new Set(['PASSED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RECORD_INACCESSIBLE', 'RUNNING']);
+  const EXECUTED_STATES = new Set(['PASSED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RECORD_INACCESSIBLE']);
   const executedCount = (assertionRuns?.assertions ?? []).filter(
     (entry) => entry.adopted && EXECUTED_STATES.has(entry.state),
   ).length;
   const hasCriteria = Boolean(criteriaText);
-  const hasScript = Boolean(scriptDraft) || scriptSaved;
+  const hasScript = Boolean(scriptDraft) || scriptSaved || (doc?.scripts?.length ?? 0) > 0;
   const flowSteps = [
     { key: 'requirement', label: t('flowRequirement'), done: hasCriteria, action: criteriaText ? t('editCriteria') : t('addCriteria'), onClick: () => { setCriteriaDraft(criteriaText); setCriteriaEditing(true); } },
     { key: 'assertion', label: t('flowAssertion'), done: adoptedCount > 0, action: t('draftAssertions'), onClick: () => void draftAssertions() },

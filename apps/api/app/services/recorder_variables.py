@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from qa_core.failure.redactor import SensitiveRedactor
+
 MAX_VARIABLES = 20
 MIN_VALUE_LENGTH = 2
 
@@ -86,6 +88,9 @@ def extract_variables(steps) -> list[RecorderVariable]:
             continue  # handled by the existing secret env-var path
         value = getattr(step, "value", None)
         if not value or len(value.strip()) < MIN_VALUE_LENGTH:
+            continue
+        if SensitiveRedactor.contains_redaction_placeholder(value) or SensitiveRedactor.redact_text(value) != value:
+            # Values that look like email/phone/SSN stay literal in the recording, never a variable default.
             continue
         hint = (getattr(step, "description", "") or "").strip()
         if not hint and getattr(step, "locator", None) is not None:

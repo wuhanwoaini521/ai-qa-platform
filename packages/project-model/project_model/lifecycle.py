@@ -143,6 +143,13 @@ class GroundedAssertion(DocumentModel):
     created_at: str = Field(default="", max_length=40)
 
 
+class ScriptNodeCriteria(DocumentModel):
+    """Which criteria a single test function implements (assertion-level pairing)."""
+
+    nodeid: str = Field(min_length=3, max_length=300)
+    criterion_ids: list[str] = Field(default_factory=list, max_length=30)
+
+
 class ScriptBinding(DocumentModel):
     """A test file saved from grounded assertions, recorded so runs can be traced back."""
 
@@ -153,6 +160,7 @@ class ScriptBinding(DocumentModel):
     provider: str = Field(default="", max_length=120)
     model: str = Field(default="", max_length=120)
     saved_at: str = Field(default="", max_length=40)
+    nodeid_criteria: list[ScriptNodeCriteria] = Field(default_factory=list, max_length=10)
 
 
 class AnalysisRecord(DocumentModel):
@@ -217,6 +225,11 @@ class RequirementDocument(DocumentModel):
                 raise ValueError("Script binding refers to an unknown assertion")
             if not set(script.criterion_ids) <= criteria:
                 raise ValueError("Script binding refers to an unknown acceptance criterion")
+            for pairing in script.nodeid_criteria:
+                if pairing.nodeid not in script.nodeids:
+                    raise ValueError("Script binding pairs criteria with an unknown nodeid")
+                if not set(pairing.criterion_ids) <= set(script.criterion_ids):
+                    raise ValueError("Script binding pairs an unknown criterion with a test function")
         for item in self.rules:
             if not set(item.criterion_ids) <= criteria:
                 raise ValueError("Business rule refers to an unknown acceptance criterion")

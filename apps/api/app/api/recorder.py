@@ -12,7 +12,6 @@ from app.api.authz import authenticate_websocket_stream, has_permission, require
 from app.api.project_acl import enforce_project_access
 from app.container import get_recorder_workflow_service, recorder_service
 from app.services.ai_runtime import build_ai_orchestrator
-from app.services.recorder_variables import extract_variables
 from app.services.recorder_service import (
     RecorderGenerateRequest,
     RecorderOptimization,
@@ -24,6 +23,7 @@ from app.services.recorder_service import (
     normalize_recording_steps,
     validate_recording_optimization,
 )
+from app.services.recorder_variables import extract_variables
 from app.services.recorder_workflow_service import RecorderWorkflowService
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
