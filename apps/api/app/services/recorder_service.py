@@ -19,7 +19,14 @@ from qa_core.healing.locator_intelligence import rank_locator_candidates
 
 from app.ports.browser_runtime import BrowserRuntime, BrowserRuntimeSession
 from app.ports.repository_scope import RepositoryScopeFactory
+from app.services.recorder_variables import extract_variables, split_origin, variable_for_fill
 from app.settings import get_config
+
+RECORDER_STEP_COMMAND_ACTIONS = frozenset({"add_step", "replace_steps", "edit_step", "delete_step", "reorder"})
+RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS = frozenset({"navigate"})
+RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS = frozenset({"back", "forward", "reload"})
+RECORDER_NAVIGATION_COMMAND_ACTIONS = RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS | RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS
+MAX_RECORDER_COMMAND_HISTORY = 1024
 
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
@@ -538,6 +545,14 @@ def _step_evidence(event: dict[str, Any], selection: dict[str, Any]) -> Recorder
     )
 
 
+class RecorderStreamReplaced(RuntimeError):
+    """Raised when a WebSocket stream attempts work after a newer stream took ownership."""
+
+
+class RecorderStepsRevisionConflict(ValueError):
+    """Raised when a replace_steps command is based on an older canonical revision."""
+
+
 @dataclass
 class RecorderSession:
     id: str
@@ -556,6 +571,10 @@ class RecorderSession:
     pending_pick_action: str = "click"
     last_locator_verification: dict[str, Any] | None = None
     steps_revision: int = 0
+    applied_step_command_ids: dict[str, None] = field(default_factory=dict)
+    processed_navigation_command_ids: dict[str, None] = field(default_factory=dict)
+    stream_generation: int = 0
+    closed: bool = False
 
     @property
     def browser_session_id(self) -> str:
@@ -655,11 +674,13 @@ class BrowserRecorderService:
                     not isinstance(value, str)
                     or safe.get("value") != value
                     or _safe_recorder_text(value, 2000) != value
-                    or "[redacted]" in value.casefold()
-                    or "***redacted***" in value.casefold()
+                    or SensitiveRedactor.contains_redaction_placeholder(value)
                     or (
                         isinstance(name, str)
-                        and (_safe_recorder_text(name, 500) != name or "[redacted]" in name.casefold())
+                        and (
+                            _safe_recorder_text(name, 500) != name
+                            or SensitiveRedactor.contains_redaction_placeholder(name)
+                        )
                     )
                 ):
                     continue
@@ -687,13 +708,12 @@ class BrowserRecorderService:
             if safe_locator and (
                 safe_locator.get("value") != locator.get("value")
                 or _safe_recorder_text(str(locator.get("value") or ""), 2000) != locator.get("value")
-                or "[redacted]" in str(locator.get("value") or "").casefold()
-                or "***redacted***" in str(locator.get("value") or "").casefold()
+                or SensitiveRedactor.contains_redaction_placeholder(str(locator.get("value") or ""))
                 or (
                     isinstance(locator.get("name"), str)
                     and (
                         _safe_recorder_text(locator["name"], 500) != locator["name"]
-                        or "[redacted]" in locator["name"].casefold()
+                        or SensitiveRedactor.contains_redaction_placeholder(locator["name"])
                     )
                 )
             ):
@@ -729,7 +749,99 @@ class BrowserRecorderService:
     def navigation_failed(session: RecorderSession, message: str) -> None:
         session.navigation_error = SensitiveRedactor.redact_text(message)
 
-    async def apply_command(self, session: RecorderSession, command: dict[str, Any]) -> str | None:
+    async def claim_websocket_stream(self, session: RecorderSession) -> int:
+        async with session.lock:
+            async with self._lock:
+                if self._sessions.get(session.id) is not session:
+                    raise RecorderStreamReplaced("Recorder session is closed or expired")
+            session.stream_generation += 1
+            return session.stream_generation
+
+    @staticmethod
+    def _require_current_stream(session: RecorderSession, stream_generation: int | None) -> None:
+        if stream_generation is not None and session.stream_generation != stream_generation:
+            raise RecorderStreamReplaced("Recorder stream replaced")
+
+    def _record_processed_navigation_command(self, session: RecorderSession, command_id: str) -> None:
+        session.processed_navigation_command_ids[command_id] = None
+        if len(session.processed_navigation_command_ids) > MAX_RECORDER_COMMAND_HISTORY:
+            session.processed_navigation_command_ids.pop(next(iter(session.processed_navigation_command_ids)))
+        self.touch(session)
+
+    async def apply_command(
+        self,
+        session: RecorderSession,
+        command: dict[str, Any],
+        *,
+        stream_generation: int | None = None,
+    ) -> str | None:
+        async with session.lock:
+            self._require_current_stream(session, stream_generation)
+            action = command.get("action")
+            if action in RECORDER_STEP_COMMAND_ACTIONS:
+                command_id = command.get("command_id")
+                if isinstance(command_id, str) and 0 < len(command_id) <= 128:
+                    if command_id in session.applied_step_command_ids:
+                        return None
+                else:
+                    command_id = None
+                self._apply_step_command(session, command)
+                if command_id is not None:
+                    session.applied_step_command_ids[command_id] = None
+                    if len(session.applied_step_command_ids) > MAX_RECORDER_COMMAND_HISTORY:
+                        session.applied_step_command_ids.pop(next(iter(session.applied_step_command_ids)))
+                return None
+            if action in RECORDER_NAVIGATION_COMMAND_ACTIONS:
+                command_id = command.get("command_id")
+                if isinstance(command_id, str) and 0 < len(command_id) <= 128:
+                    if command_id in session.processed_navigation_command_ids:
+                        return None
+                else:
+                    command_id = None
+                if command_id is not None and action in RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS:
+                    # History navigation and reload can take effect before their wait raises.
+                    # Record the attempt first so reconnect cannot repeat that side effect.
+                    self._record_processed_navigation_command(session, command_id)
+                current_url = await self._apply_command(session, command)
+                if command_id is not None and action in RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS:
+                    self._record_processed_navigation_command(session, command_id)
+                return current_url
+            return await self._apply_command(session, command)
+
+    def _apply_step_command(self, session: RecorderSession, command: dict[str, Any]) -> None:
+        action = command.get("action")
+        if action == "add_step":
+            added = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
+            if not any(step.get("id") == added["id"] for step in session.steps):
+                session.steps.append(added)
+        elif action == "replace_steps":
+            raw_steps = command.get("steps")
+            if not isinstance(raw_steps, list) or len(raw_steps) > 500:
+                raise ValueError("A recorder session can contain at most 500 steps.")
+            if "command_id" in command:
+                base_revision = command.get("base_steps_revision")
+                if isinstance(base_revision, bool) or not isinstance(base_revision, int):
+                    raise ValueError("Recorder replacement requires a current steps revision.")
+                if base_revision != session.steps_revision:
+                    raise RecorderStepsRevisionConflict(
+                        "Recorder steps changed since the command snapshot; refresh before replacing."
+                    )
+            session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
+        elif action == "edit_step":
+            updated = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
+            session.steps = [updated if step["id"] == updated["id"] else step for step in session.steps]
+        elif action == "delete_step":
+            session.steps = [step for step in session.steps if step["id"] != command.get("id")]
+        elif action == "reorder":
+            order = command.get("ids", [])
+            by_id = {step["id"]: step for step in session.steps}
+            session.steps = [by_id[item] for item in order if item in by_id] + [
+                step for step in session.steps if step["id"] not in order
+            ]
+        session.steps_revision += 1
+        self.touch(session)
+
+    async def _apply_command(self, session: RecorderSession, command: dict[str, Any]) -> str | None:
         runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
         if runtime_session is None:
             raise RuntimeError("Recorder browser session is closed or expired")
@@ -800,25 +912,7 @@ class BrowserRecorderService:
                 await self.browser_runtime.select_page(session.browser_session_id, index)
             except IndexError:
                 pass
-        elif action == "add_step":
-            session.steps.append(RecorderStep.model_validate(command["step"]).model_dump(mode="json"))
-        elif action == "replace_steps":
-            raw_steps = command.get("steps")
-            if not isinstance(raw_steps, list) or len(raw_steps) > 500:
-                raise ValueError("A recorder session can contain at most 500 steps.")
-            session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
-        elif action == "edit_step":
-            updated = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
-            session.steps = [updated if step["id"] == updated["id"] else step for step in session.steps]
-        elif action == "delete_step":
-            session.steps = [step for step in session.steps if step["id"] != command.get("id")]
-        elif action == "reorder":
-            order = command.get("ids", [])
-            by_id = {step["id"]: step for step in session.steps}
-            session.steps = [by_id[item] for item in order if item in by_id] + [
-                step for step in session.steps if step["id"] not in order
-            ]
-        if action in {"start", "add_step", "replace_steps", "edit_step", "delete_step", "reorder", "verify_locator"}:
+        if action in {"start", "verify_locator"}:
             session.steps_revision += 1
         self.touch(session)
         return SensitiveRedactor.redact_url(page.url) if action == "navigate" else None
@@ -828,10 +922,13 @@ class BrowserRecorderService:
         if not session:
             return
         async with self._lifecycle_lock:
-            async with self._lock:
-                if self._sessions.pop(session_id, None) is None:
-                    return
-            await self.browser_runtime.close_session(session.browser_session_id)
+            async with session.lock:
+                async with self._lock:
+                    if self._sessions.pop(session_id, None) is None:
+                        return
+                session.closed = True
+                session.stream_generation += 1
+                await self.browser_runtime.close_session(session.browser_session_id)
 
     async def close_all(self) -> None:
         for session in list(self._sessions.values()):
@@ -852,7 +949,17 @@ class BrowserRecorderService:
             )
         )
 
-    async def page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
+    async def page_snapshot(
+        self,
+        session: RecorderSession,
+        *,
+        stream_generation: int | None = None,
+    ) -> dict[str, Any]:
+        async with session.lock:
+            self._require_current_stream(session, stream_generation)
+            return await self._page_snapshot(session)
+
+    async def _page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
         runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
         if runtime_session is None:
             return {
@@ -861,6 +968,7 @@ class BrowserRecorderService:
                 "url": "",
                 "state": "CRASHED",
                 "steps": session.steps,
+                "steps_revision": session.steps_revision,
             }
         page = await self.browser_runtime.get_page(session.browser_session_id)
         try:
@@ -872,6 +980,7 @@ class BrowserRecorderService:
                     "url": SensitiveRedactor.redact_url(page.url),
                     "state": session.state,
                     "steps": session.steps,
+                    "steps_revision": session.steps_revision,
                 }
             snapshot = await self.browser_runtime.snapshot(
                 session.browser_session_id,
@@ -1090,6 +1199,12 @@ class BrowserRecorderService:
         evidence.context["revalidated_url"] = current_url
 
     async def analyze_locator_with_ai(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
+        async with session.lock:
+            if session.closed:
+                raise LookupError("Recorder session is closed or expired")
+            return await self._analyze_locator_with_ai_locked(session, step_id)
+
+    async def _analyze_locator_with_ai_locked(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
         from app.services.ai_runtime import build_ai_orchestrator
 
         step = next((item for item in session.steps if item.get("id") == step_id), None)
@@ -1197,6 +1312,12 @@ class BrowserRecorderService:
         return analysis
 
     async def request_jev_locator_decision(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
+        async with session.lock:
+            if session.closed:
+                raise LookupError("Recorder session is closed or expired")
+            return await self._request_jev_locator_decision_locked(session, step_id)
+
+    async def _request_jev_locator_decision_locked(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
         from app.services.locator_decision_service import LocatorDecisionService
 
         step = next((item for item in session.steps if item.get("id") == step_id), None)
@@ -1375,6 +1496,7 @@ def _locator_expression(locator: RecorderLocator | None, frame_path: list[str] |
 
 
 def generate_python_case(request: RecorderGenerateRequest) -> str:
+    variables = extract_variables(request.steps)
     test_name = re.sub(r"\W+", "_", request.test_name).strip("_") or "test_recorded_case"
     if test_name[0].isdigit():
         test_name = "test_" + test_name
@@ -1425,7 +1547,17 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         step_lines_start = len(lines)
         lines.append(f"            # Step {index}: {step.description or step.action}")
         if step.action == "navigate":
-            lines.append(f"            page.goto({_py_literal(step.url)})")
+            base = split_origin(step.url or "")
+            if base and any(item.name == "QA_BASE_URL" for item in variables):
+                origin, rest = base
+                if rest:
+                    lines.append(
+                        f"            page.goto(os.getenv(\"QA_BASE_URL\", {_py_literal(origin)}) + {_py_literal(rest)})"
+                    )
+                else:
+                    lines.append(f"            page.goto(os.getenv(\"QA_BASE_URL\", {_py_literal(origin)}))")
+            else:
+                lines.append(f"            page.goto({_py_literal(step.url)})")
         elif step.action == "back":
             lines.append("            page.go_back()")
         elif step.action == "scroll":
@@ -1453,7 +1585,13 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
                     )
                     lines.append(f"            {locator}.fill({local_name})")
                 else:
-                    lines.append(f"            {locator}.fill({_py_literal(step.value)})")
+                    variable = variable_for_fill(variables, step)
+                    if variable is not None:
+                        lines.append(
+                            f"            {locator}.fill(os.getenv({_py_literal(variable.name)}, {_py_literal(variable.default)}))"
+                        )
+                    else:
+                        lines.append(f"            {locator}.fill({_py_literal(step.value)})")
             elif step.action == "select":
                 option_key = "value" if step.select_by_value else "label"
                 if step.value_redacted:

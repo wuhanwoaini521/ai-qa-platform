@@ -39,6 +39,8 @@
     "targetWebsite": "the target website",
     "sessionWrongProject": "This browser session belongs to another project. Switch to its project first.",
     "browserOperationFailed": "Browser operation failed.",
+    "stepOutboxStorageUnavailable": "Recorder step edits are paused because this browser cannot save the pending command queue. Restore local storage access, then retry the edit.",
+    "navigationOutboxStorageUnavailable": "Browser navigation is paused because this tab cannot persist its pending command queue. Restore session storage access, then retry the navigation.",
     "noProject": "Create or select a project first.",
     "noAgentStartUrl": "The Agent task has no valid starting URL, so a script cannot be generated.",
     "noReusableActions": "This Agent run has no successful reusable actions, so no script was generated.",
@@ -96,7 +98,9 @@
     "forward": "Forward",
     "reload": "Reload",
     "startBrowser": "Start browser",
-    "closeBrowser": "Close browser"
+    "closeBrowser": "Close browser",
+    "closingBrowser": "Closing browser…",
+    "closeBlocked": "Finish the current operation first"
   },
   "browser": {
     "view": "Browser view",
@@ -223,5 +227,7 @@
     "needsVerification": "Requires test run verification",
     "optimizationBasis": "View optimization rationale",
     "textarea": "Generated Python script"
-  }
+  },
+  "variablesCount": "{{count}} parameter(s)",
+  "variablesHint": "Generated code reads these from environment variables; override with QA_DATA_* / QA_BASE_URL"
 }

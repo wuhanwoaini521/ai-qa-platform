@@ -39,6 +39,8 @@
     "targetWebsite": "目标网页",
     "sessionWrongProject": "该浏览器会话属于其他项目，请先切换到所属项目。",
     "browserOperationFailed": "浏览器操作失败。",
+    "stepOutboxStorageUnavailable": "当前浏览器无法保存待处理命令队列，录制步骤编辑已暂停。请恢复本地存储访问后重试编辑。",
+    "navigationOutboxStorageUnavailable": "当前标签页无法保存待处理浏览器命令队列，浏览器导航已暂停。请恢复会话存储访问后重试导航。",
     "noProject": "请先创建或选择项目。",
     "noAgentStartUrl": "Agent 任务缺少有效的起始网址，不能生成脚本。",
     "noReusableActions": "这次 Agent 执行没有可复用的成功操作，未生成脚本。",
@@ -96,7 +98,9 @@
     "forward": "前进",
     "reload": "刷新",
     "startBrowser": "启动浏览器",
-    "closeBrowser": "关闭浏览器"
+    "closeBrowser": "关闭浏览器",
+    "closingBrowser": "正在关闭浏览器…",
+    "closeBlocked": "请先完成当前操作"
   },
   "browser": {
     "view": "浏览器视图",
@@ -223,5 +227,7 @@
     "needsVerification": "仍需运行测试验证",
     "optimizationBasis": "查看优化依据",
     "textarea": "生成的 Python 脚本"
-  }
+  },
+  "variablesCount": "{{count}} 个参数",
+  "variablesHint": "生成脚本已改用环境变量，可用 QA_DATA_* / QA_BASE_URL 覆盖"
 }

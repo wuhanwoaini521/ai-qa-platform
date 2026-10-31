@@ -5938,3 +5938,21 @@ button, input, select, textarea {
 }
 .workspace-return-link:hover { background: #ffe6d6; }
 .workspace-return-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Recorder data variables extracted from recorded steps. */
+.recorder-variables {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+}
+.recorder-variables strong { color: var(--ink); font-size: var(--fs-label); }
+.recorder-variables-hint { color: var(--ink-muted); }
+.recorder-variables ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.recorder-variables li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); }
+.recorder-variables code { color: var(--brand); font-size: var(--fs-xs); }
+.recorder-variables li span { max-width: 220px; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }

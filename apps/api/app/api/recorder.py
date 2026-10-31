@@ -12,11 +12,14 @@ from app.api.authz import authenticate_websocket_stream, has_permission, require
 from app.api.project_acl import enforce_project_access
 from app.container import get_recorder_workflow_service, recorder_service
 from app.services.ai_runtime import build_ai_orchestrator
+from app.services.recorder_variables import extract_variables
 from app.services.recorder_service import (
     RecorderGenerateRequest,
     RecorderOptimization,
     RecorderSaveCaseRequest,
     RecorderSessionCreate,
+    RecorderStepsRevisionConflict,
+    RecorderStreamReplaced,
     generate_python_case,
     normalize_recording_steps,
     validate_recording_optimization,
@@ -24,6 +27,7 @@ from app.services.recorder_service import (
 from app.services.recorder_workflow_service import RecorderWorkflowService
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
+RECORDER_NAVIGATION_COMMANDS = frozenset({"back", "click", "double_click", "forward", "navigate", "press", "reload"})
 
 
 async def _get_accessible_session(session_id: str, user: User):
@@ -74,7 +78,12 @@ async def generate_case(
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
     session = await _get_accessible_session(session_id, user)
-    return {"code": generate_python_case(request), "project_id": recorder_service.session_status(session)["project_id"]}
+    variables = [variable.as_dict() for variable in extract_variables(request.steps)]
+    return {
+        "code": generate_python_case(request),
+        "project_id": recorder_service.session_status(session)["project_id"],
+        "variables": variables,
+    }
 
 
 @router.post("/sessions/{session_id}/steps/{step_id}/ai-analysis")
@@ -263,10 +272,26 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
         return
     recorder_service.touch(session)
     last_steps_revision = -1
+    initial_snapshot_sent = False
+    pending_navigation_snapshot_count = 0
     try:
+        stream_generation = await recorder_service.claim_websocket_stream(session)
         while True:
             recorder_service.touch(session)
-            frame = await recorder_service.page_snapshot(session)
+            frame = await recorder_service.page_snapshot(session, stream_generation=stream_generation)
+            if not initial_snapshot_sent:
+                frame["applied_step_command_ids"] = list(session.applied_step_command_ids)
+                frame["processed_navigation_command_ids"] = list(session.processed_navigation_command_ids)
+                # Keep the former field for already-loaded clients during a rolling deployment.
+                frame["applied_navigation_command_ids"] = frame["processed_navigation_command_ids"]
+                if frame.get("type") == "navigating":
+                    pending_navigation_snapshot_count = max(1, pending_navigation_snapshot_count)
+                initial_snapshot_sent = True
+            if frame.get("type") in {"frame", "error"}:
+                frame["settled_navigation_count"] = pending_navigation_snapshot_count
+                pending_navigation_snapshot_count = 0
+            else:
+                frame["settled_navigation_count"] = 0
             revision = frame.get("steps_revision")
             if revision == last_steps_revision:
                 frame.pop("steps", None)
@@ -278,24 +303,49 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
             except asyncio.TimeoutError:
                 continue
             action = command.get("action")
+            if action in RECORDER_NAVIGATION_COMMANDS:
+                pending_navigation_snapshot_count += 1
+            command_id = command.get("command_id")
             try:
-                current_url = await recorder_service.apply_command(session, command)
+                current_url = await recorder_service.apply_command(
+                    session, command, stream_generation=stream_generation
+                )
+                # A periodic frame may race with a later command; acknowledge completion explicitly.
+                response = {"type": "command_success", "action": action}
+                if isinstance(command_id, str):
+                    response["command_id"] = command_id
+                if action in {"add_step", "edit_step", "replace_steps", "delete_step", "reorder"}:
+                    response["steps_revision"] = session.steps_revision
                 if current_url is not None:
-                    await websocket.send_json({"type": "command_success", "action": "navigate", "url": current_url})
+                    response["url"] = current_url
+                await websocket.send_json(response)
+            except RecorderStreamReplaced:
+                raise
             except Exception as error:
+                if action in {"add_step", "edit_step", "replace_steps", "delete_step", "reorder"}:
+                    last_steps_revision = -1
                 if action == "navigate":
                     recorder_service.navigation_failed(session, str(error))
-                await websocket.send_json(
-                    {
-                        "type": "command_error",
-                        "message": str(error),
-                        "url": command.get("url")
-                        if action == "navigate"
-                        else recorder_service.session_status(session)["url"],
-                    }
-                )
+                error_response = {
+                    "type": "command_error",
+                    "action": action,
+                    "message": str(error),
+                    "url": command.get("url")
+                    if action == "navigate"
+                    else recorder_service.session_status(session)["url"],
+                }
+                if isinstance(command_id, str):
+                    error_response["command_id"] = command_id
+                if isinstance(error, RecorderStepsRevisionConflict):
+                    error_response["code"] = "steps_revision_conflict"
+                await websocket.send_json(error_response)
     except WebSocketDisconnect:
         pass
+    except RecorderStreamReplaced:
+        try:
+            await websocket.close(code=1012, reason="Recorder stream replaced")
+        except Exception:
+            pass
     except Exception:
         try:
             await websocket.close(code=1011)

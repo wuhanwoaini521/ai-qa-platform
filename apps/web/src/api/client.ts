@@ -837,7 +837,7 @@ export const api = {
       steps: RecorderStep[];
     },
   ) =>
-    request<{ code: string; project_id: string }>(
+    request<{ code: string; project_id: string; variables?: { name: string; default: string; source: string; hint?: string }[] }>(
       `/recorder/sessions/${encodeURIComponent(sessionId)}/generate`,
       {
         method: 'POST',
