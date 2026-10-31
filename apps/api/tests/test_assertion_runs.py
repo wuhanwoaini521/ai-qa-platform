@@ -443,3 +443,51 @@ async def test_queued_run_without_executions_reports_running(client, test_db_ses
         assert body["assertions"][0]["state"] == "RUNNING"
     finally:
         _stop()
+
+
+@pytest.mark.asyncio
+async def test_file_level_marker_outside_test_functions_is_rejected(client):
+    _project_id, requirement_id, assertion_id = await _seed_adopted(client)
+    try:
+        leaky = """# criterion: AC-001
+from playwright.sync_api import Page
+
+
+def helper(page: Page) -> None:
+    page.goto("http://127.0.0.1:5183/")
+
+
+def test_real(page: Page):
+    # criterion: AC-001
+    helper(page)
+"""
+        response = await client.post(
+            f"/api/requirements/{requirement_id}/assertions/script/save",
+            json={"path": "tests/test_leaky.py", "code": leaky, "assertion_ids": [assertion_id]},
+        )
+        # A duplicate header marker is harmless, but only test functions may own the pairing.
+        assert response.status_code == 200, response.text
+        bindings = (await client.get(f"/api/requirements/{requirement_id}/assertions/runs")).json()["scripts"]
+        paired = {entry["nodeid"] for binding in bindings for entry in binding["nodeid_criteria"]}
+        assert paired == {"tests/test_leaky.py::test_real"}
+    finally:
+        _stop()
+
+
+@pytest.mark.asyncio
+async def test_discard_assertion_removes_it_and_trims_bindings(client):
+    _project_id, requirement_id, assertion_id = await _seed_adopted(client)
+    try:
+        await client.post(
+            f"/api/requirements/{requirement_id}/assertions/script/save",
+            json={"path": "tests/test_total.py", "code": SCRIPT, "assertion_ids": [assertion_id]},
+        )
+        response = await client.request("DELETE", f"/api/requirements/{requirement_id}/assertions/{assertion_id}")
+        assert response.status_code == 200, response.text
+        document = (await client.get(f"/api/requirements/{requirement_id}")).json()["qa_model"]
+        assert document["assertions"] == []
+        assert document["scripts"] == []
+        missing = await client.request("DELETE", f"/api/requirements/{requirement_id}/assertions/{assertion_id}")
+        assert missing.status_code == 404
+    finally:
+        _stop()

@@ -287,5 +287,7 @@
   "assertionStateBlocked": "阻塞",
   "assertionStateRecordInaccessible": "记录不可访问",
   "assertionStateUnknown": "状态未知",
-  "scriptConflict": "该路径已有内容不同的脚本，未覆盖。请重新生成到新路径，或在编辑器中查看现有文件后再决定。"
+  "scriptConflict": "该路径已有内容不同的脚本，未覆盖。请重新生成到新路径，或在编辑器中查看现有文件后再决定。",
+  "discardAssertion": "作废",
+  "discardAssertionHint": "作废后该断言从需求中移除，可重新生成草稿"
 }

@@ -287,5 +287,7 @@
   "assertionStateBlocked": "Blocked",
   "assertionStateRecordInaccessible": "Record unavailable",
   "assertionStateUnknown": "Unknown",
-  "scriptConflict": "A different script already exists at this path and was not overwritten. Regenerate to a new path, or inspect the existing file in the editor first."
+  "scriptConflict": "A different script already exists at this path and was not overwritten. Regenerate to a new path, or inspect the existing file in the editor first.",
+  "discardAssertion": "Discard",
+  "discardAssertionHint": "Removes the assertion so you can draft again"
 }

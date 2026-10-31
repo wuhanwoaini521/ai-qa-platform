@@ -73,7 +73,7 @@ export function TestExecutionResults({
                     {identity.mapping === 'ambiguous' && <small className="run-execution-result-ambiguity">{t('result.caseExecutionResults.ambiguousMapping', { cases: identity.mappedCaseLabels.join(' / ') })}</small>}
                   </div>
                   <span className="run-execution-result-duration"><span>{t('result.duration')}</span>{durationLabel(execution.duration_ms)}</span>
-                  <span className={`run-execution-result-status is-${tone}`}>{t('result.executionStatus', { status: t(`result.workflowStatus.${execution.status}`, { defaultValue: '' }) || execution.status })}</span>
+                  <span className={`run-execution-result-status is-${tone}`}>{t('result.executionStatus', { status: t(`result.testRunStatus.${execution.status}`, { defaultValue: '' }) || execution.status })}</span>
                 </div>
                 {hasFailure && (
                   <div className="run-execution-result-failure">

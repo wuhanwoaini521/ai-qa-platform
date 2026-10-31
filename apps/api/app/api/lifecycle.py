@@ -163,6 +163,24 @@ class AssertionScriptSavePayload(BaseModel):
     assertion_ids: list[str] = Field(min_length=1, max_length=30)
 
 
+@router.delete(
+    "/requirements/{requirement_id}/assertions/{assertion_id}",
+    dependencies=[Depends(requirement_id_access)],
+)
+async def discard_assertion(
+    requirement_id: str,
+    assertion_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    try:
+        await service.discard_assertion(requirement_id, assertion_id)
+        return {"status": "discarded", "assertion_id": assertion_id}
+    except LookupError as error:
+        raise HTTPException(404, "Assertion not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
 @router.post("/requirements/{requirement_id}/assertions/script/save", dependencies=[Depends(requirement_id_access)])
 async def save_assertion_script(
     requirement_id: str,

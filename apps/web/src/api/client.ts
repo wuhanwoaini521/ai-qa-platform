@@ -632,6 +632,11 @@ export const api = {
     ),
   generateAssertionScript: (id: string) =>
     request<AssertionScriptDraft>(`/requirements/${encodeURIComponent(id)}/assertions/script`, { method: 'POST' }),
+  discardAssertion: (requirementId: string, assertionId: string) =>
+    request<{ status: string; assertion_id: string }>(
+      `/requirements/${encodeURIComponent(requirementId)}/assertions/${encodeURIComponent(assertionId)}`,
+      { method: 'DELETE' },
+    ),
   saveAssertionScript: (id: string, path: string, code: string, assertionIds: string[]) =>
     request<ScriptBinding>(`/requirements/${encodeURIComponent(id)}/assertions/script/save`, {
       method: 'POST',

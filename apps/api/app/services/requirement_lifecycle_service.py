@@ -788,6 +788,27 @@ class RequirementLifecycleService:
         if not navigates:
             raise ValueError("Generated script never navigates (page.goto) to the page it asserts on")
 
+    async def discard_assertion(self, requirement_id, assertion_id):
+        """Forget an assertion (used when its text can no longer be turned into a test)."""
+        _title, _desc, _project_id, document, raw, _ctx, _cases = await self._load(requirement_id)
+        if not any(item.id == assertion_id for item in document.assertions):
+            raise LookupError(assertion_id)
+        document.assertions = [item for item in document.assertions if item.id != assertion_id]
+        kept = []
+        for binding in document.scripts:
+            remaining = [identifier for identifier in binding.assertion_ids if identifier != assertion_id]
+            if not remaining:
+                continue
+            binding.assertion_ids = remaining
+            binding.nodeid_criteria = [
+                pairing
+                for pairing in binding.nodeid_criteria
+                if set(pairing.criterion_ids) <= {item.criterion_id for item in document.assertions}
+            ]
+            kept.append(binding)
+        document.scripts = kept
+        await self._store(requirement_id, document, expected=raw, check_input_hash=False)
+
     async def save_assertion_script(self, requirement_id, *, path, code, assertion_ids):
         """Persist a human-approved script and record which assertions it implements.
 
@@ -844,6 +865,13 @@ class RequirementLifecycleService:
         provider_name = str(getattr(ai_provider, "provider_name", "") or "")
         model_name = str(getattr(ai_provider, "model", "") or "")
 
+        paired_criteria = {criterion for entry in paired for criterion in entry["criterion_ids"]}
+        unpaired = sorted(markers - paired_criteria)
+        if unpaired:
+            raise ValueError(
+                "Every '# criterion:' marker must live inside a test function; unpaired: " + ", ".join(unpaired)
+            )
+
         workspace = WorkspaceService()
         created = False
         try:
@@ -871,8 +899,6 @@ class RequirementLifecycleService:
                 await workspace.delete_file(project_id, path)
             raise
         return binding
-
-    TERMINAL_EXECUTION_STATES = {"PASSED", "FAILED", "SKIPPED", "CANCELLED", "ERROR"}
 
     @staticmethod
     def _resolve_assertion_state(adopted: bool, entry: dict | None, active_paths: set[str], path: str) -> str:
@@ -965,8 +991,11 @@ class RequirementLifecycleService:
                 )
                 if pairing is not None:
                     entry = latest.get(pairing.nodeid)
+                elif binding.nodeid_criteria:
+                    # Paired bindings never fall back to file level: unpaired assertions stay unstated.
+                    entry = None
                 else:
-                    # Legacy bindings without pairing keep file-level behaviour.
+                    # Legacy bindings created before pairing keep file-level behaviour.
                     candidates = [latest[nodeid] for nodeid in binding.nodeids if nodeid in latest]
                     if candidates:
                         entry = max(candidates, key=lambda item: item.get("finished_at") or "")
