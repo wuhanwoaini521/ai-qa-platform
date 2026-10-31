@@ -1,7 +1,7 @@
 # Final handoff — overnight product improvement batch
 
 Branch: `feat/overnight-product-improvement` (local only; no push).
-Base: `main` @ `3c6f33a`. HEAD at handoff: `f32c810`.
+Base: `main` @ `3c6f33a`. HEAD at handoff: `d148d7e`.
 
 ## What is now true that was not before
 
@@ -27,10 +27,12 @@ Base: `main` @ `3c6f33a`. HEAD at handoff: `f32c810`.
 | `0332aed` | 断言级 nodeid 配对、白名单、原子性、本地化、变量安全、429/503 |
 | `f68af99` | 无执行记录时用 run 级终态（BLOCKED / CANCELLED / RECORD_INACCESSIBLE / RUNNING） |
 | `f32c810` | 断言行布局修复 |
+| `d148d7e` | 关闭配对旁路（marker 必须在 test 函数内）、执行状态本地化、断言作废路径 |
 
 ## Verification (actually executed)
 
-- 干净检出 `/tmp/head-check`（HEAD `f68af99`）：`import app.main` OK、37 passed、`tsc --noEmit` 通过。
+- 干净检出 `/tmp/final-check`（HEAD `d148d7e`）：`import app.main` OK、**87 passed**、`tsc --noEmit` 通过。
+- 早期干净检出（`f68af99`）：37 passed，用于定位提交不自洽问题。
 - 广泛回归（工作区）：`527 passed, 7 skipped`（含此前 2 个失败已修复）。
 - 前端：234 passed、`tsc`、ESLint 通过；i18n 3,517 keys；`vite build` 通过。
 - Ruff：`ruff check` / `format --check` 在提交状态全绿。
@@ -43,6 +45,8 @@ Base: `main` @ `3c6f33a`. HEAD at handoff: `f32c810`.
 3. 录制变量只在单元/契约层验证，未跑真实录制会话端到端。
 4. 探针数据未删除（清单 + 方案已给）。
 5. 项目级 SUT 地址、失败→修复→重跑的完整闭环仍是产品 P0（未在本批次）。
+6. 回滚到 `1a51bfe` 及更早的代码前，需清理需求文档里的 `scripts` 字段（新模型 `extra="forbid"` 会使旧代码读取 500）。
+7. `>10` 个 test 函数仍返回 422（已回滚文件，无孤儿），如需支持需把绑定上限提高。
 6. 工作区仍有大量历史未跟踪产物（`.ai-runs/*`、设计与证据预览），未清理。
 
 ## Recovery
@@ -53,3 +57,8 @@ cd apps/api && uv run --no-sync uvicorn app.main:app --app-dir apps/api --host 1
 cd apps/web && VITE_DEV_API_TARGET=http://127.0.0.1:8000 node node_modules/vite/bin/vite.js --port 5183
 git revert --no-edit <commit>   # 任一变更有问题时可单独回滚
 ```
+
+## Independent verdicts
+
+- **QA（rev2，锚点 `f68af99`）**：PASS，P0=0，P1=0，建议 Release；边界：未重跑全量后端、未做 live provider。
+- **Critical Review（rev2，锚点 `f68af99`）**：APPROVE WITH FIXES，P0=0；条件（R-P1-2 假通过旁路）已在 `d148d7e` 修复并新增测试；R-P1-1 本地化、R-P1-3 PII 死路同批修复。

@@ -1477,3 +1477,10 @@ git diff --check
 - **验证：** 干净检出 37 passed + tsc；广泛回归 527 passed / 7 skipped；前端 234 passed；Ruff/i18n/build 通过；真实浏览器截图（登录后三视口）。
 - **仍缺：** 用例级（非函数级）断言映射；Jenkins 无 nodeids 的运行；录制变量浏览器端到端；探针数据清理；项目级 SUT 地址；失败→修复→重跑闭环。
 - **注意：** 本轮曾出现「提交引用了未提交文件导致 HEAD 不可构建」的问题，已通过补提交与 `git worktree` 干净检出验证修复；后续提交前必须做干净检出验证。
+
+### 3.52 收尾（2026-11-01 00:57）
+
+- HEAD 前进到 `d148d7e`：关闭配对旁路（marker 必须在 test 函数内、paired 绑定禁止回退文件级）、执行状态改用 `result.testRunStatus`、新增断言作废 `DELETE /requirements/{id}/assertions/{assertion_id}`。
+- 干净检出 `/tmp/final-check`（`d148d7e`）：import OK、87 passed、tsc OK。
+- 复核结论：QA rev2 PASS（P0/P1 = 0）；Critical Review rev2 APPROVE WITH FIXES（P0=0，条件项已修）。
+- 发布前注意：回滚到旧代码需清理文档 `scripts` 字段；`>10` test 函数仍 422；探针数据未删。
