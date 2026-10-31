@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Circle, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { api } from '../../api/client';
 import type { AITraceEvent, Requirement, TestDesign } from '../../types';
-import type { RequirementDocument } from './types';
+import type { AssertionRunsResponse, AssertionScriptDraft, RequirementDocument } from './types';
 import { useKnowledge } from './useKnowledge';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { CoveragePanel } from './CoveragePanel';
@@ -76,6 +76,11 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
   const doc = requirement.qa_model;
   const criteriaText = criteriaTextFor(requirement);
   const [busy, setBusy] = useState(false);
+  const [assertionBusy, setAssertionBusy] = useState(false);
+  const [scriptDraft, setScriptDraft] = useState<AssertionScriptDraft | null>(null);
+  const [scriptSaved, setScriptSaved] = useState(false);
+  const [assertionRuns, setAssertionRuns] = useState<AssertionRunsResponse | null>(null);
+  const [scriptNotice, setScriptNotice] = useState('');
   const [error, setError] = useState('');
   const [criteriaEditing, setCriteriaEditing] = useState(false);
   const [criteriaDraft, setCriteriaDraft] = useState(criteriaText);
@@ -92,6 +97,14 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
     api.getTestDesigns(requirement.id).then(items=>{if(!disposed)setDesigns(items);}).catch(reason=>{if(!disposed)setError(String(reason));});
     return () => {disposed=true;generation.current++;controller.current?.abort();};
   }, [requirement.id]);
+  useEffect(() => {
+    let alive = true;
+    void api
+      .getAssertionRuns(requirement.id)
+      .then((result) => { if (alive) setAssertionRuns(result); })
+      .catch(() => { if (alive) setAssertionRuns(null); });
+    return () => { alive = false; };
+  }, [requirement.id, doc?.scripts?.length, scriptSaved]);
   const analyze = async () => {
     const token=generation.current; const aborter = new AbortController();controller.current=aborter;
     setBusy(true);setError('');setEvents([]);setActiveHistory('');setQuery({...Object.fromEntries(query),tab:'analysis'});
@@ -130,6 +143,88 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
       setBusy(false);
     }
   };
+  const draftAssertions = async () => {
+    setAssertionBusy(true);
+    setError('');
+    try {
+      await api.draftGroundedAssertions(requirement.id);
+      onChanged(await api.getRequirement(requirement.id));
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setAssertionBusy(false);
+    }
+  };
+  const toggleAssertion = async (assertionId: string, adopted: boolean) => {
+    setAssertionBusy(true);
+    setError('');
+    try {
+      await api.setGroundedAssertionAdoption(requirement.id, assertionId, adopted);
+      onChanged(await api.getRequirement(requirement.id));
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setAssertionBusy(false);
+    }
+  };
+  const generateScript = async () => {
+    setAssertionBusy(true);
+    setError('');
+    setScriptNotice('');
+    try {
+      setScriptDraft(await api.generateAssertionScript(requirement.id));
+      setScriptSaved(false);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setAssertionBusy(false);
+    }
+  };
+  const saveScript = async () => {
+    if (!scriptDraft) return;
+    setAssertionBusy(true);
+    setError('');
+    try {
+      await api.saveAssertionScript(requirement.id, scriptDraft.file_path, scriptDraft.code, scriptDraft.assertion_ids);
+      setScriptNotice(t('scriptSaved'));
+      setScriptSaved(true);
+      knowledge.reload();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setAssertionBusy(false);
+    }
+  };
+  const adoptedCount = (doc?.assertions ?? []).filter((item) => item.adopted).length;
+  const runStateFor = (assertionId: string) =>
+    (assertionRuns?.assertions ?? []).find((entry) => entry.assertion_id === assertionId) ?? null;
+  const runStateKey: Record<string, string> = {
+    NEVER_RUN: 'assertionStateNeverRun',
+    NOT_ADOPTED: 'assertionStateNotAdopted',
+    QUEUED: 'assertionStateQueued',
+    RUNNING: 'assertionStateRunning',
+    PASSED: 'assertionStatePassed',
+    FAILED: 'assertionStateFailed',
+    SKIPPED: 'assertionStateSkipped',
+    CANCELLED: 'assertionStateCancelled',
+    ERROR: 'assertionStateError',
+    BLOCKED: 'assertionStateBlocked',
+    RECORD_INACCESSIBLE: 'assertionStateRecordInaccessible',
+    UNKNOWN: 'assertionStateUnknown',
+  };
+  const runStateLabel = (state: string) => String(t((runStateKey[state] ?? 'assertionStateUnknown') as never));
+  const EXECUTED_STATES = new Set(['PASSED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RECORD_INACCESSIBLE', 'RUNNING']);
+  const executedCount = (assertionRuns?.assertions ?? []).filter(
+    (entry) => entry.adopted && EXECUTED_STATES.has(entry.state),
+  ).length;
+  const hasCriteria = Boolean(criteriaText);
+  const hasScript = Boolean(scriptDraft) || scriptSaved;
+  const flowSteps = [
+    { key: 'requirement', label: t('flowRequirement'), done: hasCriteria, action: criteriaText ? t('editCriteria') : t('addCriteria'), onClick: () => { setCriteriaDraft(criteriaText); setCriteriaEditing(true); } },
+    { key: 'assertion', label: t('flowAssertion'), done: adoptedCount > 0, action: t('draftAssertions'), onClick: () => void draftAssertions() },
+    { key: 'script', label: t('flowScript'), done: hasScript, action: t('generateScript'), onClick: () => void generateScript() },
+    { key: 'run', label: t('flowRun'), done: executedCount > 0, action: t('flowOpenRuns'), href: `/runs?projectId=${requirement.project_id}` },
+  ];
   const history = doc?.history??[];
   const latestRecord = history.at(-1);
   const record = history.find(item=>item.id===activeHistory)??history.at(-1);
@@ -160,7 +255,7 @@ export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated
     <nav className="lc-tabs">{['overview','analysis','mind','scenario','knowledge','coverage','design'].map(key=><button key={key} className={tab===key?'selected':''} onClick={()=>setQuery({...Object.fromEntries(query),tab:key})}>{t(key)}</button>)}</nav>
     {(error||knowledge.error)&&<p role="alert" className="lc-notice lc-error">{error||knowledge.error}</p>}
     {requirement.analysis_stale&&<p className="lc-notice">{t('staleAnalysis')}</p>}
-    {tab==='overview'&&<><section className="lc-card"><p>{requirement.description}</p><div className="lc-criteria-heading"><h3>{t('acceptanceCriteria')}</h3>{!criteriaEditing&&<button className="btn btn-secondary btn-sm" disabled={busy||analysisRunning} onClick={()=>{setCriteriaDraft(criteriaText);setCriteriaEditing(true);}}>{criteriaText?t('editCriteria'):t('addCriteria')}</button>}</div>{criteriaEditing?<div className="lc-criteria-editor"><label className="lc-muted" htmlFor="requirement-criteria-editor">{t('criteriaEditorHint')}</label><textarea id="requirement-criteria-editor" className="lc-criteria-textarea" maxLength={5000} value={criteriaDraft} onChange={(event)=>setCriteriaDraft(event.target.value)} placeholder={t('criteriaPlaceholder')} disabled={busy||analysisRunning}/><div className="lc-criteria-actions"><button className="btn btn-secondary" disabled={busy||analysisRunning} onClick={()=>{setCriteriaDraft(criteriaText);setCriteriaEditing(false);}}>{t('cancel')}</button><button className="btn btn-primary" disabled={busy||analysisRunning} onClick={()=>void saveCriteria()}>{busy?t('savingCriteria'):t('saveCriteria')}</button></div></div>:criteriaText?<div className="lc-stack">{(doc?.criteria.length?doc.criteria:criteriaText.split('\n').map((description,index)=>({id:`AC-${String(index+1).padStart(3,'0')}`,description,negative_required:false}))).map(item=><div className="lc-gap" key={item.id}><strong>{item.id}</strong><span>{item.description}</span>{item.negative_required&&<small>{t('negativeRequired')}</small>}</div>)}</div>:<div className="lc-criteria-empty"><p>{t('criteriaOptionalBeforeAnalysis')}</p></div>}</section><div className="lc-two-col"><section className="lc-card"><h3>{t('rules')}</h3>{doc?.rules.map(item=><p key={item.id}><strong>{item.id}</strong> · {item.description}<small className="lc-muted"> ({item.criterion_ids.join(', ')})</small></p>)}</section><section className="lc-card"><h3>{t('constraints')}</h3>{[...(doc?.constraints??[]),...(doc?.dependencies??[])].map((item,index)=><p key={index}>{item}</p>)}</section></div></>}
+    {tab==='overview'&&<><nav className="flow-strip" aria-label={t('flowTitle')}>{flowSteps.map((step, index) => <div key={step.key} className={`flow-step${step.done ? ' is-done' : ''}`}><span className="flow-step-index">{index + 1}</span><span className="flow-step-label">{step.label}</span>{step.href ? <a className="flow-step-action" href={step.href}>{step.action}</a> : <button type="button" className="flow-step-action" disabled={busy||analysisRunning||assertionBusy} onClick={step.onClick}>{step.action}</button>}</div>)}</nav><section className="lc-card"><p>{requirement.description}</p><div className="lc-criteria-heading"><h3>{t('acceptanceCriteria')}</h3>{!criteriaEditing&&<button className="btn btn-secondary btn-sm" disabled={busy||analysisRunning} onClick={()=>{setCriteriaDraft(criteriaText);setCriteriaEditing(true);}}>{criteriaText?t('editCriteria'):t('addCriteria')}</button>}</div>{criteriaEditing?<div className="lc-criteria-editor"><label className="lc-muted" htmlFor="requirement-criteria-editor">{t('criteriaEditorHint')}</label><textarea id="requirement-criteria-editor" className="lc-criteria-textarea" maxLength={5000} value={criteriaDraft} onChange={(event)=>setCriteriaDraft(event.target.value)} placeholder={t('criteriaPlaceholder')} disabled={busy||analysisRunning}/><div className="lc-criteria-actions"><button className="btn btn-secondary" disabled={busy||analysisRunning} onClick={()=>{setCriteriaDraft(criteriaText);setCriteriaEditing(false);}}>{t('cancel')}</button><button className="btn btn-primary" disabled={busy||analysisRunning} onClick={()=>void saveCriteria()}>{busy?t('savingCriteria'):t('saveCriteria')}</button></div></div>:criteriaText?<div className="lc-stack">{(doc?.criteria.length?doc.criteria:criteriaText.split('\n').map((description,index)=>({id:`AC-${String(index+1).padStart(3,'0')}`,description,negative_required:false}))).map(item=><div className="lc-gap" key={item.id}><strong>{item.id}</strong><span>{item.description}</span>{item.negative_required&&<small>{t('negativeRequired')}</small>}</div>)}</div>:<div className="lc-criteria-empty"><p>{t('criteriaOptionalBeforeAnalysis')}</p></div>}</section><section className="lc-card"><div className="lc-criteria-heading"><h3>{t('groundedAssertions')}</h3><span className="lc-muted" style={{fontSize:12}}>{(doc?.assertions??[]).filter(item=>item.adopted).length} {t('assertionAdopted')}</span><button className="btn btn-secondary btn-sm" disabled={busy||analysisRunning||assertionBusy} onClick={()=>void draftAssertions()}>{assertionBusy?t('draftingAssertions'):t('draftAssertions')}</button><button className="btn btn-primary btn-sm" title={(doc?.assertions??[]).some(item=>item.adopted)?undefined:t('scriptNeedsAdoption')} disabled={busy||analysisRunning||assertionBusy||!(doc?.assertions??[]).some(item=>item.adopted)} onClick={()=>void generateScript()}>{assertionBusy?t('generatingScript'):t('generateScript')}</button></div>{(doc?.assertions??[]).length?<div className="lc-stack">{doc?.assertions?.map(item=><div className="lc-gap" key={item.id}><strong>{item.criterion_id}</strong><span>{item.statement}{item.check?<small className="lc-muted"> · {item.check}</small>:null}</span><small className="badge badge-draft">{item.adopted?t('assertionAdopted'):t('assertionDraft')}</small>{(()=>{const entry=runStateFor(item.id); if(!entry) return null; return <span className="lc-run-state"><small className={`badge badge-run is-${entry.state.toLowerCase()}`}>{runStateLabel(entry.state)}</small>{entry.run&&<a className="lc-run-link" href={`/runs/${entry.run.run_id}?projectId=${requirement.project_id}&requirementId=${requirement.id}`}>{t('viewRunResult')}</a>}</span>;})()}<button className="btn btn-secondary btn-sm" disabled={assertionBusy||analysisRunning} onClick={()=>void toggleAssertion(item.id,!item.adopted)}>{item.adopted?t('unadoptAssertion'):t('adoptAssertion')}</button></div>)}</div>:<p className="lc-empty">{t('noAssertions')}</p>}{scriptNotice&&<p className="lc-notice">{scriptNotice}</p>}{scriptDraft&&<div className="lc-stack"><div className="lc-toolbar"><strong>{t('scriptDraftTitle')}</strong><code>{scriptDraft.file_path}</code><span className="lc-muted">{scriptDraft.provider} · {scriptDraft.model} · {scriptDraft.used_criterion_ids.join(', ')}</span><button className="btn btn-secondary btn-sm" disabled={assertionBusy} onClick={()=>setScriptDraft(null)}>{t('closeScriptDraft')}</button><a className="btn btn-secondary btn-sm" href={`/projects/${requirement.project_id}/studio/file/${scriptDraft.file_path}`} target="_blank" rel="noreferrer">{t('openInEditor')}</a><button className="btn btn-primary btn-sm" disabled={assertionBusy||scriptSaved} onClick={()=>void saveScript()}>{scriptSaved?t('scriptSaved').slice(0,0)+t('scriptSaved') : assertionBusy?t('savingScript'):t('saveScript')}</button></div><pre style={{maxHeight:320,overflow:'auto'}}>{scriptDraft.code}</pre></div>}</section><div className="lc-two-col"><section className="lc-card"><h3>{t('rules')}</h3>{doc?.rules.map(item=><p key={item.id}><strong>{item.id}</strong> · {item.description}<small className="lc-muted"> ({item.criterion_ids.join(', ')})</small></p>)}</section><section className="lc-card"><h3>{t('constraints')}</h3>{[...(doc?.constraints??[]),...(doc?.dependencies??[])].map((item,index)=><p key={index}>{item}</p>)}</section></div></>}
     {tab==='analysis'&&<><section className="lc-card"><div className="lc-toolbar"><h3>{busy?t('analyzing'):t('analysisHistory')}</h3><select aria-label={t('analysisHistory')} value={activeHistory||record?.id||''} onChange={e=>setActiveHistory(e.target.value)}>{[...history].reverse().map(item=><option key={item.id} value={item.id}>{item.status} · {item.provider||'—'} · {new Date(item.started_at).toLocaleString()}</option>)}</select>{busy&&<button className="btn btn-secondary btn-sm" onClick={()=>controller.current?.abort()}>{t('cancel')}</button>}</div>
       {record?.status==='REFERENCE'&&<p className="lc-notice">{t('referenceNotice')}</p>}{record?.error&&<div className="lc-notice lc-error" role="alert"><p>{isInvalidStructuredAnalysis(record.error_code,record.error)?t('invalidStructuredOutput'):recordProviderFailure?t(recordProviderFailure):record.error}</p>{(isInvalidStructuredAnalysis(record.error_code,record.error)||recordProviderFailure)&&<details><summary>{t('technicalDetails')}</summary><pre>{record.error}</pre></details>}</div>}
       {record&&<p className="lc-caption">{record.provider||'—'} · {record.model||'—'} · {record.prompt_version||'—'} · {record.id}</p>}

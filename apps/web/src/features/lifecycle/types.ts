@@ -11,6 +11,55 @@ export interface AnalysisRecord {
   stages: {id: string; title: string; status: string; summary: string; source: string; duration_ms: number}[];
   decisions: {choice: string | null; provider: string; model?: string; reason?: string; fallback_used: boolean; name: string}[];
 }
+export interface GroundedAssertion {
+  id: string;
+  criterion_id: string;
+  statement: string;
+  check?: string;
+  adopted: boolean;
+  source?: string;
+  created_at?: string;
+}
+
+export interface AssertionScriptDraft {
+  file_path: string;
+  code: string;
+  used_criterion_ids: string[];
+  assertion_ids: string[];
+  provider: string;
+  model: string;
+}
+
+export interface ScriptBinding {
+  path: string;
+  nodeids: string[];
+  assertion_ids: string[];
+  criterion_ids: string[];
+  saved_at?: string;
+}
+
+export interface AssertionRun {
+  assertion_id: string;
+  criterion_id: string;
+  adopted: boolean;
+  state: string;
+  run: {
+    run_id: string;
+    run_status: string;
+    nodeid: string;
+    execution_status: string;
+    finished_at: string | null;
+    artifact_count: number;
+    error_message: string;
+  } | null;
+}
+
+export interface AssertionRunsResponse {
+  requirement_id: string;
+  scripts: ScriptBinding[];
+  assertions: AssertionRun[];
+}
+
 export interface RequirementDocument {
   display_id: string; criteria: {id: string; description: string; negative_required: boolean}[];
   rules: {id: string; description: string; criterion_ids: string[]}[]; constraints: string[]; dependencies: string[];
@@ -22,6 +71,8 @@ export interface RequirementDocument {
     scenarios: Scenario[]; coverage_gaps: string[];
   } | null;
   history: AnalysisRecord[];
+  assertions?: GroundedAssertion[];
+  scripts?: ScriptBinding[];
 }
 export interface ModernTestModel {
   display_id: string; intent: string; scenario_id?: string; coverage: CoverageRefs; path_type: string; technique: string;

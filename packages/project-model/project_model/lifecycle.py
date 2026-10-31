@@ -131,6 +131,30 @@ class AnalysisStage(DocumentModel):
     at: str = ""
 
 
+class GroundedAssertion(DocumentModel):
+    """An executable assertion draft that must cite the acceptance criterion it verifies."""
+
+    id: str = Field(pattern=r"^ASR-[A-Za-z0-9-]+$", max_length=64)
+    criterion_id: str = Field(min_length=1, max_length=64)
+    statement: str = Field(min_length=8, max_length=400)
+    check: str = Field(default="", max_length=300)
+    adopted: bool = False
+    source: str = Field(default="", max_length=120)
+    created_at: str = Field(default="", max_length=40)
+
+
+class ScriptBinding(DocumentModel):
+    """A test file saved from grounded assertions, recorded so runs can be traced back."""
+
+    path: str = Field(pattern=r"^tests/[A-Za-z0-9_./-]+\.py$", max_length=200)
+    nodeids: list[str] = Field(min_length=1, max_length=10)
+    assertion_ids: list[str] = Field(min_length=1, max_length=30)
+    criterion_ids: list[str] = Field(default_factory=list, max_length=30)
+    provider: str = Field(default="", max_length=120)
+    model: str = Field(default="", max_length=120)
+    saved_at: str = Field(default="", max_length=40)
+
+
 class AnalysisRecord(DocumentModel):
     id: str
     status: Literal["REFERENCE", "RUNNING", "SUCCESS", "FAILED", "FALLBACK"]
@@ -167,6 +191,8 @@ class RequirementDocument(DocumentModel):
     constraints: list[str] = Field(default_factory=list, max_length=20)
     dependencies: list[str] = Field(default_factory=list, max_length=20)
     analysis: RequirementAnalysis | None = None
+    assertions: list[GroundedAssertion] = Field(default_factory=list, max_length=30)
+    scripts: list[ScriptBinding] = Field(default_factory=list, max_length=10)
     history: list[AnalysisRecord] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
@@ -179,6 +205,18 @@ class RequirementDocument(DocumentModel):
             if len(ids) != len(set(ids)):
                 raise ValueError("Document entity IDs must be unique within their kind")
         criteria = {item.id for item in self.criteria}
+        assertion_ids = [item.id for item in self.assertions]
+        if len(assertion_ids) != len(set(assertion_ids)):
+            raise ValueError("Assertion IDs must be unique")
+        for assertion in self.assertions:
+            if assertion.criterion_id not in criteria:
+                raise ValueError("Assertion refers to an unknown acceptance criterion")
+        assertion_id_set = {item.id for item in self.assertions}
+        for script in self.scripts:
+            if not set(script.assertion_ids) <= assertion_id_set:
+                raise ValueError("Script binding refers to an unknown assertion")
+            if not set(script.criterion_ids) <= criteria:
+                raise ValueError("Script binding refers to an unknown acceptance criterion")
         for item in self.rules:
             if not set(item.criterion_ids) <= criteria:
                 raise ValueError("Business rule refers to an unknown acceptance criterion")

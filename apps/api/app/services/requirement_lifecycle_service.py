@@ -2,35 +2,63 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import copy
+import hashlib
 import json
+import re
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from project_model.lifecycle import (
     AnalysisRecord,
     AnalysisStage,
+    GroundedAssertion,
     ModernTestModel,
     RequirementAnalysis,
     RequirementDocument,
+    ScriptBinding,
     TestOracle,
 )
 from project_model.models import DecisionOption, DecisionRequest, TestCaseCreate, TestDesignCreate
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from qa_core.ai.models import AICompletionRequest
 from qa_core.ai.trace import make_trace_event
+from qa_core.author import GroundingValidator
 from qa_core.failure.redactor import SensitiveRedactor
-from qa_core.prompts import REQUIREMENT_LIFECYCLE_PROMPT
+from qa_core.prompts import ASSERTION_SCRIPT_PROMPT, GROUNDED_ASSERTION_PROMPT, REQUIREMENT_LIFECYCLE_PROMPT
 
 from app.persistence.models import utc_now
 from app.ports.repository_scope import RepositoryScopeFactory
+from app.repositories.run_history_repo import RunHistoryRepository
 from app.services.ai_runtime import build_ai_orchestrator
 from app.services.decision_service import DecisionService
 from app.services.lifecycle_validation import input_hash, validate_case_model, validate_requirement_replacement
+from app.services.task_code_generation_service import TaskCodeGenerationService
+from app.services.task_errors import TaskBlocked
 from app.services.test_case_service import TestCaseService
 from app.services.test_design_service import TestDesignService
+from app.services.workspace_service import WorkspaceService
+
+
+class AssertionDraftItem(BaseModel):
+    criterion_id: str = Field(min_length=1, max_length=64)
+    statement: str = Field(min_length=8, max_length=400)
+    check: str = Field(default="", max_length=300)
+
+
+class AssertionDraftResponse(BaseModel):
+    assertions: list[AssertionDraftItem] = Field(min_length=1, max_length=30)
+
+
+class AssertionScriptResponse(BaseModel):
+    file_path: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1)
+    used_criterion_ids: list[str] = Field(min_length=1, max_length=30)
+
 
 DEFAULT_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS = 45.0
 MIN_REQUIREMENT_ANALYSIS_TIMEOUT_SECONDS = 120.0
@@ -143,6 +171,7 @@ class RequirementLifecycleService:
                     if line.strip()
                 ][:30]
             project_context = {"project_id": row.project_id, "name": project.name if project else row.project_id}
+            # Bound existing-case excerpts to the analysis prompt budget; this does not alter persisted TestCases.
             existing_cases = [
                 {
                     "id": case.id,
@@ -156,7 +185,7 @@ class RequirementLifecycleService:
             ]
             return row.title, row.description, row.project_id, document, raw, project_context, existing_cases
 
-    async def _store(self, requirement_id, document, *, expected=None, analysis_id=None):
+    async def _store(self, requirement_id, document, *, expected=None, analysis_id=None, check_input_hash=True):
         async with self.repository_scope() as repositories:
             requirements = repositories.requirements
             row = await requirements.get_by_id(requirement_id)
@@ -174,8 +203,15 @@ class RequirementLifecycleService:
             original = row.qa_model or {}
             if expected is not None and original != expected:
                 raise RequirementAnalysisBusy("Requirement changed; reload before analyzing")
-            if expected is not None and document.history[-1].input_hash != input_hash(
-                row.title, row.description, row.acceptance_criteria, document
+            # The input hash protects an analysis result from being written over changed inputs.
+            # Draft-only writes (for example grounded assertions) do not replace analysis output,
+            # so they rely on the optimistic-concurrency check instead.
+            if (
+                expected is not None
+                and check_input_hash
+                and document.history
+                and document.history[-1].input_hash
+                != input_hash(row.title, row.description, row.acceptance_criteria, document)
             ):
                 raise RequirementAnalysisBusy("Requirement inputs changed; reload before analyzing")
             await validate_requirement_replacement(
@@ -546,6 +582,362 @@ class RequirementLifecycleService:
                 result.append(item)
             await repositories.commit()
             return result
+
+    async def draft_assertions(self, requirement_id):
+        """Draft assertions grounded in the requirement's acceptance criteria.
+
+        Nothing is applied automatically: drafts stay unadopted until a human adopts them, and the
+        deterministic runner remains the only source of PASS/FAIL.
+        """
+        title, description, _project_id, document, raw, _context, _cases = await self._load(requirement_id)
+        criteria = {item.id: item.description for item in document.criteria}
+        if not criteria:
+            raise ValueError("Acceptance criteria are required before assertions can be grounded")
+        provider = getattr(self.orchestrator.ai_provider, "primary", self.orchestrator.ai_provider)
+        provider_name = getattr(provider, "provider_name", "unknown")
+        if provider_name == "fake":
+            raise ValueError(
+                "Fake AI is configured; grounded assertions require a real provider. Configure one and retry."
+            )
+        request = AICompletionRequest(
+            prompt=GROUNDED_ASSERTION_PROMPT.format(
+                title=title,
+                description=description[:4000],
+                criteria="\n".join(f"- {cid}: {text}" for cid, text in criteria.items()),
+            ),
+            system_instruction=GROUNDED_ASSERTION_PROMPT.system_instruction,
+            prompt_id=GROUNDED_ASSERTION_PROMPT.prompt_id,
+            prompt_version=GROUNDED_ASSERTION_PROMPT.version,
+            response_schema=AssertionDraftResponse,
+            max_tokens=4000,
+            max_retries=1,
+        )
+        response = await self.orchestrator.complete(request)
+        if response.provider == "fake" or response.fallback_used:
+            raise ValueError("AI unavailable: simulated fallback cannot ground assertions")
+        payload = AssertionDraftResponse.model_validate(response.structured_data)
+        unknown = sorted({item.criterion_id for item in payload.assertions if item.criterion_id not in criteria})
+        if unknown:
+            raise ValueError("Assertion draft cited unknown acceptance criteria: " + ", ".join(unknown))
+        statements = [item.statement.strip() for item in payload.assertions]
+        if len(statements) != len(set(statements)):
+            raise ValueError("Assertion draft contains duplicate statements")
+        source = f"{response.provider}/{response.model}"
+        # Never discard human-adopted assertions; only refresh the unadopted drafts.
+        kept = [item for item in document.assertions if item.adopted]
+        used_ids = {item.id for item in kept}
+        drafted = []
+        for item in payload.assertions:
+            index = 1
+            candidate = f"ASR-{item.criterion_id}-{index}"
+            while candidate in used_ids:
+                index += 1
+                candidate = f"ASR-{item.criterion_id}-{index}"
+            used_ids.add(candidate)
+            drafted.append(
+                GroundedAssertion(
+                    id=candidate,
+                    criterion_id=item.criterion_id,
+                    statement=item.statement.strip(),
+                    check=item.check.strip(),
+                    adopted=False,
+                    source=source,
+                    created_at=utc_now().isoformat(),
+                )
+            )
+        document.assertions = [*kept, *drafted]
+        await self._store(requirement_id, document, expected=raw, check_input_hash=False)
+        return document.assertions
+
+    async def generate_assertion_script(self, requirement_id):
+        """Turn human-adopted assertions into a script draft.
+
+        The draft is returned to the caller only. Nothing is written to the workspace here: the
+        human still saves it through the existing workspace editor, which is the approval step.
+        """
+        title, description, project_id, document, _raw, _context, _cases = await self._load(requirement_id)
+        adopted = [item for item in document.assertions if item.adopted]
+        if not adopted:
+            raise ValueError("Adopt at least one assertion draft before generating a script")
+        provider = getattr(self.orchestrator.ai_provider, "primary", self.orchestrator.ai_provider)
+        if getattr(provider, "provider_name", "unknown") == "fake":
+            raise ValueError("Fake AI is configured; script generation requires a real provider")
+        for item in adopted:
+            if SensitiveRedactor.contains_redaction_placeholder(
+                item.statement
+            ) or SensitiveRedactor.contains_redaction_placeholder(item.check):
+                raise ValueError(
+                    "Adopted assertion contains a redaction placeholder; restore the real expectation before generating"
+                )
+        workspace_dir = WorkspaceService().get_workspace_dir(project_id)
+        listing = ""
+        fixtures = "(none)"
+        if workspace_dir.exists():
+            listing = "\n".join(
+                sorted(
+                    str(path.relative_to(workspace_dir))
+                    for path in workspace_dir.rglob("*.py")
+                    if "__pycache__" not in path.parts
+                )[:40]
+            )
+            conftest = workspace_dir / "conftest.py"
+            if conftest.is_file():
+                names = re.findall(r"^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", conftest.read_text(), re.MULTILINE)
+                if names:
+                    fixtures = ", ".join(sorted(set(names)))
+        request = AICompletionRequest(
+            prompt=ASSERTION_SCRIPT_PROMPT.format(
+                title=title,
+                description=description[:3000],
+                criteria="\n".join(f"- {item.id}: {item.description}" for item in document.criteria) or "(none)",
+                fixtures=fixtures,
+                workspace=listing or "(empty workspace)",
+                assertions="\n".join(
+                    f"- {item.criterion_id} | {item.statement} | {item.check or 'no explicit check'}"
+                    for item in adopted
+                ),
+            ),
+            system_instruction=ASSERTION_SCRIPT_PROMPT.system_instruction,
+            prompt_id=ASSERTION_SCRIPT_PROMPT.prompt_id,
+            prompt_version=ASSERTION_SCRIPT_PROMPT.version,
+            response_schema=AssertionScriptResponse,
+            max_tokens=6000,
+            max_retries=1,
+        )
+        response = await self.orchestrator.complete(request)
+        if response.provider == "fake" or response.fallback_used:
+            raise ValueError("AI unavailable: simulated fallback cannot generate a script")
+        payload = AssertionScriptResponse.model_validate(response.structured_data)
+        adopted_ids = {item.criterion_id for item in adopted}
+        used_ids = set(payload.used_criterion_ids)
+        unknown = sorted(used_ids - adopted_ids)
+        if unknown:
+            raise ValueError("Generated script cites assertions that were not adopted: " + ", ".join(unknown))
+        missing = sorted(adopted_ids - used_ids)
+        if missing:
+            raise ValueError("Generated script omitted adopted assertions: " + ", ".join(missing))
+        try:
+            ast.parse(payload.code)
+        except SyntaxError as error:
+            raise ValueError(f"Generated script is not valid Python: {error}") from error
+        try:
+            TaskCodeGenerationService._validate_goal_generated_test(payload.code, payload.file_path)
+        except TaskBlocked as error:
+            raise ValueError(f"Generated script violates the test policy: {error}") from error
+        self._validate_script_asserts_a_real_page(payload.code)
+        markers = set(re.findall(r"#\s*criterion:\s*(AC-[A-Za-z0-9-]+)", payload.code))
+        if not adopted_ids <= markers:
+            absent = ", ".join(sorted(adopted_ids - markers))
+            raise ValueError("Generated script is missing '# criterion:' traceability markers for: " + absent)
+        unexpected = sorted(markers - adopted_ids)
+        if unexpected:
+            raise ValueError("Generated script references criteria that were not adopted: " + ", ".join(unexpected))
+        referenced = set(re.findall(r"ASR-[A-Za-z0-9-]+", payload.code))
+        allowed_assertions = {item.id for item in adopted}
+        foreign = sorted(referenced - allowed_assertions)
+        if foreign:
+            raise ValueError("Generated script references assertions that were not adopted: " + ", ".join(foreign))
+        file_path = payload.file_path.strip()
+        if not (file_path.startswith("tests/") and file_path.endswith(".py")) or ".." in Path(file_path).parts:
+            raise ValueError("Generated script path must be a tests/*.py file inside the workspace")
+        if workspace_dir.exists():
+            report = GroundingValidator(workspace_dir).validate(payload.code, file_path)
+            if not report.grounded:
+                detail = "; ".join(f"{item.kind}: {item.reference}" for item in report.violations[:5])
+                raise ValueError(f"Generated script is not grounded in the workspace: {detail}")
+        return {
+            "file_path": file_path,
+            "code": payload.code,
+            "used_criterion_ids": sorted(set(payload.used_criterion_ids)),
+            "assertion_ids": [item.id for item in adopted if item.criterion_id in markers],
+            "provider": response.provider,
+            "model": response.model,
+        }
+
+    async def set_assertion_adoption(self, requirement_id, assertion_id, adopted):
+        title, description, _project_id, document, raw, _context, _cases = await self._load(requirement_id)
+        target = next((item for item in document.assertions if item.id == assertion_id), None)
+        if target is None:
+            raise LookupError(f"Assertion not found: {assertion_id}")
+        target.adopted = bool(adopted)
+        await self._store(requirement_id, document, expected=raw, check_input_hash=False)
+        return target
+
+    @staticmethod
+    def _validate_script_asserts_a_real_page(code):
+        """Reject scripts that fabricate the page they assert on (false-green guard)."""
+        tree = ast.parse(code)
+        # Launching a browser is allowed (workspaces without a page fixture need it); fabricating
+        # the page under test or intercepting its network is not.
+        forbidden = {"set_content", "route", "unroute", "route_from_har", "add_init_script"}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+            if name in forbidden:
+                raise ValueError(
+                    f"Generated script builds its own page ({name}); assertions must target the real page under test"
+                )
+        navigates = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"goto", "navigate"}
+            for node in ast.walk(tree)
+        )
+        if not navigates:
+            raise ValueError("Generated script never navigates (page.goto) to the page it asserts on")
+
+    async def save_assertion_script(self, requirement_id, *, path, code, assertion_ids):
+        """Persist a human-approved script and record which assertions it implements.
+
+        The write is compare-and-swap (never overwrites an existing file) and the binding is what
+        later maps real TestRun executions back to the assertions that motivated them.
+        """
+        _title, _desc, project_id, document, raw, _ctx, _cases = await self._load(requirement_id)
+        adopted = {item.id: item for item in document.assertions if item.adopted}
+        requested = list(dict.fromkeys(assertion_ids))
+        if not requested or any(identifier not in adopted for identifier in requested):
+            raise ValueError("Only adopted assertions can be saved into a script")
+        if not (path.startswith("tests/") and path.endswith(".py")) or ".." in Path(path).parts:
+            raise ValueError("Script path must be a tests/*.py file inside the workspace")
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as error:
+            raise ValueError(f"Script is not valid Python: {error}") from error
+        nodeids = [
+            f"{path}::{node.name}"
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test")
+        ]
+        if not nodeids:
+            raise ValueError("Script must define at least one test function")
+        # The assertion edge is decided by the code's own traceability markers, never by the caller.
+        markers = set(re.findall(r"#\s*criterion:\s*(AC-[A-Za-z0-9-]+)", code))
+        unknown_markers = sorted(markers - {item.criterion_id for item in adopted.values()})
+        if unknown_markers:
+            raise ValueError("Script markers cite criteria without an adopted assertion: " + ", ".join(unknown_markers))
+        derived = sorted(item.id for item in adopted.values() if item.criterion_id in markers)
+        if set(derived) != set(requested):
+            missing = ", ".join(sorted(set(derived) - set(requested)))
+            extra = ", ".join(sorted(set(requested) - set(derived)))
+            detail = []
+            if missing:
+                detail.append(f"missing {missing}")
+            if extra:
+                detail.append(f"not implemented in code {extra}")
+            raise ValueError("Script markers do not match the requested assertions: " + "; ".join(detail))
+
+        workspace = WorkspaceService()
+        created = False
+        try:
+            await workspace.write_file_if_unchanged(project_id, path, code, False, None)
+            created = True
+        except FileExistsError:
+            existing = await workspace.read_file(project_id, path)
+            if hashlib.sha256(existing.encode()).hexdigest() != hashlib.sha256(code.encode()).hexdigest():
+                raise FileExistsError("A different script already exists at this path; refusing to overwrite") from None
+        binding = ScriptBinding(
+            path=path,
+            nodeids=nodeids,
+            assertion_ids=derived,
+            criterion_ids=sorted({adopted[identifier].criterion_id for identifier in derived}),
+            provider="openai-compatible",
+            model="",
+            saved_at=utc_now().isoformat(),
+        )
+        document.scripts = [item for item in document.scripts if item.path != path][:9] + [binding]
+        try:
+            await self._store(requirement_id, document, expected=raw, check_input_hash=False)
+        except Exception:
+            if created:
+                await workspace.delete_file(project_id, path)
+            raise
+        return binding
+
+    TERMINAL_EXECUTION_STATES = {"PASSED", "FAILED", "SKIPPED", "CANCELLED", "ERROR"}
+
+    @staticmethod
+    def _resolve_assertion_state(adopted: bool, entry: dict | None, active_paths: set[str], path: str) -> str:
+        if not adopted:
+            return "NOT_ADOPTED"
+        if entry is None:
+            return "RUNNING" if path in active_paths else "NEVER_RUN"
+        execution_status = entry["execution_status"]
+        run_status = entry["run_status"]
+        if execution_status in {"PASSED", "FAILED"}:
+            if run_status == "ERROR":
+                return "BLOCKED"
+            return execution_status
+        if execution_status == "SKIPPED":
+            return "BLOCKED"
+        if execution_status in {"CANCELLED", "ERROR"}:
+            return "CANCELLED" if execution_status == "CANCELLED" else "BLOCKED"
+        if run_status in {"QUEUED", "RUNNING"}:
+            return "RUNNING"
+        if run_status == "CANCELLED":
+            return "CANCELLED"
+        if run_status == "ERROR":
+            return "BLOCKED"
+        if run_status in {"PASSED", "FAILED"}:
+            return "RECORD_INACCESSIBLE"
+        return "UNKNOWN"
+
+    async def assertion_runs(self, requirement_id):
+        """Map every assertion to its latest real execution record (never inferred pass/fail)."""
+        _title, _desc, project_id, document, _raw, _ctx, _cases = await self._load(requirement_id)
+        bindings = list(document.scripts)
+        latest: dict[str, dict] = {}
+        active_paths: set[str] = set()
+        if bindings:
+            all_nodeids = [nodeid for binding in bindings for nodeid in binding.nodeids]
+            rows = await RunHistoryRepository().get_latest_executions_with_runs(all_nodeids, project_id)
+            nodeid_index = {nodeid: binding for binding in bindings for nodeid in binding.nodeids}
+            for execution, run in rows:
+                binding = nodeid_index.get(execution.nodeid)
+                if binding is None or execution.nodeid in latest:
+                    continue
+                latest[execution.nodeid] = {
+                    "run_id": run.id,
+                    "run_status": getattr(run.status, "value", run.status),
+                    "nodeid": execution.nodeid,
+                    "execution_status": getattr(execution.status, "value", execution.status),
+                    "finished_at": (run.finished_at or execution.finished_at or run.created_at).isoformat()
+                    if (run.finished_at or execution.finished_at or run.created_at)
+                    else None,
+                    "artifact_count": len(execution.artifact_paths or []),
+                    "error_message": (execution.error_message or "")[:300],
+                }
+            async with self.repository_scope() as repositories:
+                runs = await repositories.test_runs.list_runs(project_id, limit=15)
+            for run in runs:
+                if getattr(run.status, "value", run.status) in {"QUEUED", "RUNNING"}:
+                    for nodeid in run.nodeids or []:
+                        if nodeid in nodeid_index:
+                            active_paths.add(nodeid_index[nodeid].path)
+        assertions = []
+        for item in document.assertions:
+            binding = next((candidate for candidate in bindings if item.id in candidate.assertion_ids), None)
+            entry = None
+            if binding is not None:
+                candidates = [latest[nodeid] for nodeid in binding.nodeids if nodeid in latest]
+                if candidates:
+                    entry = max(candidates, key=lambda item: item.get("finished_at") or "")
+            state = self._resolve_assertion_state(item.adopted, entry, active_paths, binding.path if binding else "")
+            assertions.append(
+                {
+                    "assertion_id": item.id,
+                    "criterion_id": item.criterion_id,
+                    "adopted": item.adopted,
+                    "state": state,
+                    "run": entry,
+                }
+            )
+        return {
+            "requirement_id": requirement_id,
+            "scripts": [binding.model_dump(mode="json") for binding in bindings],
+            "assertions": assertions,
+        }
 
     async def adopt_case(self, design_id):
         async with self.repository_scope() as repositories:

@@ -9,76 +9,80 @@
      ========================================================================================== */
 
   /* --- Surfaces ---------------------------------------------------------------------------- */
-  --graphite-canvas: #111619;
-  --graphite-rail: #151c20;
-  --graphite-surface: #1b2428;
-  --graphite-raised: #222d32;
-  --graphite-inset: #182226;
-  --graphite-line: #344148;
-  --graphite-ink: #e7efec;
-  --graphite-ink-soft: #c3cfca;
-  --graphite-ink-muted: #a1b0ac;
-  --graphite-ink-faint: #788985;
-  --graphite-mint: #a6d5c1;
-  --graphite-mint-soft: #263a35;
-  --graphite-amber: #e6ae68;
-  --graphite-amber-soft: #3a2d20;
-  --graphite-red: #f17d73;
-  --graphite-red-soft: #3d2827;
-  --graphite-blue: #9bbeff;
-  --graphite-blue-soft: #253448;
-  --graphite-violet: #c3b6ff;
-  --graphite-violet-soft: #332d43;
-  --graphite-hover: #263136;
-  --graphite-line-soft: #29363b;
-  --graphite-line-strong: #405057;
-  --graphite-scrollbar: #536168;
-  --graphite-focus: rgba(166, 213, 193, 0.4);
+  /* Light editorial workspace: warm neutral canvas, white cards, hairline borders.
+     The `graphite-*` names are kept for compatibility with existing rules. */
+  --graphite-canvas: var(--canvas);
+  --graphite-rail: var(--surface-frame);
+  --graphite-surface: var(--surface);
+  --graphite-raised: var(--surface-raised);
+  --graphite-inset: var(--surface-inset);
+  --graphite-line: var(--line);
+  --graphite-ink: var(--ink);
+  --graphite-ink-soft: var(--ink-soft);
+  --graphite-ink-muted: var(--ink-muted);
+  --graphite-ink-faint: var(--ink-faint);
+  --graphite-mint: var(--brand);
+  --graphite-mint-soft: var(--brand-soft);
+  --graphite-amber: var(--accent-amber);
+  --graphite-amber-soft: var(--accent-amber-soft);
+  --graphite-red: var(--accent-red);
+  --graphite-red-soft: var(--accent-red-soft);
+  --graphite-blue: var(--ink-soft);
+  --graphite-blue-soft: var(--surface-inset);
+  --graphite-violet: var(--accent-violet);
+  --graphite-violet-soft: var(--accent-violet-soft);
+  --graphite-hover: var(--surface-hover);
+  --graphite-line-soft: var(--line-soft);
+  --graphite-line-strong: var(--line-strong);
+  --graphite-scrollbar: var(--ink-faint);
+  --graphite-focus: var(--ui-focus);
 
-  --canvas: #f3f7fd;            /* cool blue-gray app canvas */
-  --surface-frame: #f8faff;     /* navigation rail */
+  --canvas: #f4f3f0;            /* warm neutral app canvas */
+  --surface-frame: #fbfaf8;     /* navigation rail */
   --surface: #ffffff;           /* workspace panel + cards */
   --surface-raised: #ffffff;    /* popovers, menus, active nav item */
   --surface-toolbar: #ffffff;   /* shell utility toolbar */
-  --surface-inset: #f5f8fc;     /* inset rows inside a card */
+  --surface-inset: #f7f6f3;     /* inset rows inside a card */
   --surface-field: #ffffff;     /* inputs and search */
-  --surface-hover: #eef4ff;
-  --surface-active: #e8f0ff;
+  --surface-hover: #f5f3ef;
+  --surface-active: #f0eeea;
 
   /* --- Lines ------------------------------------------------------------------------------- */
-  --line: #e5ebf4;              /* default hairline */
-  --line-soft: #eff3f9;
-  --line-strong: #d8e2f0;       /* toolbar / emphasized separators */
+  --line: #e6e3de;              /* default hairline */
+  --line-soft: #efece7;
+  --line-strong: #d8d4ce;       /* toolbar / emphasized separators */
 
   /* --- Ink --------------------------------------------------------------------------------- */
-  --ink: #1c2942;
-  --ink-soft: #40516f;
-  --ink-muted: #5d6b82;
-  --ink-faint: #8795aa;
+  --ink: #17181a;
+  --ink-soft: #3f4247;
+  --ink-muted: #6e7176;
+  --ink-faint: #9a9da2;
   --ink-inverse: #ffffff;
 
   /* --- Accents (status + emphasis only, never large fields) --------------------------------- */
-  --accent-blue: #1d5bd7;
-  --accent-blue-soft: #eaf1ff;
-  --accent-green: #146c43;
-  --accent-green-soft: #e8f8ef;
-  --accent-green-dot: #48c987;
-  --accent-amber: #805400;
-  --accent-amber-soft: #fff6e7;
-  --accent-amber-dot: #f0b644;
-  --accent-red: #b42333;
-  --accent-red-soft: #fff0f1;
-  --accent-red-dot: #ef5b68;
-  --accent-violet: #5d4bcf;      /* AI surfaces only */
-  --accent-violet-soft: #eeecfd;
+  --brand: #c2410c;              /* the single warm accent */
+  --brand-soft: #fff1e7;
+  --accent-blue: #3f4247;        /* info is neutral ink, not a second brand color */
+  --accent-blue-soft: #f0eeea;
+  --accent-green: #18864b;
+  --accent-green-soft: #e9f7ef;
+  --accent-green-dot: #34b16d;
+  --accent-amber: #a05a00;
+  --accent-amber-soft: #fff4e3;
+  --accent-amber-dot: #e79a2b;
+  --accent-red: #c0362c;
+  --accent-red-soft: #fdeceb;
+  --accent-red-dot: #e2564a;
+  --accent-violet: #5b48d8;      /* AI surfaces only */
+  --accent-violet-soft: #efedfd;
 
   /* --- Geometry ---------------------------------------------------------------------------- */
   --r-xs: 6px;
   --r-sm: 8px;
-  --r-md: 8px;                  /* controls, active nav item, inner cards */
-  --r-card: 10px;               /* content cards */
-  --r-lg: 12px;                 /* toolbar, modal, drawer */
-  --r-xl: 14px;                 /* workspace panel */
+  --r-md: 10px;                 /* controls, active nav item, inner cards */
+  --r-card: 14px;               /* content cards */
+  --r-lg: 16px;                 /* toolbar, modal, drawer */
+  --r-xl: 18px;                 /* workspace panel */
   --r-frame: 0px;               /* full-bleed application frame */
   --r-pill: 999px;
 
@@ -88,6 +92,14 @@
   --sidebar-w: 240px;
   --workspace-pad: 20px;
   --toolbar-h: 50px;
+
+  /* Subtle glass is reserved for the shell and the selected-run indicator. */
+  --glass-shell-mix: 88%;
+  --glass-rail-mix: 90%;
+  --glass-island-mix: 80%;
+  --glass-border-mix: 70%;
+  --glass-blur: 18px;
+  --glass-saturation: 145%;
 
   /* Layer scale: nav/content < sticky controls < dock < app header < dialog. */
   --z-sticky: 10;
@@ -110,15 +122,15 @@
   --sp-grid: 16px;              /* gap inside a card grid */
 
   /* --- Elevation (whisper-quiet: depth comes from hairlines, not shadow) --------------------- */
-  --shadow-xs: 0 1px 2px rgba(27, 27, 29, 0.04);
-  --shadow-sm: 0 1px 2px rgba(27, 27, 29, 0.05), 0 2px 6px rgba(27, 27, 29, 0.03);
-  --shadow-md: 0 4px 14px rgba(27, 27, 29, 0.06);
-  --shadow-lg: 0 16px 40px rgba(27, 27, 29, 0.10);
-  --shadow-frame: 0 1px 2px rgba(27, 27, 29, 0.05);
+  --shadow-xs: 0 1px 2px rgba(23, 24, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(23, 24, 26, 0.05), 0 2px 8px rgba(23, 24, 26, 0.04);
+  --shadow-md: 0 6px 20px rgba(23, 24, 26, 0.07);
+  --shadow-lg: 0 20px 48px rgba(23, 24, 26, 0.12);
+  --shadow-frame: 0 1px 2px rgba(23, 24, 26, 0.05);
 
   /* --- Typography -------------------------------------------------------------------------- */
   /* Local and system stacks only — no webfont request (see apps/web/index.html). */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --fs-xs: 11px;
   --fs-sm: 12px;
@@ -149,7 +161,7 @@
   --border-color: var(--line);
   --border-subtle: var(--line-soft);
   --primary: var(--accent-blue);
-  --primary-hover: #1d4ed8;
+  --primary-hover: var(--ink-soft);
   --primary-light: var(--accent-blue-soft);
   --success: var(--accent-green);
   --success-light: var(--accent-green-soft);
@@ -161,12 +173,17 @@
   --radius-md: var(--r-card);
   --radius-lg: var(--r-xl);
 
-  --ui-primary: var(--accent-blue);
-  --ui-primary-strong: #1d4ed8;
+  --ui-primary: var(--graphite-mint);
+  --ui-primary-strong: var(--brand);
   --ui-brand: var(--ink);
-  --ui-focus: rgba(37, 99, 235, 0.28);
-  --ui-primary-soft: var(--accent-blue-soft);
-  --ui-primary-tint: rgba(37, 99, 235, 0.10);
+  --ui-focus: rgba(194, 65, 12, 0.28);
+  --ui-primary-soft: var(--graphite-mint-soft);
+  --ui-primary-tint: rgba(194, 65, 12, 0.10);
+  /* Legacy indigo names are aliased onto the single accent so lifecycle screens stop
+     introducing a second color system. */
+  --ui-indigo: var(--graphite-mint);
+  --ui-indigo-strong: var(--brand);
+  --ui-indigo-soft: var(--graphite-mint-soft);
   --ui-mint: var(--accent-green);
   --ui-mint-strong: var(--accent-green);
   --ui-mint-soft: var(--accent-green-soft);
@@ -180,7 +197,7 @@
   --success-text: var(--ui-success-strong);
   --danger-text: var(--accent-red);
   --accent-orange: #ea580c;
-  --accent: var(--accent-blue);
+  --accent: var(--graphite-mint);
 
   --ui-ink: var(--ink);
   --ui-ink-soft: var(--ink-soft);
@@ -337,11 +354,14 @@ button, input, select, textarea {
   flex-direction: column;
   min-height: 0;
   padding: 16px 14px;
-  background: var(--surface);
+  background: var(--surface-frame);
+  background: color-mix(in srgb, var(--surface-frame) var(--glass-rail-mix), transparent);
   border: 0;
   border-right: 1px solid var(--line);
   border-radius: 0;
   box-shadow: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   user-select: none;
   transition: width 180ms var(--ease), padding 180ms var(--ease);
 }
@@ -658,7 +678,7 @@ button, input, select, textarea {
 
 .app-sidebar .nav-item.active svg,
 .app-sidebar .nav-item[aria-current='page'] svg {
-  color: var(--accent-blue);
+  color: var(--ink);
 }
 
 .nav-item.active::after {
@@ -835,7 +855,10 @@ button, input, select, textarea {
   gap: 12px;
   padding: 0 18px;
   background: var(--surface-toolbar);
+  background: color-mix(in srgb, var(--surface-toolbar) var(--glass-shell-mix), transparent);
   border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .topbar-title-section {
@@ -910,6 +933,90 @@ button, input, select, textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.topbar-run-island-slot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 360px);
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+}
+
+.run-status-island {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(420px, 100%);
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-color: color-mix(in srgb, var(--line-strong) var(--glass-border-mix), transparent);
+  border-radius: var(--r-pill);
+  background: var(--surface-raised);
+  background: color-mix(in srgb, var(--surface-raised) var(--glass-island-mix), transparent);
+  color: var(--ink);
+  text-decoration: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.run-status-island:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.run-status-island:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.run-status-island-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.run-status-island-dot.is-queued { background: var(--accent-amber); }
+.run-status-island-dot.is-running { background: var(--accent-blue); }
+.run-status-island-dot.is-passed { background: var(--accent-green); }
+.run-status-island-dot.is-failed { background: var(--accent-red); }
+
+.run-status-island-id {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font: var(--fs-xs) var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-status-island-separator,
+.run-status-island > svg { color: var(--ink-muted); }
+.run-status-island-separator { flex: 0 0 auto; }
+.run-status-island-state {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-status-island > svg { flex: 0 0 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .run-status-island { transition: none; }
 }
 
 .topbar-actions,
@@ -1405,9 +1512,10 @@ button, input, select, textarea {
 }
 
 .btn-primary {
-  background-color: var(--accent-blue);
-  border-color: var(--accent-blue);
+  background-color: var(--ink);
+  border-color: var(--ink);
   color: var(--ink-inverse);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -4504,6 +4612,21 @@ button, input, select, textarea {
   gap: var(--sp-3);
   min-width: 0;
 }
+/* Priority order on the overview: next action > signals > attention > registry. */
+.dashboard-project-registry { order: 9; }
+.dashboard-next-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.dashboard-next-step > span {
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 .dashboard-run-link { padding: 0; color: var(--accent-blue); background: transparent; border: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .dashboard-run-link:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 
@@ -5317,8 +5440,10 @@ button, input, select, textarea {
   --ink-soft: #c9d1dd;
   --ink-muted: #a3afbf;
   --ink-faint: #8897aa;
-  --accent-blue: #82adff;
-  --accent-blue-soft: #243753;
+  --brand: #ff8a5c;
+  --brand-soft: #3a2318;
+  --accent-blue: #9aa7ba;
+  --accent-blue-soft: #232a34;
   --accent-green: #7bdd9d;
   --accent-green-soft: #203c2b;
   --accent-amber: #f0c36c;
@@ -5328,7 +5453,11 @@ button, input, select, textarea {
   --accent-violet: #b9a9ff;
   --accent-violet-soft: #35304e;
   --primary-hover: #a8c6ff;
-  --ui-primary-strong: #a8c6ff;
+  --ui-primary-strong: #ff8a5c;
+  --ui-indigo: #ff8a5c;
+  --ui-indigo-strong: #ff8a5c;
+  --ui-indigo-soft: #3a2318;
+  --ui-focus: rgba(255, 138, 92, 0.32);
 }
 .sidebar-platform > summary { cursor: pointer; padding: 0 10px; margin: 0; }
 .sidebar-platform summary:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
@@ -5370,9 +5499,9 @@ button, input, select, textarea {
 }
 
 @media (min-width: 1151px) {
-/* Direction A — Graphite Developer Studio, scoped to authorized desktop route families. */
+/* Desktop workspace surfaces, scoped to the authorized route families. */
 .app-frame.is-graphite {
-  color-scheme: dark;
+  color-scheme: inherit;
   --canvas: var(--graphite-canvas);
   --surface-frame: var(--graphite-rail);
   --surface: var(--graphite-surface);
@@ -5382,7 +5511,7 @@ button, input, select, textarea {
   --surface-field: var(--graphite-canvas);
   --surface-muted: var(--graphite-inset);
   --surface-hover: var(--graphite-hover);
-  --surface-active: var(--graphite-mint-soft);
+  --surface-active: var(--graphite-inset);
   --line: var(--graphite-line);
   --line-soft: var(--graphite-line-soft);
   --line-strong: var(--graphite-line-strong);
@@ -5471,13 +5600,15 @@ button, input, select, textarea {
 .app-frame.is-graphite .app-topbar {
   padding-inline: 16px;
   border-color: var(--line);
+  border-color: color-mix(in srgb, var(--line) var(--glass-border-mix), transparent);
   background: var(--surface-toolbar);
+  background: color-mix(in srgb, var(--surface-toolbar) var(--glass-shell-mix), transparent);
 }
 .app-frame.is-graphite .topbar-nav button { color: var(--ink-muted); }
 .app-frame.is-graphite .topbar-nav button:hover:not(:disabled) { color: var(--ink); background: var(--surface-hover); }
 .app-frame.is-graphite .topbar-separator { background: var(--line-strong); }
 .app-frame.is-graphite .topbar-project-context { display: inline-flex; align-items: baseline; gap: 9px; min-width: 0; color: var(--ink-muted); font: 12px var(--font-mono); }
-.app-frame.is-graphite .topbar-project-context strong { max-width: min(32vw, 340px); overflow: hidden; color: var(--graphite-mint); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.app-frame.is-graphite .topbar-project-context strong { max-width: min(32vw, 340px); overflow: hidden; color: var(--ink); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .app-frame.is-graphite .topbar-project-context code { color: var(--ink-muted); font: inherit; }
 .app-frame.is-graphite .app-body,
 .app-frame.is-graphite .app-main,
@@ -5485,38 +5616,43 @@ button, input, select, textarea {
 .app-frame.is-graphite .app-sidebar,
 .app-frame.is-graphite .app-sidebar.is-collapsed,
 .app-frame.is-graphite .app-sidebar.is-workspace-compact {
-  flex: 0 0 64px;
-  width: 64px;
-  min-width: 64px;
-  max-width: 64px;
-  padding: 14px 8px;
+  flex: 0 0 236px;
+  width: 236px;
+  min-width: 236px;
+  max-width: 236px;
+  padding: 14px 12px;
   border-right: 1px solid var(--line);
   background: var(--surface-frame);
+  background: color-mix(in srgb, var(--surface-frame) var(--glass-rail-mix), transparent);
 }
-.app-frame.is-graphite .sidebar-header { justify-content: center; padding: 0 0 16px; }
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-project-context,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-brand-title,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-brand-badge,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-collapse-toggle,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-search,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail > .sidebar-divider { display: none; }
+.app-frame.is-graphite .sidebar-header { justify-content: flex-start; gap: 10px; padding: 0 4px 16px; }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-brand-title { color: var(--ink); font-weight: 600; }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-collapse-toggle { display: none; }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-search {
+  margin: 0 0 12px;
+  border-color: var(--line);
+  background: var(--surface);
+}
+.app-frame.is-graphite .app-sidebar.is-graphite-rail > .sidebar-divider { margin: 12px 4px; background: var(--line-soft); }
 .app-frame.is-graphite .app-sidebar.is-graphite-rail .nav-item-label,
 .app-frame.is-graphite .app-sidebar.is-graphite-rail .nav-item-mobile-label,
 .app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-platform summary span,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-section-chevron,
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-footer .lang-badge { display: none; }
-.app-frame.is-graphite .sidebar-logo-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--graphite-mint); color: var(--graphite-canvas); }
-.app-frame.is-graphite .sidebar-nav { align-items: center; gap: 5px; padding: 4px 0 10px; }
-.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-platform > div { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.app-frame.is-graphite .sidebar-nav > .sidebar-divider { width: 30px; margin: 8px 0; background: var(--line); }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-section-chevron { display: inline-flex; }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .nav-item-mobile-label { display: none; }
+.app-frame.is-graphite .sidebar-logo-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--graphite-ink); color: var(--ink-inverse); }
+.app-frame.is-graphite .sidebar-nav { align-items: stretch; gap: 2px; padding: 4px 0 10px; }
+.app-frame.is-graphite .app-sidebar.is-graphite-rail .sidebar-platform > div { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+.app-frame.is-graphite .sidebar-nav > .sidebar-divider { width: 100%; margin: 10px 4px; background: var(--line-soft); }
 .app-frame.is-graphite .sidebar-nav .nav-item,
 .app-frame.is-graphite .sidebar-pinned .nav-item {
-  justify-content: center;
-  width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border-radius: 9px;
-  color: var(--ink-muted);
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-size: var(--fs-label);
 }
 .app-frame.is-graphite .sidebar-nav .nav-item svg,
 .app-frame.is-graphite .sidebar-pinned .nav-item svg { color: currentColor; }
@@ -5524,15 +5660,15 @@ button, input, select, textarea {
 .app-frame.is-graphite .sidebar-pinned .nav-item:hover { background: var(--surface-hover); color: var(--ink); }
 .app-frame.is-graphite .sidebar-nav .nav-item.active,
 .app-frame.is-graphite .sidebar-nav .nav-item[aria-current='page'],
-.app-frame.is-graphite .sidebar-pinned .nav-item.active { background: var(--graphite-mint-soft); color: var(--graphite-mint); }
+.app-frame.is-graphite .sidebar-pinned .nav-item.active { background: var(--surface-active); color: var(--ink); font-weight: 600; }
 .app-frame.is-graphite .sidebar-nav .nav-item.active svg,
-.app-frame.is-graphite .sidebar-nav .nav-item[aria-current='page'] svg { color: var(--graphite-mint); }
-.app-frame.is-graphite .sidebar-footer { justify-content: center; padding: 10px 0 0; border-color: var(--line); }
+.app-frame.is-graphite .sidebar-nav .nav-item[aria-current='page'] svg { color: var(--ink); }
+.app-frame.is-graphite .sidebar-footer { justify-content: space-between; padding: 10px 4px 0; border-color: var(--line); }
 .app-frame.is-graphite .sidebar-lang-toggle { width: 34px; height: 30px; border-color: var(--line); background: var(--surface); color: var(--ink-soft); }
 .app-frame.is-graphite .content-viewport:not(.is-workspace) { padding: 22px 24px; }
 .app-frame.is-graphite .content-viewport.is-workspace { padding: 8px 12px; }
-.app-frame.is-graphite .btn-primary { border-color: var(--graphite-mint); background: var(--graphite-mint); color: var(--graphite-canvas); }
-.app-frame.is-graphite .btn-primary:hover:not(:disabled) { border-color: var(--graphite-ink); background: var(--graphite-ink); color: var(--graphite-canvas); }
+.app-frame.is-graphite .btn-primary { border-color: var(--graphite-ink); background: var(--graphite-ink); color: var(--ink-inverse); }
+.app-frame.is-graphite .btn-primary:hover:not(:disabled) { border-color: var(--primary-hover); background: var(--primary-hover); color: var(--ink-inverse); }
 .app-frame.is-graphite .btn-secondary { border-color: var(--line-strong); background: var(--surface-raised); color: var(--ink-soft); }
 .app-frame.is-graphite .btn-secondary:hover:not(:disabled) { border-color: var(--graphite-mint); background: var(--surface-active); color: var(--ink); }
 .app-frame.is-graphite :is(button, a, input, select, textarea, summary):focus-visible { outline-color: var(--graphite-mint); }
@@ -5708,3 +5844,80 @@ button, input, select, textarea {
 @media (max-width: 1050px) {
   .failure-review-workbench { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Requirement flow strip: four clickable steps, one obvious current position. */
+.flow-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1px;
+  padding: 0;
+  margin: 0 0 var(--sp-3);
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.flow-step-index {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--ink-muted);
+  background: var(--surface-inset);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+}
+.flow-step.is-done .flow-step-index {
+  color: var(--ink-inverse);
+  background: var(--ink);
+}
+.flow-step-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-step-action {
+  margin-left: auto;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.flow-step-action:disabled { color: var(--ink-faint); cursor: not-allowed; }
+.flow-step-action:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Assertion execution state, sourced from real TestRun executions only. */
+.badge-run { border-radius: var(--r-pill); }
+.badge-run.is-passed { background: var(--accent-green-soft); border-color: #cfe9d9; color: var(--accent-green); }
+.badge-run.is-failed, .badge-run.is-error { background: var(--accent-red-soft); border-color: #f6d5d0; color: var(--accent-red); }
+.badge-run.is-running, .badge-run.is-queued { background: var(--brand-soft); border-color: #f6d9c6; color: var(--brand); }
+.badge-run.is-skipped, .badge-run.is-cancelled, .badge-run.is-never-run { background: var(--surface-inset); border-color: var(--line); color: var(--ink-soft); }
+.lc-run-link {
+  color: var(--brand);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lc-run-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.lc-run-state { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

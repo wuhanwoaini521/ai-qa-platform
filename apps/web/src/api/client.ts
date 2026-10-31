@@ -1,5 +1,11 @@
 import { responseError } from './errors';
-import type { ProjectKnowledge } from '../features/lifecycle/types';
+import type {
+  AssertionRunsResponse,
+  AssertionScriptDraft,
+  GroundedAssertion,
+  ProjectKnowledge,
+  ScriptBinding,
+} from '../features/lifecycle/types';
 import { parseEventFrame } from './eventStream';
 import {
   ApplyRepairPayload,
@@ -619,6 +625,25 @@ export const api = {
       onEvent,
       signal ?? new AbortController().signal,
     ),
+  draftGroundedAssertions: (id: string) =>
+    request<GroundedAssertion[]>(
+      `/requirements/${encodeURIComponent(id)}/assertions/draft`,
+      { method: 'POST' },
+    ),
+  generateAssertionScript: (id: string) =>
+    request<AssertionScriptDraft>(`/requirements/${encodeURIComponent(id)}/assertions/script`, { method: 'POST' }),
+  saveAssertionScript: (id: string, path: string, code: string, assertionIds: string[]) =>
+    request<ScriptBinding>(`/requirements/${encodeURIComponent(id)}/assertions/script/save`, {
+      method: 'POST',
+      body: JSON.stringify({ path, code, assertion_ids: assertionIds }),
+    }),
+  getAssertionRuns: (id: string) =>
+    request<AssertionRunsResponse>(`/requirements/${encodeURIComponent(id)}/assertions/runs`),
+  setGroundedAssertionAdoption: (requirementId: string, assertionId: string, adopted: boolean) =>
+    request<GroundedAssertion>(
+      `/requirements/${encodeURIComponent(requirementId)}/assertions/${encodeURIComponent(assertionId)}/adoption`,
+      { method: 'POST', body: JSON.stringify({ adopted }) },
+    ),
   adoptLifecycleDesigns: (id: string) =>
     request<TestDesign[]>(
       `/requirements/${encodeURIComponent(id)}/lifecycle/designs`,
@@ -981,6 +1006,11 @@ export const api = {
     request<{ path: string; content: string }>(
       `/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}`,
     ),
+  createWorkspaceTestFile: (workspaceId: string, path: string, content: string) =>
+    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/file`, {
+      method: 'PUT',
+      body: JSON.stringify({ path, content, expected_exists: false }),
+    }),
   writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
     request<{ status: string; path: string }>(
       `/workspaces/${workspaceId}/file`,
