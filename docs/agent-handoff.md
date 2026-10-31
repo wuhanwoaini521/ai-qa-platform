@@ -1484,3 +1484,10 @@ git diff --check
 - 干净检出 `/tmp/final-check`（`d148d7e`）：import OK、87 passed、tsc OK。
 - 复核结论：QA rev2 PASS（P0/P1 = 0）；Critical Review rev2 APPROVE WITH FIXES（P0=0，条件项已修）。
 - 发布前注意：回滚到旧代码需清理文档 `scripts` 字段；`>10` test 函数仍 422；探针数据未删。
+
+## 3.53 流程画板 P0（只读）
+
+- 新路由 `/flows?projectId&requirementId[&scenarioId]`，需求「场景设计」每张场景卡可跳转。
+- 数据只来自现有 `RequirementDocument`：验收标准 → 场景 → 动作 → 期望四列；纯函数 `buildScenarioFlow` + 4 条前端测试；自适应缩放避免右列裁切。
+- 只读：不写库、不执行、无新接口；为 P1「可编辑 + 编译为 RecorderStep」留出同一数据模型。
+- 验证：tsc、ESLint、前端 238 passed、`vite build`、i18n 27 命名空间 3,558 keys；证据 `.ai-runs/2026-11-01-flow-canvas/`。

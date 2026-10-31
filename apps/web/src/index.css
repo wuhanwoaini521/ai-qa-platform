@@ -6060,3 +6060,95 @@ button, input, select, textarea {
 .page-container .data-table td { padding: 14px 16px; }
 .page-container .data-table th + th,
 .page-container .data-table td + td { border-left: 0; }
+
+/* --- Flow canvas (read-only) ---------------------------------------------------------------- */
+.flow-page { gap: 16px; }
+.flow-page-header { align-items: flex-start; }
+.flow-page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.flow-page-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 16px; }
+.flow-page-title { display: grid; gap: 2px; min-width: 0; }
+.flow-page-title strong { color: var(--ink); font-size: var(--fs-label); }
+.flow-page-title small { color: var(--ink-muted); font-size: var(--fs-xs); }
+.flow-page-select { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.flow-page-select > span { color: var(--ink-muted); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
+.flow-page-select .form-select { margin: 0; width: auto; min-width: 260px; max-width: 420px; }
+
+.flow-canvas { display: grid; gap: 10px; min-width: 0; }
+.flow-canvas-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.flow-canvas-chip {
+  padding: 4px 10px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+}
+.flow-canvas-chip.is-muted { color: var(--ink-muted); }
+.flow-canvas-hint { margin-left: auto; color: var(--ink-muted); font-size: var(--fs-xs); }
+.flow-canvas-viewport {
+  overflow: auto;
+  padding: 24px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.flow-canvas-viewport:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.flow-canvas-surface { position: relative; }
+.flow-canvas-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.flow-canvas-edge { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.flow-canvas-edge.is-criterion { stroke: #c9c4bd; stroke-dasharray: 4 4; }
+.flow-canvas-edge.is-assert { stroke: var(--accent-green); opacity: 0.55; }
+.flow-canvas-arrow { fill: var(--line-strong); }
+.flow-canvas-node {
+  position: absolute;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 0 rgba(23, 24, 26, 0.03);
+}
+.flow-canvas-node.is-criterion { border-left: 3px solid var(--accent-blue); }
+.flow-canvas-node.is-scenario { border-color: var(--brand); background: var(--brand-soft); }
+.flow-canvas-node.is-assert { border-left: 3px solid var(--accent-green); }
+.flow-canvas-kind {
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.flow-canvas-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.flow-canvas-subtitle {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-canvas-index {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--ink-soft);
+  background: var(--surface-inset);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+}
+.flow-canvas-surface > div { position: relative; }
