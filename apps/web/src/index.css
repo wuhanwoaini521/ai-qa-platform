@@ -5966,3 +5966,97 @@ button, input, select, textarea {
 .case-assertion-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .case-assertion-row code { color: var(--accent-blue); font: 600 11px/1.5 var(--font-mono); }
 .case-assertion-statement { flex: 1 1 260px; min-width: 0; color: var(--ink-soft); font-size: var(--fs-xs); }
+
+/* --- Unified rhythm for full-width shared pages (flaky, workers, security) --------------------
+   These pages reuse the generic card/stat/table classes with legacy markup, which made them read
+   denser than the workspace. One page-level layer aligns padding, KPI layout and table rhythm. */
+.page-container { gap: var(--sp-4); }
+.page-container > .stats-grid { gap: 14px; }
+
+.page-container .stat-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+}
+.page-container .stat-card > :is(.stat-icon, .stat-icon-wrapper) {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-color: transparent;
+  border-radius: 12px;
+}
+.page-container .stat-card > :is(.stat-info, .stat-details) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.page-container .stat-card :is(.stat-label, .stat-title) {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-container .stat-card .stat-value {
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.page-container .stat-card .stat-subtitle {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.stat-icon.is-amber { background: var(--accent-amber-soft); color: var(--accent-amber); }
+.stat-icon.is-violet { background: #f1ecfd; color: var(--accent-violet); }
+
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 16px;
+}
+.page-toolbar-search {
+  display: flex;
+  flex: 1 1 280px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.page-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-toolbar-label {
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.page-toolbar .form-input,
+.page-toolbar .form-select { margin: 0; }
+.page-toolbar .form-select { width: auto; min-width: 132px; }
+
+.page-empty-state {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+.page-empty-state h4 { margin: 0; color: var(--ink); font-size: var(--fs-title); }
+.page-empty-state p { margin: 0; font-size: var(--fs-label); }
+
+.page-container .data-table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.page-container .data-table td { padding: 14px 16px; }
+.page-container .data-table th + th,
+.page-container .data-table td + td { border-left: 0; }

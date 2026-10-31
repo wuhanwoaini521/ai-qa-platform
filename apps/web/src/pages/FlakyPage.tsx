@@ -103,7 +103,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
+      <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon-wrapper blue">
             <TrendingUp size={20} />
@@ -152,9 +152,8 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '220px' }}>
+      <div className="card page-toolbar">
+          <div className="page-toolbar-search">
             <Search size={16} color="var(--text-muted)" />
             <input
               type="text"
@@ -162,18 +161,16 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
               placeholder={t('filterPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ margin: 0 }}
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="page-toolbar-group">
             <Filter size={14} color="var(--text-muted)" />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('classificationLabel')}</span>
+            <span className="page-toolbar-label">{t('classificationLabel')}</span>
             <select
               className="form-select"
               value={selectedClassification}
               onChange={(e) => setSelectedClassification(e.target.value)}
-              style={{ width: 'auto', margin: 0 }}
             >
               <option value="ALL">{t('classificationAll')}</option>
               <option value="LIKELY_FLAKY">{t('classificationLikelyFlaky')}</option>
@@ -183,13 +180,12 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('minScoreLabel')}</span>
+          <div className="page-toolbar-group">
+            <span className="page-toolbar-label">{t('minScoreLabel')}</span>
             <select
               className="form-select"
               value={minScore}
               onChange={(e) => setMinScore(parseFloat(e.target.value))}
-              style={{ width: 'auto', margin: 0 }}
             >
               <option value={0.0}>{t('minScoreAll')}</option>
               <option value={0.2}>&ge; 0.20</option>
@@ -197,19 +193,18 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
               <option value={0.6}>&ge; 0.60</option>
             </select>
           </div>
-        </div>
       </div>
 
       {/* Flaky Intelligence Table */}
       <div className="card">
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <RefreshCw size={24} className="spinning" style={{ marginBottom: '0.75rem' }} />
+          <div className="page-empty-state">
+            <RefreshCw size={24} className="spinning" />
             <div>{t('calculating')}</div>
           </div>
         ) : filteredTests.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <CheckCircle2 size={36} color="var(--color-success)" style={{ marginBottom: '0.75rem' }} />
+          <div className="page-empty-state">
+            <CheckCircle2 size={36} color="var(--color-success)" />
             <h4>{t('emptyTitle')}</h4>
             <p>{t('emptyDescription')}</p>
           </div>
@@ -245,7 +240,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </td>
                     <td>{getClassificationBadge(item.flaky_score.classification)}</td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div className="page-toolbar-group">
                         <div
                           style={{
                             width: '60px',
@@ -380,7 +375,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                   </div>
 
                   {/* Execution Timeline */}
-                  <h4 style={{ marginBottom: '0.75rem' }}>{t('last20Executions')}</h4>
+                  <h4 >{t('last20Executions')}</h4>
                   {testHistory.executions.length === 0 ? (
                     <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                       {t('noExecutions')}
