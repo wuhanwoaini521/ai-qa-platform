@@ -763,6 +763,8 @@ export function WorkspacePage() {
         project_id: projectId,
         workspace_id: projectId,
         nodeids: [nodeId],
+        requirement_id: context.requirementId ?? selectedRequirement?.id ?? null,
+        case_id: selectedCase?.id ?? context.testCaseId ?? null,
         requested_by: `Workspace · ${selectedCase?.title ?? nodeId}`,
         browser: selectedRunConfig.browser,
         environment: {

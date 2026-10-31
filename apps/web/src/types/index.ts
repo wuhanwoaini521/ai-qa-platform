@@ -432,6 +432,9 @@ export interface TestRunCreate {
   parent_run_id?: string | null;
   origin_failure_id?: string | null;
   project_id: string;
+  /** Identity the run belongs to, so results can restore context without URL parameters. */
+  requirement_id?: string | null;
+  case_id?: string | null;
   /** The API keys a workspace by project id, so this is the project's workspace id. */
   workspace_id: string;
   nodeids?: string[];

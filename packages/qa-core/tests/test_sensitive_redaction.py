@@ -96,3 +96,11 @@ def test_redact_text_preserves_hexadecimal_identifiers():
     identifier = "651e9917c3fe472987578ab2933fa104"
 
     assert SensitiveRedactor.redact_text(identifier) == identifier
+
+
+def test_recorder_secret_variables_are_forwarded_explicitly(monkeypatch):
+    from qa_core.execution.environment import project_subprocess_environment
+
+    environment = project_subprocess_environment({"QA_RECORDER_SECRET_ABC123": "value", "QA_DATABASE_URL": "sqlite://"})
+    assert environment["QA_RECORDER_SECRET_ABC123"] == "value"
+    assert "QA_DATABASE_URL" not in environment

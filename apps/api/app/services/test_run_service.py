@@ -791,10 +791,11 @@ class TestRunService:
                         if workspace_id and workspace_dir
                         else None
                     )
+                    identity_run = await run_repo.get_by_id(run_id)
                     failure_record = await run_repo.create_failure_record(
                         run_id=run_id,
-                        requirement_id=getattr(existing, "requirement_id", None),
-                        case_id=getattr(existing, "case_id", None),
+                        requirement_id=getattr(identity_run, "requirement_id", None),
+                        case_id=getattr(identity_run, "case_id", None),
                         execution_id=exec_orm.id,
                         test_nodeid=res.nodeid,
                         test_name=res.nodeid.split("::")[-1],
