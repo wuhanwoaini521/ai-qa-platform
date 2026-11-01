@@ -75,6 +75,29 @@
     "result": "执行结果",
     "failure": "失败恢复"
   },
+  "stages": "工作流阶段",
+  "journey": {
+    "requirement": "需求",
+    "discover": "发现",
+    "cases": "用例",
+    "automation": "自动化",
+    "result": "运行与结果"
+  },
+  "journeyFacts": {
+    "loading": "正在加载…",
+    "noRequirements": "暂无需求",
+    "requirementCount": "{{count}} 条需求",
+    "analyzing": "正在分析",
+    "latestAnalysis": "最近分析：{{status}}",
+    "discover": "探索页面并识别覆盖缺口",
+    "noCases": "暂无关联用例",
+    "caseCountScoped": "{{count}} 条关联用例",
+    "caseCount": "{{count}} 条项目用例",
+    "bindingCountScoped": "{{bound}}/{{total}} 条已绑定",
+    "bindingCount": "{{bound}}/{{total}} 条用例已绑定",
+    "runStatus": "{{status}} · {{saved}}/{{total}} 项已保存",
+    "noRun": "尚无运行记录"
+  },
   "flow": {
     "board": "QA 流转看板",
     "loading": "正在读取项目状态…",

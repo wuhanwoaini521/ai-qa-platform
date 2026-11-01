@@ -1,6 +1,14 @@
 # Agent 交接文档 / Agent Handoff
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
+
+## Current styling remediation handoff
+
+User reported Workspace styling breakage and provided the route `/workspace/proj_golden_shop_v1?...&stage=automation&view=code`. Starting HEAD: `833cac1` on `main`. Initial CSS-cycle/theme scoping repair was insufficient. Real browser inspection (Chrome 150, temporary profile/CDP; active route at 1200×853) found the actual additional defects: stage-nav markup had no component styles, desktop `.workspace-shell` grid still allocated only two rows so the new stage navigation collapsed to zero height and overlapped the workspace, header flex children collapsed the title/mode controls, and `journey`/`journeyFacts`/`stages` localization keys were missing. These have now been repaired in `apps/web/src/features/workspace/workspace.css`, `apps/web/src/index.css`, and both `apps/web/src/i18n/locales/{zh-CN,en}/workspace.json`; prior `AppLayout.tsx`, `index.css`, and design-system regression changes remain. Stage nav now has six readable desktop cards; heading uses stable grid columns; shell reserves heading + stage nav + content rows. No business logic or API behavior changed.
+
+Browser evidence on the target route: after fix, stage row height is 56px; title/mode widths remain nonzero; document width equals viewport at 1200×853, 1280×800, 1440×900, and 1920×1080. Clicked Workspace Explore and Write Tests mode tabs and expanded context without page overflow; returned to the requested Code view. Screenshots: `/tmp/workspace-styles-fixed-1200-v2.png`, `/tmp/workspace-code-1920.png`, `/tmp/workspace-context-open.png`. The editor content showed Loading/Python language service connecting in this temporary browser session, so actual code editing/execution was not tested.
+
+Latest verification: web tests **300 passed**; typecheck, ESLint, production build, i18n check (**29 namespaces, 2 languages, 4020 keys**) and `git diff --check` passed. Build retains existing large-chunk warning. Full `python scripts/task.py test`: **1193 passed / 13 skipped / 6 failed** (one browser E2E; four legacy migration-target tests fail because `projects.hidden_from_overview` is absent at those migration revisions; startup-without-credentials test unexpectedly sees a real configured provider). The independently launched agent-browser Chrome 155 failed on macOS 12 due missing VideoToolbox symbol; direct Chrome 150 with CDP worked. Broad verification of all routes/features remains incomplete; continue only if user requests it. Preserve unrelated worktree changes and do not claim all app features were verified.
 > **当前有效状态见 §3.69（main 合并与验证）；Dashboard layout reference follow-up 的验收见 §3.68。更早章节里的“当前”分支、HEAD、环境和待办均为历史快照。**
 > 禁止把聊天记录或未跟踪的临时日志作为唯一进度来源。
 

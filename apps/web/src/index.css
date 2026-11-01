@@ -1051,7 +1051,7 @@ button, input, select, textarea {
 }
 
 @media (min-width: 821px) {
-  .content-viewport.is-workspace .workspace-shell { grid-template-rows: auto minmax(0, 1fr); }
+  .content-viewport.is-workspace .workspace-shell { grid-template-rows: auto auto minmax(0, 1fr); }
 }
 
 .content-viewport.is-workspace-result .workspace-shell {
@@ -5497,102 +5497,11 @@ button, input, select, textarea {
 }
 
 @media (min-width: 1151px) {
-/* Desktop workspace surfaces, scoped to the authorized route families. */
+/* Graphite-named component rules below retain the shared warm-light tokens.
+   The compatibility aliases at :root point back to canonical tokens, so remapping
+   canonical tokens through those aliases creates cyclic custom properties. */
 .app-frame.is-graphite {
   color-scheme: inherit;
-  --canvas: var(--graphite-canvas);
-  --surface-frame: var(--graphite-rail);
-  --surface: var(--graphite-surface);
-  --surface-raised: var(--graphite-raised);
-  --surface-toolbar: var(--graphite-rail);
-  --surface-inset: var(--graphite-inset);
-  --surface-field: var(--graphite-canvas);
-  --surface-muted: var(--graphite-inset);
-  --surface-hover: var(--graphite-hover);
-  --surface-active: var(--graphite-inset);
-  --line: var(--graphite-line);
-  --line-soft: var(--graphite-line-soft);
-  --line-strong: var(--graphite-line-strong);
-  --ink: var(--graphite-ink);
-  --ink-inverse: var(--graphite-canvas);
-  --ink-soft: var(--graphite-ink-soft);
-  --ink-muted: var(--graphite-ink-muted);
-  --ink-faint: var(--graphite-ink-faint);
-  --accent-blue: var(--graphite-blue);
-  --accent-blue-soft: var(--graphite-blue-soft);
-  --accent-green: var(--graphite-mint);
-  --accent-green-soft: var(--graphite-mint-soft);
-  --accent-green-dot: var(--graphite-mint);
-  --accent-amber: var(--graphite-amber);
-  --accent-amber-soft: var(--graphite-amber-soft);
-  --accent-amber-dot: var(--graphite-amber);
-  --accent-red: var(--graphite-red);
-  --accent-red-soft: var(--graphite-red-soft);
-  --accent-red-dot: var(--graphite-red);
-  --accent-violet: var(--graphite-violet);
-  --accent-violet-soft: var(--graphite-violet-soft);
-  --primary: var(--graphite-blue);
-  --primary-hover: var(--graphite-ink);
-  --primary-light: var(--graphite-blue-soft);
-  --success: var(--graphite-mint);
-  --success-light: var(--graphite-mint-soft);
-  --warning: var(--graphite-amber);
-  --warning-light: var(--graphite-amber-soft);
-  --danger: var(--graphite-red);
-  --danger-light: var(--graphite-red-soft);
-  --bg-app: var(--graphite-canvas);
-  --bg-card: var(--graphite-surface);
-  --bg-sidebar: var(--graphite-rail);
-  --text-main: var(--graphite-ink);
-  --text-muted: var(--graphite-ink-muted);
-  --text-primary: var(--graphite-ink);
-  --text-secondary: var(--graphite-ink-soft);
-  --border-color: var(--graphite-line);
-  --border-subtle: var(--graphite-line-soft);
-  --ui-primary: var(--graphite-blue);
-  --ui-primary-strong: var(--graphite-blue);
-  --ui-brand: var(--graphite-mint);
-  --ui-focus: var(--graphite-focus);
-  --ui-primary-soft: var(--graphite-blue-soft);
-  --ui-primary-tint: var(--graphite-blue-soft);
-  --ui-mint: var(--graphite-mint);
-  --ui-mint-strong: var(--graphite-mint);
-  --ui-mint-soft: var(--graphite-mint-soft);
-  --ui-amber: var(--graphite-amber);
-  --ui-rose: var(--graphite-red);
-  --ui-violet: var(--graphite-violet);
-  --ui-success-strong: var(--graphite-mint);
-  --ui-warning-strong: var(--graphite-amber);
-  --success-text: var(--graphite-mint);
-  --danger-text: var(--graphite-red);
-  --ui-ink: var(--graphite-ink);
-  --ui-ink-soft: var(--graphite-ink-soft);
-  --ui-ink-muted: var(--graphite-ink-muted);
-  --ui-line: var(--graphite-line);
-  --ui-line-strong: var(--graphite-line-strong);
-  --ui-surface: var(--graphite-surface);
-  --ui-surface-raised: var(--graphite-raised);
-  --ui-surface-solid: var(--graphite-raised);
-  --ui-surface-sunken: var(--graphite-inset);
-  --ui-canvas: var(--graphite-canvas);
-  --ui-canvas-studio: var(--graphite-canvas);
-  --accent-primary: var(--graphite-blue);
-  --surface-primary: var(--graphite-raised);
-  --surface-secondary: var(--graphite-inset);
-  --surface-subtle: var(--graphite-inset);
-  --bg-base: var(--graphite-canvas);
-  --bg-subtle: var(--graphite-inset);
-  --bg-surface: var(--graphite-surface);
-  --color-primary: var(--graphite-blue);
-  --color-success: var(--graphite-mint);
-  --color-warning: var(--graphite-amber);
-  --color-error: var(--graphite-red);
-  --danger-color: var(--graphite-red);
-  --success-color: var(--graphite-mint);
-  --warning-color: var(--graphite-amber);
-  --sidebar-w: 64px;
-  --toolbar-h: 50px;
-  --workspace-pad: 20px;
 }
 
 .app-frame.is-graphite .app-topbar {

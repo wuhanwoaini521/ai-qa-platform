@@ -65,6 +65,12 @@ test('the core design tokens are declared once, in index.css', () => {
   assert.deepEqual(missing, [], `missing tokens: ${missing.join(', ')}`);
 });
 
+test('graphite route styles do not create cycles through compatibility aliases', () => {
+  const css = read(path.join(srcDir, 'index.css'));
+  const graphiteBlock = css.match(/\.app-frame\.is-graphite\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.doesNotMatch(graphiteBlock, /--(?:canvas|surface|ink|line|accent-[a-z-]+)\s*:\s*var\(--graphite-/);
+});
+
 test('every referenced CSS custom property is declared', () => {
   const declared = new Set();
   for (const file of sources) {

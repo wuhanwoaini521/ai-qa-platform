@@ -56,8 +56,9 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const workspaceResultsRoute = workspaceRoute && (
     workspaceStage === 'result' || (!workspaceStage && workspaceView === 'results')
   );
-  const graphiteRoute = location.pathname === '/' || location.pathname === '/projects' ||
-    location.pathname.startsWith('/projects/') || location.pathname === '/quality' || workspaceRoute;
+  const graphiteWorkspace = workspaceRoute && workspaceStage === 'automation' &&
+    (workspaceView === 'browser' || workspaceView === 'debug');
+  const graphiteRoute = location.pathname === '/' || graphiteWorkspace;
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
   const selectedRunContext = readExplicitRunId(location.search)

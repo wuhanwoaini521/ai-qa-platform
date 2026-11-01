@@ -75,6 +75,29 @@
     "result": "Run result",
     "failure": "Failure recovery"
   },
+  "stages": "Workflow stages",
+  "journey": {
+    "requirement": "Requirements",
+    "discover": "Discovery",
+    "cases": "Cases",
+    "automation": "Automation",
+    "result": "Runs & results"
+  },
+  "journeyFacts": {
+    "loading": "Loading…",
+    "noRequirements": "No requirements yet",
+    "requirementCount": "{{count}} requirements",
+    "analyzing": "Analysis in progress",
+    "latestAnalysis": "Latest analysis: {{status}}",
+    "discover": "Explore pages and identify coverage gaps",
+    "noCases": "No linked cases yet",
+    "caseCountScoped": "{{count}} linked cases",
+    "caseCount": "{{count}} project cases",
+    "bindingCountScoped": "{{bound}}/{{total}} bound",
+    "bindingCount": "{{bound}}/{{total}} cases bound",
+    "runStatus": "{{status}} · {{saved}}/{{total}} saved",
+    "noRun": "No runs yet"
+  },
   "flow": {
     "board": "QA flow board",
     "loading": "Loading project status…",
