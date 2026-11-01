@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
   ShieldCheck,
   Target,
-  AlertTriangle,
   Activity,
   CheckCircle2,
   XCircle,
@@ -15,6 +14,7 @@ import {
   PlayCircle,
   ChevronDown,
   Search,
+  ArrowRight,
 } from 'lucide-react';
 import {
   ImpactAnalysisResult,
@@ -27,7 +27,9 @@ import {
   TestCase,
 } from '../types';
 import { api } from '../api/client';
+import { APIError } from '../api/errors';
 import { buildWorkspaceHref } from '../app/workspaceContext';
+import { hasInsufficientQualityEvidence, measuredPercentage } from './qualityMetricsModel';
 import './QualityPage.css';
 
 interface QualityPageProps {
@@ -37,11 +39,13 @@ interface QualityPageProps {
 }
 
 export const QualityPage: React.FC<QualityPageProps> = ({
+  projects = [],
   selectedProjectId,
   onNavigateToRuns,
 }) => {
   const { t } = useTranslation('quality');
   const [activeTab, setActiveTab] = useState<'coverage' | 'risks' | 'impact' | 'releases'>('coverage');
+  const [impactError, setImpactError] = useState('');
 
   // Coverage & Risks state
   const [coverage, setCoverage] = useState<QualityCoverageSummary | null>(null);
@@ -51,9 +55,11 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   const [coverageSort, setCoverageSort] = useState<'title' | 'coverage-desc' | 'coverage-asc'>('coverage-desc');
   const [groupCoverageByStatus, setGroupCoverageByStatus] = useState(false);
   const [expandedCoverageId, setExpandedCoverageId] = useState<string | null>(null);
-  const [coverageSourceError, setCoverageSourceError] = useState(false);
+  const [testCasesSourceError, setTestCasesSourceError] = useState(false);
+  const [qualityLoadError, setQualityLoadError] = useState<'forbidden' | 'failed' | null>(null);
   const [riskMatrix, setRiskMatrix] = useState<QualityRiskMatrix | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState<boolean>(true);
+  const qualityRequestVersion = useRef(0);
 
   // Impact Analysis state
   const [changedFilesText, setChangedFilesText] = useState<string>('');
@@ -75,48 +81,71 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   // Gate Report state
   const [selectedGateReport, setSelectedGateReport] = useState<ReleaseGateReport | null>(null);
   const [evaluatingGateId, setEvaluatingGateId] = useState<string | null>(null);
+  const riskCount = riskMatrix?.risks.length ?? t('notAvailable');
+  const releaseCount = !selectedProjectId || loadingMetrics || qualityLoadError ? t('notAvailable') : releases.length;
+  const qualityTabs = [
+    { id: 'coverage' as const, label: t('tabCoverage') },
+    { id: 'risks' as const, label: t('tabRisks', { value: riskCount }) },
+    { id: 'impact' as const, label: t('tabImpact') },
+    { id: 'releases' as const, label: t('tabReleases', { value: releaseCount }) },
+  ];
+  const handleQualityTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? qualityTabs.length - 1 : (index + offset + qualityTabs.length) % qualityTabs.length;
+    if (!offset && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const next = qualityTabs[nextIndex].id;
+    setActiveTab(next);
+    document.getElementById(`quality-tab-${next}`)?.focus();
+  };
 
-  const fetchQualityData = async () => {
+  const fetchQualityData = useCallback(async () => {
+    const requestVersion = ++qualityRequestVersion.current;
+    setQualityLoadError(null);
+    setTestCasesSourceError(false);
     if (!selectedProjectId) {
       setCoverage(null);
       setTestCases(null);
       setRiskMatrix(null);
       setReleases([]);
-      setCoverageSourceError(false);
       setLoadingMetrics(false);
       return;
     }
+    setLoadingMetrics(true);
+    setCoverage(null);
+    setTestCases(null);
+    setRiskMatrix(null);
+    setReleases([]);
     try {
-      setLoadingMetrics(true);
-      setCoverage(null);
-      setTestCases(null);
-      setCoverageSourceError(false);
       const [cov, risks, rels] = await Promise.all([
         api.getQualityCoverage(selectedProjectId),
         api.getQualityRiskMatrix(selectedProjectId),
         api.getReleases(selectedProjectId),
       ]);
+      if (requestVersion !== qualityRequestVersion.current) return;
       setCoverage(cov);
       setRiskMatrix(risks);
       setReleases(rels);
       try {
         setTestCases(await api.getTestCases(selectedProjectId));
       } catch (error) {
+        if (requestVersion !== qualityRequestVersion.current) return;
         console.error('Failed to fetch test case bindings for quality coverage', error);
         setTestCases(null);
-        setCoverageSourceError(true);
+        setTestCasesSourceError(true);
       }
     } catch (err) {
+      if (requestVersion !== qualityRequestVersion.current) return;
       console.error('Failed to fetch quality intelligence data', err);
       setCoverage(null);
       setRiskMatrix(null);
       setReleases([]);
       setTestCases(null);
-      setCoverageSourceError(true);
+      setQualityLoadError(err instanceof APIError && err.status === 403 ? 'forbidden' : 'failed');
     } finally {
-      setLoadingMetrics(false);
+      if (requestVersion === qualityRequestVersion.current) setLoadingMetrics(false);
     }
-  };
+  }, [selectedProjectId]);
 
   const coveragePercentageByRequirement = useMemo(
     () => new Map((coverage?.requirement_details ?? []).map((item) => [item.requirement_id, item.coverage_percentage])),
@@ -194,15 +223,22 @@ export const QualityPage: React.FC<QualityPageProps> = ({
     }
     return [...byStatus].sort(([left], [right]) => left.localeCompare(right)).map(([status, items]) => ({ status, items }));
   }, [filteredCoverage, groupCoverageByStatus]);
+  const currentProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const evidenceIncomplete = coverage ? hasInsufficientQualityEvidence(coverage) : false;
+  const requirementCoverage = coverage ? measuredPercentage(coverage.requirement_coverage_pct, coverage.total_requirements) : null;
+  const automationCoverage = coverage ? measuredPercentage(coverage.automation_coverage_pct, coverage.total_test_cases) : null;
+  const executionCoverage = coverage ? measuredPercentage(coverage.execution_coverage_pct, coverage.total_test_cases) : null;
 
   useEffect(() => {
-    fetchQualityData();
-  }, [selectedProjectId]);
+    void fetchQualityData();
+    return () => { qualityRequestVersion.current += 1; };
+  }, [fetchQualityData]);
 
   const handleRunImpactAnalysis = async () => {
     if (!selectedProjectId) return;
     try {
       setLoadingImpact(true);
+      setImpactError('');
       const files = changedFilesText
         .split('\n')
         .map((l) => l.trim())
@@ -214,6 +250,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
       setImpactResult(res);
     } catch (err) {
       console.error('Impact analysis failed', err);
+      setImpactError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingImpact(false);
     }
@@ -281,153 +318,136 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container quality-page">
       {/* Page Header */}
-      <div className="page-header">
+      <div className="page-header quality-page-header">
         <div>
           <h2>{t('titles:quality')}</h2>
           <p className="subtitle">{t('subtitle')}</p>
+          {currentProject && <p className="quality-project-context">{t('currentProject', { project: currentProject.name })}</p>}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={fetchQualityData} disabled={loadingMetrics}>
+        <div className="quality-page-actions">
+          <button className="btn btn-secondary" onClick={() => void fetchQualityData()} disabled={loadingMetrics || !selectedProjectId}>
             <RefreshCw size={14} className={loadingMetrics ? 'spinning' : ''} />
             <span>{t('common:refresh')}</span>
           </button>
-          <button className="btn btn-primary" onClick={() => setShowCreateReleaseModal(true)}>
+          <button className="btn btn-primary" onClick={() => setShowCreateReleaseModal(true)} disabled={!selectedProjectId}>
             <Plus size={14} />
             <span>{t('newRelease')}</span>
           </button>
         </div>
       </div>
 
-      {/* Top Metric Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-primary)' }}>
-            <ShieldCheck size={20} />
-          </div>
-          <div className="stat-details">
-            <div className="stat-title">{t('metricQualityHealth')}</div>
-            <div className="stat-value">
-              {riskMatrix ? `${riskMatrix.overall_quality_score}/100` : '--'}
-            </div>
-            <div className="stat-subtitle">
-              {riskMatrix && <>
-                {getRiskBadge(riskMatrix.overall_risk_level, t)}
-                <small className="quality-score-formula">{t('metricQualityHealthFormula')}</small>
-              </>}
-            </div>
-          </div>
-        </div>
+      {!selectedProjectId && <div className="quality-context-notice" role="status">
+        <span>{t('noProjectSelected')}</span><Link to="/projects">{t('goToProjects')}</Link>
+      </div>}
+      {qualityLoadError && <div className="quality-data-error" role="alert">
+        <span>{t(qualityLoadError === 'forbidden' ? 'qualityLoadForbidden' : 'qualityLoadFailed')}</span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void fetchQualityData()} disabled={loadingMetrics}>{t('common:refresh')}</button>
+      </div>}
 
-        <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
-            <Target size={20} />
-          </div>
-          <div className="stat-details">
-            <div className="stat-title">{t('metricRequirementCoverage')}</div>
-            <div className="stat-value">
-              {coverage ? `${coverage.requirement_coverage_pct}%` : '--'}
-            </div>
-            <div className="stat-subtitle">
-              {coverage
-                ? t('requirementsCoverageCount', {
-                    covered: coverage.covered_requirements,
-                    total: coverage.total_requirements,
-                  })
-                : t('requirementsCoveredZero')}
+      <section className="quality-overview" aria-label={t('overviewTitle')} aria-busy={loadingMetrics}>
+        <div className="quality-posture">
+          <div className="quality-posture-main">
+            <span className="stat-icon quality-posture-icon is-blue" aria-hidden="true">
+              <ShieldCheck size={20} />
+            </span>
+            <div>
+              <h3 className="quality-posture-label">{t('metricQualityHealth')}</h3>
+              <div className="quality-posture-score">
+                {riskMatrix ? <><strong>{riskMatrix.overall_quality_score}</strong><span>/100</span></> : '--'}
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)' }}>
-            <Zap size={20} />
-          </div>
-          <div className="stat-details">
-            <div className="stat-title">{t('metricAutomationCoverage')}</div>
-            <div className="stat-value">
-              {coverage ? `${coverage.automation_coverage_pct}%` : '--'}
-            </div>
-            <div className="stat-subtitle">
-              {coverage
-                ? t('casesAutomatedCount', {
-                    automated: coverage.automated_cases,
-                    total: coverage.total_test_cases,
-                  })
-                : coverageSourceError
-                  ? t('coverageSourceUnavailable')
-                  : loadingMetrics ? t('coverageLoading') : t('casesZero')}
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon is-blue">
-            <Activity size={20} />
-          </div>
-          <div className="stat-details">
-            <div className="stat-title">{t('metricExecutionCoverage')}</div>
-            <div className="stat-value">
-              {coverage ? `${coverage.execution_coverage_pct}%` : '--'}
-            </div>
-            <div className="stat-subtitle">
-              {coverage
-                ? t('casesExecutedRecent', {
-                    executed: coverage.executed_cases_recent,
-                    total: coverage.total_test_cases,
-                  })
-                : coverageSourceError
-                  ? t('coverageSourceUnavailable')
-                  : loadingMetrics ? t('coverageLoading') : t('casesZero')}
-            </div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)' }}>
-            <AlertTriangle size={20} />
-          </div>
-          <div className="stat-details">
-            <div className="stat-title">{t('metricHighRiskAreas')}</div>
-            <div className="stat-value">
-              {riskMatrix ? riskMatrix.high_risk_count : '--'}
-            </div>
-            <div className="stat-subtitle">
+          <div className="quality-posture-footer">
+            <div className="quality-posture-risk">
               {riskMatrix
-                ? t('p0Unautomated', { value: riskMatrix.unautomated_p0_count })
-                : t('risksZero')}
+                ? evidenceIncomplete ? <span className="quality-evidence-badge">{t('evidenceIncompleteShort')}</span> : getRiskBadge(riskMatrix.overall_risk_level, t)
+                : <span className="quality-risk-unavailable">{loadingMetrics ? t('coverageLoading') : t('notAvailable')}</span>}
+              {riskMatrix && (
+                <span className="quality-posture-p0">{t('p0Unautomated', { value: riskMatrix.unautomated_p0_count })}</span>
+              )}
+            </div>
+            <div className="quality-posture-high-risk">
+              <span>{t('metricHighRiskAreas')}</span>
+              <strong>{riskMatrix ? riskMatrix.high_risk_count : '--'}</strong>
             </div>
           </div>
+          {riskMatrix && coverage && evidenceIncomplete && <p className="quality-evidence-note" role="note">
+            {t('riskEvidenceIncomplete', { requirements: coverage.total_requirements, executed: coverage.executed_cases_recent })}
+          </p>}
+          {riskMatrix && (
+            <details className="quality-score-method">
+              <summary>{t('qualityScoreMethod')}</summary>
+              <p>{t('metricQualityHealthFormula')}</p>
+            </details>
+          )}
         </div>
-      </div>
+
+        <div className="quality-coverage-signals">
+          {[
+            {
+              icon: Target,
+              tone: 'is-green',
+              label: t('metricRequirementCoverage'),
+              value: coverage ? requirementCoverage === null ? t('notAvailable') : `${requirementCoverage}%` : '--',
+              detail: coverage
+                ? coverage.total_requirements > 0
+                  ? t('requirementsCoverageCount', { covered: coverage.covered_requirements, total: coverage.total_requirements })
+                  : t('requirementsCoverageUnavailable')
+                : qualityLoadError ? t('qualityLoadFailed') : loadingMetrics ? t('coverageLoading') : t('noProjectSelected'),
+            },
+            {
+              icon: Zap,
+              tone: 'is-amber',
+              label: t('metricAutomationCoverage'),
+              value: coverage ? automationCoverage === null ? t('notAvailable') : `${automationCoverage}%` : '--',
+              detail: coverage
+                ? coverage.total_test_cases > 0
+                  ? t('casesAutomatedCount', { automated: coverage.automated_cases, total: coverage.total_test_cases })
+                  : t('casesCoverageUnavailable')
+                : qualityLoadError ? t('qualityLoadFailed') : loadingMetrics ? t('coverageLoading') : t('noProjectSelected'),
+            },
+            {
+              icon: Activity,
+              tone: 'is-blue',
+              label: t('metricExecutionCoverage'),
+              value: coverage ? executionCoverage === null ? t('notAvailable') : `${executionCoverage}%` : '--',
+              detail: coverage
+                ? coverage.total_test_cases > 0
+                  ? t('casesExecutedRecent', { executed: coverage.executed_cases_recent, total: coverage.total_test_cases })
+                  : t('casesCoverageUnavailable')
+                : qualityLoadError ? t('qualityLoadFailed') : loadingMetrics ? t('coverageLoading') : t('noProjectSelected'),
+            },
+          ].map(({ icon: Icon, tone, label, value, detail }) => (
+            <div className="quality-coverage-signal" key={label}>
+              <div className="quality-signal-heading">
+                <span className={`stat-icon quality-signal-icon ${tone}`} aria-hidden="true"><Icon size={16} /></span>
+                <span>{label}</span>
+              </div>
+              <strong className="quality-signal-value">{value}</strong>
+              <span className="quality-signal-detail">{detail}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Tabs */}
-      <div className="tabs-container" style={{ margin: '1.5rem 0 1rem' }}>
-        <button
-          className={`tab-btn ${activeTab === 'coverage' ? 'active' : ''}`}
-          onClick={() => setActiveTab('coverage')}
-        >
-          {t('tabCoverage')}
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'risks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('risks')}
-        >
-          {t('tabRisks', { value: riskMatrix?.risks.length || 0 })}
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'impact' ? 'active' : ''}`}
-          onClick={() => setActiveTab('impact')}
-        >
-          {t('tabImpact')}
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'releases' ? 'active' : ''}`}
-          onClick={() => setActiveTab('releases')}
-        >
-          {t('tabReleases', { value: releases.length })}
-        </button>
+      <div className="tabs-container quality-tabs" role="tablist" aria-label={t('tabsLabel')}>
+        {qualityTabs.map((tab, index) => <button
+          key={tab.id}
+          id={`quality-tab-${tab.id}`}
+          type="button"
+          role="tab"
+          aria-controls="quality-tabpanel"
+          aria-selected={activeTab === tab.id}
+          tabIndex={activeTab === tab.id ? 0 : -1}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => setActiveTab(tab.id)}
+          onKeyDown={(event) => handleQualityTabKeyDown(event, index)}
+        >{tab.label}</button>)}
       </div>
+      <div id="quality-tabpanel" role="tabpanel" aria-labelledby={`quality-tab-${activeTab}`} tabIndex={0}>
 
       {/* Tab 1: Coverage Details */}
       {activeTab === 'coverage' && (
@@ -436,9 +456,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <h3>{t('coverageTitle')}</h3>
             <span className="text-secondary text-sm">{t('coverageHint')}</span>
           </div>
-          {coverageSourceError && (
+          {testCasesSourceError && (
             <p className="text-secondary text-sm" role="status" style={{ padding: '0 16px 12px' }}>
-              {t('coverageSourceUnavailable')}
+              {t('testCasesSourceUnavailable')}
             </p>
           )}
           <div className="quality-coverage-toolbar" role="search">
@@ -468,7 +488,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             </label>
           </div>
           <div className="quality-coverage-count" role="status">
-            {t('coverageResultCount', { visible: filteredCoverage.length, total: coverage?.requirement_details.length ?? 0 })}
+            {coverage
+              ? t('coverageResultCount', { visible: filteredCoverage.length, total: coverage.requirement_details.length })
+              : loadingMetrics ? t('coverageLoading') : qualityLoadError ? t('qualityLoadFailed') : t('noProjectSelected')}
           </div>
           <p className="quality-coverage-scroll-hint">{t('coverageScrollHint')}</p>
           <div
@@ -492,7 +514,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               </thead>
               {filteredCoverage.length === 0 ? (
                 <tbody><tr><td colSpan={7} className="text-center text-secondary py-4">
-                  {coverage?.requirement_details.length ? t('coverageNoMatches') : t('coverageEmpty')}
+                  {loadingMetrics ? t('coverageLoading')
+                    : qualityLoadError ? t(qualityLoadError === 'forbidden' ? 'qualityLoadForbidden' : 'qualityLoadFailed')
+                      : !selectedProjectId ? t('noProjectSelected')
+                        : coverage?.total_requirements === 0 ? <div className="quality-coverage-empty">
+                          <p>{t('coverageEmpty')}</p>
+                          <Link to={buildWorkspaceHref({ projectId: selectedProjectId, stage: 'requirement', view: 'requirement' })}>{t('openRequirements')} <ArrowRight size={13} aria-hidden="true" /></Link>
+                        </div>
+                          : coverage?.requirement_details.length === 0 ? t('coverageDetailsUnavailable') : t('coverageNoMatches')}
                 </td></tr></tbody>
               ) : coverageGroups.map(({ status, items }) => (
                 <tbody key={status || 'all'}>
@@ -564,7 +593,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                             </div>
                             <div className="quality-coverage-linked-tests">
                               <h4>{t('coverageLinkedTestsTitle')}</h4>
-                              {testCases === null ? <p className="text-secondary">{t('coverageSourceUnavailable')}</p>
+                              {testCases === null ? <p className="text-secondary">{t('testCasesSourceUnavailable')}</p>
                                 : linkedCases.length === 0 ? <p className="text-secondary">{t('coverageNoCases')}</p>
                                   : <ul>{linkedCases.map((testCase) => (
                                     <li key={testCase.id}>
@@ -598,35 +627,30 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <h3>{t('risksTitle')}</h3>
             <span className="text-secondary text-sm">{t('risksHint')}</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-            {riskMatrix && riskMatrix.risks.length > 0 ? (
+          <div className="quality-risk-list">
+            {loadingMetrics ? <div className="quality-data-message" role="status">{t('coverageLoading')}</div>
+              : qualityLoadError ? <div className="quality-data-message" role="status">{t(qualityLoadError === 'forbidden' ? 'qualityLoadForbidden' : 'qualityLoadFailed')}</div>
+                : !selectedProjectId ? <div className="quality-data-message" role="status">{t('noProjectSelected')}</div>
+                  : riskMatrix && riskMatrix.risks.length > 0 ? (
               riskMatrix.risks.map((risk) => {
                 const riskHref = riskWorkspaceHref(risk);
                 return (
-                <div
-                  key={risk.id}
-                  style={{
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--r-sm)',
-                    padding: '1rem',
-                    backgroundColor: 'var(--bg-subtle)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <article key={risk.id} className="quality-risk-card">
+                  <div className="quality-risk-heading">
+                    <div className="quality-risk-title">
                       {riskHref
                         ? <Link className="quality-risk-link" to={riskHref}>{risk.area}</Link>
-                        : <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{risk.area}</span>}
+                        : <span className="quality-risk-area">{risk.area}</span>}
                       {getRiskBadge(risk.risk_level, t)}
                     </div>
-                    <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
+                    <div className="quality-risk-score">
                       {t('riskScore', { value: risk.score })}
                     </div>
                   </div>
 
-                  <div style={{ margin: '8px 0' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('riskReasons')}</div>
-                    <ul style={{ margin: '4px 0 8px 1.2rem', fontSize: '0.9rem' }}>
+                  <div className="quality-risk-section">
+                    <div className="quality-risk-label">{t('riskReasons')}</div>
+                    <ul>
                       {risk.reasons.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}
@@ -634,18 +658,18 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   </div>
 
                   {risk.recommended_actions.length > 0 && (
-                    <div style={{ marginTop: '8px', backgroundColor: 'var(--bg-base)', padding: '8px 12px', borderRadius: 'var(--r-xs)' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '4px' }}>
+                    <div className="quality-risk-actions">
+                      <div className="quality-risk-label">
                         {t('riskRecommendedActions')}
                       </div>
-                      <ul style={{ margin: '0 0 0 1.2rem', fontSize: '0.85rem' }}>
+                      <ul>
                         {risk.recommended_actions.map((act, i) => (
                           <li key={i}>{act}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                </div>
+                </article>
                 );
               })
             ) : (
@@ -657,26 +681,27 @@ export const QualityPage: React.FC<QualityPageProps> = ({
 
       {/* Tab 3: Git Impact & Regression Selector */}
       {activeTab === 'impact' && (
-        <div className="card" style={{ padding: '1.5rem' }}>
+        <div className="card quality-impact-card">
           <div style={{ marginBottom: '1.5rem' }}>
             <h3>{t('impactTitle')}</h3>
             <p className="text-secondary text-sm">{t('impactHint')}</p>
           </div>
 
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.9rem' }}>
+            <label className="quality-impact-label" htmlFor="quality-changed-files">
               {t('impactChangedFilesLabel')}
             </label>
             <textarea
-              className="form-control"
+              id="quality-changed-files"
+              className="form-control quality-impact-input"
               rows={4}
               placeholder={t('impactChangedFilesPlaceholder')}
               value={changedFilesText}
               onChange={(e) => setChangedFilesText(e.target.value)}
-              style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', width: '100%' }}
             />
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button
+                type="button"
                 className="btn btn-primary"
                 onClick={handleRunImpactAnalysis}
                 disabled={loadingImpact}
@@ -686,6 +711,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               </button>
             </div>
           </div>
+          {impactError && <div className="async-state async-state-error quality-action-error" role="alert">{t('impactActionFailed', { message: impactError })}</div>}
 
           {impactResult && (
             <div
@@ -859,6 +885,8 @@ export const QualityPage: React.FC<QualityPageProps> = ({
         </div>
         </>
       )}
+
+      </div>
 
       {/* Modal: Create Release */}
       {showCreateReleaseModal && (

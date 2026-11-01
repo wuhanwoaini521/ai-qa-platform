@@ -312,6 +312,8 @@ async def test_worker_collects_encrypted_failure_snapshot_from_existing_pytest_r
             self.posts.append((path, json))
             return Response()
 
+    from pydantic import SecretStr
+
     daemon = WorkerDaemon()
     worker_config = daemon.config.worker.model_copy(
         update={
@@ -319,8 +321,9 @@ async def test_worker_collects_encrypted_failure_snapshot_from_existing_pytest_r
             "artifact_storage_dir": tmp_path / "artifacts",
         }
     )
+    app_config = daemon.config.app.model_copy(update={"secret_key": SecretStr("worker-test-master-key")})
     features = daemon.config.features.model_copy(update={"live_browser": True})
-    daemon.config = daemon.config.model_copy(update={"worker": worker_config, "features": features})
+    daemon.config = daemon.config.model_copy(update={"app": app_config, "worker": worker_config, "features": features})
     (tmp_path / "workspaces" / "project-snapshot").mkdir(parents=True)
     client = Client()
     daemon._http_client = client  # type: ignore[assignment]

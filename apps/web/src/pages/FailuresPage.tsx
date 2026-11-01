@@ -980,6 +980,18 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   ? analysisAttemptLabelKey(selectedAnalysis?.status)
                   : null}
               />
+
+              <div className="failure-review-workbench">
+                <div className="failure-review-evidence">
+                  <FailureEvidence
+                    failure={selectedFailure}
+                    environment={sourceRun?.environment}
+                    browser={sourceRun?.browser}
+                    browserSession={sourceRun?.browser_sessions?.find((session) => session.nodeid === selectedFailure.test_nodeid)}
+                    browserArtifacts={sourceRun?.external_artifacts}
+                  />
+                </div>
+                <div className="failure-review-column">
               {repairError && <div className="alert alert-error" role="alert">{repairError}</div>}
 
               {aiDiagnosis && (
@@ -1001,14 +1013,6 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   </div>
                 </section>
               )}
-
-              <FailureEvidence
-                failure={selectedFailure}
-                environment={sourceRun?.environment}
-                browser={sourceRun?.browser}
-                browserSession={sourceRun?.browser_sessions?.find((session) => session.nodeid === selectedFailure.test_nodeid)}
-                browserArtifacts={sourceRun?.external_artifacts}
-              />
 
               {/* Locator Repair Proposal Card */}
               {repairWorkflow?.repair_proposal && repairProposal && (
@@ -1350,8 +1354,11 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
 
 
+                </div>
+              </div>
+
               {/* Similar Past Failures / Recurrence History */}
-              <div className="card">
+              <div className="card failure-recurrence-workspace">
                 <div className="card-header">
                   <div
                     style={{

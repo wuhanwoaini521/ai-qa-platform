@@ -872,6 +872,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requirements/{requirement_id}/assertions/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Assertions
+         * @description Draft assertions grounded in acceptance criteria. Drafts are never applied automatically.
+         */
+        post: operations["draft_assertions_api_requirements__requirement_id__assertions_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}/adoption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Assertion Adoption
+         * @description Record the human adoption decision for one drafted assertion.
+         */
+        post: operations["set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Assertion Script
+         * @description Return a script draft built from human-adopted assertions. Nothing is written to disk.
+         */
+        post: operations["generate_assertion_script_api_requirements__requirement_id__assertions_script_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-cases/{case_id}/assertions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Case Assertions
+         * @description Case assertions with their bound test function's latest real execution.
+         */
+        get: operations["case_assertions_api_test_cases__case_id__assertions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Assertion */
+        delete: operations["discard_assertion_api_requirements__requirement_id__assertions__assertion_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/script/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Assertion Script
+         * @description Save a human-approved script and record which adopted assertions it implements.
+         */
+        post: operations["save_assertion_script_api_requirements__requirement_id__assertions_script_save_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requirements/{requirement_id}/assertions/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assertion Runs
+         * @description Return each assertion with its latest real TestRun execution, or NEVER_RUN.
+         */
+        get: operations["assertion_runs_api_requirements__requirement_id__assertions_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/requirements/{requirement_id}/lifecycle/designs": {
         parameters: {
             query?: never;
@@ -900,6 +1037,94 @@ export interface paths {
         put?: never;
         /** Adopt Case */
         post: operations["adopt_case_api_test_designs__design_id__lifecycle_case_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/flows/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compile Flow Document
+         * @description Compile an authored flow into pytest source through the recorder generator.
+         *
+         *     Authoring only: nothing is written and nothing executes. The caller decides whether to save the
+         *     returned source into a workspace, which then uses the existing save/run/evidence path.
+         */
+        post: operations["compile_flow_document_api_flows_compile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/flows/bind-case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind Flow Case
+         * @description Bind a saved flow to a test case whose assertions carry the flow's criteria.
+         *
+         *     Human-triggered: the caller saves the file first, then records the case identity. The case
+         *     assertion panel derives run state from the nodeid stored on each assertion.
+         */
+        post: operations["bind_flow_case_api_flows_bind_case_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/api-cases/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compile Api Case Endpoint
+         * @description Compile a request spec into a pytest API case (authoring only: nothing is saved or run).
+         */
+        post: operations["compile_api_case_endpoint_api_api_cases_compile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/api-cases/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Api Case
+         * @description Save an authored API case: write the pytest file, create/refresh the case, bind the nodeid.
+         *
+         *     Human-triggered. Criterion assertions are only stored when a requirement is chosen.
+         */
+        post: operations["save_api_case_api_api_cases_save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -977,6 +1202,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recorder/sessions/{session_id}/api-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Recorder Api Calls
+         * @description API calls observed while recording, ready to turn into API cases.
+         */
+        get: operations["get_recorder_api_calls_api_recorder_sessions__session_id__api_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recorder/sessions/{session_id}/generate": {
         parameters: {
             query?: never;
@@ -1039,6 +1284,26 @@ export interface paths {
         put?: never;
         /** Save Recorded Case */
         post: operations["save_recorded_case_api_recorder_sessions__session_id__save_case_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recorder/sessions/{session_id}/save-api-case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Recorded Api Case
+         * @description Save one captured API call as an API test case (human-triggered).
+         */
+        post: operations["save_recorded_api_case_api_recorder_sessions__session_id__save_api_case_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4399,6 +4664,54 @@ export interface components {
              */
             at: string;
         };
+        /** ApiAssertion */
+        ApiAssertion: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "status" | "json_path" | "body_contains" | "json_contract";
+            /** Path */
+            path?: string | null;
+            /** Expected */
+            expected?: unknown;
+        };
+        /** ApiCaseRequest */
+        ApiCaseRequest: {
+            /**
+             * Test Name
+             * @default api_case
+             */
+            test_name: string;
+            /**
+             * Method
+             * @default GET
+             * @enum {string}
+             */
+            method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+            /** Url */
+            url: string;
+            /** Headers */
+            headers?: components["schemas"]["ApiHeader"][];
+            /** Base Url */
+            base_url?: string | null;
+            /** Body */
+            body?: string | null;
+            /** Json Body */
+            json_body?: unknown;
+            /** Assertions */
+            assertions?: components["schemas"]["ApiAssertion"][];
+        };
+        /** ApiHeader */
+        ApiHeader: {
+            /** Name */
+            name: string;
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+        };
         /** ApiKey */
         ApiKey: {
             /** Name */
@@ -4488,6 +4801,15 @@ export interface components {
             /** Storage Url */
             storage_url: string;
         };
+        /** AssertionScriptSavePayload */
+        AssertionScriptSavePayload: {
+            /** Path */
+            path: string;
+            /** Code */
+            code: string;
+            /** Assertion Ids */
+            assertion_ids: string[];
+        };
         /** AutomationBinding */
         AutomationBinding: {
             /** Test Case Id */
@@ -4550,6 +4872,30 @@ export interface components {
          * @enum {string}
          */
         AutomationStatus: "MANUAL" | "DRAFT" | "AUTOMATED";
+        /** BindFlowRequest */
+        BindFlowRequest: {
+            /** Project Id */
+            project_id: string;
+            /** Requirement Id */
+            requirement_id: string;
+            /** Scenario Id */
+            scenario_id?: string | null;
+            /** File Path */
+            file_path: string;
+            /** Test Name */
+            test_name: string;
+            /** Title */
+            title: string;
+            /** Steps */
+            steps?: string[];
+            /** Assertions */
+            assertions?: components["schemas"]["FlowAssertion"][];
+        };
+        /** Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post */
+        Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post: {
+            /** Adopted */
+            adopted: boolean;
+        };
         /** Body_upload_artifact_api_artifacts_upload_post */
         Body_upload_artifact_api_artifacts_upload_post: {
             /** File */
@@ -4651,6 +4997,33 @@ export interface components {
             description: string;
             /** Criterion Ids */
             criterion_ids?: string[];
+        };
+        /**
+         * CaseAssertion
+         * @description An executable expectation owned by one test case and bound to a test function.
+         */
+        CaseAssertion: {
+            /** Id */
+            id: string;
+            /** Criterion Id */
+            criterion_id: string;
+            /** Statement */
+            statement: string;
+            /**
+             * Check
+             * @default
+             */
+            check: string;
+            /**
+             * Nodeid
+             * @default
+             */
+            nodeid: string;
+            /**
+             * Source Assertion Id
+             * @default
+             */
+            source_assertion_id: string;
         };
         /**
          * CaseIdStrategy
@@ -5570,6 +5943,10 @@ export interface components {
             id: string;
             /** Run Id */
             run_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Execution Id */
             execution_id: string;
             /** Test Nodeid */
@@ -5766,6 +6143,10 @@ export interface components {
             path: string;
             /** Content */
             content: string;
+            /** Expected Exists */
+            expected_exists?: boolean | null;
+            /** Expected Sha256 */
+            expected_sha256?: string | null;
         };
         /** FileNode */
         FileNode: {
@@ -5846,6 +6227,79 @@ export interface components {
             flaky_score: components["schemas"]["FlakyScore"];
             trend: components["schemas"]["TestTrend"];
         };
+        /** FlowAssertion */
+        FlowAssertion: {
+            /** Criterion Id */
+            criterion_id: string;
+            /** Statement */
+            statement: string;
+            /**
+             * Check
+             * @default
+             */
+            check: string;
+        };
+        /** FlowDocument */
+        FlowDocument: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /**
+             * Test Name
+             * @default flow_canvas_case
+             */
+            test_name: string;
+            /** Nodes */
+            nodes?: components["schemas"]["FlowNode"][];
+        };
+        /** FlowNode */
+        FlowNode: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "navigate" | "click" | "fill" | "assert_text" | "assert_visible" | "wait" | "condition";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Url */
+            url?: string | null;
+            /**
+             * Locator Kind
+             * @default css
+             * @enum {string}
+             */
+            locator_kind: "css" | "test_id" | "role" | "label" | "placeholder" | "id" | "name" | "text";
+            /** Locator Value */
+            locator_value?: string | null;
+            /** Locator Name */
+            locator_name?: string | null;
+            /** Value */
+            value?: string | null;
+            /** Criterion Ids */
+            criterion_ids?: string[];
+            /**
+             * Condition Kind
+             * @default css
+             * @enum {string}
+             */
+            condition_kind: "css" | "text" | "test_id";
+            /** Condition Value */
+            condition_value?: string | null;
+            /** Env Var */
+            env_var?: string | null;
+            /** Then */
+            then?: components["schemas"]["FlowNode"][];
+            /** Else Nodes */
+            else_nodes?: components["schemas"]["FlowNode"][];
+        };
         /**
          * FrameworkType
          * @enum {string}
@@ -5918,6 +6372,38 @@ export interface components {
              * @default
              */
             message: string;
+        };
+        /**
+         * GroundedAssertion
+         * @description An executable assertion draft that must cite the acceptance criterion it verifies.
+         */
+        GroundedAssertion: {
+            /** Id */
+            id: string;
+            /** Criterion Id */
+            criterion_id: string;
+            /** Statement */
+            statement: string;
+            /**
+             * Check
+             * @default
+             */
+            check: string;
+            /**
+             * Adopted
+             * @default false
+             */
+            adopted: boolean;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Created At
+             * @default
+             */
+            created_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6449,6 +6935,8 @@ export interface components {
             };
             /** Oracles */
             oracles?: components["schemas"]["TestOracle"][];
+            /** Assertions */
+            assertions?: components["schemas"]["CaseAssertion"][];
             /** Evidence */
             evidence?: ("Screenshot" | "DOM" | "Network" | "Trace" | "Logs")[];
             /** Missing */
@@ -6595,6 +7083,13 @@ export interface components {
             default_branch: string;
             /** @default playwright_python */
             framework_type: components["schemas"]["FrameworkType"];
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /**
+             * Hidden From Overview
+             * @default false
+             */
+            hidden_from_overview: boolean;
             /** Id */
             id: string;
             /** Demo Kind */
@@ -6632,6 +7127,13 @@ export interface components {
             default_branch: string;
             /** @default playwright_python */
             framework_type: components["schemas"]["FrameworkType"];
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /**
+             * Hidden From Overview
+             * @default false
+             */
+            hidden_from_overview: boolean;
             /**
              * Bootstrap Workspace
              * @description Automatically initialize starter workspace directory structure
@@ -6650,6 +7152,10 @@ export interface components {
             /** Default Branch */
             default_branch?: string | null;
             framework_type?: components["schemas"]["FrameworkType"] | null;
+            /** Sut Base Url */
+            sut_base_url?: string | null;
+            /** Hidden From Overview */
+            hidden_from_overview?: boolean | null;
             /** Owner Id */
             owner_id?: string | null;
             /** Team Id */
@@ -7006,6 +7512,8 @@ export interface components {
             test_name: string;
             /** Steps */
             steps: components["schemas"]["RecorderStep"][];
+            /** Mock Responses */
+            mock_responses?: components["schemas"]["RecorderMockResponse"][];
         };
         /** RecorderLocator */
         RecorderLocator: {
@@ -7025,6 +7533,40 @@ export interface components {
             exact: boolean;
             /** Nth */
             nth?: number | null;
+        };
+        /**
+         * RecorderMockResponse
+         * @description A captured API response replayed through page.route during the generated test.
+         */
+        RecorderMockResponse: {
+            /** Url */
+            url: string;
+            /**
+             * Method
+             * @default GET
+             */
+            method: string;
+            /**
+             * Status
+             * @default 200
+             */
+            status: number;
+            /** Headers */
+            headers?: {
+                [key: string]: string;
+            };
+            /** Body */
+            body?: string | null;
+        };
+        /**
+         * RecorderSaveApiCaseRequest
+         * @description Save one captured API call as a pytest API case bound to the recorder project.
+         */
+        RecorderSaveApiCaseRequest: {
+            /** Call Id */
+            call_id: string;
+            /** Test Name */
+            test_name?: string | null;
         };
         /** RecorderSaveCaseRequest */
         RecorderSaveCaseRequest: {
@@ -7056,7 +7598,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "navigate" | "back" | "scroll" | "click" | "double_click" | "fill" | "select" | "check" | "uncheck" | "press" | "hover" | "wait" | "assert_visible" | "assert_text" | "assert_url" | "assert_title" | "assert_count";
+            action: "navigate" | "back" | "scroll" | "click" | "double_click" | "fill" | "select" | "check" | "uncheck" | "press" | "hover" | "wait" | "assert_visible" | "assert_text" | "assert_url" | "assert_title" | "assert_count" | "condition";
             locator?: components["schemas"]["RecorderLocator"] | null;
             /** Frame Path */
             frame_path?: string[];
@@ -7088,6 +7630,18 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             evidence?: components["schemas"]["RecorderStepEvidence"] | null;
+            /**
+             * Condition Kind
+             * @default css
+             * @enum {string}
+             */
+            condition_kind: "css" | "text" | "test_id";
+            /** Condition Value */
+            condition_value?: string | null;
+            /** Then Steps */
+            then_steps?: components["schemas"]["RecorderStep"][];
+            /** Else Steps */
+            else_steps?: components["schemas"]["RecorderStep"][];
         };
         /** RecorderStepEvidence */
         RecorderStepEvidence: {
@@ -7450,6 +8004,10 @@ export interface components {
             /** Dependencies */
             dependencies?: string[];
             analysis?: components["schemas"]["RequirementAnalysis"] | null;
+            /** Assertions */
+            assertions?: components["schemas"]["GroundedAssertion"][];
+            /** Scripts */
+            scripts?: components["schemas"]["ScriptBinding"][];
             /** History */
             history?: components["schemas"]["AnalysisRecord"][];
         };
@@ -8090,6 +8648,59 @@ export interface components {
             max_replans: number;
             /** Recorder Session Id */
             recorder_session_id?: string | null;
+        };
+        /** SaveApiCasePayload */
+        SaveApiCasePayload: {
+            /** Project Id */
+            project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Scenario Id */
+            scenario_id?: string | null;
+            /** Criterion Ids */
+            criterion_ids?: string[];
+            request: components["schemas"]["ApiCaseRequest"];
+        };
+        /**
+         * ScriptBinding
+         * @description A test file saved from grounded assertions, recorded so runs can be traced back.
+         */
+        ScriptBinding: {
+            /** Path */
+            path: string;
+            /** Nodeids */
+            nodeids: string[];
+            /** Assertion Ids */
+            assertion_ids: string[];
+            /** Criterion Ids */
+            criterion_ids?: string[];
+            /**
+             * Provider
+             * @default
+             */
+            provider: string;
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /**
+             * Saved At
+             * @default
+             */
+            saved_at: string;
+            /** Nodeid Criteria */
+            nodeid_criteria?: components["schemas"]["ScriptNodeCriteria"][];
+        };
+        /**
+         * ScriptNodeCriteria
+         * @description Which criteria a single test function implements (assertion-level pairing).
+         */
+        ScriptNodeCriteria: {
+            /** Nodeid */
+            nodeid: string;
+            /** Criterion Ids */
+            criterion_ids?: string[];
         };
         /** SingleTestResult */
         SingleTestResult: {
@@ -9188,6 +9799,10 @@ export interface components {
             origin_failure_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Workspace Id */
             workspace_id: string;
             /** @default QUEUED */
@@ -9289,6 +9904,10 @@ export interface components {
             origin_failure_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Case Id */
+            case_id?: string | null;
             /** Workspace Id */
             workspace_id: string;
             /** Nodeids */
@@ -11763,6 +12382,233 @@ export interface operations {
             };
         };
     };
+    draft_assertions_api_requirements__requirement_id__assertions_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+                assertion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_assertion_script_api_requirements__requirement_id__assertions_script_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_assertions_api_test_cases__case_id__assertions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_assertion_api_requirements__requirement_id__assertions__assertion_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+                assertion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_assertion_script_api_requirements__requirement_id__assertions_script_save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssertionScriptSavePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assertion_runs_api_requirements__requirement_id__assertions_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     adopt_scenarios_api_requirements__requirement_id__lifecycle_designs_post: {
         parameters: {
             query?: never;
@@ -11812,6 +12658,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compile_flow_document_api_flows_compile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlowDocument"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bind_flow_case_api_flows_bind_case_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindFlowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compile_api_case_endpoint_api_api_cases_compile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_api_case_api_api_cases_save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveApiCasePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -12039,6 +13025,37 @@ export interface operations {
             };
         };
     };
+    get_recorder_api_calls_api_recorder_sessions__session_id__api_calls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     generate_case_api_recorder_sessions__session_id__generate_post: {
         parameters: {
             query?: never;
@@ -12150,6 +13167,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RecorderSaveCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_recorded_api_case_api_recorder_sessions__session_id__save_api_case_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecorderSaveApiCaseRequest"];
             };
         };
         responses: {

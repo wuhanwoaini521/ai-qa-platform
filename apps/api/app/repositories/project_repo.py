@@ -13,13 +13,18 @@ class ProjectRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def count_all(self) -> int:
+    async def count_all(self, *, include_hidden: bool = False) -> int:
         """Row count without materialising the table."""
-        result = await self.session.execute(select(func.count()).select_from(ProjectORM))
+        query = select(func.count()).select_from(ProjectORM)
+        if not include_hidden:
+            query = query.where(ProjectORM.hidden_from_overview.is_(False))
+        result = await self.session.execute(query)
         return int(result.scalar() or 0)
 
-    async def list_all(self, limit: int | None = None) -> list[ProjectORM]:
+    async def list_all(self, limit: int | None = None, *, include_hidden: bool = False) -> list[ProjectORM]:
         query = select(ProjectORM).order_by(ProjectORM.created_at.desc())
+        if not include_hidden:
+            query = query.where(ProjectORM.hidden_from_overview.is_(False))
         if limit is not None:
             query = query.limit(limit)
         result = await self.session.execute(query)
@@ -43,6 +48,8 @@ class ProjectRepository:
             repository_url=data.repository_url,
             default_branch=data.default_branch,
             framework_type=data.framework_type.value,
+            sut_base_url=data.sut_base_url,
+            hidden_from_overview=data.hidden_from_overview,
             owner_id=owner_id,
             created_at=now,
             updated_at=now,

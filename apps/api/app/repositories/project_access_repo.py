@@ -50,7 +50,14 @@ class ProjectAccessRepository:
         )
 
     async def project_of_workspace(self, workspace_id: str) -> str | None:
-        return await self._scalar(select(WorkspaceORM.project_id).where(WorkspaceORM.id == workspace_id))
+        # WorkspaceCatalogService exposes the project id as the canonical workspace id, while
+        # persisted workspace resources may still be addressed by their actual row id.
+        project_id = await self._scalar(select(WorkspaceORM.project_id).where(WorkspaceORM.id == workspace_id))
+        if project_id is not None:
+            return project_id
+        return await self._scalar(
+            select(WorkspaceORM.project_id).where(WorkspaceORM.project_id == workspace_id).limit(1)
+        )
 
     async def project_of_requirement(self, requirement_id: str) -> str | None:
         return await self._scalar(select(RequirementORM.project_id).where(RequirementORM.id == requirement_id))

@@ -30,6 +30,8 @@ __all__ = [
     "enforce_resource_access",
     "failure_access",
     "is_admin",
+    "project_body_access",
+    "resource_body_access",
     "project_path_access",
     "project_query_access",
     "release_access",
@@ -110,6 +112,45 @@ def project_query_access(param: str):
         project_id = request.query_params.get(param)
         if project_id:
             await enforce_project_access(user, project_id)
+
+    return _guard
+
+
+async def _request_json_object(request: Request) -> dict:
+    """Read a JSON object for ACL checks; leave malformed bodies to FastAPI validation."""
+    try:
+        payload = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def project_body_access(param: str = "project_id"):
+    """Guard a project ID carried in a JSON body before the route mutates that project."""
+
+    async def _guard(request: Request, user: User = Depends(get_current_user)):
+        project_id = (await _request_json_object(request)).get(param)
+        if project_id is None:
+            return
+        if not isinstance(project_id, str) and not is_admin(user):
+            raise _not_found()
+        if isinstance(project_id, str):
+            await enforce_project_access(user, project_id)
+
+    return _guard
+
+
+def resource_body_access(param: str, kind: str):
+    """Guard a project-owned resource ID carried in a JSON body."""
+
+    async def _guard(request: Request, user: User = Depends(get_current_user)):
+        resource_id = (await _request_json_object(request)).get(param)
+        if resource_id is None:
+            return
+        if not isinstance(resource_id, str) and not is_admin(user):
+            raise _not_found()
+        if isinstance(resource_id, str):
+            await enforce_resource_access(user, kind, resource_id)
 
     return _guard
 

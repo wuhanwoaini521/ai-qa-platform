@@ -249,7 +249,71 @@ async def test_quality_coverage_and_risk_matrix(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_quality_metric_definitions_match_requirement_and_case_data(client: AsyncClient):
+    project = (
+        await client.post("/api/projects", json={"name": "Quality metric definitions", "bootstrap_workspace": False})
+    ).json()
+    project_id = project["id"]
+
+    requirements = {}
+    for title in ("Designed and manual", "Case only", "Automated without design"):
+        response = await client.post(
+            "/api/requirements",
+            json={"project_id": project_id, "title": title, "description": "Metric definition regression"},
+        )
+        assert response.status_code in (200, 201), response.text
+        requirements[title] = response.json()["id"]
+
+    design_response = await client.post(
+        "/api/test-designs",
+        json={
+            "requirement_id": requirements["Designed and manual"],
+            "title": "Metric regression design",
+            "category": "FUNCTIONAL",
+            "description": "One design contributes 30 completeness points.",
+        },
+    )
+    assert design_response.status_code in (200, 201), design_response.text
+
+    for title, requirement_title, automation_status in (
+        ("Manual designed case", "Designed and manual", "MANUAL"),
+        ("Manual case-only case", "Case only", "MANUAL"),
+        ("Automated case-only case", "Automated without design", "AUTOMATED"),
+    ):
+        response = await client.post(
+            "/api/test-cases",
+            json={
+                "project_id": project_id,
+                "requirement_id": requirements[requirement_title],
+                "title": title,
+                "priority": "P1",
+                "automation_status": automation_status,
+            },
+        )
+        assert response.status_code in (200, 201), response.text
+
+    response = await client.get(f"/api/quality/coverage?project_id={project_id}")
+    assert response.status_code == 200, response.text
+    coverage = response.json()
+    rows = {item["title"]: item["coverage_percentage"] for item in coverage["requirement_details"]}
+
+    # A design + a manual case is 70 points; a case alone is 40; an automated
+    # case alone is also 70. Aggregate requirement coverage counts rows >=70,
+    # while automation coverage is the separate automated-cases / all-cases ratio.
+    assert rows == {"Designed and manual": 70.0, "Case only": 40.0, "Automated without design": 70.0}
+    assert coverage["covered_requirements"] == 2
+    assert coverage["total_requirements"] == 3
+    assert coverage["requirement_coverage_pct"] == 66.7
+    assert coverage["automated_cases"] == 1
+    assert coverage["total_test_cases"] == 3
+    assert coverage["automation_coverage_pct"] == 33.3
+    assert coverage["executed_cases_recent"] == 0
+    assert coverage["execution_coverage_pct"] == 0.0
+
+
+@pytest.mark.asyncio
 async def test_impact_analysis_and_regression_selector(client: AsyncClient):
+
     # 1. Create project
     proj_resp = await client.post(
         "/api/projects",

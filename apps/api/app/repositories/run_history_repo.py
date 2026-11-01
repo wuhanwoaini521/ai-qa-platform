@@ -69,6 +69,20 @@ class RunHistoryRepository:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def get_latest_executions_with_runs(self, nodeids: list[str], project_id: str) -> list[tuple[object, object]]:
+        """Latest execution per nodeid, joined with its run (newest first)."""
+        if not nodeids:
+            return []
+        async with self.session_factory() as session:
+            stmt = (
+                select(TestExecutionORM, TestRunORM)
+                .join(TestRunORM, TestExecutionORM.run_id == TestRunORM.id)
+                .where(TestExecutionORM.nodeid.in_(nodeids), TestRunORM.project_id == project_id)
+                .order_by(desc(TestExecutionORM.started_at).nulls_last(), desc(TestExecutionORM.id))
+            )
+            result = await session.execute(stmt)
+            return [(execution, run) for execution, run in result.all()]
+
     async def get_test_history_detail(
         self,
         nodeid: str,

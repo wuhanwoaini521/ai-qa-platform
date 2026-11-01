@@ -14,7 +14,7 @@ async def list_projects(
     service: ProjectService = Depends(get_project_service),
     user: User = Depends(get_current_user),
 ):
-    projects = await service.list_projects()
+    projects = await service.list_projects(include_hidden=True)
     allowed = await visible_project_ids(user)
     if allowed is None:
         return projects

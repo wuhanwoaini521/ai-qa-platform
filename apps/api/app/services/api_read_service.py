@@ -92,7 +92,14 @@ class StreamResourceService:
         if kind == "lsp":
             return await self.project_repo.get_by_id(resource_id) is not None
         if kind == "recorder":
-            return await self.recorder_service.get(resource_id, owner_id) is not None
+            session = await self.recorder_service.get(resource_id, owner_id)
+            if session is None:
+                return False
+            if user is not None and user.role is UserRole.ADMIN:
+                return True
+            if self.project_access_repo is None:
+                return False
+            return session.project_id in await self.project_access_repo.owned_or_shared_project_ids(owner_id)
         if kind == "debug":
             return await self.debug_session_service.get(resource_id, owner_id) is not None
         if kind == "discovery":

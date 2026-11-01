@@ -5,10 +5,17 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 class SensitiveRedactor:
-    """Redacts passwords, tokens, API keys, and sensitive headers from logs and traces."""
+    """Redacts credentials, personal identifiers, and sensitive metadata from logs and traces."""
 
     SENSITIVE_KEYS = re.compile(
-        r"(?i)(?:^|[_-])(authorization|cookie|set-cookie|password|passwd|secret|token|api[_-]?key)(?:$|[_-])"
+        r"(?i)(?:^|[_-])(authorization|cookie|set-cookie|password|passwd|secret|token|api[_-]?key"
+        r"|email(?:[_-]?(?:address|addr))?|phone(?:[_-]?(?:number|no))?"
+        r"|telephone(?:[_-]?(?:number|no))?|mobile(?:[_-]?(?:phone|number))?"
+        r"|cell(?:[_-]?(?:phone|number))?|ssn|social[_-]?security(?:[_-]?number)?)(?:$|[_-])"
+    )
+    REDACTION_PLACEHOLDER_PATTERN = re.compile(
+        r"(?i)(?:\*{3}\s*REDACTED\s*\*{3}|\[\s*REDACTED(?:[_ -][A-Z0-9_-]+)?\s*\]"
+        r"|<\s*REDACTED(?:[_ -][A-Z0-9_-]+)?\s*>)"
     )
     URL_PATTERN = re.compile(r"(?i)https?://[^\s\"'<>]+")
 
@@ -29,6 +36,22 @@ class SensitiveRedactor:
         (re.compile(r"(?i)bearer\s+[a-zA-Z0-9_\-\.]+", re.IGNORECASE), r"Bearer ***REDACTED***"),
         (re.compile(r"(?i)ghp_[a-zA-Z0-9]{36}", re.IGNORECASE), r"ghp_***REDACTED***"),
         (re.compile(r"(?i)sk-[a-zA-Z0-9]{32,}", re.IGNORECASE), r"sk-***REDACTED***"),
+        (re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"), "[REDACTED_EMAIL]"),
+        (
+            re.compile(
+                r"(?<!\w)(?:\d{3}[-. \u00a0\u202f\u2010-\u2015\u2212]\d{2}[-. \u00a0\u202f\u2010-\u2015\u2212]\d{4}|\d{9})(?!\w)"
+            ),
+            "[REDACTED_SSN]",
+        ),
+        (
+            re.compile(
+                r"(?<!\w)(?:\+?1[ .\u00a0\u202f\u2010-\u2015\u2212-]?)?(?:\(\d{3}\)|\d{3})"
+                r"[ .\u00a0\u202f\u2010-\u2015\u2212-]?\d{3}[ .\u00a0\u202f\u2010-\u2015\u2212-]?\d{4}"
+                r"(?:\s*(?:ext\.?|x)\s*\d{1,6})?(?!\w)",
+                re.IGNORECASE,
+            ),
+            "[REDACTED_PHONE]",
+        ),
     ]
 
     # Accessibility snapshots print the typed value next to the field, e.g. `- textbox "Card number": 4111…`.
@@ -44,13 +67,19 @@ class SensitiveRedactor:
         return cls.TYPED_VALUE_PATTERN.sub(r"\g<prefix> {filled}", text)
 
     @classmethod
+    def contains_redaction_placeholder(cls, text: str) -> bool:
+        """Return whether text contains a persisted redaction marker."""
+        return bool(text and cls.REDACTION_PLACEHOLDER_PATTERN.search(text))
+
+    @classmethod
     def redact_text(cls, text: str) -> str:
         if not text:
             return ""
         result = cls.redact_typed_values(text)
+        result = cls.URL_PATTERN.sub(lambda match: cls.redact_url(match.group(0)), result)
         for pattern, replacement in cls.PATTERNS:
             result = pattern.sub(replacement, result)
-        return cls.URL_PATTERN.sub(lambda match: cls.redact_url(match.group(0)), result)
+        return result
 
     @staticmethod
     def redact_url(value: str) -> str:
@@ -89,7 +118,9 @@ class SensitiveRedactor:
             redacted = {}
             for key, item in value.items():
                 key_text = str(key)
-                if cls.SENSITIVE_KEYS.search(key_text):
+                normalized_key = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key_text)
+                normalized_key = re.sub(r"[^A-Za-z0-9_-]+", "_", normalized_key)
+                if cls.SENSITIVE_KEYS.search(normalized_key):
                     redacted[key] = "***REDACTED***" if item is not None else None
                 else:
                     redacted[key] = cls.redact_value(item)

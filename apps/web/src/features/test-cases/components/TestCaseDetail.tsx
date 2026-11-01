@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CheckSquare, ExternalLink, Sparkles, Tag } from 'lucide-react';
 import { AutomationStatus, TestCase } from '../../../types';
 import { ModernCasePanel } from '../../lifecycle/ModernCasePanel';
+import { CaseAssertionsPanel } from './CaseAssertionsPanel';
 
 interface TestCaseDetailProps {
   selectedCase: TestCase;
@@ -67,6 +68,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
       </div>
       <div className="card-body">
         {selectedCase.test_model && <ModernCasePanel key={selectedCase.id} item={selectedCase}/>}
+        <CaseAssertionsPanel key={`assertions-${selectedCase.id}`} caseId={selectedCase.id} />
         {selectedCase.preconditions && (
           <div style={{ marginBottom: '14px' }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>

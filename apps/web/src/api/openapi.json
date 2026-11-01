@@ -2393,6 +2393,330 @@
         }
       }
     },
+    "/api/requirements/{requirement_id}/assertions/draft": {
+      "post": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Draft Assertions",
+        "description": "Draft assertions grounded in acceptance criteria. Drafts are never applied automatically.",
+        "operationId": "draft_assertions_api_requirements__requirement_id__assertions_draft_post",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}/adoption": {
+      "post": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Set Assertion Adoption",
+        "description": "Record the human adoption decision for one drafted assertion.",
+        "operationId": "set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          },
+          {
+            "name": "assertion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Assertion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requirements/{requirement_id}/assertions/script": {
+      "post": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Generate Assertion Script",
+        "description": "Return a script draft built from human-adopted assertions. Nothing is written to disk.",
+        "operationId": "generate_assertion_script_api_requirements__requirement_id__assertions_script_post",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test-cases/{case_id}/assertions": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Case Assertions",
+        "description": "Case assertions with their bound test function's latest real execution.",
+        "operationId": "case_assertions_api_test_cases__case_id__assertions_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requirements/{requirement_id}/assertions/{assertion_id}": {
+      "delete": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Discard Assertion",
+        "operationId": "discard_assertion_api_requirements__requirement_id__assertions__assertion_id__delete",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          },
+          {
+            "name": "assertion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Assertion Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requirements/{requirement_id}/assertions/script/save": {
+      "post": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Save Assertion Script",
+        "description": "Save a human-approved script and record which adopted assertions it implements.",
+        "operationId": "save_assertion_script_api_requirements__requirement_id__assertions_script_save_post",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssertionScriptSavePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requirements/{requirement_id}/assertions/runs": {
+      "get": {
+        "tags": [
+          "QA Lifecycle"
+        ],
+        "summary": "Assertion Runs",
+        "description": "Return each assertion with its latest real TestRun execution, or NEVER_RUN.",
+        "operationId": "assertion_runs_api_requirements__requirement_id__assertions_runs_get",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Requirement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/requirements/{requirement_id}/lifecycle/designs": {
       "post": {
         "tags": [
@@ -2457,6 +2781,182 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/flows/compile": {
+      "post": {
+        "tags": [
+          "Flow Canvas"
+        ],
+        "summary": "Compile Flow Document",
+        "description": "Compile an authored flow into pytest source through the recorder generator.\n\nAuthoring only: nothing is written and nothing executes. The caller decides whether to save the\nreturned source into a workspace, which then uses the existing save/run/evidence path.",
+        "operationId": "compile_flow_document_api_flows_compile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlowDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Compile Flow Document Api Flows Compile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/flows/bind-case": {
+      "post": {
+        "tags": [
+          "Flow Canvas"
+        ],
+        "summary": "Bind Flow Case",
+        "description": "Bind a saved flow to a test case whose assertions carry the flow's criteria.\n\nHuman-triggered: the caller saves the file first, then records the case identity. The case\nassertion panel derives run state from the nodeid stored on each assertion.",
+        "operationId": "bind_flow_case_api_flows_bind_case_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindFlowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Bind Flow Case Api Flows Bind Case Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api-cases/compile": {
+      "post": {
+        "tags": [
+          "API Cases"
+        ],
+        "summary": "Compile Api Case Endpoint",
+        "description": "Compile a request spec into a pytest API case (authoring only: nothing is saved or run).",
+        "operationId": "compile_api_case_endpoint_api_api_cases_compile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Compile Api Case Endpoint Api Api Cases Compile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api-cases/save": {
+      "post": {
+        "tags": [
+          "API Cases"
+        ],
+        "summary": "Save Api Case",
+        "description": "Save an authored API case: write the pytest file, create/refresh the case, bind the nodeid.\n\nHuman-triggered. Criterion assertions are only stored when a requirement is chosen.",
+        "operationId": "save_api_case_api_api_cases_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveApiCasePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Save Api Case Api Api Cases Save Post"
+                }
               }
             }
           },
@@ -2746,6 +3246,47 @@
         }
       }
     },
+    "/api/recorder/sessions/{session_id}/api-calls": {
+      "get": {
+        "tags": [
+          "Browser Recorder"
+        ],
+        "summary": "Get Recorder Api Calls",
+        "description": "API calls observed while recording, ready to turn into API cases.",
+        "operationId": "get_recorder_api_calls_api_recorder_sessions__session_id__api_calls_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/recorder/sessions/{session_id}/generate": {
       "post": {
         "tags": [
@@ -2918,6 +3459,57 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RecorderSaveCaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recorder/sessions/{session_id}/save-api-case": {
+      "post": {
+        "tags": [
+          "Browser Recorder"
+        ],
+        "summary": "Save Recorded Api Case",
+        "description": "Save one captured API call as an API test case (human-triggered).",
+        "operationId": "save_recorded_api_case_api_recorder_sessions__session_id__save_api_case_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecorderSaveApiCaseRequest"
               }
             }
           }
@@ -12657,6 +13249,140 @@
         ],
         "title": "AnalysisStage"
       },
+      "ApiAssertion": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "status",
+              "json_path",
+              "body_contains",
+              "json_contract"
+            ],
+            "title": "Kind"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "expected": {
+            "title": "Expected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "ApiAssertion"
+      },
+      "ApiCaseRequest": {
+        "properties": {
+          "test_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Test Name",
+            "default": "api_case"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "HEAD",
+              "OPTIONS"
+            ],
+            "title": "Method",
+            "default": "GET"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url"
+          },
+          "headers": {
+            "items": {
+              "$ref": "#/components/schemas/ApiHeader"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Headers"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "json_body": {
+            "title": "Json Body"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/ApiAssertion"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Assertions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ApiCaseRequest"
+      },
+      "ApiHeader": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Value",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ApiHeader"
+      },
       "ApiKey": {
         "properties": {
           "name": {
@@ -12903,6 +13629,37 @@
         ],
         "title": "ArtifactUploadResponse"
       },
+      "AssertionScriptSavePayload": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Path"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Code"
+          },
+          "assertion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Assertion Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "code",
+          "assertion_ids"
+        ],
+        "title": "AssertionScriptSavePayload"
+      },
       "AutomationBinding": {
         "properties": {
           "test_case_id": {
@@ -13020,6 +13777,85 @@
           "AUTOMATED"
         ],
         "title": "AutomationStatus"
+      },
+      "BindFlowRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "requirement_id": {
+            "type": "string",
+            "title": "Requirement Id"
+          },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Id"
+          },
+          "file_path": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "File Path"
+          },
+          "test_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Test Name"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Steps"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/FlowAssertion"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Assertions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "requirement_id",
+          "file_path",
+          "test_name",
+          "title"
+        ],
+        "title": "BindFlowRequest"
+      },
+      "Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post": {
+        "properties": {
+          "adopted": {
+            "type": "boolean",
+            "title": "Adopted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "adopted"
+        ],
+        "title": "Body_set_assertion_adoption_api_requirements__requirement_id__assertions__assertion_id__adoption_post"
       },
       "Body_upload_artifact_api_artifacts_upload_post": {
         "properties": {
@@ -13244,6 +14080,55 @@
           "description"
         ],
         "title": "BusinessRule"
+      },
+      "CaseAssertion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^TCA-[A-Za-z0-9-]+$",
+            "title": "Id"
+          },
+          "criterion_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Criterion Id"
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 400,
+            "minLength": 8,
+            "title": "Statement"
+          },
+          "check": {
+            "type": "string",
+            "maxLength": 400,
+            "title": "Check",
+            "default": ""
+          },
+          "nodeid": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Nodeid",
+            "default": ""
+          },
+          "source_assertion_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Source Assertion Id",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "criterion_id",
+          "statement"
+        ],
+        "title": "CaseAssertion",
+        "description": "An executable expectation owned by one test case and bound to a test function."
       },
       "CaseIdStrategy": {
         "type": "string",
@@ -15226,6 +16111,28 @@
             "type": "string",
             "title": "Run Id"
           },
+          "requirement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Id"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          },
           "execution_id": {
             "type": "string",
             "title": "Execution Id"
@@ -15792,6 +16699,28 @@
           "content": {
             "type": "string",
             "title": "Content"
+          },
+          "expected_exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Exists"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
           }
         },
         "type": "object",
@@ -15976,6 +16905,218 @@
         ],
         "title": "FlakyTestItem"
       },
+      "FlowAssertion": {
+        "properties": {
+          "criterion_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Criterion Id"
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 400,
+            "minLength": 8,
+            "title": "Statement"
+          },
+          "check": {
+            "type": "string",
+            "maxLength": 400,
+            "title": "Check",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "criterion_id",
+          "statement"
+        ],
+        "title": "FlowAssertion"
+      },
+      "FlowDocument": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "test_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Test Name",
+            "default": "flow_canvas_case"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FlowNode"
+            },
+            "type": "array",
+            "maxItems": 300,
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "title": "FlowDocument"
+      },
+      "FlowNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "navigate",
+              "click",
+              "fill",
+              "assert_text",
+              "assert_visible",
+              "wait",
+              "condition"
+            ],
+            "title": "Kind"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Description",
+            "default": ""
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "locator_kind": {
+            "type": "string",
+            "enum": [
+              "css",
+              "test_id",
+              "role",
+              "label",
+              "placeholder",
+              "id",
+              "name",
+              "text"
+            ],
+            "title": "Locator Kind",
+            "default": "css"
+          },
+          "locator_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator Value"
+          },
+          "locator_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator Name"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "criterion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Criterion Ids"
+          },
+          "condition_kind": {
+            "type": "string",
+            "enum": [
+              "css",
+              "text",
+              "test_id"
+            ],
+            "title": "Condition Kind",
+            "default": "css"
+          },
+          "condition_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Value"
+          },
+          "env_var": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Var"
+          },
+          "then": {
+            "items": {
+              "$ref": "#/components/schemas/FlowNode"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Then"
+          },
+          "else_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FlowNode"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Else Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "FlowNode"
+      },
       "FrameworkType": {
         "type": "string",
         "enum": [
@@ -16145,6 +17286,60 @@
           "branch"
         ],
         "title": "GitPushResult"
+      },
+      "GroundedAssertion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^ASR-[A-Za-z0-9-]+$",
+            "title": "Id"
+          },
+          "criterion_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Criterion Id"
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 400,
+            "minLength": 8,
+            "title": "Statement"
+          },
+          "check": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Check",
+            "default": ""
+          },
+          "adopted": {
+            "type": "boolean",
+            "title": "Adopted",
+            "default": false
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Source",
+            "default": ""
+          },
+          "created_at": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Created At",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "criterion_id",
+          "statement"
+        ],
+        "title": "GroundedAssertion",
+        "description": "An executable assertion draft that must cite the acceptance criterion it verifies."
       },
       "HTTPValidationError": {
         "properties": {
@@ -17243,6 +18438,14 @@
             "maxItems": 20,
             "title": "Oracles"
           },
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/CaseAssertion"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Assertions"
+          },
           "evidence": {
             "items": {
               "type": "string",
@@ -17654,6 +18857,23 @@
             "$ref": "#/components/schemas/FrameworkType",
             "default": "playwright_python"
           },
+          "sut_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sut Base Url"
+          },
+          "hidden_from_overview": {
+            "type": "boolean",
+            "title": "Hidden From Overview",
+            "default": false
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -17747,6 +18967,23 @@
             "$ref": "#/components/schemas/FrameworkType",
             "default": "playwright_python"
           },
+          "sut_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sut Base Url"
+          },
+          "hidden_from_overview": {
+            "type": "boolean",
+            "title": "Hidden From Overview",
+            "default": false
+          },
           "bootstrap_workspace": {
             "type": "boolean",
             "title": "Bootstrap Workspace",
@@ -17818,6 +19055,29 @@
                 "type": "null"
               }
             ]
+          },
+          "sut_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sut Base Url"
+          },
+          "hidden_from_overview": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hidden From Overview"
           },
           "owner_id": {
             "anyOf": [
@@ -18599,6 +19859,14 @@
             "type": "array",
             "maxItems": 500,
             "title": "Steps"
+          },
+          "mock_responses": {
+            "items": {
+              "$ref": "#/components/schemas/RecorderMockResponse"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Mock Responses"
           }
         },
         "type": "object",
@@ -18665,6 +19933,82 @@
           "value"
         ],
         "title": "RecorderLocator"
+      },
+      "RecorderMockResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Url"
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Method",
+            "default": "GET"
+          },
+          "status": {
+            "type": "integer",
+            "maximum": 599.0,
+            "minimum": 100.0,
+            "title": "Status",
+            "default": 200
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Headers"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "RecorderMockResponse",
+        "description": "A captured API response replayed through page.route during the generated test."
+      },
+      "RecorderSaveApiCaseRequest": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Call Id"
+          },
+          "test_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id"
+        ],
+        "title": "RecorderSaveApiCaseRequest",
+        "description": "Save one captured API call as a pytest API case bound to the recorder project."
       },
       "RecorderSaveCaseRequest": {
         "properties": {
@@ -18747,7 +20091,8 @@
               "assert_text",
               "assert_url",
               "assert_title",
-              "assert_count"
+              "assert_count",
+              "condition"
             ],
             "title": "Action"
           },
@@ -18853,6 +20198,44 @@
                 "type": "null"
               }
             ]
+          },
+          "condition_kind": {
+            "type": "string",
+            "enum": [
+              "css",
+              "text",
+              "test_id"
+            ],
+            "title": "Condition Kind",
+            "default": "css"
+          },
+          "condition_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Value"
+          },
+          "then_steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecorderStep"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Then Steps"
+          },
+          "else_steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecorderStep"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Else Steps"
           }
         },
         "type": "object",
@@ -19716,6 +21099,22 @@
                 "type": "null"
               }
             ]
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/GroundedAssertion"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Assertions"
+          },
+          "scripts": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptBinding"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Scripts"
           },
           "history": {
             "items": {
@@ -21764,6 +23163,149 @@
           "type"
         ],
         "title": "RuntimeTask"
+      },
+      "SaveApiCasePayload": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "requirement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Id"
+          },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Id"
+          },
+          "criterion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Criterion Ids"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ApiCaseRequest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "request"
+        ],
+        "title": "SaveApiCasePayload"
+      },
+      "ScriptBinding": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^tests/[A-Za-z0-9_./-]+\\.py$",
+            "title": "Path"
+          },
+          "nodeids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Nodeids"
+          },
+          "assertion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Assertion Ids"
+          },
+          "criterion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Criterion Ids"
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Provider",
+            "default": ""
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Model",
+            "default": ""
+          },
+          "saved_at": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Saved At",
+            "default": ""
+          },
+          "nodeid_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptNodeCriteria"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Nodeid Criteria"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "nodeids",
+          "assertion_ids"
+        ],
+        "title": "ScriptBinding",
+        "description": "A test file saved from grounded assertions, recorded so runs can be traced back."
+      },
+      "ScriptNodeCriteria": {
+        "properties": {
+          "nodeid": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Nodeid"
+          },
+          "criterion_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Criterion Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nodeid"
+        ],
+        "title": "ScriptNodeCriteria",
+        "description": "Which criteria a single test function implements (assertion-level pairing)."
       },
       "SingleTestResult": {
         "properties": {
@@ -24517,6 +26059,28 @@
             "type": "string",
             "title": "Project Id"
           },
+          "requirement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Id"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          },
           "workspace_id": {
             "type": "string",
             "title": "Workspace Id"
@@ -24745,6 +26309,28 @@
           "project_id": {
             "type": "string",
             "title": "Project Id"
+          },
+          "requirement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Id"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
           },
           "workspace_id": {
             "type": "string",

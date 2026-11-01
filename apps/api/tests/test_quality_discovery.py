@@ -4021,6 +4021,7 @@ async def test_discovery_journey_creates_replayable_create_test_draft_without_br
 
     project_id = f"project-{uuid4().hex[:12]}"
     run_id = str(uuid4())
+    requirement_id = str(uuid4())
     now = utc_now()
     async with test_db_session() as session:
         session.add(
@@ -4034,6 +4035,17 @@ async def test_discovery_journey_creates_replayable_create_test_draft_without_br
                 updated_at=now,
             )
         )
+        await session.flush()
+        session.add(
+            RequirementORM(
+                id=requirement_id,
+                project_id=project_id,
+                title="Product search",
+                description="Search the product catalog.",
+                acceptance_criteria="Matching products appear",
+            )
+        )
+        await session.flush()
         session.add(
             QualityDiscoveryRunORM(
                 id=run_id,
@@ -4041,7 +4053,7 @@ async def test_discovery_journey_creates_replayable_create_test_draft_without_br
                 requested_by="test",
                 mode="EXPLORE",
                 start_url="https://shop.example.test/",
-                requirement_id=None,
+                requirement_id=requirement_id,
                 requirement_text="",
                 allowed_domains=["shop.example.test"],
                 status="COMPLETED",
@@ -4072,14 +4084,505 @@ async def test_discovery_journey_creates_replayable_create_test_draft_without_br
     assert tasks.owner_id == "owner-1"
     assert tasks.data.type == TaskType.CREATE_TEST
     assert tasks.data.project_id == project_id and tasks.data.workspace_id == project_id
+    assert tasks.data.max_ai_calls == 1
+    assert tasks.data.inputs["requirement_id"] == requirement_id
+    assert tasks.data.inputs["requirement"] == "Product search\nSearch the product catalog."
+    assert tasks.data.inputs["acceptance_criteria"] == ["Matching products appear"]
     assert "url" not in tasks.data.inputs and "recorder_session_id" not in tasks.data.inputs
     assert tasks.data.inputs["assertion_bypass_check"] is True
+    assert tasks.data.inputs["discovery_run_id"] == run_id
+    assert tasks.data.inputs["discovery_run_version"] == 1
+    assert tasks.data.inputs["discovery_journey_id"] == "journey-1"
+    assert "discovery_assertion_candidates" not in tasks.data.inputs
     steps = tasks.data.inputs["recorded_steps"]
     assert [step["action"] for step in steps] == ["navigate", "fill", "press", "assert_text"]
     assert steps[1]["locator"]["kind"] == "role"
     assert steps[1]["value"] == "camera"
     assert steps[2]["key"] == "Enter"
     assert steps[-1]["locator"]["name"] == "Search results for camera"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("returned_ids", "expected_status", "expected_fallback"),
+    [
+        (["observed_02"], "selected", False),
+        (["invented_999"], "invalid_output", True),
+    ],
+)
+async def test_discovery_assertion_selection_is_bounded_redacted_and_candidate_only(
+    monkeypatch, returned_ids, expected_status, expected_fallback
+):
+    from contextlib import asynccontextmanager
+
+    from app.services.task_ai_service import TaskAIService
+    from qa_core.ai.models import AICompletionResponse
+    from qa_core.ai.registry import AIProviderRegistry
+
+    captured_requests = []
+    captured_events = []
+
+    class Provider:
+        provider_name = "fixture-provider"
+        model = "fixture-model"
+
+        async def complete(self, request):
+            captured_requests.append(request)
+            return AICompletionResponse(
+                content="",
+                structured_data={"candidate_ids": returned_ids},
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    class TaskRepository:
+        async def get(self, _task_id):
+            return SimpleNamespace(id="task-selection")
+
+        async def add_event(self, task_id, event_type, payload):
+            captured_events.append((task_id, event_type, payload))
+
+    class Repositories:
+        tasks = TaskRepository()
+
+        async def commit(self):
+            return None
+
+    @asynccontextmanager
+    async def repository_scope():
+        yield Repositories()
+
+    provider = Provider()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: provider)
+    service = TaskAIService(SimpleNamespace(repository_scope=repository_scope))
+
+    async def reserve_ai_call(_task_id):
+        return True
+
+    monkeypatch.setattr(service, "reserve_ai_call", reserve_ai_call)
+    candidates = [
+        {"candidate_id": "observed_01", "kind": "heading", "text": "Observed heading"},
+        {"candidate_id": "sensitive_01", "kind": "visible_text", "text": "api_key: secret-sentinel-123"},
+        *[
+            {"candidate_id": f"observed_{index:02d}", "kind": "heading", "text": f"Observed heading {index}"}
+            for index in range(2, 12)
+        ],
+        {"candidate_id": "outside_limit", "kind": "heading", "text": "Beyond the candidate limit"},
+    ]
+
+    result = await service.suggest_discovery_assertions(SimpleNamespace(id="task-selection"), candidates)
+
+    prompt = json.loads(captured_requests[0].prompt)
+    prompted_candidates = prompt["candidates"]
+    assert len(prompted_candidates) == 11
+    assert all(set(item) == {"candidate_id", "kind", "text"} for item in prompted_candidates)
+    assert "secret-sentinel-123" not in captured_requests[0].prompt
+    assert "sensitive_01" not in captured_requests[0].prompt
+    assert "outside_limit" not in captured_requests[0].prompt
+    assert captured_requests[0].max_tokens == 450
+    assert captured_requests[0].max_retries == 0
+    assert result["status"] == expected_status
+    assert result["fallback_used"] is expected_fallback
+    expected_ids = returned_ids if not expected_fallback else []
+    assert result["candidate_ids"] == expected_ids
+    assert captured_events[0][2]["status"] == expected_status
+    assert captured_events[0][2]["fallback_used"] is expected_fallback
+
+
+@pytest.mark.asyncio
+async def test_discovery_assertion_selection_rejects_raw_pii_placeholders_and_truncated_sources(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from app.services.task_ai_service import TaskAIService
+    from qa_core.ai.models import AICompletionResponse
+    from qa_core.ai.registry import AIProviderRegistry
+
+    captured_requests = []
+    captured_events = []
+
+    class Provider:
+        provider_name = "fixture-provider"
+        model = "fixture-model"
+
+        async def complete(self, request):
+            captured_requests.append(request)
+            return AICompletionResponse(
+                content="",
+                structured_data={"candidate_ids": ["safe_01"]},
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    class TaskRepository:
+        async def get(self, _task_id):
+            return SimpleNamespace(id="task-selection")
+
+        async def add_event(self, task_id, event_type, payload):
+            captured_events.append((task_id, event_type, payload))
+
+    class Repositories:
+        tasks = TaskRepository()
+
+        async def commit(self):
+            return None
+
+    @asynccontextmanager
+    async def repository_scope():
+        yield Repositories()
+
+    provider = Provider()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: provider)
+    service = TaskAIService(SimpleNamespace(repository_scope=repository_scope))
+    monkeypatch.setattr(service, "reserve_ai_call", lambda _task_id: asyncio.sleep(0, result=True))
+    candidates = [
+        {"candidate_id": "safe_01", "kind": "heading", "text": "Search results"},
+        {"candidate_id": "raw_email", "kind": "visible_text", "text": "Contact alice@example.test"},
+        {"candidate_id": "raw_phone", "kind": "visible_text", "text": "Call (415) 555-0199"},
+        {"candidate_id": "raw_ssn", "kind": "visible_text", "text": "SSN 123-45-6789"},
+        {"candidate_id": "raw_dotted_ssn", "kind": "visible_text", "text": "SSN 123.45.6789"},
+        {"candidate_id": "raw_unicode_phone", "kind": "visible_text", "text": "Call 415‑555‑0199"},
+        {"candidate_id": "redacted_email", "kind": "visible_text", "text": "Contact [REDACTED_EMAIL]"},
+        {"candidate_id": "redacted_secret", "kind": "heading", "text": "***REDACTED***"},
+        {
+            "candidate_id": "truncated_pii",
+            "kind": "visible_text",
+            "text": f"{'x' * 210} hidden@example.test",
+        },
+        {"candidate_id": "safe_02", "kind": "heading", "text": "Matching products"},
+    ]
+
+    result = await service.suggest_discovery_assertions(SimpleNamespace(id="task-selection"), candidates)
+
+    assert result["status"] == "selected"
+    assert result["candidate_ids"] == ["safe_01"]
+    prompt = captured_requests[0].prompt
+    prompt_candidates = json.loads(prompt)["candidates"]
+    assert [item["candidate_id"] for item in prompt_candidates] == ["safe_01", "safe_02"]
+    for sensitive in (
+        "alice@example.test",
+        "(415) 555-0199",
+        "123-45-6789",
+        "123.45.6789",
+        "415‑555‑0199",
+        "[REDACTED_EMAIL]",
+        "***REDACTED***",
+        "hidden@example.test",
+        "raw_email",
+        "raw_phone",
+        "raw_ssn",
+        "raw_dotted_ssn",
+        "raw_unicode_phone",
+        "redacted_email",
+        "redacted_secret",
+        "truncated_pii",
+    ):
+        assert sensitive not in prompt
+    assert captured_events[0][2]["candidate_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_persisted_discovery_placeholders_and_pii_never_reach_assertion_candidates_or_provider(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from app.services.task_ai_service import TaskAIService
+    from app.services.task_code_generation_service import TaskCodeGenerationService
+    from qa_core.ai.models import AICompletionResponse
+    from qa_core.ai.registry import AIProviderRegistry
+
+    project_id = "project-sensitive-source"
+    source = SimpleNamespace(
+        project_id=project_id,
+        status="COMPLETED",
+        version=3,
+        result=_replayable_discovery_result(
+            final_state_overrides={
+                "main_content": (
+                    "Matching products appear. Contact alice@example.test. Call (415) 555-0199. "
+                    "SSN 123-45-6789. Another phone 415‑555‑0199; dotted SSN 123.45.6789. "
+                    "Cached [REDACTED_EMAIL]."
+                ),
+                "landmarks": (
+                    'heading "Search results for camera" [level=1] '
+                    'heading "[REDACTED_EMAIL]" [level=2] '
+                    'heading "Contact alice@example.test" [level=2] '
+                    'heading "Call +1 415-555-0199" [level=2] '
+                    'heading "SSN 123-45-6789" [level=2]'
+                ),
+                "controls": [
+                    {"visible": True, "role": "button", "name": "Continue"},
+                    {"visible": True, "role": "button", "name": "[REDACTED_PHONE]"},
+                    {"visible": True, "role": "link", "name": "alice@example.test"},
+                    {"visible": True, "role": "tab", "name": "123-45-6789"},
+                ],
+            }
+        ),
+    )
+
+    class DiscoveryRepository:
+        async def get(self, _run_id):
+            return source
+
+    @asynccontextmanager
+    async def discovery_repository_scope():
+        yield SimpleNamespace(quality_discovery=DiscoveryRepository())
+
+    inputs = {
+        "discovery_run_id": "source-run",
+        "discovery_journey_id": "journey-1",
+        "discovery_run_version": 3,
+    }
+    codegen = TaskCodeGenerationService(
+        SimpleNamespace(
+            input=lambda _task, key, default=None: inputs.get(key, default),
+            repository_scope=discovery_repository_scope,
+        )
+    )
+    candidates = await codegen._observed_discovery_assertion_candidates(SimpleNamespace(project_id=project_id))
+    rendered_candidates = json.dumps(candidates)
+    assert candidates
+    assert "Matching products appear" in rendered_candidates
+    for sensitive in (
+        "alice@example.test",
+        "(415) 555-0199",
+        "123-45-6789",
+        "123.45.6789",
+        "415‑555‑0199",
+        "[REDACTED_EMAIL]",
+        "[REDACTED_PHONE]",
+    ):
+        assert sensitive not in rendered_candidates
+
+    captured_requests = []
+    captured_events = []
+
+    class Provider:
+        provider_name = "fixture-provider"
+        model = "fixture-model"
+
+        async def complete(self, request):
+            captured_requests.append(request)
+            return AICompletionResponse(
+                content="",
+                structured_data={"candidate_ids": [candidates[0]["candidate_id"]]},
+                provider=self.provider_name,
+                model=self.model,
+            )
+
+    class TaskRepository:
+        async def get(self, _task_id):
+            return SimpleNamespace(id="task-persisted-source")
+
+        async def add_event(self, task_id, event_type, payload):
+            captured_events.append((task_id, event_type, payload))
+
+    class Repositories:
+        tasks = TaskRepository()
+
+        async def commit(self):
+            return None
+
+    @asynccontextmanager
+    async def ai_repository_scope():
+        yield Repositories()
+
+    provider = Provider()
+    monkeypatch.setattr(AIProviderRegistry, "get_provider", lambda: provider)
+    ai_service = TaskAIService(SimpleNamespace(repository_scope=ai_repository_scope))
+
+    async def reserve_ai_call(_task_id):
+        return True
+
+    monkeypatch.setattr(ai_service, "reserve_ai_call", reserve_ai_call)
+    result = await ai_service.suggest_discovery_assertions(SimpleNamespace(id="task-persisted-source"), candidates)
+
+    assert result["candidate_ids"] == [candidates[0]["candidate_id"]]
+    prompt = captured_requests[0].prompt
+    for sensitive in (
+        "alice@example.test",
+        "(415) 555-0199",
+        "123-45-6789",
+        "123.45.6789",
+        "415‑555‑0199",
+        "[REDACTED_EMAIL]",
+        "[REDACTED_PHONE]",
+        "***REDACTED***",
+    ):
+        assert sensitive not in prompt
+    assert captured_events[0][2]["candidate_count"] == len(candidates)
+
+
+@pytest.mark.parametrize(
+    ("title", "landmarks"),
+    [
+        ("[REDACTED_EMAIL]", ""),
+        ("Safe title", 'heading "***REDACTED***" [level=1]'),
+    ],
+)
+def test_observed_final_assertion_fails_closed_on_redaction_placeholders(title, landmarks):
+    from app.services.quality_discovery_draft import QualityDiscoveryDraftMixin
+
+    with pytest.raises(ValueError, match="no safe observable heading or title"):
+        QualityDiscoveryDraftMixin._observed_final_assertion(
+            {"evidence_id": "evidence-placeholder", "title": title, "landmarks": landmarks}
+        )
+
+
+@pytest.mark.asyncio
+async def test_discovery_codegen_rebuilds_candidates_from_persisted_evidence():
+    from contextlib import asynccontextmanager
+
+    from app.services.task_code_generation_service import TaskCodeGenerationService
+
+    project_id = "project-source"
+    inputs = {
+        "discovery_run_id": "source-run",
+        "discovery_journey_id": "journey-1",
+        "discovery_run_version": 3,
+        "discovery_assertion_candidates": [
+            {
+                "candidate_id": "forged_candidate",
+                "kind": "heading",
+                "text": "Unobserved assertion",
+                "evidence_id": "forged-evidence",
+                "state_id": "forged-state",
+                "step": {"action": "assert_text", "value": "Unobserved assertion"},
+            }
+        ],
+    }
+    source = SimpleNamespace(
+        project_id=project_id,
+        status="COMPLETED",
+        version=3,
+        result=_replayable_discovery_result(),
+    )
+
+    class DiscoveryRepository:
+        async def get(self, _run_id):
+            return source
+
+    @asynccontextmanager
+    async def repository_scope():
+        yield SimpleNamespace(quality_discovery=DiscoveryRepository())
+
+    def task_input(_task, key, default=None):
+        return inputs.get(key, default)
+
+    service = TaskCodeGenerationService(SimpleNamespace(input=task_input, repository_scope=repository_scope))
+    candidates = await service._observed_discovery_assertion_candidates(SimpleNamespace(project_id=project_id))
+
+    assert candidates
+    assert candidates[0]["candidate_id"] == "discovery_assertion_01"
+    assert candidates[0]["text"] == "Search results for camera"
+    assert candidates[0]["evidence_id"] == "evidence-results"
+    assert all(item["candidate_id"] != "forged_candidate" for item in candidates)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("source_project", "source_version"), [("other-project", 3), ("project-source", 2)])
+async def test_discovery_codegen_rejects_cross_project_or_stale_source(source_project, source_version):
+    from contextlib import asynccontextmanager
+
+    from app.services.task_code_generation_service import TaskCodeGenerationService
+    from app.services.task_errors import TaskBlocked
+
+    source = SimpleNamespace(
+        project_id=source_project,
+        status="COMPLETED",
+        version=source_version,
+        result=_replayable_discovery_result(),
+    )
+
+    class DiscoveryRepository:
+        async def get(self, _run_id):
+            return source
+
+    @asynccontextmanager
+    async def repository_scope():
+        yield SimpleNamespace(quality_discovery=DiscoveryRepository())
+
+    inputs = {
+        "discovery_run_id": "source-run",
+        "discovery_journey_id": "journey-1",
+        "discovery_run_version": 3,
+    }
+    context = SimpleNamespace(
+        input=lambda _task, key, default=None: inputs.get(key, default), repository_scope=repository_scope
+    )
+    service = TaskCodeGenerationService(context)
+
+    with pytest.raises(TaskBlocked, match="missing, stale, incomplete, or outside the task project"):
+        await service._observed_discovery_assertion_candidates(SimpleNamespace(project_id="project-source"))
+
+
+@pytest.mark.asyncio
+async def test_discovery_journey_draft_rejects_requirement_from_another_project(test_db_session):
+    project_id = f"project-{uuid4().hex[:12]}"
+    other_project_id = f"project-{uuid4().hex[:12]}"
+    requirement_id = str(uuid4())
+    run_id = str(uuid4())
+    now = utc_now()
+    async with test_db_session() as session:
+        session.add_all(
+            [
+                ProjectORM(
+                    id=project_id,
+                    name="Discovery project",
+                    description="",
+                    default_branch="main",
+                    framework_type="playwright_python",
+                    created_at=now,
+                    updated_at=now,
+                ),
+                ProjectORM(
+                    id=other_project_id,
+                    name="Other project",
+                    description="",
+                    default_branch="main",
+                    framework_type="playwright_python",
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ]
+        )
+        await session.flush()
+        session.add(
+            RequirementORM(
+                id=requirement_id,
+                project_id=other_project_id,
+                title="Other project requirement",
+            )
+        )
+        await session.flush()
+        session.add(
+            QualityDiscoveryRunORM(
+                id=run_id,
+                project_id=project_id,
+                requested_by="test",
+                mode="EXPLORE",
+                start_url="https://shop.example.test/",
+                requirement_id=requirement_id,
+                requirement_text="",
+                allowed_domains=["shop.example.test"],
+                status="COMPLETED",
+                progress={},
+                result=_replayable_discovery_result(),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    class CaptureTasks:
+        async def create(self, *_args, **_kwargs):
+            pytest.fail("A draft must not be created from a requirement owned by another project")
+
+    service = QualityDiscoveryService(
+        test_db_session,
+        browser_runtime=DiscoveryFixtureBrowserRuntime(),
+        task_commands=CaptureTasks(),
+    )
+    with pytest.raises(ValueError, match="no longer belongs to this Discovery project"):
+        await service.create_pytest_draft(run_id, "journey-1", "owner-1")
 
 
 @pytest.mark.asyncio
@@ -4158,10 +4661,31 @@ async def test_discovery_journey_draft_rejects_non_replayable_or_unassertable_jo
         service._append_replay_action([], non_text_search, {"controls": None})
 
 
+def test_discovery_expected_result_enforces_test_case_limit_without_truncating():
+    from app.services.task_errors import TaskBlocked
+    from app.services.task_test_execution_service import (
+        TEST_CASE_EXPECTED_RESULT_MAX_LENGTH,
+        TaskTestExecutionService,
+    )
+
+    prefix = "Acceptance criteria:\n- "
+    within_limit_criterion = "x" * (TEST_CASE_EXPECTED_RESULT_MAX_LENGTH - len(prefix))
+    expected_result = TaskTestExecutionService._test_case_expected_result("", [within_limit_criterion])
+    assert len(expected_result) == TEST_CASE_EXPECTED_RESULT_MAX_LENGTH
+    assert expected_result == f"{prefix}{within_limit_criterion}"
+
+    oversized_criterion = "x" * (TEST_CASE_EXPECTED_RESULT_MAX_LENGTH - len(prefix) + 1)
+    with pytest.raises(TaskBlocked, match="expected result limit"):
+        TaskTestExecutionService._test_case_expected_result("", [oversized_criterion])
+    with pytest.raises(TaskBlocked, match="expected result limit"):
+        TaskTestExecutionService._test_case_expected_result("r" * TEST_CASE_EXPECTED_RESULT_MAX_LENGTH, ["c"])
+
+
 @pytest.mark.asyncio
 async def test_discovery_draft_api_waits_for_approval_before_workspace_write(client, test_db_session):
     from app.container import get_task_runtime_service
     from app.services.workspace_service import WorkspaceService
+    from sqlalchemy import select
 
     task_scheduler_service = get_task_runtime_service().scheduler
 
@@ -4196,11 +4720,22 @@ async def test_discovery_draft_api_waits_for_approval_before_workspace_write(cli
     project = await client.post("/api/projects", json={"name": "Discovery Draft API", "bootstrap_workspace": True})
     assert project.status_code == 201, project.text
     project_id = project.json()["id"]
+    requirement_id = str(uuid4())
     server = await asyncio.start_server(serve_page, "127.0.0.1", 0)
     start_url = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/"
     run_id = str(uuid4())
     now = utc_now()
     async with test_db_session() as session:
+        session.add(
+            RequirementORM(
+                id=requirement_id,
+                project_id=project_id,
+                title="Search products",
+                description="Find matching products.",
+                acceptance_criteria="The matching product is shown",
+            )
+        )
+        await session.flush()
         session.add(
             QualityDiscoveryRunORM(
                 id=run_id,
@@ -4208,7 +4743,7 @@ async def test_discovery_draft_api_waits_for_approval_before_workspace_write(cli
                 requested_by="test",
                 mode="EXPLORE",
                 start_url=start_url,
-                requirement_id=None,
+                requirement_id=requirement_id,
                 requirement_text="",
                 allowed_domains=["127.0.0.1"],
                 status="COMPLETED",
@@ -4234,12 +4769,21 @@ async def test_discovery_draft_api_waits_for_approval_before_workspace_write(cli
         assert waiting["status"] == "WAITING", waiting.get("failure_reason")
         assert "url" not in waiting["inputs"]
         assert waiting["inputs"]["assertion_bypass_check"] is True
+        assert waiting["inputs"]["requirement_id"] == requirement_id
+        assert waiting["inputs"]["discovery_run_id"] == run_id
+        assert "discovery_assertion_candidates" not in waiting["inputs"]
         assert all(
             next(step for step in waiting["steps"] if step["key"] == key)["status"] == "SKIPPED"
             for key in ("inspect", "decide", "act")
         )
-        generated = next(step for step in waiting["steps"] if step["key"] == "generate")["outputs"]["suggested_code"]
+        generate_outputs = next(step for step in waiting["steps"] if step["key"] == "generate")["outputs"]
+        generated = generate_outputs["suggested_code"]
+        selection = generate_outputs["assertion_selection"]
         assert "to_contain_text" in generated
+        assert selection["status"] == "deterministic_fallback"
+        assert selection["fallback_used"] is True
+        assert len(selection["candidate_ids"]) == 1
+        assert selection["evidence_ids"] == ["evidence-results"]
         file_path = waiting["inputs"]["file_path"]
         workspace_file = WorkspaceService().get_workspace_dir(project_id) / file_path
         assert not workspace_file.exists()
@@ -4275,6 +4819,12 @@ async def test_discovery_draft_api_waits_for_approval_before_workspace_write(cli
         assert workspace_file.exists()
         run_step = next(step for step in adopted_detail.json()["steps"] if step["key"] == "run")
         assert run_step["outputs"]["status"] == "PASSED"
+        async with test_db_session() as session:
+            case_result = await session.execute(select(_TestCaseORM).where(_TestCaseORM.external_case_id == adopted_id))
+            adopted_case = case_result.scalar_one()
+        assert adopted_case.project_id == project_id
+        assert adopted_case.requirement_id == requirement_id
+        assert "Acceptance criteria:\n- The matching product is shown" in adopted_case.expected_result
     finally:
         await task_scheduler_service.stop()
         server.close()

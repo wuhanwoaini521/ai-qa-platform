@@ -4,13 +4,17 @@ import ast
 import difflib
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from project_model.task_models import EvidenceType, TaskType
 from qa_core.ai.context import ContextSelector
+from qa_core.failure.redactor import SensitiveRedactor
 
 from app.domain.task_records import TaskRecord as TaskExecutionRecord
+from app.services.quality_discovery_draft import QualityDiscoveryDraftMixin
+from app.services.quality_discovery_models import DiscoveryStatus
 from app.services.task_approval import approval_granted
 from app.services.task_errors import ApprovalRequired, TaskBlocked
 from app.services.task_execution_ports import TaskExecutionPorts
@@ -22,6 +26,53 @@ class TaskCodeGenerationService:
 
     def __init__(self, context: TaskExecutionPorts) -> None:
         self.context = context
+
+    async def _observed_discovery_assertion_candidates(self, task: TaskExecutionRecord) -> list[dict[str, Any]]:
+        discovery_run_id = self.context.input(task, "discovery_run_id")
+        journey_id = self.context.input(task, "discovery_journey_id")
+        expected_version = self.context.input(task, "discovery_run_version")
+        async with self.context.repository_scope() as repositories:
+            discovery_run = await repositories.quality_discovery.get(str(discovery_run_id or ""))
+        if (
+            discovery_run is None
+            or discovery_run.project_id != task.project_id
+            or discovery_run.status != DiscoveryStatus.COMPLETED.value
+            or not isinstance(expected_version, int)
+            or isinstance(expected_version, bool)
+            or discovery_run.version != expected_version
+        ):
+            raise TaskBlocked("The Discovery source is missing, stale, incomplete, or outside the task project.")
+
+        result = discovery_run.result
+        if not isinstance(result, dict):
+            raise TaskBlocked("The Discovery source has no persisted result evidence.")
+        journeys = result.get("journeys")
+        if not isinstance(journeys, list):
+            raise TaskBlocked("The Discovery source has no persisted journey evidence.")
+        journey = next(
+            (item for item in journeys if isinstance(item, dict) and item.get("journey_id") == journey_id),
+            None,
+        )
+        journey_steps = journey.get("steps") if isinstance(journey, dict) else None
+        if not isinstance(journey_steps, list) or not journey_steps or not isinstance(journey_steps[-1], dict):
+            raise TaskBlocked("The Discovery source journey has no final observed state.")
+        final_state_id = journey_steps[-1].get("state_id")
+        states = result.get("states")
+        if not isinstance(states, list):
+            raise TaskBlocked("The Discovery source has no persisted state evidence.")
+        final_state = next(
+            (item for item in states if isinstance(item, dict) and item.get("state_id") == final_state_id),
+            None,
+        )
+        if not isinstance(final_state, dict):
+            raise TaskBlocked("The Discovery source journey has no persisted final state evidence.")
+        try:
+            candidates = QualityDiscoveryDraftMixin._discovery_assertion_candidates(final_state)
+        except (TypeError, ValueError) as error:
+            raise TaskBlocked("The Discovery source has no safe, observed assertion evidence.") from error
+        if not candidates:
+            raise TaskBlocked("The Discovery source has no safe, observed assertion candidates.")
+        return candidates
 
     async def _inspect_source(
         self, task: TaskExecutionRecord, outputs: dict[str, Any], path: str | None = None
@@ -199,14 +250,149 @@ class TaskCodeGenerationService:
         if recorded_steps:
             from app.services.recorder_service import RecorderGenerateRequest, RecorderStep, generate_python_case
 
+            request_steps = [RecorderStep.model_validate(step) for step in recorded_steps]
+            steps_for_generation = request_steps
+            action_type = "generated_from_recording"
+            assertion_selection: dict[str, Any] | None = None
+            if (
+                task.type == TaskType.CREATE_TEST.value
+                and self.context.input(task, "discovery_run_id")
+                and self.context.input(task, "assertion_bypass_check") is True
+            ):
+                raw_candidates = await self._observed_discovery_assertion_candidates(task)
+                candidate_steps: dict[str, RecorderStep] = {}
+                candidate_metadata: dict[str, dict[str, Any]] = {}
+                safe_summaries: list[dict[str, str]] = []
+                allowed_roles = {"button", "link", "tab", "checkbox", "radio", "switch"}
+                if isinstance(raw_candidates, list):
+                    for item in raw_candidates[:12]:
+                        if not isinstance(item, dict):
+                            continue
+                        candidate_id = str(item.get("candidate_id") or "")
+                        evidence_id = str(item.get("evidence_id") or "")
+                        state_id = str(item.get("state_id") or "")
+                        kind = str(item.get("kind") or "")[:32]
+                        text = str(item.get("text") or "").strip()[:200]
+                        raw_step = item.get("step")
+                        if (
+                            not candidate_id
+                            or len(candidate_id) > 48
+                            or not candidate_id.replace("_", "").replace("-", "").isalnum()
+                            or not evidence_id
+                            or not state_id
+                            or not kind
+                            or not text
+                            or SensitiveRedactor.redact_text(text) != text
+                            or not isinstance(raw_step, dict)
+                        ):
+                            continue
+                        try:
+                            assertion = RecorderStep.model_validate(raw_step)
+                        except Exception:
+                            continue
+                        locator = assertion.locator
+                        grounded = (
+                            (
+                                assertion.action == "assert_title"
+                                and kind == "page_title"
+                                and assertion.value == re.escape(text)
+                            )
+                            or (
+                                assertion.action == "assert_text"
+                                and kind in {"heading", "visible_text"}
+                                and assertion.value == text
+                                and locator is not None
+                                and (
+                                    (locator.kind == "role" and locator.value == "heading" and locator.name == text)
+                                    or (locator.kind == "text" and locator.value == text)
+                                )
+                            )
+                            or (
+                                assertion.action == "assert_visible"
+                                and kind.startswith("visible_")
+                                and locator is not None
+                                and locator.kind == "role"
+                                and locator.value in allowed_roles
+                                and locator.name == text
+                            )
+                        )
+                        if not grounded or candidate_id in candidate_steps:
+                            continue
+                        candidate_steps[candidate_id] = assertion
+                        candidate_metadata[candidate_id] = {"evidence_id": evidence_id, "state_id": state_id}
+                        safe_summaries.append({"candidate_id": candidate_id, "kind": kind, "text": text})
+
+                if safe_summaries:
+                    selection = await self.context.suggest_discovery_assertions(task, safe_summaries)
+                    requested_ids = selection.get("candidate_ids", []) if isinstance(selection, dict) else []
+                    chosen_ids = (
+                        list(
+                            dict.fromkeys(
+                                item for item in requested_ids if isinstance(item, str) and item in candidate_steps
+                            )
+                        )
+                        if isinstance(requested_ids, list)
+                        else []
+                    )
+                    fallback = not chosen_ids
+                    if fallback and candidate_steps:
+                        chosen_ids = [next(iter(candidate_steps))]
+                    base_steps = (
+                        request_steps[:-1]
+                        if request_steps
+                        and request_steps[-1].action
+                        in {"assert_visible", "assert_text", "assert_url", "assert_title", "assert_count"}
+                        else request_steps
+                    )
+                    selected_steps = [candidate_steps[item] for item in chosen_ids]
+                    if (
+                        not selected_steps
+                        and request_steps
+                        and request_steps[-1].action
+                        in {"assert_visible", "assert_text", "assert_url", "assert_title", "assert_count"}
+                    ):
+                        selected_steps = [request_steps[-1]]
+                    steps_for_generation = [*base_steps, *selected_steps]
+                    assertion_selection = {
+                        "status": "deterministic_fallback" if fallback else "ai_selected",
+                        "provider": selection.get("provider"),
+                        "model": selection.get("model"),
+                        "fallback_used": bool(selection.get("fallback_used")) or fallback,
+                        "candidate_ids": chosen_ids,
+                        "evidence_ids": list(
+                            dict.fromkeys(
+                                candidate_metadata[item]["evidence_id"]
+                                for item in chosen_ids
+                                if item in candidate_metadata
+                            )
+                        ),
+                    }
+                    action_type = (
+                        "generated_from_discovery_ai_assertions"
+                        if not fallback
+                        else "generated_from_discovery_deterministic_fallback"
+                    )
+                else:
+                    assertion_selection = {
+                        "status": "deterministic_fallback",
+                        "provider": None,
+                        "model": None,
+                        "fallback_used": True,
+                        "candidate_ids": [],
+                        "evidence_ids": [],
+                    }
+                    action_type = "generated_from_discovery_deterministic_fallback"
+
             request = RecorderGenerateRequest(
                 case_name=str(self.context.input(task, "case_name", task.goal[:120])),
                 file_path=file_path,
                 test_name=default_name,
-                steps=[RecorderStep.model_validate(step) for step in recorded_steps],
+                steps=steps_for_generation,
             )
             code = generate_python_case(request)
-            source = {"suggested_code": code, "target_file": file_path, "action_type": "generated_from_recording"}
+            source = {"suggested_code": code, "target_file": file_path, "action_type": action_type}
+            if assertion_selection is not None:
+                source["assertion_selection"] = assertion_selection
         else:
             page = outputs.get("inspect", {})
             bundle = ContextSelector().select(WorkspaceService().get_workspace_dir(task.workspace_id), query=task.goal)
@@ -250,6 +436,7 @@ class TaskCodeGenerationService:
             "target_file": file_path,
             "suggested_code": code,
             "action_type": source.get("action_type", "ai_generated"),
+            "assertion_selection": source.get("assertion_selection"),
             "case_bindings": case_bindings,
             "artifact_id": artifact["artifact_id"],
             "_artifacts": [artifact],
@@ -264,6 +451,11 @@ class TaskCodeGenerationService:
                     {
                         "target_file": file_path,
                         "provider": "recorder" if recorded_steps else source.get("provider", "unknown"),
+                        **(
+                            {"assertion_selection": source["assertion_selection"]}
+                            if source.get("assertion_selection")
+                            else {}
+                        ),
                     },
                     artifact["artifact_id"],
                 )
@@ -439,7 +631,16 @@ class TaskCodeGenerationService:
                     node.func.attr != "getenv"
                     or not args
                     or not isinstance(args[0], ast.Constant)
-                    or args[0].value not in allowed_environment_variables
+                    or (
+                        args[0].value not in allowed_environment_variables
+                        and not (
+                            isinstance(args[0].value, str)
+                            and (
+                                args[0].value == "QA_BASE_URL"
+                                or args[0].value.startswith(("QA_DATA_", "QA_RECORDER_SECRET_"))
+                            )
+                        )
+                    )
                 ):
                     raise TaskBlocked("Generated test may only read approved browser environment settings.")
 

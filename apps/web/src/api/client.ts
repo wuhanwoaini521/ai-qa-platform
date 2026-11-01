@@ -1,5 +1,11 @@
 import { responseError } from './errors';
-import type { ProjectKnowledge } from '../features/lifecycle/types';
+import type {
+  AssertionRunsResponse,
+  AssertionScriptDraft,
+  GroundedAssertion,
+  ProjectKnowledge,
+  ScriptBinding,
+} from '../features/lifecycle/types';
 import { parseEventFrame } from './eventStream';
 import {
   ApplyRepairPayload,
@@ -688,6 +694,30 @@ export const api = {
       onEvent,
       signal ?? new AbortController().signal,
     ),
+  draftGroundedAssertions: (id: string) =>
+    request<GroundedAssertion[]>(
+      `/requirements/${encodeURIComponent(id)}/assertions/draft`,
+      { method: 'POST' },
+    ),
+  generateAssertionScript: (id: string) =>
+    request<AssertionScriptDraft>(`/requirements/${encodeURIComponent(id)}/assertions/script`, { method: 'POST' }),
+  discardAssertion: (requirementId: string, assertionId: string) =>
+    request<{ status: string; assertion_id: string }>(
+      `/requirements/${encodeURIComponent(requirementId)}/assertions/${encodeURIComponent(assertionId)}`,
+      { method: 'DELETE' },
+    ),
+  saveAssertionScript: (id: string, path: string, code: string, assertionIds: string[]) =>
+    request<ScriptBinding>(`/requirements/${encodeURIComponent(id)}/assertions/script/save`, {
+      method: 'POST',
+      body: JSON.stringify({ path, code, assertion_ids: assertionIds }),
+    }),
+  getAssertionRuns: (id: string) =>
+    request<AssertionRunsResponse>(`/requirements/${encodeURIComponent(id)}/assertions/runs`),
+  setGroundedAssertionAdoption: (requirementId: string, assertionId: string, adopted: boolean) =>
+    request<GroundedAssertion>(
+      `/requirements/${encodeURIComponent(requirementId)}/assertions/${encodeURIComponent(assertionId)}/adoption`,
+      { method: 'POST', body: JSON.stringify({ adopted }) },
+    ),
   adoptLifecycleDesigns: (id: string) =>
     request<TestDesign[]>(
       `/requirements/${encodeURIComponent(id)}/lifecycle/designs`,
@@ -879,9 +909,10 @@ export const api = {
       file_path: string;
       test_name: string;
       steps: RecorderStep[];
+      mock_responses?: import('../features/api-cases/apiCase').RecorderMockResponse[];
     },
   ) =>
-    request<{ code: string; project_id: string }>(
+    request<{ code: string; project_id: string; variables?: { name: string; default: string; source: string; hint?: string }[] }>(
       `/recorder/sessions/${encodeURIComponent(sessionId)}/generate`,
       {
         method: 'POST',
@@ -1050,6 +1081,18 @@ export const api = {
     }),
 
   // Test Cases
+  getCaseAssertions: (caseId: string) =>
+    request<{
+      case_id: string;
+      assertions: {
+        id: string;
+        criterion_id: string;
+        statement: string;
+        nodeid?: string;
+        state: string;
+        run?: { run_id: string; execution_status: string; finished_at: string | null } | null;
+      }[];
+    }>(`/test-cases/${encodeURIComponent(caseId)}/assertions`),
   getTestCases: (projectId?: string) => {
     const query = projectId ? `?project_id=${projectId}` : '';
     return request<TestCase[]>(`/test-cases${query}`);
@@ -1117,6 +1160,11 @@ export const api = {
     request<{ path: string; content: string }>(
       `/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}`,
     ),
+  createWorkspaceTestFile: (workspaceId: string, path: string, content: string) =>
+    request<{ status: string; path: string }>(`/workspaces/${workspaceId}/file`, {
+      method: 'PUT',
+      body: JSON.stringify({ path, content, expected_exists: false }),
+    }),
   writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
     request<{ status: string; path: string }>(
       `/workspaces/${workspaceId}/file`,
@@ -1246,6 +1294,55 @@ export const api = {
       outputs: Record<string, unknown>;
     }>(
       `/tasks/${encodeURIComponent(taskId)}/runtime/steps/${encodeURIComponent(stepId)}`,
+    ),
+  bindFlowCase: (payload: Record<string, unknown>) =>
+    request<{ case_id: string; nodeid: string; created: boolean; assertions: { criterion_id: string; statement: string; nodeid: string }[] }>(
+      '/flows/bind-case',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    ),
+  saveRecorderApiCase: (sessionId: string, callId: string, testName?: string) =>
+    request<{
+      file_path: string;
+      nodeid: string;
+      reused: boolean;
+      code: string;
+      test_case: { id: string; title: string };
+    }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/save-api-case`, {
+      method: 'POST',
+      body: JSON.stringify({ call_id: callId, ...(testName ? { test_name: testName } : {}) }),
+    }),
+  getRecorderApiCalls: (sessionId: string) =>
+    request<{ session_id: string; calls: import('../features/api-cases/apiCase').RecorderApiCall[] }>(
+      `/recorder/sessions/${encodeURIComponent(sessionId)}/api-calls`,
+    ),
+  saveApiCase: (payload: {
+    project_id: string;
+    requirement_id?: string | null;
+    criterion_ids?: string[];
+    request: Record<string, unknown>;
+  }) =>
+    request<{
+      file_path: string;
+      nodeid: string;
+      reused: boolean;
+      test_case: { id: string; title: string };
+      assertions: { criterion_id: string }[];
+    }>('/api-cases/save', { method: 'POST', body: JSON.stringify(payload) }),
+  compileApiCase: (payload: Record<string, unknown>) =>
+    request<{ code: string; test_name: string; assertion_count: number }>('/api-cases/compile', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  compileFlow: (document: Record<string, unknown>) =>
+    request<{ code: string; test_name: string; node_count: number; step_count: number; warnings: string[] }>(
+      '/flows/compile',
+      {
+        method: 'POST',
+        body: JSON.stringify(document),
+      },
     ),
   createTestRun: (data: TestRunCreate) =>
     request<TestRun>('/runs', {

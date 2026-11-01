@@ -1,0 +1,177 @@
+{
+  "session_id": "e537ad0edbe647b28d3d777d6d737861",
+  "call": {
+    "id": "66edf5159b24",
+    "method": "GET",
+    "url": "http://127.0.0.1:8099/api/info",
+    "status": 200,
+    "failed": false,
+    "request_headers": {
+      "referer": "http://127.0.0.1:8099/new/",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.125 Safari/537.36",
+      "accept-language": "en-US"
+    },
+    "request_body": null,
+    "response_content_type": "application/octet-stream"
+  },
+  "saved": {
+    "test_case": {
+      "id": "tc_api_7078e4bf3ab11b458535a832147f9",
+      "project_id": "proj_67767c6f93df",
+      "requirement_id": null,
+      "test_design_id": null,
+      "title": "API GET http://127.0.0.1:8099/api/info",
+      "preconditions": "",
+      "steps": [
+        "GET http://127.0.0.1:8099/api/info"
+      ],
+      "expected_result": "",
+      "test_model": {
+        "display_id": "test_get_api_info",
+        "intent": "API GET http://127.0.0.1:8099/api/info",
+        "scenario_id": null,
+        "coverage": {
+          "criterion_ids": [],
+          "rule_ids": [],
+          "risk_ids": [],
+          "flow_ids": []
+        },
+        "path_type": "normal",
+        "technique": "happy_path",
+        "data": {},
+        "oracles": [],
+        "assertions": [],
+        "evidence": [],
+        "missing": []
+      },
+      "priority": "P1",
+      "automation_status": "AUTOMATED",
+      "tags": [],
+      "external_system": "RECORDER_API",
+      "external_case_id": "7078e4bf3ab11b458535a832147f9",
+      "external_url": null,
+      "created_at": "2026-11-01T00:54:32.103951+00:00",
+      "updated_at": "2026-11-01T00:54:32.117604+00:00",
+      "binding": null
+    },
+    "binding": {
+      "test_case_id": "tc_api_7078e4bf3ab11b458535a832147f9",
+      "workspace_id": "proj_67767c6f93df",
+      "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+      "file_path": "tests/test_get_api_info.py",
+      "framework": "playwright_python",
+      "status": "ACTIVE",
+      "id": "bind_dfe2af2e8f78",
+      "created_at": "2026-11-01T00:54:32.113949Z",
+      "updated_at": "2026-11-01T00:54:32.113949Z",
+      "recorder_steps": []
+    },
+    "file_path": "tests/test_get_api_info.py",
+    "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+    "reused": false,
+    "code": "import json\nimport os\n\nimport httpx\n\n\ndef _value_at(payload, path):\n    current = payload\n    for part in path.split('.'):\n        if part.endswith(']') and '[' in part:\n            name, index = part[:-1].split('[', 1)\n            if name:\n                current = current[name]\n            current = current[int(index)]\n        else:\n            current = current[part]\n    return current\n\n\ndef test_get_api_info():\n    base = os.getenv(\"QA_BASE_URL\", \"http://127.0.0.1:8099\")\n    url = base + \"/api/info\"\n    headers = {}\n    response = httpx.request(\"GET\", url, headers=headers, timeout=30.0, follow_redirects=True)\n    assert response.status_code == 200, response.text[:500]\n"
+  },
+  "case": {
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "test_design_id": null,
+    "title": "API GET http://127.0.0.1:8099/api/info",
+    "preconditions": "",
+    "steps": [
+      "GET http://127.0.0.1:8099/api/info"
+    ],
+    "expected_result": "",
+    "priority": "P1",
+    "automation_status": "AUTOMATED",
+    "tags": [],
+    "external_system": "RECORDER_API",
+    "external_case_id": "7078e4bf3ab11b458535a832147f9",
+    "external_url": null,
+    "test_model": {
+      "display_id": "test_get_api_info",
+      "intent": "API GET http://127.0.0.1:8099/api/info",
+      "scenario_id": null,
+      "coverage": {
+        "criterion_ids": [],
+        "rule_ids": [],
+        "risk_ids": [],
+        "flow_ids": []
+      },
+      "path_type": "normal",
+      "technique": "happy_path",
+      "data": {},
+      "oracles": [],
+      "assertions": [],
+      "evidence": [],
+      "missing": []
+    },
+    "id": "tc_api_7078e4bf3ab11b458535a832147f9",
+    "binding": {
+      "test_case_id": "tc_api_7078e4bf3ab11b458535a832147f9",
+      "workspace_id": "proj_67767c6f93df",
+      "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+      "file_path": "tests/test_get_api_info.py",
+      "framework": "playwright_python",
+      "status": "ACTIVE",
+      "id": "bind_dfe2af2e8f78",
+      "created_at": "2026-11-01T00:54:32.113949Z",
+      "updated_at": "2026-11-01T00:54:32.113949Z",
+      "recorder_steps": []
+    },
+    "created_at": "2026-11-01T00:54:32.103951Z",
+    "updated_at": "2026-11-01T00:54:32.117604Z"
+  },
+  "run": {
+    "id": "run_2a5df1c05e5d",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "PASSED",
+    "requested_by": "user",
+    "environment": {
+      "AI_QA_BROWSER_CHANNEL": "chrome"
+    },
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_get_api_info.py::test_get_api_info"
+    ],
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 555.6665209996936,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_get_api_info.py::test_get_api_info PASSED\n\n============================== 1 passed in 0.11s ===============================",
+    "started_at": "2026-11-01T00:54:32.286610Z",
+    "finished_at": "2026-11-01T00:54:32.858532Z",
+    "created_at": "2026-11-01T00:54:32.262004Z",
+    "executions": [
+      {
+        "id": "exec_8b5d0bf5867d",
+        "run_id": "run_2a5df1c05e5d",
+        "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+        "status": "PASSED",
+        "duration_ms": 63.675160000457254,
+        "error_message": null,
+        "stack_trace": null,
+        "failure_category": null,
+        "artifact_paths": [],
+        "started_at": "2026-11-01T00:54:32.791250Z",
+        "finished_at": "2026-11-01T00:54:32.854925Z"
+      }
+    ],
+    "browser_sessions": [],
+    "external_artifacts": []
+  }
+}

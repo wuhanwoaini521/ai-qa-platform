@@ -9,6 +9,11 @@ _CLOUD_PREFIXES = ("AWS_", "AZURE_", "GOOGLE_", "GCP_", "CLOUDSDK_AUTH_")
 _CREDENTIAL_SUFFIXES = ("_KEY", "_KEY_ID", "_CREDENTIALS", "_CONNECTION_STRING")
 _CREDENTIAL_NAMES = {"SSH_AUTH_SOCK", "GIT_ASKPASS", "DATABASE_URL", "QA_DATABASE_URL"}
 _RUN_CAPABILITY_KEYS = {"QA_FAILURE_SNAPSHOT_ENCRYPTION_KEY"}
+# Recorder secrets are named explicitly per recording step and supplied per run;
+# they are the one credential-shaped group the generated test requires.
+_RECORDER_SECRET_PREFIX = "QA_RECORDER_SECRET_"
+# API cases fetch their credentials from the run environment on purpose, same as recorder secrets.
+_API_SECRET_PREFIX = "QA_API_SECRET_"
 
 
 def _credential_name(key: str) -> bool:
@@ -29,7 +34,13 @@ def project_subprocess_environment(environment: dict[str, str] | None = None) ->
     }
     for key, value in (environment or {}).items():
         name = key.upper()
-        if name not in _RUN_CAPABILITY_KEYS and name.startswith(_PLATFORM_PREFIXES) and _credential_name(name):
+        if (
+            name not in _RUN_CAPABILITY_KEYS
+            and not name.startswith(_RECORDER_SECRET_PREFIX)
+            and not name.startswith(_API_SECRET_PREFIX)
+            and name.startswith(_PLATFORM_PREFIXES)
+            and _credential_name(name)
+        ):
             continue
         result[key] = value
     return result

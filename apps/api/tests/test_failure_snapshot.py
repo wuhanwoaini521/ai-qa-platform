@@ -193,8 +193,15 @@ async def test_snapshot_storage_state_is_encrypted_and_deleted_after_ttl(client,
 
 @pytest.mark.asyncio
 async def test_locator_repair_restores_authenticated_fixture_page_from_failure_snapshot(
-    client, test_db_session, tmp_path
+    client, test_db_session, tmp_path, monkeypatch
 ):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "app_secret_key", "snapshot-test-master-key")
+    monkeypatch.setattr(settings, "failure_auto_repair_mode", "OFF")
+    login = await client.post("/api/auth/login", json={"email": "admin@ai-qa.local", "password": "adminpassword"})
+    assert login.status_code == 200, login.text
+    client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
     authenticated_requests = []
 
     class ProtectedSite(BaseHTTPRequestHandler):

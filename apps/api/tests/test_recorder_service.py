@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,6 +11,8 @@ from app.services.recorder_service import (
     RecorderSession,
     RecorderSessionCreate,
     RecorderStep,
+    RecorderStepsRevisionConflict,
+    RecorderStreamReplaced,
     generate_python_case,
 )
 from app.settings import settings
@@ -88,7 +91,9 @@ def test_generator_preserves_agent_search_submission_keypress() -> None:
     )
 
     compile(source, "recorded_search.py", "exec")
-    assert '.get_by_role("textbox", name="Search", exact=True).fill("Selenium")' in source
+    assert (
+        '.get_by_role("textbox", name="Search", exact=True).fill(os.getenv("QA_DATA_1_SEARCH", "Selenium"))' in source
+    )
     assert '.get_by_role("textbox", name="Search", exact=True).press("Enter")' in source
 
 
@@ -516,7 +521,7 @@ def test_recorder_step_evidence_is_versioned_bounded_and_redacts_private_input()
     assert private_url_step.url == "https://example.test/checkout"
     assert "https://user:password@example.test" not in generated
     assert "ada%40example.test" not in generated
-    assert 'page.goto("https://example.test/checkout")' in generated
+    assert 'page.goto(os.getenv("QA_BASE_URL", "https://example.test") + "/checkout")' in generated
 
 
 def test_element_evidence_bundle_is_versioned_bounded_and_redacted() -> None:
@@ -564,6 +569,54 @@ def test_element_evidence_bundle_is_versioned_bounded_and_redacted() -> None:
     assert [item["candidate_id"] for item in bundle["steps"][0]["evidence"]["locator_candidates"]] == ["candidate_1"]
     assert "ada@example.test" not in str(bundle)
     assert "token=secret" not in str(bundle)
+
+
+@pytest.mark.parametrize("placeholder", ["***REDACTED***", "[REDACTED_EMAIL]", "<REDACTED_EMAIL>"])
+@pytest.mark.parametrize("field", ["candidate_value", "candidate_name", "locator_value", "locator_name"])
+def test_element_evidence_bundle_excludes_all_redaction_marker_forms(field: str, placeholder: str) -> None:
+    candidate = {
+        "candidate_id": "candidate_redacted" if field.startswith("candidate_") else "candidate_safe",
+        "kind": "role",
+        "value": placeholder if field == "candidate_value" else "button",
+        "name": placeholder if field == "candidate_name" else "Submit",
+        "verification": {"verified": True},
+    }
+    locator = RecorderLocator(
+        kind="role",
+        value=placeholder if field == "locator_value" else "button",
+        name=placeholder if field == "locator_name" else "Submit",
+    )
+    step = RecorderStep(
+        action="click",
+        evidence={
+            "schema_version": 1,
+            "element": {"tag": "button", "role": "button", "name": "Submit", "text": "Submit"},
+            "context": {"url": "https://example.test/", "frame_path": []},
+            "locator_candidates": [candidate],
+            "decision": {},
+            "decision_history": [],
+            "status": "available",
+            "missing": [],
+        },
+        locator=locator,
+    )
+    session = RecorderSession(
+        id="session",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+        steps=[step.model_dump(mode="json")],
+    )
+
+    bundle = BrowserRecorderService.element_evidence_bundle(session)
+    evidence_candidates = bundle["steps"][0]["evidence"]["locator_candidates"]
+    selected_locator = bundle["steps"][0]["locator"]
+    if field.startswith("candidate_"):
+        assert evidence_candidates == []
+        assert selected_locator is not None
+    else:
+        assert evidence_candidates[0]["candidate_id"] == "candidate_safe"
+        assert selected_locator is None
 
 
 def test_sensitive_recorder_fill_uses_environment_without_embedding_a_secret() -> None:
@@ -624,6 +677,343 @@ async def test_failed_initial_navigation_keeps_session_open() -> None:
     browser_runtime.close_session.assert_not_awaited()
     await service.close(session.id, "owner")
     browser_runtime.close_session.assert_awaited_once_with("browser-session")
+
+
+@pytest.mark.asyncio
+async def test_replayed_add_step_command_is_idempotent_by_step_id() -> None:
+    browser_runtime = SimpleNamespace(
+        get_session=AsyncMock(return_value=object()),
+        get_page=AsyncMock(return_value=SimpleNamespace(url="about:blank")),
+    )
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    step = {"id": "step-1", "action": "click", "description": "Open the panel"}
+    command = {"action": "add_step", "step": step, "command_id": "client-command-1"}
+
+    await service.apply_command(session, command)
+    await service.apply_command(session, command)
+
+    assert [item["id"] for item in session.steps] == ["step-1"]
+    assert session.steps[0]["description"] == "Open the panel"
+
+
+@pytest.mark.asyncio
+async def test_replayed_navigation_command_id_does_not_repeat_browser_action() -> None:
+    service = BrowserRecorderService(browser_runtime=SimpleNamespace())
+    service._apply_command = AsyncMock(return_value="http://127.0.0.1:5183/")
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    command = {"action": "reload", "command_id": "navigation-command-1"}
+
+    await service.apply_command(session, command)
+    await service.apply_command(session, command)
+
+    service._apply_command.assert_awaited_once_with(session, command)
+    assert session.processed_navigation_command_ids == {"navigation-command-1": None}
+
+
+@pytest.mark.parametrize(
+    ("action", "method_name"),
+    [("back", "go_back"), ("forward", "go_forward"), ("reload", "reload")],
+)
+@pytest.mark.asyncio
+async def test_timed_out_non_idempotent_navigation_is_not_replayed_after_side_effect(
+    action: str,
+    method_name: str,
+) -> None:
+    side_effect_count = [0]
+
+    async def apply_then_timeout(**_kwargs: object) -> None:
+        side_effect_count[0] += 1
+        raise TimeoutError("navigation wait timed out after the browser action")
+
+    page = SimpleNamespace(
+        url="http://127.0.0.1:5183/second",
+        go_back=AsyncMock(side_effect=apply_then_timeout),
+        go_forward=AsyncMock(side_effect=apply_then_timeout),
+        reload=AsyncMock(side_effect=apply_then_timeout),
+    )
+    service = BrowserRecorderService(
+        browser_runtime=SimpleNamespace(
+            get_session=AsyncMock(return_value=object()),
+            get_page=AsyncMock(return_value=page),
+        )
+    )
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    command = {"action": action, "command_id": f"navigation-{action}-1"}
+
+    with pytest.raises(TimeoutError, match="after the browser action"):
+        await service.apply_command(session, command)
+
+    assert session.processed_navigation_command_ids == {command["command_id"]: None}
+    assert await service.apply_command(session, command) is None
+    getattr(page, method_name).assert_awaited_once()
+    assert side_effect_count == [1]
+
+
+@pytest.mark.asyncio
+async def test_replayed_replace_steps_command_preserves_later_captured_steps() -> None:
+    browser_runtime = SimpleNamespace(
+        get_session=AsyncMock(return_value=object()),
+        get_page=AsyncMock(return_value=SimpleNamespace(url="about:blank")),
+    )
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    replacement_step = {"id": "replacement", "action": "click", "description": "Generated step"}
+    captured_step = {"id": "captured", "action": "fill", "description": "Captured after replacement"}
+    command = {
+        "action": "replace_steps",
+        "steps": [replacement_step],
+        "command_id": "replace-1",
+        "base_steps_revision": 0,
+    }
+
+    await service.apply_command(session, command)
+    session.steps.append(captured_step)
+    session.steps_revision += 1
+    await service.apply_command(session, command)
+
+    assert [step["id"] for step in session.steps] == ["replacement", "captured"]
+
+
+@pytest.mark.asyncio
+async def test_stale_replace_steps_command_does_not_overwrite_newer_recorded_steps() -> None:
+    browser_runtime = SimpleNamespace(
+        get_session=AsyncMock(return_value=object()),
+        get_page=AsyncMock(return_value=SimpleNamespace(url="about:blank")),
+    )
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+        steps=[{"id": "existing", "action": "click", "description": "Existing"}],
+        steps_revision=4,
+    )
+    command = {
+        "action": "replace_steps",
+        "steps": [{"id": "replacement", "action": "click", "description": "Stale replacement"}],
+        "command_id": "replace-stale",
+        "base_steps_revision": 4,
+    }
+    session.steps.append({"id": "newer", "action": "fill", "description": "Captured later"})
+    session.steps_revision = 5
+
+    with pytest.raises(RecorderStepsRevisionConflict, match="steps changed"):
+        await service.apply_command(session, command)
+
+    assert [step["id"] for step in session.steps] == ["existing", "newer"]
+
+
+@pytest.mark.asyncio
+async def test_step_metadata_command_is_applied_after_browser_runtime_expires() -> None:
+    browser_runtime = SimpleNamespace(get_session=AsyncMock(return_value=None))
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+        steps=[{"id": "step-1", "action": "click", "description": "Old description"}],
+    )
+
+    await service.apply_command(
+        session,
+        {
+            "action": "edit_step",
+            "step": {"id": "step-1", "action": "click", "description": "Updated description"},
+            "command_id": "edit-1",
+        },
+    )
+
+    assert session.steps[0]["description"] == "Updated description"
+    browser_runtime.get_session.assert_not_awaited()
+
+
+@pytest.mark.parametrize("operation", ["command", "snapshot", "ai-analysis", "jev-analysis"])
+@pytest.mark.asyncio
+async def test_recorder_close_waits_for_active_runtime_work(operation: str, monkeypatch) -> None:
+    work_started = asyncio.Event()
+    release_work = asyncio.Event()
+    candidate = {
+        "candidate_id": "candidate-1",
+        "kind": "role",
+        "value": "button",
+        "name": "Save",
+        "exact": True,
+        "locator": 'get_by_role("button", name="Save")',
+    }
+    step = BrowserRecorderService.events_to_steps(
+        [
+            {
+                "action": "click",
+                "tag": "button",
+                "role": "button",
+                "name": "Save",
+                "url": "https://example.test/form",
+                "frame_path": [],
+                "candidates": [candidate],
+            }
+        ]
+    )[0]
+
+    async def block_verify_locator(_browser_session_id, _candidate, _event):
+        work_started.set()
+        await release_work.wait()
+        return {"match_count": 1, "unique": True, "visible": True, "enabled": True, "verified": True}
+
+    browser_runtime = SimpleNamespace(
+        close_session=AsyncMock(),
+        get_page=AsyncMock(return_value=SimpleNamespace(url="https://example.test/form")),
+        verify_locator=block_verify_locator,
+    )
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+        steps=[step],
+    )
+    service._sessions[session.id] = session
+
+    async def block_command(_session, _command):
+        work_started.set()
+        await release_work.wait()
+        return None
+
+    async def block_snapshot(_session):
+        work_started.set()
+        await release_work.wait()
+        return {"type": "frame"}
+
+    if operation == "command":
+        service._apply_command = block_command
+        active_work = asyncio.create_task(service.apply_command(session, {"action": "click"}))
+    elif operation == "snapshot":
+        service._page_snapshot = block_snapshot
+        active_work = asyncio.create_task(service.page_snapshot(session))
+    elif operation == "ai-analysis":
+        from app.services import ai_runtime
+
+        class FakeOrchestrator:
+            async def complete(self, _request):
+                return SimpleNamespace(
+                    provider="fake", model="fake", fallback_used=True, invocation_id=None, structured_data={}
+                )
+
+        monkeypatch.setattr(ai_runtime, "build_ai_orchestrator", lambda: FakeOrchestrator())
+        active_work = asyncio.create_task(service.analyze_locator_with_ai(session, step["id"]))
+    else:
+        from app.services.locator_decision_service import LocatorDecisionService
+
+        async def decide(_pipeline, **kwargs):
+            return {
+                "summary": {"provider": "local-strategy", "fallback_used": True, "fallback_reason": "test"},
+                "ranked_candidates": kwargs["candidates"],
+                "trace": [],
+            }
+
+        monkeypatch.setattr(LocatorDecisionService, "decide", decide)
+        active_work = asyncio.create_task(service.request_jev_locator_decision(session, step["id"]))
+    await work_started.wait()
+
+    closing = asyncio.create_task(service.close(session.id, session.owner_id))
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(asyncio.shield(closing), timeout=0.02)
+    browser_runtime.close_session.assert_not_awaited()
+
+    release_work.set()
+    await active_work
+    await closing
+
+    browser_runtime.close_session.assert_awaited_once_with(session.browser_session_id)
+    assert await service.get(session.id, session.owner_id) is None
+
+
+@pytest.mark.parametrize("operation", ["ai", "jev"])
+@pytest.mark.asyncio
+async def test_locator_analysis_queued_behind_close_is_rejected(operation: str) -> None:
+    browser_runtime = SimpleNamespace(close_session=AsyncMock())
+    service = BrowserRecorderService(browser_runtime=browser_runtime)
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    service._sessions[session.id] = session
+    await session.lock.acquire()
+
+    closing = asyncio.create_task(service.close(session.id, session.owner_id))
+    await asyncio.sleep(0)
+    if operation == "ai":
+        analysis = asyncio.create_task(service.analyze_locator_with_ai(session, "missing-step"))
+    else:
+        analysis = asyncio.create_task(service.request_jev_locator_decision(session, "missing-step"))
+    await asyncio.sleep(0)
+    session.lock.release()
+
+    await closing
+    with pytest.raises(LookupError, match="closed or expired"):
+        await analysis
+    assert session.closed is True
+    assert await service.get(session.id, session.owner_id) is None
+
+
+@pytest.mark.asyncio
+async def test_recorder_stream_generation_fences_old_commands_waiting_for_the_session_lock() -> None:
+    service = BrowserRecorderService(browser_runtime=SimpleNamespace(close_session=AsyncMock()))
+    session = RecorderSession(
+        id="session-1",
+        owner_id="owner",
+        project_id="project",
+        runtime_session=SimpleNamespace(id="browser-session"),
+    )
+    service._sessions[session.id] = session
+    service._apply_command = AsyncMock(return_value=None)
+    service._page_snapshot = AsyncMock(return_value={"type": "frame"})
+    old_generation = await service.claim_websocket_stream(session)
+
+    await session.lock.acquire()
+    replacement = asyncio.create_task(service.claim_websocket_stream(session))
+    await asyncio.sleep(0)
+    stale_command = asyncio.create_task(
+        service.apply_command(session, {"action": "click"}, stream_generation=old_generation)
+    )
+    await asyncio.sleep(0)
+    session.lock.release()
+
+    new_generation = await replacement
+    assert new_generation == old_generation + 1
+    with pytest.raises(RecorderStreamReplaced):
+        await stale_command
+    with pytest.raises(RecorderStreamReplaced):
+        await service.page_snapshot(session, stream_generation=old_generation)
+
+    assert await service.page_snapshot(session, stream_generation=new_generation) == {"type": "frame"}
+    service._apply_command.assert_not_awaited()
+    service._page_snapshot.assert_awaited_once_with(session)
 
 
 @pytest.fixture(autouse=True)

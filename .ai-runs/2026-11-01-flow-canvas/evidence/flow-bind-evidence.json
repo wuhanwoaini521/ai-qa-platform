@@ -1,0 +1,220 @@
+{
+  "case_id": "tc_flow_3ce338440e498ec2d5ba63284bf10",
+  "nodeid": "tests/test_scn_004.py::test_scn_004",
+  "run": {
+    "id": "run_3c3a44f415a3",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_golden_shop_v1",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_golden_shop_v1",
+    "status": "PASSED",
+    "requested_by": "user",
+    "environment": {
+      "AI_QA_BROWSER_CHANNEL": "chrome"
+    },
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_scn_004.py::test_scn_004"
+    ],
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 3458.7837320004837,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_golden_shop_v1\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_scn_004.py::test_scn_004 PASSED\n\n============================== 1 passed in 2.96s ===============================",
+    "started_at": "2026-11-01T00:26:22.219584Z",
+    "finished_at": "2026-11-01T00:26:25.705491Z",
+    "created_at": "2026-11-01T00:26:22.208142Z",
+    "executions": [
+      {
+        "id": "exec_18f3a0356782",
+        "run_id": "run_3c3a44f415a3",
+        "nodeid": "tests/test_scn_004.py::test_scn_004",
+        "status": "PASSED",
+        "duration_ms": 2940.382502999455,
+        "error_message": null,
+        "stack_trace": null,
+        "failure_category": null,
+        "artifact_paths": [
+          "/api/artifacts/f22539ce-279f-4489-984c-12f0fec3c5f0/download"
+        ],
+        "started_at": "2026-11-01T00:26:22.761793Z",
+        "finished_at": "2026-11-01T00:26:25.702176Z"
+      }
+    ],
+    "browser_sessions": [
+      {
+        "page_evidence": {
+          "url": "http://127.0.0.1:8099/new/",
+          "title": "Offer",
+          "controls": [
+            {
+              "tag": "button",
+              "type": "",
+              "role": "button",
+              "name": "Accept",
+              "candidates": [
+                {
+                  "kind": "role",
+                  "value": "button",
+                  "name": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "test_id",
+                  "value": "accept"
+                },
+                {
+                  "kind": "text",
+                  "value": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "css",
+                  "value": "button"
+                }
+              ],
+              "visible": true,
+              "enabled": true
+            }
+          ],
+          "console_logs": [
+            {
+              "level": "error",
+              "text": "Failed to load resource: the server responded with a status of 404 (File not found)",
+              "timestamp": "2026-11-01T00:26:24.502768+00:00"
+            }
+          ],
+          "network_logs": [
+            {
+              "url": "http://127.0.0.1:8099/new/",
+              "method": "GET",
+              "duration_ms": 36.5,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "text/html",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T00:26:24.332042+00:00"
+            }
+          ],
+          "recent_steps": [
+            {
+              "action": "click",
+              "locator": "body",
+              "status": "PASSED",
+              "duration_ms": 97.6,
+              "file": "tests/test_scn_004.py",
+              "line": 43,
+              "step_id": "nmvx3afx16",
+              "evidence_id": "recorder:nmvx3afx16",
+              "timestamp": "2026-11-01T00:26:24.707534+00:00"
+            },
+            {
+              "action": "click",
+              "locator": "body",
+              "status": "PASSED",
+              "duration_ms": 64.4,
+              "file": "tests/test_scn_004.py",
+              "line": 45,
+              "step_id": "nmvx3afx17",
+              "evidence_id": "recorder:nmvx3afx17",
+              "timestamp": "2026-11-01T00:26:24.817997+00:00"
+            },
+            {
+              "action": "click",
+              "locator": "body",
+              "status": "PASSED",
+              "duration_ms": 50.1,
+              "file": "tests/test_scn_004.py",
+              "line": 47,
+              "step_id": "nmvx3afx18",
+              "evidence_id": "recorder:nmvx3afx18",
+              "timestamp": "2026-11-01T00:26:24.918961+00:00"
+            }
+          ],
+          "last_frame_artifact_id": "f22539ce-279f-4489-984c-12f0fec3c5f0"
+        },
+        "id": "034ed5ceb0bc44fdac18efd7c98abc92",
+        "run_id": "run_3c3a44f415a3",
+        "case_execution_id": "exec_18f3a0356782",
+        "worker_id": "main",
+        "browser_session_id": "034ed5ceb0bc44fdac18efd7c98abc92",
+        "page_id": "1ac0103b8186434984019d2442e6efb9",
+        "nodeid": "tests/test_scn_004.py::test_scn_004",
+        "case_name": "test_scn_004",
+        "current_url": "http://127.0.0.1:8099/new/",
+        "status": "passed",
+        "elapsed_ms": 1308.8880000000001,
+        "started_at": "2026-11-01T00:26:24.271898Z",
+        "finished_at": "2026-11-01T00:26:25.580786Z"
+      }
+    ],
+    "external_artifacts": [
+      {
+        "id": "art_cca83936e857",
+        "run_id": "run_3c3a44f415a3",
+        "name": "browser-034ed5ceb0bc44fdac18efd7c98abc92-last.jpg",
+        "type": "SCREENSHOT",
+        "url": "/api/artifacts/f22539ce-279f-4489-984c-12f0fec3c5f0/download",
+        "metadata_json": {
+          "artifact_id": "f22539ce-279f-4489-984c-12f0fec3c5f0",
+          "content_type": "image/jpeg",
+          "browser_session_id": "034ed5ceb0bc44fdac18efd7c98abc92",
+          "frame_kind": "last"
+        },
+        "created_at": "2026-11-01T00:26:25.699545Z"
+      }
+    ]
+  },
+  "assertions": {
+    "case_id": "tc_flow_3ce338440e498ec2d5ba63284bf10",
+    "assertions": [
+      {
+        "id": "TCA-AC-001",
+        "criterion_id": "AC-001",
+        "statement": "Everyday Tee · Navy · M · Quantity: 1",
+        "check": "assert_visible:css=#offer",
+        "nodeid": "tests/test_scn_004.py::test_scn_004",
+        "state": "PASSED",
+        "run": {
+          "run_id": "run_3c3a44f415a3",
+          "run_status": "PASSED",
+          "execution_status": "PASSED",
+          "finished_at": "2026-11-01T00:26:25.702176+00:00",
+          "artifact_count": 1
+        }
+      },
+      {
+        "id": "TCA-AC-002",
+        "criterion_id": "AC-002",
+        "statement": "Total: $29.00",
+        "check": "assert_visible:css=#offer",
+        "nodeid": "tests/test_scn_004.py::test_scn_004",
+        "state": "PASSED",
+        "run": {
+          "run_id": "run_3c3a44f415a3",
+          "run_status": "PASSED",
+          "execution_status": "PASSED",
+          "finished_at": "2026-11-01T00:26:25.702176+00:00",
+          "artifact_count": 1
+        }
+      }
+    ]
+  }
+}

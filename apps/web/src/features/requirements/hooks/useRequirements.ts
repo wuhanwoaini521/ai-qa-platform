@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { APIError } from '../../../api/errors';
 import { api } from '../../../api/client';
 import { Project, Requirement, RequirementCreate, RequirementStatus } from '../../../types';
 import { recallEntity, rememberEntity } from '../../lifecycle/contextMemory';
@@ -17,24 +18,31 @@ export function useRequirements({
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReq, setSelectedReq] = useState<Requirement | null>(null);
-
-  const fetchRequirements = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getRequirements(selectedProjectId || undefined);
-      setRequirements(data);
-      const id=initialRequirementId??recallEntity(selectedProjectId,'requirement');
-      setSelectedReq(data.find(r=>r.id===id)??data[0]??null);
-    } catch (err) {
-      console.error('Failed to load requirements', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [loadError, setLoadError] = useState<'forbidden' | 'failed' | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   useEffect(() => {
-    fetchRequirements();
-  }, [selectedProjectId,initialRequirementId]);
+    let active = true;
+    setLoading(true);
+    setLoadError(null);
+    setRequirements([]);
+    setSelectedReq(null);
+    void api.getRequirements(selectedProjectId || undefined).then((data) => {
+      if (!active) return;
+      setRequirements(data);
+      const id = initialRequirementId ?? recallEntity(selectedProjectId, 'requirement');
+      setSelectedReq(data.find((requirement) => requirement.id === id) ?? data[0] ?? null);
+    }).catch((err: unknown) => {
+      if (!active) return;
+      console.error('Failed to load requirements', err);
+      setLoadError(err instanceof APIError && err.status === 403 ? 'forbidden' : 'failed');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [selectedProjectId, initialRequirementId, reloadVersion]);
+
+  const refresh = () => setReloadVersion((version) => version + 1);
   useEffect(()=>{if(selectedReq)rememberEntity(selectedReq.project_id,'requirement',selectedReq.id);},[selectedReq]);
 
   const createRequirement = async (data: RequirementCreate): Promise<Requirement | null> => {
@@ -43,7 +51,7 @@ export function useRequirements({
         ...data,
         project_id: selectedProjectId || data.project_id || projects[0]?.id || '',
       });
-      setRequirements([created, ...requirements]);
+      setRequirements((current) => [created, ...current]);
       setSelectedReq(created);
       return created;
     } catch (err) {
@@ -55,7 +63,7 @@ export function useRequirements({
   const updateStatus = async (reqId: string, status: RequirementStatus) => {
     try {
       const updated = await api.updateRequirement(reqId, { status });
-      setRequirements(requirements.map((r) => (r.id === reqId ? updated : r)));
+      setRequirements((current) => current.map((r) => (r.id === reqId ? updated : r)));
       if (selectedReq?.id === reqId) {
         setSelectedReq(updated);
       }
@@ -65,7 +73,7 @@ export function useRequirements({
   };
 
   const addImported = (imported: Requirement[]) => {
-    setRequirements([...imported, ...requirements]);
+    setRequirements((current) => [...imported, ...current]);
     if (imported.length > 0) {
       setSelectedReq(imported[0]);
     }
@@ -74,6 +82,8 @@ export function useRequirements({
   return {
     requirements,
     loading,
+    loadError,
+    refresh,
     selectedReq,
     setSelectedReq,
     createRequirement,

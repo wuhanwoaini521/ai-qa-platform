@@ -1,0 +1,380 @@
+{
+  "captured": [
+    {
+      "id": "66edf5159b24",
+      "method": "GET",
+      "url": "http://127.0.0.1:8099/api/info",
+      "status": 200,
+      "failed": false,
+      "request_headers": {
+        "authorization": "[REDACTED]",
+        "referer": "http://127.0.0.1:8099/new/",
+        "accept-language": "en-US",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.125 Safari/537.36",
+        "accept": "application/json"
+      },
+      "request_body": null,
+      "response_content_type": "application/octet-stream",
+      "response_body": "{\"ok\": true, \"service\": \"fixture\", \"count\": 3}"
+    },
+    {
+      "id": "f56392bf183d",
+      "method": "GET",
+      "url": "http://127.0.0.1:8099/api/stats",
+      "status": 200,
+      "failed": false,
+      "request_headers": {
+        "referer": "http://127.0.0.1:8099/new/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.125 Safari/537.36",
+        "accept-language": "en-US"
+      },
+      "request_body": null,
+      "response_content_type": "application/octet-stream",
+      "response_body": "{\"stats\": {\"orders\": 3, \"revenue\": 270}}"
+    }
+  ],
+  "mock_case": {
+    "id": "run_d60cec165c94",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "PASSED",
+    "requested_by": "user",
+    "environment": {},
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_replay_recorded.py::test_replay_recorded"
+    ],
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 2430.728937999447,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_replay_recorded.py::test_replay_recorded PASSED\n\n============================== 1 passed in 1.99s ===============================",
+    "started_at": "2026-11-01T02:17:54.096316Z",
+    "finished_at": "2026-11-01T02:17:56.546525Z",
+    "created_at": "2026-11-01T02:17:54.087705Z",
+    "executions": [
+      {
+        "id": "exec_5b644de67fc2",
+        "run_id": "run_d60cec165c94",
+        "nodeid": "tests/test_replay_recorded.py::test_replay_recorded",
+        "status": "PASSED",
+        "duration_ms": 1977.2076110002672,
+        "error_message": null,
+        "stack_trace": null,
+        "failure_category": null,
+        "artifact_paths": [
+          "/api/artifacts/f084450d-c076-4add-9ad8-dad28b9483a8/download"
+        ],
+        "started_at": "2026-11-01T02:17:54.566839Z",
+        "finished_at": "2026-11-01T02:17:56.544047Z"
+      }
+    ],
+    "browser_sessions": [
+      {
+        "page_evidence": {
+          "url": "http://127.0.0.1:8099/new/",
+          "title": "Offer",
+          "controls": [
+            {
+              "tag": "button",
+              "type": "",
+              "role": "button",
+              "name": "Accept",
+              "candidates": [
+                {
+                  "kind": "role",
+                  "value": "button",
+                  "name": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "test_id",
+                  "value": "accept"
+                },
+                {
+                  "kind": "text",
+                  "value": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "css",
+                  "value": "button"
+                }
+              ],
+              "visible": true,
+              "enabled": true
+            }
+          ],
+          "console_logs": [],
+          "network_logs": [
+            {
+              "url": "http://127.0.0.1:8099/new/",
+              "method": "GET",
+              "duration_ms": 18.1,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "text/html",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:55.834416+00:00"
+            },
+            {
+              "url": "http://127.0.0.1:8099/api/info",
+              "method": "GET",
+              "duration_ms": 126.8,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "application/octet-stream",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:55.960402+00:00"
+            },
+            {
+              "url": "http://127.0.0.1:8099/api/stats",
+              "method": "GET",
+              "duration_ms": 123.2,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "application/octet-stream",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:55.961102+00:00"
+            }
+          ],
+          "recent_steps": [],
+          "last_frame_artifact_id": "f084450d-c076-4add-9ad8-dad28b9483a8"
+        },
+        "id": "c55c3ab863f54b4293751f3d7c7d2cf5",
+        "run_id": "run_d60cec165c94",
+        "case_execution_id": "exec_5b644de67fc2",
+        "worker_id": "main",
+        "browser_session_id": "c55c3ab863f54b4293751f3d7c7d2cf5",
+        "page_id": "c60e43b0fc684c49909a89d9127202d4",
+        "nodeid": "tests/test_replay_recorded.py::test_replay_recorded",
+        "case_name": "test_replay_recorded",
+        "current_url": "http://127.0.0.1:8099/new/",
+        "status": "passed",
+        "elapsed_ms": 671.6560000000001,
+        "started_at": "2026-11-01T02:17:55.779632Z",
+        "finished_at": "2026-11-01T02:17:56.451288Z"
+      }
+    ],
+    "external_artifacts": [
+      {
+        "id": "art_d7e951c62210",
+        "run_id": "run_d60cec165c94",
+        "name": "browser-c55c3ab863f54b4293751f3d7c7d2cf5-last.jpg",
+        "type": "SCREENSHOT",
+        "url": "/api/artifacts/f084450d-c076-4add-9ad8-dad28b9483a8/download",
+        "metadata_json": {
+          "artifact_id": "f084450d-c076-4add-9ad8-dad28b9483a8",
+          "content_type": "image/jpeg",
+          "browser_session_id": "c55c3ab863f54b4293751f3d7c7d2cf5",
+          "frame_kind": "last"
+        },
+        "created_at": "2026-11-01T02:17:56.541789Z"
+      }
+    ]
+  },
+  "live_case": {
+    "id": "run_e4357475c926",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "FAILED",
+    "requested_by": "user",
+    "environment": {},
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_replay_live.py::test_replay_live"
+    ],
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 7473.303233999104,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_replay_live.py::test_replay_live FAILED\n\n=================================== FAILURES ===================================\n_______________________________ test_replay_live _______________________________\ntests/test_replay_live.py:43: in test_replay_live\n    expect(page.locator(\"#api\")).to_contain_text(\"service=fixture orders=3\")  # qa_step_id=7ea994fa5940 qa_evidence_id=recorder:7ea994fa5940\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AssertionError: Locator expected to contain text 'service=fixture orders=3'\nE   Actual value: service=changed-live orders=3 \nE   Call log:\nE     - Expect \"to_contain_text\" with timeout 5000ms\nE     - waiting for locator(\"#api\")\nE       14 × locator resolved to <div id=\"api\">service=changed-live orders=3</div>\nE          - unexpected value \"service=changed-live orders=3\"\nE   \nE   Aria snapshot:\nE   - text: service=changed-live orders=3\n=========================== short test summary info ============================\nFAILED tests/test_replay_live.py::test_replay_live - AssertionError: Locator ...\n============================== 1 failed in 7.06s ===============================",
+    "started_at": "2026-11-01T02:17:58.168889Z",
+    "finished_at": "2026-11-01T02:18:05.672042Z",
+    "created_at": "2026-11-01T02:17:58.157953Z",
+    "executions": [
+      {
+        "id": "exec_a25ee34295a0",
+        "run_id": "run_e4357475c926",
+        "nodeid": "tests/test_replay_live.py::test_replay_live",
+        "status": "FAILED",
+        "duration_ms": 7026.826945999346,
+        "error_message": "AssertionError: Locator expected to contain text 'service=fixture orders=3'\nActual value: service=changed-live orders=3 \nCall log:\n  - Expect \"to_contain_text\" with timeout 5000ms\n  - waiting for locator(\"#api\")\n    14 × locator resolved to <div id=\"api\">service=changed-live orders=3</div>\n       - unexpected value \"service=changed-live orders=3\"\n\nAria snapshot:\n- text: service=changed-live orders=3",
+        "stack_trace": "tests/test_replay_live.py:43: in test_replay_live\n    expect(page.locator(\"#api\")).to_contain_text(\"service=fixture orders=3\")  # qa_step_id=7ea994fa5940 qa_evidence_id=recorder:7ea994fa5940\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AssertionError: Locator expected to contain text 'service=fixture orders=3'\nE   Actual value: service=changed-live orders=3 \nE   Call log:\nE     - Expect \"to_contain_text\" with timeout 5000ms\nE     - waiting for locator(\"#api\")\nE       14 × locator resolved to <div id=\"api\">service=changed-live orders=3</div>\nE          - unexpected value \"service=changed-live orders=3\"\nE   \nE   Aria snapshot:\nE   - text: service=changed-live orders=3",
+        "failure_category": "ASSERTION_FAILURE",
+        "artifact_paths": [
+          "/api/artifacts/1eec62cb-56d5-4c35-bd5d-0efd75814aac/download"
+        ],
+        "started_at": "2026-11-01T02:17:58.634741Z",
+        "finished_at": "2026-11-01T02:18:05.661568Z"
+      }
+    ],
+    "browser_sessions": [
+      {
+        "page_evidence": {
+          "url": "http://127.0.0.1:8099/new/",
+          "title": "Offer",
+          "controls": [
+            {
+              "tag": "button",
+              "type": "",
+              "role": "button",
+              "name": "Accept",
+              "candidates": [
+                {
+                  "kind": "role",
+                  "value": "button",
+                  "name": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "test_id",
+                  "value": "accept"
+                },
+                {
+                  "kind": "text",
+                  "value": "Accept",
+                  "exact": true
+                },
+                {
+                  "kind": "css",
+                  "value": "button"
+                }
+              ],
+              "visible": true,
+              "enabled": true
+            }
+          ],
+          "console_logs": [
+            {
+              "level": "error",
+              "text": "Failed to load resource: the server responded with a status of 404 (File not found)",
+              "timestamp": "2026-11-01T02:18:00.021802+00:00"
+            }
+          ],
+          "network_logs": [
+            {
+              "url": "http://127.0.0.1:8099/new/",
+              "method": "GET",
+              "duration_ms": 36.7,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "text/html",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:59.890426+00:00"
+            },
+            {
+              "url": "http://127.0.0.1:8099/api/info",
+              "method": "GET",
+              "duration_ms": 9.4,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "application/octet-stream",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:59.899179+00:00"
+            },
+            {
+              "url": "http://127.0.0.1:8099/api/stats",
+              "method": "GET",
+              "duration_ms": 9.9,
+              "request": {
+                "content_type": "",
+                "body": "[not captured: absent, non-JSON or oversized]"
+              },
+              "status": 200,
+              "response": {
+                "content_type": "application/octet-stream",
+                "body": "[not captured: non-JSON, unknown or oversized length]"
+              },
+              "timestamp": "2026-11-01T02:17:59.899879+00:00"
+            }
+          ],
+          "recent_steps": [],
+          "last_frame_artifact_id": "1eec62cb-56d5-4c35-bd5d-0efd75814aac"
+        },
+        "id": "34c4388fa1374733bbfaa5959bbd48ff",
+        "run_id": "run_e4357475c926",
+        "case_execution_id": "exec_a25ee34295a0",
+        "worker_id": "main",
+        "browser_session_id": "34c4388fa1374733bbfaa5959bbd48ff",
+        "page_id": "cc05f08b1cc948f4b939016a89aaf11b",
+        "nodeid": "tests/test_replay_live.py::test_replay_live",
+        "case_name": "test_replay_live",
+        "current_url": "http://127.0.0.1:8099/new/",
+        "status": "failed",
+        "elapsed_ms": 5717.765,
+        "started_at": "2026-11-01T02:17:59.836958Z",
+        "finished_at": "2026-11-01T02:18:05.554723Z"
+      }
+    ],
+    "external_artifacts": [
+      {
+        "id": "art_33ec82c07445",
+        "run_id": "run_e4357475c926",
+        "name": "browser-34c4388fa1374733bbfaa5959bbd48ff-last.jpg",
+        "type": "SCREENSHOT",
+        "url": "/api/artifacts/1eec62cb-56d5-4c35-bd5d-0efd75814aac/download",
+        "metadata_json": {
+          "artifact_id": "1eec62cb-56d5-4c35-bd5d-0efd75814aac",
+          "content_type": "image/jpeg",
+          "browser_session_id": "34c4388fa1374733bbfaa5959bbd48ff",
+          "frame_kind": "last"
+        },
+        "created_at": "2026-11-01T02:18:05.658906Z"
+      }
+    ]
+  }
+}

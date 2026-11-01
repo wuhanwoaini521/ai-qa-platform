@@ -47,10 +47,27 @@
   },
   "mobile": {
     "resizeDebugSplit": "调整编辑器与浏览器面板，使用左右方向键微调",
-    "debug": { "navigation": "调试面板", "code": "代码", "browser": "浏览器", "steps": "步骤", "logs": "状态" },
-    "explore": { "navigation": "探索面板", "browser": "浏览器", "task": "任务" }
+    "debug": {
+      "navigation": "调试面板",
+      "code": "代码",
+      "browser": "浏览器",
+      "steps": "步骤",
+      "logs": "状态"
+    },
+    "explore": {
+      "navigation": "探索面板",
+      "browser": "浏览器",
+      "task": "任务"
+    }
   },
-  "quick": { "requirement": "工作区 · 需求", "cases": "工作区 · 用例", "failures": "工作区 · 失败队列", "recorder": "工作区 · 浏览器录制", "searchPlaceholder": "搜索需求、用例、失败或录制", "destinations": "工作区快捷入口" },
+  "quick": {
+    "requirement": "工作区 · 需求",
+    "cases": "工作区 · 用例",
+    "failures": "工作区 · 失败队列",
+    "recorder": "工作区 · 浏览器录制",
+    "searchPlaceholder": "搜索需求、用例、失败或录制",
+    "destinations": "工作区快捷入口"
+  },
   "stage": {
     "requirement": "需求分析",
     "cases": "测试用例",
@@ -161,11 +178,13 @@
       "passed": "运行通过",
       "cancelled": "已取消",
       "task-completed": "任务已完成",
+      "task-paused": "任务已暂停",
       "task-failed": "任务失败",
       "task-blocked": "任务需要处理",
       "task-cancelled": "任务已取消"
     },
-    "taskFinished": "工作流任务已完成；本次没有创建 TestRun。"
+    "taskFinished": "工作流任务已完成；本次没有创建 TestRun。",
+    "taskPaused": "工作流任务已暂停；可在任务详情中查看进度。"
   },
   "aiRun": {
     "title": "AI Run",
@@ -187,7 +206,18 @@
     "loading": "正在加载所选运行证据…",
     "loadError": "无法加载所选运行证据。",
     "openRuns": "打开运行历史",
-    "timeline": "执行时间线"
+    "timeline": "执行时间线",
+    "taskStatus": "任务：{{status}}",
+    "runStatus": "运行：{{status}}",
+    "runtimeUpdates": "运行时更新：{{status}}",
+    "connection": {
+      "idle": "空闲",
+      "connecting": "连接中",
+      "connected": "已连接",
+      "reconnecting": "正在重连",
+      "failed": "连接失败"
+    },
+    "recentActivity": "最近：{{activity}}"
   },
   "main": {
     "title": "工作内容",
@@ -221,11 +251,19 @@
     "starting": "正在启动…",
     "waiting": "等待下一步",
     "progress": "已完成 {{completed}} / {{total}} 项 · {{current}}",
-    "risk": {"low": "低风险", "medium": "中风险", "high": "需确认"}
+    "risk": {
+      "low": "低风险",
+      "medium": "中风险",
+      "high": "需确认"
+    }
   },
   "inspector": {
     "resizePanel": "调整检查器宽度，使用左右方向键微调",
-    "tabs": { "context": "上下文", "ai": "AI 计划", "run": "运行信息" },
+    "tabs": {
+      "context": "上下文",
+      "ai": "AI 计划",
+      "run": "运行信息"
+    },
     "title": "检查器",
     "close": "关闭检查器",
     "liveContext": "实时上下文",
@@ -271,6 +309,8 @@
     "title": "运行时状态",
     "idle": "空闲",
     "noRun": "当前上下文没有活动运行",
+    "loadingRun": "正在读取运行状态",
+    "statusUnavailable": "无法读取运行状态",
     "currentStep": "当前步骤",
     "noCurrentStep": "等待实际执行事件",
     "finished": "本次运行已结束，请查看结果",
@@ -305,7 +345,8 @@
       "RUNNING": "运行中",
       "QUEUED": "排队中",
       "PASSED": "运行通过",
-      "CANCELLED": "已取消"
+      "CANCELLED": "已取消",
+      "SKIPPED": "运行已跳过"
     },
     "runOutcome": {
       "ERROR": "运行级错误",
@@ -329,15 +370,7 @@
       "fullFailureEvidence": "查看完整错误与调用栈",
       "openFailure": "打开此失败记录"
     },
-    "executionStatus": {
-      "QUEUED": "排队中",
-      "RUNNING": "运行中",
-      "PASSED": "通过",
-      "FAILED": "失败",
-      "ERROR": "错误",
-      "SKIPPED": "已跳过",
-      "CANCELLED": "已取消"
-    },
+    "executionStatus": "执行状态：{{status}}",
     "viewExecutionPlan": "查看执行计划",
     "planDisclosureDescription": "需要查看 AI Run 的计划时，可从这里展开计划面板。",
     "openExecutionPlan": "打开计划面板",
@@ -347,7 +380,12 @@
     "fullRuntime": "运行详情",
     "rerun": "重跑用例",
     "filterCases": "筛选测试用例",
-    "caseFilters": { "all": "全部", "failed": "失败", "passed": "通过", "skipped": "跳过" },
+    "caseFilters": {
+      "all": "全部",
+      "failed": "失败",
+      "passed": "通过",
+      "skipped": "跳过"
+    },
     "noCasesForFilter": "此筛选下没有用例。",
     "selectedCasePassed": "此用例已通过。当前没有失败信息。",
     "selectedCaseSkipped": "此用例已跳过。当前没有失败信息。",
@@ -355,7 +393,15 @@
     "caseEvidenceReady": "已关联 {{count}} 项当前用例证据",
     "caseEvidenceUnavailable": "尚未找到此用例的 Failure 记录。",
     "selectFailureToAnalyze": "选择失败用例后，可在此查看分析和修复状态。",
-    "evidenceTabs": { "screenshot": "截图", "snapshot": "页面快照", "dom": "DOM", "trace": "Trace", "console": "控制台日志", "network": "网络请求", "source": "源码" },
+    "evidenceTabs": {
+      "screenshot": "截图",
+      "snapshot": "页面快照",
+      "dom": "DOM",
+      "trace": "Trace",
+      "console": "控制台日志",
+      "network": "网络请求",
+      "source": "源码"
+    },
     "evidenceMissing": {
       "screenshot": "此用例没有关联截图制品。",
       "snapshot": "未保存此用例的浏览器页面快照。",
@@ -484,6 +530,7 @@
     "currentRunAndLogs": "当前运行与日志",
     "live": "实时事件",
     "runContext": "Run 上下文",
+    "inspector": "运行检查器",
     "currentTask": "当前任务",
     "case": "测试用例",
     "environment": "环境",
@@ -492,7 +539,12 @@
     "eventLog": "运行事件",
     "viewRuntimeDetails": "查看完整运行事件",
     "filterEvents": "筛选运行事件",
-    "eventFilters": { "all": "全部", "errors": "错误", "browser": "浏览器", "ai": "AI / Jev" },
+    "eventFilters": {
+      "all": "全部",
+      "errors": "错误",
+      "browser": "浏览器",
+      "ai": "AI / Jev"
+    },
     "noMatchingEvents": "没有符合此筛选条件的事件。",
     "runtimeLoading": "正在读取 Run 的 Runtime 事件…",
     "runtimeLoadError": "读取 Runtime 事件失败；结果页不会用模拟状态替代。",
@@ -550,6 +602,15 @@
       "CANCELLED": "任务已取消",
       "SKIPPED": "任务已跳过"
     },
+    "testRunStatus": {
+      "QUEUED": "排队中",
+      "RUNNING": "运行中",
+      "PASSED": "通过",
+      "FAILED": "失败",
+      "SKIPPED": "已跳过",
+      "ERROR": "错误",
+      "CANCELLED": "已取消"
+    },
     "noRun": "还没有运行结果",
     "noRunDescription": "从已绑定的自动化用例启动 Run，结果会留在当前 Workspace。",
     "runTitle": "测试运行",
@@ -569,7 +630,6 @@
     "executionLog": "查看执行日志",
     "openCase": "返回当前用例",
     "goalStatus": "目标状态",
-    "executionStatus": "执行状态：{{status}}",
     "status": {
       "COMPLETED": "目标已验证",
       "COMPLETED_WITH_UNRESOLVED": "执行结束，仍有未解决项",
@@ -931,5 +991,6 @@
       "unknownKind": "节点类型不在白名单内。",
       "missingNode": "连线引用了不存在的节点。"
     }
-  }
+  },
+  "backToRequirement": "返回需求"
 }

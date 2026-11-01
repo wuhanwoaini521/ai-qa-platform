@@ -1,0 +1,75 @@
+{
+  "session_id": "36de0067680b42709e38a9bdd5f3b404",
+  "calls": [
+    {
+      "id": "66edf5159b24",
+      "method": "GET",
+      "url": "http://127.0.0.1:8099/api/info",
+      "status": 200,
+      "failed": false,
+      "request_headers": {
+        "referer": "http://127.0.0.1:8099/new/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.125 Safari/537.36",
+        "accept-language": "en-US"
+      },
+      "request_body": null,
+      "response_content_type": "application/octet-stream"
+    }
+  ],
+  "compiled": {
+    "code": "import json\nimport os\n\nimport httpx\n\n\ndef _value_at(payload, path):\n    current = payload\n    for part in path.split('.'):\n        if part.endswith(']') and '[' in part:\n            name, index = part[:-1].split('[', 1)\n            if name:\n                current = current[name]\n            current = current[int(index)]\n        else:\n            current = current[part]\n    return current\n\n\ndef test_api_info():\n    base = os.getenv(\"QA_BASE_URL\", \"http://127.0.0.1:8099\")\n    url = base + \"/api/info\"\n    headers = {}\n    response = httpx.request(\"GET\", url, headers=headers, timeout=30.0, follow_redirects=True)\n    assert response.status_code == 200, response.text[:500]\n    assert _value_at(response.json(), \"service\") == \"fixture\"\n",
+    "test_name": "test_api_info",
+    "assertion_count": 2
+  },
+  "run": {
+    "id": "run_fd86e71056a7",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "PASSED",
+    "requested_by": "user",
+    "environment": {},
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_api_info.py::test_api_info"
+    ],
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 708.7812090003354,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_api_info.py::test_api_info PASSED\n\n============================== 1 passed in 0.14s ===============================",
+    "started_at": "2026-11-01T00:40:27.609437Z",
+    "finished_at": "2026-11-01T00:40:28.341775Z",
+    "created_at": "2026-11-01T00:40:27.583382Z",
+    "executions": [
+      {
+        "id": "exec_bc935be3a77f",
+        "run_id": "run_fd86e71056a7",
+        "nodeid": "tests/test_api_info.py::test_api_info",
+        "status": "PASSED",
+        "duration_ms": 81.43419599946355,
+        "error_message": null,
+        "stack_trace": null,
+        "failure_category": null,
+        "artifact_paths": [],
+        "started_at": "2026-11-01T00:40:28.253762Z",
+        "finished_at": "2026-11-01T00:40:28.335196Z"
+      }
+    ],
+    "browser_sessions": [],
+    "external_artifacts": []
+  }
+}

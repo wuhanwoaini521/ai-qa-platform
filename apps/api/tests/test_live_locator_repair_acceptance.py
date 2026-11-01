@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -19,6 +20,7 @@ from app.services.decision_settings_service import DecisionSettingsService
 from app.services.workspace_service import WorkspaceService
 from app.settings import settings
 from qa_core.ai.registry import AIProviderRegistry
+from qa_core.failure.redactor import SensitiveRedactor
 
 #: Bundled Playwright Chromium by default; hosts where it cannot execute (e.g. some macOS builds)
 #: set AI_QA_ACCEPTANCE_BROWSER_CHANNEL=chrome to use an installed system browser.
@@ -317,12 +319,22 @@ def test_workflow():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_live_ai_jev_failure_repair_through_browser_ui(
-    client, test_db_session, tmp_path, local_http_url, monkeypatch
-):
-    """Drive diagnosis, apply, and verification through the real React UI and API."""
-    if os.getenv("AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE") != "1":
-        pytest.skip("set AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE=1 to run the real browser acceptance")
+async def test_live_ai_jev_failure_repair_through_browser_ui(client, test_db_session, tmp_path, local_http_url):
+    """Drive the existing browser acceptance, or opt into its proposal-only variant."""
+    proposal_only = os.getenv("AI_QA_RUN_LIVE_JEV_PROPOSAL_ACCEPTANCE") == "1"
+    if not proposal_only and os.getenv("AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE") != "1":
+        pytest.skip("set AI_QA_RUN_LIVE_JEV_BROWSER_ACCEPTANCE=1 or AI_QA_RUN_LIVE_JEV_PROPOSAL_ACCEPTANCE=1")
+    proposal_artifact = None
+    if proposal_only:
+        artifact_value = os.getenv("AI_QA_JEV_PROPOSAL_ARTIFACT_PATH")
+        required_root = Path(".ai-runs/2026-10-28-qa-003-real-ai-failure-repair").resolve()
+        if not artifact_value:
+            pytest.fail("AI_QA_JEV_PROPOSAL_ARTIFACT_PATH is required in proposal-only mode")
+        proposal_artifact = Path(artifact_value).resolve()
+        if not proposal_artifact.is_relative_to(required_root):
+            pytest.fail(f"proposal artifact must be under {required_root}")
+        if proposal_artifact.exists():
+            pytest.fail(f"refusing to overwrite proposal artifact: {proposal_artifact}")
 
     from playwright.async_api import async_playwright
     from uvicorn import Config, Server
@@ -331,19 +343,14 @@ async def test_live_ai_jev_failure_repair_through_browser_ui(
     ai_config = await AISettingsService(repository_scope)._effective_config()
     decision_config = await DecisionSettingsService(repository_scope).get_runtime_config()
     if ai_config.provider == "fake" or not ai_config.api_key:
+        if proposal_only:
+            pytest.fail("proposal-only acceptance requires a configured real AI provider and key")
         pytest.skip("a real AI provider and configured key are required for this acceptance")
     if not decision_config.enabled or not decision_config.api_key:
+        if proposal_only:
+            pytest.fail("proposal-only acceptance requires enabled Jev runtime and a configured key")
         pytest.skip("enabled Jev runtime and configured key are required for this acceptance")
 
-    import app.settings as settings_module
-
-    current_config = settings_module.get_config()
-    repair_config = current_config.repair.model_copy(update={"mode": "ASSISTED", "auto_start_on_failure": False})
-    monkeypatch.setattr(
-        settings_module.config_manager,
-        "_config",
-        current_config.model_copy(update={"repair": repair_config}),
-    )
     original_runtime = AIProviderRegistry._runtime_config
     original_middleware = AIProviderRegistry._middleware
     original_artifact_dir = settings.artifact_storage_dir
@@ -403,26 +410,27 @@ def test_workflow():
             "PYTHONDONTWRITEBYTECODE": "1",
         }
 
-        baseline = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                f"--basetemp={temp_root / 'baseline'}",
-                "tests/test_workflow.py::test_workflow",
-            ],
-            cwd=workspace,
-            env=run_environment,
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=False,
-        )
-        baseline_output = baseline.stdout + baseline.stderr
-        assert baseline.returncode != 0 and "purchase-now" in baseline_output, baseline_output[-2500:]
+        if not proposal_only:
+            baseline = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    "-p",
+                    "no:cacheprovider",
+                    f"--basetemp={temp_root / 'baseline'}",
+                    "tests/test_workflow.py::test_workflow",
+                ],
+                cwd=workspace,
+                env=run_environment,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+            )
+            baseline_output = baseline.stdout + baseline.stderr
+            assert baseline.returncode != 0 and "purchase-now" in baseline_output, baseline_output[-2500:]
         original_response = await client.post(
             "/api/runs",
             json={
@@ -443,6 +451,11 @@ def test_workflow():
             assert response.status_code == 200, response.text
             original_run = response.json()
         assert original_run["status"] == "FAILED", original_run
+        expected_node = "tests/test_workflow.py::test_workflow"
+        assert original_run.get("nodeids") == [expected_node], original_run
+        executions = original_run.get("executions") or []
+        assert len(executions) == 1 and executions[0].get("nodeid") == expected_node, executions
+        assert executions[0].get("status") == "FAILED", executions
         browser_sessions = original_run.get("browser_sessions") or []
         assert any(
             session.get("page_evidence", {}).get("controls")
@@ -507,8 +520,14 @@ def test_workflow():
                 + json.dumps({"theme": "system", "language": "en", "startPage": "/", "defaultProjectId": None})
                 + ");"
             )
-            await page.goto(f"http://127.0.0.1:{vite_port}/failures/{failure['id']}", wait_until="commit")
-            diagnose_button = page.get_by_role("button", name=re.compile(r"Run AI diagnosis|运行 AI 诊断", re.I))
+            workspace_url = (
+                f"http://127.0.0.1:{vite_port}/workspace/{project_id}"
+                f"?view=results&stage=failure&failureId={failure['id']}"
+            )
+            await page.goto(workspace_url, wait_until="commit")
+            diagnose_button = page.get_by_role(
+                "button", name=re.compile(r"Start AI analysis|开始 AI 分析|Run AI diagnosis|运行 AI 诊断", re.I)
+            )
             try:
                 await diagnose_button.wait_for(state="visible", timeout=60_000)
             except Exception as error:
@@ -516,15 +535,23 @@ def test_workflow():
                     f"Failure action is not available at {page.url}; page text: "
                     f"{(await page.locator('body').inner_text())[:3000]}"
                 ) from error
-            screenshot_dir = Path(os.getenv("AI_QA_FAILURE_UI_SCREENSHOT_DIR", tmp_path / "failure-ui-review"))
-            screenshot_dir.mkdir(parents=True, exist_ok=True)
-            for width, name in ((1440, "desktop"), (768, "tablet"), (360, "mobile")):
-                await page.set_viewport_size({"width": width, "height": 900})
-                await page.screenshot(path=str(screenshot_dir / f"{name}.png"), full_page=True)
-                has_horizontal_overflow = await page.evaluate(
-                    "document.documentElement.scrollWidth > window.innerWidth"
-                )
-                assert not has_horizontal_overflow, f"Failure UI overflows horizontally at {width}px"
+            if proposal_only:
+                screenshot_dir = proposal_artifact.parent / (proposal_artifact.stem + "-screenshots")
+                if screenshot_dir.exists():
+                    pytest.fail(f"refusing to overwrite proposal screenshots: {screenshot_dir}")
+                desktop_sizes = ((1280, 800, "1280x800"), (1440, 900, "1440x900"), (1920, 1080, "1920x1080"))
+            else:
+                screenshot_dir = Path(os.getenv("AI_QA_FAILURE_UI_SCREENSHOT_DIR", tmp_path / "failure-ui-review"))
+                screenshot_dir.mkdir(parents=True, exist_ok=True)
+                desktop_sizes = ((1440, 900, "desktop"), (768, 900, "tablet"), (360, 900, "mobile"))
+            for width, height, name in desktop_sizes:
+                await page.set_viewport_size({"width": width, "height": height})
+                if not proposal_only:
+                    await page.screenshot(path=str(screenshot_dir / f"{name}.png"), full_page=True)
+                    has_horizontal_overflow = await page.evaluate(
+                        "document.documentElement.scrollWidth > window.innerWidth"
+                    )
+                    assert not has_horizontal_overflow, f"Failure UI overflows horizontally at {width}px"
             await page.set_viewport_size({"width": 1440, "height": 900})
             await diagnose_button.click()
             analysis_id = ""
@@ -560,6 +587,202 @@ def test_workflow():
             result = candidate.get("result") or {}
             diagnosis = result.get("diagnosis") or {}
             selection = result.get("selection") or {}
+            if proposal_only:
+                assert candidate.get("status") == "COMPLETED", candidate
+                assert state.get("state") == "PATCH_READY", state
+                assert "APPLY" in state.get("allowed_actions", []), state
+                assert not (set(state.get("allowed_actions", [])) & {"VERIFY", "ROLLBACK"}), state
+                assert state.get("verification_run_id") is None and state.get("verification_run_status") is None, state
+                assert proposal.get("provider") == decision_config.provider == "jev", proposal
+                assert proposal.get("model") == decision_config.model, proposal
+                assert proposal.get("ai_provider") == ai_config.provider, proposal
+                assert proposal.get("ai_fallback_used") is False, proposal
+                assert proposal.get("verified") is True and proposal.get("code_diff"), proposal
+                assert proposal.get("file_path") == "tests/test_workflow.py", proposal
+                assert proposal.get("source_sha256") == hashlib.sha256(source.encode()).hexdigest(), proposal
+                assert (
+                    proposal.get("proposed_locator")
+                    and proposal.get("proposed_locator") != 'page.locator("#purchase-now")'
+                ), proposal
+                assert diagnosis.get("provider") == ai_config.provider != "fake", diagnosis
+                assert diagnosis.get("model") == ai_config.model, diagnosis
+                assert diagnosis.get("fallback_used") is False, diagnosis
+                assert diagnosis.get("root_cause") and diagnosis.get("classification"), diagnosis
+                assert decision_summary.get("provider") == decision_config.provider == "jev", decision_summary
+                assert decision_summary.get("model") == decision_config.model, decision_summary
+                assert decision_summary.get("fallback_used") is False, proposal
+                assert decision_summary.get("verification_source") in {"playwright", "playwright_snapshot"}, (
+                    decision_summary
+                )
+                confidence = decision_summary.get("confidence")
+                assert isinstance(confidence, (int, float)) and confidence >= decision_config.minimum_confidence, (
+                    decision_summary
+                )
+                assert failure.get("run_id") == original_run["id"]
+                assert failure.get("execution_id") == executions[0]["id"]
+                assert failure.get("test_nodeid") == expected_node
+                assert failure.get("exception_type") == "AssertionError", failure
+                assert failure.get("stack_trace") and "purchase-now" in failure["stack_trace"], failure
+                inspection_events = [
+                    event for event in candidate.get("events", []) if event.get("stage") == "inspection"
+                ]
+                assert inspection_events and any(
+                    (event.get("metadata") or {}).get("has_traceback") is True for event in inspection_events
+                ), inspection_events
+                assert any(
+                    event.get("type") == "workflow.step"
+                    and (event.get("metadata") or {}).get("source_path") == "tests/test_workflow.py"
+                    for event in inspection_events
+                ), inspection_events
+                assert any(
+                    event.get("type") == "model.completed"
+                    and (event.get("metadata") or {}).get("provider") == diagnosis["provider"]
+                    and (event.get("metadata") or {}).get("model") == diagnosis["model"]
+                    and (event.get("metadata") or {}).get("fallback_used") is False
+                    for event in candidate.get("events", [])
+                ), candidate.get("events")
+                source_after = await WorkspaceService().read_file(project_id, "tests/test_workflow.py")
+                source_sha256_after = hashlib.sha256(source_after.encode()).hexdigest()
+                assert source_after == source
+                assert source_sha256_after == proposal["source_sha256"]
+                assert not any(
+                    event.get("type")
+                    in {"patch.applied", "verification.started", "verification.completed", "repair.verified"}
+                    for event in candidate.get("events", [])
+                ), candidate.get("events")
+                diagnosis_view = page.locator("#failure-root-cause")
+                await diagnosis_view.wait_for(state="visible", timeout=30_000)
+                assert diagnosis["root_cause"] in await diagnosis_view.inner_text()
+                proposed_locator = proposal["proposed_locator"]
+                diff_details = page.locator(".failure-repair-diff")
+                await diff_details.locator("summary").click()
+                diff_view = page.locator(".failure-repair-diff .failure-diff-code")
+                await diff_view.wait_for(state="visible", timeout=30_000)
+                rendered_diff = await diff_view.inner_text()
+                assert proposed_locator in rendered_diff
+                assert proposal.get("source_locator") in rendered_diff
+                assert proposal["code_diff"] in rendered_diff, "Rendered diff differs from persisted proposal"
+                approval_button = page.get_by_role(
+                    "button", name=re.compile(r"Approve and apply patch|批准并应用补丁|Apply repair|应用修复", re.I)
+                )
+                await approval_button.wait_for(state="visible", timeout=30_000)
+                proposal_artifact.parent.mkdir(parents=True, exist_ok=True)
+                screenshot_dir.mkdir(parents=False, exist_ok=False)
+                screenshots = []
+                for width, height, name in desktop_sizes:
+                    await page.set_viewport_size({"width": width, "height": height})
+                    has_horizontal_overflow = await page.evaluate(
+                        "document.documentElement.scrollWidth > window.innerWidth"
+                    )
+                    assert not has_horizontal_overflow, f"Failure UI overflows horizontally at {width}px"
+                    assert await approval_button.is_visible(), f"Approval control is hidden at {width}px"
+                    image = screenshot_dir / f"proposal-ready-{name}.png"
+                    await page.screenshot(path=str(image), full_page=True)
+                    screenshots.append(image.relative_to(Path.cwd()).as_posix())
+                analysis_traceback = SensitiveRedactor.redact_text(failure["stack_trace"])
+                analysis_traceback = analysis_traceback.replace(str(tmp_path), "<isolated-test-root>")
+                project_runs = await client.get(f"/api/runs?project_id={project_id}")
+                assert project_runs.status_code == 200, project_runs.text
+                assert [item["id"] for item in project_runs.json()] == [original_run["id"]]
+                event_metadata_fields = {
+                    "provider",
+                    "model",
+                    "fallback_used",
+                    "ai_fallback_used",
+                    "verification_source",
+                    "candidate_id",
+                    "confidence",
+                    "source_path",
+                    "source_sha256",
+                    "file_path",
+                    "repair_state",
+                    "patch_ready",
+                    "changes_applied",
+                }
+                analysis_events = [
+                    {
+                        "type": event.get("type"),
+                        "stage": event.get("stage"),
+                        "status": event.get("status"),
+                        "metadata": {
+                            key: value
+                            for key, value in (event.get("metadata") or {}).items()
+                            if key in event_metadata_fields
+                        },
+                    }
+                    for event in candidate.get("events", [])
+                ]
+                artifact = {
+                    "provider_readiness_evidence": "03-provider-readiness.json",
+                    "failure_id": failure["id"],
+                    "run_id": original_run["id"],
+                    "analysis_id": analysis_id,
+                    "project_id": project_id,
+                    "test_node": expected_node,
+                    "run_status": original_run["status"],
+                    "execution": {
+                        "id": executions[0]["id"],
+                        "nodeid": executions[0]["nodeid"],
+                        "status": executions[0]["status"],
+                    },
+                    "analysis_status": candidate["status"],
+                    "analysis_events": analysis_events,
+                    "failure_context": {
+                        "exception_type": failure.get("exception_type"),
+                        "error_message": SensitiveRedactor.redact_text(failure.get("error_message") or ""),
+                        "source_file": proposal["file_path"],
+                        "source_line": failure.get("source_line"),
+                        "stack_trace": analysis_traceback,
+                    },
+                    "source": {
+                        "path": proposal["file_path"],
+                        "sha256_before": proposal["source_sha256"],
+                        "sha256_after": source_sha256_after,
+                    },
+                    "diagnosis": {
+                        "root_cause": SensitiveRedactor.redact_text(diagnosis["root_cause"]),
+                        "classification": diagnosis["classification"],
+                        "provider": diagnosis["provider"],
+                        "model": diagnosis["model"],
+                        "fallback_used": diagnosis["fallback_used"],
+                    },
+                    "jev": {
+                        "provider": proposal["provider"],
+                        "model": decision_summary["model"],
+                        "confidence": confidence,
+                        "verified": proposal["verified"],
+                        "decision": {
+                            key: decision_summary[key]
+                            for key in (
+                                "provider",
+                                "model",
+                                "candidate_id",
+                                "selected_locator",
+                                "confidence",
+                                "fallback_used",
+                                "verification_source",
+                                "latency_ms",
+                            )
+                            if key in decision_summary
+                        },
+                    },
+                    "code_diff": proposal["code_diff"],
+                    "workflow": {
+                        "state": state["state"],
+                        "allowed_actions": state.get("allowed_actions", []),
+                        "approval_available": approval_button.is_visible(),
+                        "approval_performed": False,
+                        "applied": False,
+                        "exact_verification_performed": False,
+                        "verification_run_id": None,
+                    },
+                    "screenshots": screenshots,
+                }
+                proposal_artifact.parent.mkdir(parents=True, exist_ok=True)
+                with proposal_artifact.open("x", encoding="utf-8") as output:
+                    json.dump(artifact, output, indent=2, ensure_ascii=False)
+                    output.write("\n")
+                return
             print(
                 "REAL_AI_JEV_BROWSER_ACCEPTANCE="
                 + json.dumps(
@@ -657,7 +880,9 @@ def test_workflow():
             assert "APPLY" in state.get("allowed_actions", []), state
             assert await WorkspaceService().read_file(project_id, "tests/test_workflow.py") == source
             await page.screenshot(path=str(screenshot_dir / "patch-ready.png"), full_page=True)
-            apply_button = page.get_by_role("button", name=re.compile(r"Apply repair|应用修复", re.I))
+            apply_button = page.get_by_role(
+                "button", name=re.compile(r"Approve and apply patch|批准并应用补丁|Apply repair|应用修复", re.I)
+            )
             await apply_button.wait_for(state="visible", timeout=30_000)
             await apply_button.click()
             for _ in range(30):

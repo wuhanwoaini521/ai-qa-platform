@@ -591,6 +591,7 @@ export function WorkspaceRunResult({
           </> : <p className="workspace-muted">{t('result.caseExecutionResults.empty')}</p>}
         </main>
 
+        <section className="workspace-result-inspector" aria-label={t('result.inspector')}>
         {hasFailures && <aside onClickCapture={focusOnPanelCard('repair')} className={`workspace-result-card workspace-repair-workspace ${focusedPanel === 'repair' ? 'is-focused' : 'is-compact'}`} aria-label={t('result.repairTitle')}>
           <header><div><span className="workspace-eyebrow">{t('result.repairEyebrow')}</span><h3>{t('result.repairTitle')}</h3></div><div className="workspace-panel-header-actions"><Bot size={18} aria-hidden="true" /><button type="button" className="btn btn-icon btn-sm workspace-panel-focus" aria-pressed={focusedPanel === 'repair'} aria-label={t('result.focusPanel', { panel: t('result.repairTitle') })} title={t('result.focusPanel', { panel: t('result.repairTitle') })} onClick={() => setActivePanel('repair')}><Maximize2 size={14} aria-hidden="true" /></button></div></header>
           {isSelectedError && failure ? <>
@@ -636,6 +637,7 @@ export function WorkspaceRunResult({
           {filteredEvents.length ? <div className="workspace-result-events-viewport" role="region" aria-label={t('result.eventLog')} tabIndex={0}><ol className="workspace-result-events">{filteredEvents.map((event) => <EventRow key={event.id} event={event} onOpenDetails={onOpenDetails} onOpenStep={onOpenStep} t={t} />)}</ol></div> : runtimeError ? <p className="workspace-result-empty-inline" role="alert">{t('result.runtimeLoadError')} <button type="button" className="btn btn-secondary btn-sm" onClick={onRefreshRuntime}>{t('result.retryLoad')}</button></p> : <p className="workspace-result-empty-inline">{runRuntime ? t('result.noMatchingEvents') : t('result.runtimeLoading')}</p>}
           {run.log_output && <details className="workspace-result-raw-log"><summary>{t('result.rawRunnerLog')} · {run.log_output.split(/\r?\n/).length} {t('result.logLines')}</summary><pre>{run.log_output.slice(-12000)}</pre></details>}
         </aside>
+        </section>
       </div>
     </section>
   );

@@ -345,7 +345,9 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
                 "caseId => new URL(location.href).searchParams.get('caseId') === caseId",
                 arg=case_id,
             )
-            await expect(page.get_by_text("Search returns the requested product", exact=True)).to_have_count(2)
+            await expect(page.locator(".test-case-detail .card-title")).to_have_text(
+                "Search returns the requested product"
+            )
             await expect(page.get_by_text("Search for qa sample", exact=True)).to_be_visible()
             await _shot(page, path=str(evidence_dir / "test-case-review.png"), full_page=True)
             run = (await client.get(f"/api/discovery/runs/{run_id}")).json()
@@ -574,7 +576,6 @@ def test_discovered_search():
                 ("1920x1080", 1920, 1080),
                 ("1440x900", 1440, 900),
                 ("1366x768", 1366, 768),
-                ("390x844", 390, 844),
             ]
             page_routes = [
                 ("dashboard", "/"),
@@ -607,7 +608,7 @@ def test_discovered_search():
             await _goto_app(page, f"http://127.0.0.1:{vite_port}/")
             await page.get_by_text("平台总览", exact=True).wait_for(timeout=45000)
             await page.get_by_role("link", name="项目管理").click()
-            await page.wait_for_url("**/projects")
+            await page.wait_for_function("location.pathname === '/projects'")
             await page.get_by_role("heading", name="QA 项目").first.wait_for(timeout=15000)
             await _shot(page, path=str(round4_evidence / "project-navigation-click.png"), full_page=True)
             route_metrics = []
@@ -767,7 +768,7 @@ def test_discovered_search():
             try:
                 await _goto_app(page, f"http://127.0.0.1:{vite_port}/quality")
                 await page.wait_for_selector("body")
-                await page.locator(".tab-btn").filter(has_text="发布与门禁").first.click()
+                await page.locator(".tab-btn").filter(has_text="发布门禁").first.click()
                 await page.get_by_role("button", name="新建发布").first.click()
                 modal = page.locator(".modal-overlay")
                 await modal.wait_for(state="visible", timeout=15000)

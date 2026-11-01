@@ -7,7 +7,12 @@ from project_model.lifecycle import ModernTestModel, RequirementDocument, TestSc
 
 
 def input_hash(title, description, acceptance_criteria, document):
-    data = [title, description, acceptance_criteria, document.model_dump(exclude={"analysis", "history"}, mode="json")]
+    data = [
+        title,
+        description,
+        acceptance_criteria,  # assertions are human-adopted drafts, not analysis inputs
+        document.model_dump(exclude={"analysis", "history", "assertions", "scripts"}, mode="json"),
+    ]
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

@@ -1,5 +1,15 @@
 {
   "subtitle": "管理测试项目、工作区仓库与自动化测试框架。",
+  "projectCount": "项目总数：{{count}}",
+  "registryHint": "打开项目即可进入对应的 QA 工作台。",
+  "currentProject": "当前项目 · 工作区快捷入口",
+  "searchProjects": "搜索项目",
+  "noProjectsMatch": "没有符合搜索条件的项目。",
+  "clearSearch": "清除搜索",
+  "columnWorkspace": "工作区",
+  "openWorkspace": "打开工作台",
+  "projectLoadFailed": "项目数据暂不可用，请刷新重试。",
+  "createFailed": "项目创建失败：{{message}}",
   "tableScrollHint": "使用左右方向键或 Home、End 键横向滚动项目表格。",
   "tableSwipeHint": "左右滑动或滚动以查看项目的全部列。",
   "assetIndex": "资产库",
@@ -26,5 +36,11 @@
   "frameworkPytestApi": "Pytest（API 测试套件）",
   "frameworkCustom": "自定义框架",
   "modalDefaultBranchLabel": "默认分支",
-  "modalBootstrapHint": "<strong>创建可运行的 QA 示例</strong>（包含无需浏览器或外部服务的 Pytest 测试，以及 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 目录）"
+  "modalBootstrapHint": "<strong>创建可运行的 QA 示例</strong>（包含无需浏览器或外部服务的 Pytest 测试，以及 <code>tests/</code>、<code>pages/</code>、<code>flows/</code>、<code>components/</code> 目录）",
+  "modalSutUrlLabel": "被测系统地址（可选）",
+  "modalSutUrlPlaceholder": "https://app.example.com",
+  "modalHideFromOverview": "从总览统计中隐藏（数据保留）",
+  "hiddenFromOverview": "已隐藏",
+  "hideFromOverview": "从总览隐藏",
+  "showFromOverview": "显示到总览"
 }

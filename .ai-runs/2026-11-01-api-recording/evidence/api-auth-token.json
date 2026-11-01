@@ -1,0 +1,172 @@
+{
+  "session_id": "09925285f6d84a208356c01320007def",
+  "captured_headers": {
+    "authorization": "[REDACTED]",
+    "referer": "http://127.0.0.1:8099/new/",
+    "accept-language": "en-US",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.125 Safari/537.36",
+    "accept": "application/json"
+  },
+  "saved": {
+    "test_case": {
+      "title": "API GET http://127.0.0.1:8099/api/info",
+      "external_system": "RECORDER_API",
+      "preconditions": "",
+      "external_case_id": "7078e4bf3ab11b458535a832147f9",
+      "steps": [
+        "GET http://127.0.0.1:8099/api/info"
+      ],
+      "external_url": null,
+      "expected_result": "",
+      "created_at": "2026-11-01T00:54:32.103951+00:00",
+      "project_id": "proj_67767c6f93df",
+      "test_model": {
+        "display_id": "test_get_api_info",
+        "intent": "API GET http://127.0.0.1:8099/api/info"
+      },
+      "updated_at": "2026-11-01T01:10:53.542146+00:00",
+      "id": "tc_api_7078e4bf3ab11b458535a832147f9",
+      "priority": "P1",
+      "requirement_id": null,
+      "automation_status": "AUTOMATED",
+      "test_design_id": null,
+      "tags": [],
+      "binding": {
+        "test_case_id": "tc_api_7078e4bf3ab11b458535a832147f9",
+        "workspace_id": "proj_67767c6f93df",
+        "file_path": "tests/test_get_api_info.py",
+        "status": "ACTIVE",
+        "created_at": "2026-11-01T00:54:32.113949+00:00",
+        "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+        "id": "bind_dfe2af2e8f78",
+        "framework": "playwright_python",
+        "recorder_evidence_bundle": {},
+        "updated_at": "2026-11-01T01:10:53.536740+00:00"
+      }
+    },
+    "binding": {
+      "test_case_id": "tc_api_7078e4bf3ab11b458535a832147f9",
+      "workspace_id": "proj_67767c6f93df",
+      "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+      "file_path": "tests/test_get_api_info.py",
+      "framework": "playwright_python",
+      "status": "ACTIVE",
+      "id": "bind_dfe2af2e8f78",
+      "created_at": "2026-11-01T00:54:32.113949Z",
+      "updated_at": "2026-11-01T01:10:53.536740Z",
+      "recorder_steps": []
+    },
+    "file_path": "tests/test_get_api_info.py",
+    "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+    "reused": true
+  },
+  "code_has_env_ref": true,
+  "token_in_code": false,
+  "run_without_token": {
+    "id": "run_9c1f018a96a3",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "FAILED",
+    "requested_by": "user",
+    "environment": {
+      "AI_QA_BROWSER_CHANNEL": "chrome"
+    },
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_get_api_info.py::test_get_api_info"
+    ],
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 503.894436000337,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_get_api_info.py::test_get_api_info FAILED\n\n=================================== FAILURES ===================================\n______________________________ test_get_api_info _______________________________\ntests/test_get_api_info.py:24: in test_get_api_info\n    if secret_authorization is None: raise RuntimeError(\"Set environment variable QA_API_SECRET_AUTHORIZATION\")\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   RuntimeError: Set environment variable QA_API_SECRET_AUTHORIZATION=***REDACTED*** short test summary info ============================\nFAILED tests/test_get_api_info.py::test_get_api_info - RuntimeError: Set envi...\n============================== 1 failed in 0.07s ===============================",
+    "started_at": "2026-11-01T01:10:53.734032Z",
+    "finished_at": "2026-11-01T01:10:54.267658Z",
+    "created_at": "2026-11-01T01:10:53.711492Z",
+    "executions": [
+      {
+        "id": "exec_778b17138df3",
+        "run_id": "run_9c1f018a96a3",
+        "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+        "status": "FAILED",
+        "duration_ms": 0.261246999798459,
+        "error_message": "RuntimeError: Set environment variable QA_API_SECRET_AUTHORIZATION",
+        "stack_trace": "tests/test_get_api_info.py:24: in test_get_api_info\n    if secret_authorization is None: raise RuntimeError(\"Set environment variable QA_API_SECRET_AUTHORIZATION\")\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   RuntimeError: Set environment variable QA_API_SECRET_AUTHORIZATION",
+        "failure_category": "UNKNOWN",
+        "artifact_paths": [],
+        "started_at": "2026-11-01T01:10:54.251426Z",
+        "finished_at": "2026-11-01T01:10:54.251687Z"
+      }
+    ],
+    "browser_sessions": [],
+    "external_artifacts": []
+  },
+  "run_with_token": {
+    "id": "run_66c9b98aeab3",
+    "task_id": null,
+    "parent_run_id": null,
+    "origin_failure_id": null,
+    "project_id": "proj_67767c6f93df",
+    "requirement_id": null,
+    "case_id": null,
+    "workspace_id": "proj_67767c6f93df",
+    "status": "PASSED",
+    "requested_by": "user",
+    "environment": {
+      "AI_QA_BROWSER_CHANNEL": "chrome",
+      "QA_API_SECRET_AUTHORIZATION": "Bearer fixture-token"
+    },
+    "browser": "chromium",
+    "parallel_workers": 1,
+    "markers": [],
+    "nodeids": [
+      "tests/test_get_api_info.py::test_get_api_info"
+    ],
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "duration_ms": 619.0490560002218,
+    "runner_type": "LOCAL",
+    "runner_profile_id": null,
+    "external_job_id": null,
+    "external_build_url": null,
+    "queue_duration_ms": 0.0,
+    "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_get_api_info.py::test_get_api_info PASSED\n\n============================== 1 passed in 0.12s ===============================",
+    "started_at": "2026-11-01T01:10:55.787051Z",
+    "finished_at": "2026-11-01T01:10:56.421339Z",
+    "created_at": "2026-11-01T01:10:55.773116Z",
+    "executions": [
+      {
+        "id": "exec_50859e0a4d9c",
+        "run_id": "run_66c9b98aeab3",
+        "nodeid": "tests/test_get_api_info.py::test_get_api_info",
+        "status": "PASSED",
+        "duration_ms": 64.44546100010484,
+        "error_message": null,
+        "stack_trace": null,
+        "failure_category": null,
+        "artifact_paths": [],
+        "started_at": "2026-11-01T01:10:56.354259Z",
+        "finished_at": "2026-11-01T01:10:56.418704Z"
+      }
+    ],
+    "browser_sessions": [],
+    "external_artifacts": []
+  }
+}

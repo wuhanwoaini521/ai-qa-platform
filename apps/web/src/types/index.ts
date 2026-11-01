@@ -110,6 +110,8 @@ export interface ProjectCreate {
   default_branch?: string;
   framework_type?: FrameworkType;
   bootstrap_workspace?: boolean;
+  sut_base_url?: string | null;
+  hidden_from_overview?: boolean;
 }
 
 export type Requirement = Omit<ApiSchema['Requirement'], 'qa_model'> & {
@@ -430,6 +432,9 @@ export interface TestRunCreate {
   parent_run_id?: string | null;
   origin_failure_id?: string | null;
   project_id: string;
+  /** Identity the run belongs to, so results can restore context without URL parameters. */
+  requirement_id?: string | null;
+  case_id?: string | null;
   /** The API keys a workspace by project id, so this is the project's workspace id. */
   workspace_id: string;
   nodeids?: string[];

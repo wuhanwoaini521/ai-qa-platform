@@ -6,6 +6,7 @@ import { Requirement } from '../../../types';
 interface RequirementListProps {
   requirements: Requirement[];
   loading: boolean;
+  loadError?: 'forbidden' | 'failed' | null;
   selectedReq: Requirement | null;
   onSelect: (requirement: Requirement) => void;
 }
@@ -13,6 +14,7 @@ interface RequirementListProps {
 export const RequirementList: React.FC<RequirementListProps> = ({
   requirements,
   loading,
+  loadError = null,
   selectedReq,
   onSelect,
 }) => {
@@ -26,6 +28,10 @@ export const RequirementList: React.FC<RequirementListProps> = ({
         {loading ? (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
             {t('listLoading')}
+          </div>
+        ) : loadError ? (
+          <div role="status" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            {t(loadError === 'forbidden' ? 'listLoadForbidden' : 'listLoadFailed')}
           </div>
         ) : requirements.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>

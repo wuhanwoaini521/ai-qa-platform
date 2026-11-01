@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from project_model.task_models import TaskCreate, TaskType
 from qa_core.failure.redactor import SensitiveRedactor
 
+from app.repositories.requirement_repo import RequirementRepository
 from app.services.quality_discovery_models import DiscoveryStatus
 from app.services.recorder_service import RecorderLocator, RecorderStep
 
@@ -31,6 +32,29 @@ class QualityDiscoveryDraftMixin:
         if journey is None:
             raise ValueError("Quality Discovery journey not found.")
         steps = self._journey_recording_steps(run, result, journey)
+        final_state_id = journey["steps"][-1]["state_id"]
+        states = {item.get("state_id"): item for item in result.get("states", []) if isinstance(item, dict)}
+        final_state = states.get(final_state_id)
+        if final_state is None:
+            raise ValueError("The selected journey has no final observed state for assertion planning.")
+        assertion_candidates = self._discovery_assertion_candidates(final_state)
+        if not assertion_candidates:
+            raise ValueError("The selected journey has no redacted, observed assertion candidates.")
+
+        requirement_id = run.requirement_id
+        requirement_text = str(run.requirement_text or "").strip()
+        acceptance_criteria: list[str] = []
+        if requirement_id:
+            async with self.session_factory() as session:
+                requirement = await RequirementRepository(session).get_by_id(requirement_id)
+            if requirement is None or requirement.project_id != run.project_id:
+                raise ValueError("The linked requirement no longer belongs to this Discovery project.")
+            requirement_text = "\n".join(
+                value.strip() for value in (requirement.title, requirement.description) if value and value.strip()
+            )
+            acceptance_criteria = [
+                item.strip() for item in str(requirement.acceptance_criteria or "").splitlines() if item.strip()
+            ]
 
         slug = re.sub(r"[^a-z0-9]+", "_", journey_id.casefold()).strip("_")[:32] or "journey"
         run_key = re.sub(r"[^a-z0-9]", "", run.id.casefold())[:8] or "discovery"
@@ -41,14 +65,18 @@ class QualityDiscoveryDraftMixin:
             goal=f"Prepare a pytest draft from Quality Discovery journey {journey_id}.",
             project_id=run.project_id,
             workspace_id=run.project_id,
-            max_ai_calls=0,
+            max_ai_calls=1,
             inputs={
                 "case_name": f"Quality Discovery {journey_id}",
                 "file_path": file_path,
                 "test_name": name,
+                "requirement_id": requirement_id,
+                "requirement": requirement_text,
+                "acceptance_criteria": acceptance_criteria,
                 "recorded_steps": [step.model_dump(mode="json", exclude_none=True) for step in steps],
                 "assertion_bypass_check": True,
                 "discovery_run_id": run.id,
+                "discovery_run_version": run.version,
                 "discovery_journey_id": journey_id,
             },
         )
@@ -210,9 +238,105 @@ class QualityDiscoveryDraftMixin:
     def _safe_replay_value(value: Any, label: str) -> str:
         text = str(value or "").strip()
         redacted = SensitiveRedactor.redact_text(text)
-        if not text or len(text) > 200 or redacted != text:
+        if not text or len(text) > 200 or redacted != text or SensitiveRedactor.contains_redaction_placeholder(text):
             raise ValueError(f"The observed {label} is empty, too long, or contains sensitive data.")
         return text
+
+    @classmethod
+    def _discovery_assertion_candidates(cls, state: dict[str, Any]) -> list[dict[str, Any]]:
+        evidence_id = str(state.get("evidence_id") or "")
+        if not evidence_id:
+            raise ValueError("The final journey state has no evidence for assertion planning.")
+
+        candidates: list[dict[str, Any]] = []
+        seen_steps: set[str] = set()
+
+        def add(kind: str, text: str, step: RecorderStep) -> None:
+            value = text.strip()
+            if (
+                len(candidates) >= 12
+                or not value
+                or len(value) > 200
+                or SensitiveRedactor.redact_text(value) != value
+                or SensitiveRedactor.contains_redaction_placeholder(value)
+                or step.action not in {"assert_text", "assert_title", "assert_visible", "assert_url", "assert_count"}
+            ):
+                return
+            step_data = step.model_dump(mode="json", exclude_none=True)
+            signature = repr({key: value for key, value in step_data.items() if key != "description"})
+            if signature in seen_steps:
+                return
+            seen_steps.add(signature)
+            candidate_id = f"discovery_assertion_{len(candidates) + 1:02d}"
+            candidates.append(
+                {
+                    "candidate_id": candidate_id,
+                    "kind": kind,
+                    "text": value,
+                    "evidence_id": evidence_id,
+                    "state_id": str(state.get("state_id") or ""),
+                    "step": step_data,
+                }
+            )
+
+        baseline = cls._observed_final_assertion(state)
+        if baseline.action == "assert_title":
+            baseline_text = str(state.get("title") or "").strip()
+            baseline_kind = "page_title"
+        else:
+            baseline_text = str((baseline.locator.name if baseline.locator else None) or baseline.value or "").strip()
+            baseline_kind = "heading"
+        add(baseline_kind, baseline_text, baseline)
+
+        landmarks = str(state.get("landmarks") or "")
+        for match in re.finditer(r'heading\s+"([^"\r\n]{1,160})"\s+\[level=\d+\]', landmarks, re.I):
+            value = match.group(1).strip()
+            add(
+                "heading",
+                value,
+                RecorderStep(
+                    action="assert_text",
+                    locator=RecorderLocator(kind="role", value="heading", name=value, exact=True),
+                    value=value,
+                    description="Assert a heading observed in the final Discovery state",
+                ),
+            )
+
+        allowed_roles = {"button", "link", "tab", "checkbox", "radio", "switch"}
+        for control in state.get("controls") or []:
+            if not isinstance(control, dict) or control.get("visible") is not True:
+                continue
+            role = str(control.get("role") or "").strip().casefold()
+            name = str(control.get("name") or "").strip()
+            control_type = str(control.get("type") or "").casefold()
+            if role not in allowed_roles or control_type in {"password", "email", "tel"} or not name:
+                continue
+            add(
+                f"visible_{role}",
+                name,
+                RecorderStep(
+                    action="assert_visible",
+                    locator=RecorderLocator(kind="role", value=role, name=name, exact=True),
+                    description=f"Assert an observed {role} remains visible",
+                ),
+            )
+
+        content = str(state.get("main_content") or "")
+        for snippet in re.split(r"(?<=[.!?。！？])\s+|[\r\n]+", content):
+            value = snippet.strip()
+            if 8 <= len(value) <= 140:
+                add(
+                    "visible_text",
+                    value,
+                    RecorderStep(
+                        action="assert_text",
+                        locator=RecorderLocator(kind="text", value=value, exact=False),
+                        value=value,
+                        description="Assert text observed in the final Discovery state",
+                    ),
+                )
+
+        return candidates
 
     @staticmethod
     def _observed_final_assertion(state: dict[str, Any]) -> RecorderStep:
@@ -224,6 +348,8 @@ class QualityDiscoveryDraftMixin:
             heading = re.search(r'heading\s+"([^"\r\n]{1,160})"\s+\[level=\d+\]', landmarks, re.I)
         if heading:
             value = heading.group(1).strip()
+            if SensitiveRedactor.contains_redaction_placeholder(value):
+                raise ValueError("The final journey state has no safe observable heading or title for an assertion.")
             if value and SensitiveRedactor.redact_text(value) == value:
                 return RecorderStep(
                     action="assert_text",
@@ -233,6 +359,8 @@ class QualityDiscoveryDraftMixin:
                 )
 
         title = str(state.get("title") or "").strip()
+        if SensitiveRedactor.contains_redaction_placeholder(title):
+            raise ValueError("The final journey state has no safe observable heading or title for an assertion.")
         if title and len(title) <= 160 and SensitiveRedactor.redact_text(title) == title:
             return RecorderStep(
                 action="assert_title",

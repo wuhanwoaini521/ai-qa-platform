@@ -23,6 +23,8 @@ from app.services.task_errors import TaskBlocked
 from app.services.task_execution_ports import TaskExecutionPorts
 from app.services.workspace_service import WorkspaceService
 
+TEST_CASE_EXPECTED_RESULT_MAX_LENGTH = 2000
+
 
 class TaskTestExecutionService:
     """Own task-driven test discovery, child runs, registration and verification."""
@@ -134,25 +136,39 @@ class TaskTestExecutionService:
             raise TaskBlocked("Generated test has no bindable pytest node ID or file.")
         recorded_steps = self.context.input(task, "recorded_steps", []) or []
         title = str(self.context.input(task, "case_name", task.goal))[:250]
+        requirement_id = self.context.input(task, "requirement_id")
         async with self.context.repository_scope() as repositories:
             cases_repository = repositories.test_cases
+            if requirement_id:
+                requirement = await repositories.requirements.get_by_id(str(requirement_id))
+                if requirement is None or requirement.project_id != task.project_id:
+                    raise TaskBlocked("The selected requirement does not belong to this test case project.")
             existing = (
                 await cases_repository.get_by_id(str(self.context.input(task, "test_case_id")))
                 if self.context.input(task, "test_case_id")
                 else None
             )
             existing = existing or await cases_repository.get_by_external_case(task.project_id, "AGENT_TASK", task.id)
+            if existing is not None and (
+                existing.project_id != task.project_id or existing.requirement_id != requirement_id
+            ):
+                raise TaskBlocked("The existing test case does not match the task project and requirement.")
             if existing is None:
+                expected_result = self._test_case_expected_result(
+                    self.context.input(task, "requirement", ""),
+                    self.context.input(task, "acceptance_criteria", []),
+                )
                 existing = await cases_repository.create(
                     TestCaseCreate(
                         project_id=task.project_id,
+                        requirement_id=requirement_id,
                         title=title,
                         steps=[
                             str(step.get("description", ""))
                             for step in recorded_steps
                             if isinstance(step, dict) and step.get("description")
                         ],
-                        expected_result=str(self.context.input(task, "requirement", ""))[:2000],
+                        expected_result=expected_result,
                         automation_status=AutomationStatus.AUTOMATED,
                         tags=["ai-generated"],
                         external_system="AGENT_TASK",
@@ -172,6 +188,27 @@ class TaskTestExecutionService:
             await cases_repository.update_automation_status(existing.id, AutomationStatus.AUTOMATED.value)
             await repositories.commit()
         return {"test_case_id": existing.id, "file_path": generated["target_file"], "nodeid": nodeids[0]}
+
+    @staticmethod
+    def _test_case_expected_result(requirement_text: Any, raw_acceptance_criteria: Any) -> str:
+        requirement = str(requirement_text or "").strip()
+        if isinstance(raw_acceptance_criteria, str):
+            criteria = [item.strip() for item in raw_acceptance_criteria.splitlines() if item.strip()]
+        elif isinstance(raw_acceptance_criteria, list):
+            criteria = [item.strip() for item in raw_acceptance_criteria if isinstance(item, str) and item.strip()]
+        else:
+            criteria = []
+        criteria_text = "\n".join(f"- {item}" for item in criteria)
+        expected_result = requirement
+        if criteria_text:
+            criteria_section = f"Acceptance criteria:\n{criteria_text}"
+            expected_result = f"{criteria_section}\n\n{requirement}" if requirement else criteria_section
+        if len(expected_result) > TEST_CASE_EXPECTED_RESULT_MAX_LENGTH:
+            raise TaskBlocked(
+                f"Requirement and acceptance criteria exceed the {TEST_CASE_EXPECTED_RESULT_MAX_LENGTH:,}-character "
+                "Test Case expected result limit."
+            )
+        return expected_result
 
     async def _run_target(self, task: TaskExecutionRecord, outputs: dict[str, Any]) -> dict[str, Any]:
         nodeids = self.context.input(task, "nodeids", [])

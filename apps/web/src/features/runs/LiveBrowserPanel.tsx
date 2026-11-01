@@ -3,11 +3,16 @@ import { Maximize2, Minimize2, PanelTopClose, PanelTopOpen, MonitorPlay } from '
 import { useTranslation } from 'react-i18next';
 import { TestBrowserSession } from '../../types';
 import { api } from '../../api/client';
+import { browserFramePresentation } from './browserFrameModel';
 
 interface LiveBrowserPanelProps {
   sessions: TestBrowserSession[];
   frames: Record<string, string>;
-  runStatus: string;
+  runId?: string | null;
+  executionStatus: string;
+  executionKind: 'run' | 'task';
+  executionStatusLabel?: string;
+  executionActive: boolean;
   streamStatus: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
   streamError?: string | null;
   onSelectedSessionChange?: (sessionId: string | null) => void;
@@ -21,8 +26,13 @@ const statusColor = (status: string) => {
   return 'var(--ink-muted)';
 };
 
-export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, frames, runStatus, streamStatus, streamError, onSelectedSessionChange, failureWorkspace }) => {
+export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, frames, runId, executionStatus, executionKind, executionStatusLabel, executionActive, streamStatus, streamError, onSelectedSessionChange, failureWorkspace }) => {
   const { t } = useTranslation('runs');
+  const displayExecutionStatus = executionStatusLabel ?? t(`browserRunStatusLabel.${executionStatus.toLowerCase()}`, { defaultValue: executionStatus });
+  const executionStatusText = executionKind === 'task'
+    ? t('browserTaskStatus', { status: displayExecutionStatus })
+    : t('browserRunStatus', { status: displayExecutionStatus });
+  const sessionStatusLabel = (status: string) => t(`browserSessionStatus.${status.toLowerCase()}`, { defaultValue: status });
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => a.started_at.localeCompare(b.started_at)),
     [sessions],
@@ -73,31 +83,46 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
   }, [selected?.browser_session_id, selected?.status]);
 
   if (!ordered.length) {
-    const waiting = runStatus === 'RUNNING' || runStatus === 'QUEUED';
     return (
       <section className="card" aria-label={t('liveBrowsers')}>
-        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+        <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span className="card-title">{t('liveBrowsers')}</span>
-          {streamStatus === 'reconnecting' && <span role="status" className="badge badge-draft">{t('streamReconnecting')}</span>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            {runId && <span className="badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
+            <span role="status" aria-live="polite" className="badge badge-draft">{executionStatusText}</span>
+            <span role="status" aria-live="polite" className="badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
+          </div>
         </div>
         <div className="card-body" role={streamError ? 'alert' : 'status'} style={{ padding: 20, color: streamError ? 'var(--accent-red)' : 'var(--text-muted)', textAlign: 'center' }}>
-          {streamError || (waiting ? t('waitingBrowserSession') : t('noBrowserSessions'))}
+          {streamError || (executionActive ? t(executionKind === 'task' ? 'waitingTaskBrowserSession' : 'waitingBrowserSession') : t('noBrowserSessions'))}
         </div>
       </section>
     );
   }
   const liveFrame = selected ? frames[selected.browser_session_id] : undefined;
-  const frame = liveFrame || (storedFrame?.artifactId === snapshotId ? storedFrame?.url : undefined);
+  const hasCapturedFrame = Boolean(snapshotId && storedFrame?.artifactId === snapshotId && storedFrame.url);
+  const framePresentation = browserFramePresentation({
+    hasStreamFrame: Boolean(liveFrame),
+    hasCapturedFrame,
+    sessionStatus: selected?.status,
+    streamStatus,
+  });
+  const frame = liveFrame || (hasCapturedFrame ? storedFrame?.url : undefined);
+  const frameAlt = framePresentation
+    ? t(`browserFrameAlt.${framePresentation}`, { caseName: selected?.case_name || selected?.nodeid || t('browserCase') })
+    : '';
 
   return (
     <section className="card" aria-label={t('liveBrowsers')} style={{ overflow: 'hidden' }}>
-      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           <MonitorPlay size={16} color="var(--accent-blue)" />
           <span className="card-title">{t('liveBrowsers')}</span>
           <span className="badge badge-draft">{ordered.length}</span>
-          {selected?.status !== 'running' && frame && <span className="badge badge-draft">{t('lastCapturedFrame')}</span>}
-          {streamStatus === 'reconnecting' && <span role="status" className="badge badge-draft">{t('streamReconnecting')}</span>}
+          {runId && <span className="badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
+          <span role="status" aria-live="polite" className="badge badge-draft">{executionStatusText}</span>
+          <span role="status" aria-live="polite" className="badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
+          {framePresentation && <span className="badge badge-draft">{t(`browserFrameState.${framePresentation}`)}</span>}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           <button className="btn btn-icon btn-sm" aria-label={minimized ? t('expandBrowserPanel') : t('minimizeBrowserPanel')} onClick={() => setMinimized((value) => !value)}>
@@ -133,7 +158,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
                 {session.case_execution_id && (
                   <span style={{ color: 'var(--text-muted)', marginLeft: 7 }}>· {session.case_execution_id.slice(0, 8)}</span>
                 )}
-                <span aria-label={session.status} style={{ color: statusColor(session.status), marginLeft: 4 }}>{session.status}</span>
+                <span aria-label={sessionStatusLabel(session.status)} style={{ color: statusColor(session.status), marginLeft: 4 }}>{sessionStatusLabel(session.status)}</span>
               </button>
             ))}
           </div>
@@ -141,7 +166,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
             <div className="rt-browser-preview-layout" style={{ display: 'grid', gap: 12 }}>
               <div style={{ minWidth: 0, background: 'var(--surface-inverse)', borderRadius: 'var(--r-sm)', minHeight: expanded ? 540 : 260, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 {frame ? (
-                  <img src={frame} alt={`${selected.case_name} ${selected.status === 'running' ? 'live browser' : 'last captured browser frame'}`} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />
+                  <img src={frame} alt={frameAlt} style={{ display: 'block', width: '100%', maxHeight: expanded ? 540 : 380, objectFit: 'contain' }} />
                 ) : (
                   <div style={{ color: 'var(--ink-faint)', textAlign: 'center', padding: 20, fontSize: 13 }}>
                     {snapshotFailed ? t('browserSnapshotLoadFailed') : snapshotId ? t('loadingBrowserSnapshot') : selected.status === 'running' ? t('waitingBrowserFrame') : t('browserFrameUnavailable')}
@@ -151,8 +176,9 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
               <dl style={{ margin: 0, display: 'grid', alignContent: 'start', gap: 9, fontSize: 12, minWidth: 0 }}>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserCase')}</dt><dd style={{ margin: '2px 0', overflowWrap: 'anywhere' }}>{selected.case_name || selected.nodeid}</dd></div>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserWorkerCaseId')}</dt><dd style={{ margin: '2px 0', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>{selected.worker_id} / {selected.case_execution_id?.slice(0, 8) ?? selected.nodeid}</dd></div>
+                <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserSessionId')}</dt><dd style={{ margin: '2px 0', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>{selected.browser_session_id}</dd></div>
                 <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserUrl')}</dt><dd style={{ margin: '2px 0', overflowWrap: 'anywhere' }}>{selected.current_url || 'about:blank'}</dd></div>
-                <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserStatusElapsed')}</dt><dd style={{ margin: '2px 0', color: statusColor(selected.status) }}>{selected.status} · {((selected.status === 'running' ? Math.max(0, Date.now() - new Date(selected.started_at).getTime()) : selected.elapsed_ms) / 1000).toFixed(1)}s</dd></div>
+                <div><dt style={{ color: 'var(--text-muted)' }}>{t('browserStatusElapsed')}</dt><dd style={{ margin: '2px 0', color: statusColor(selected.status) }}>{sessionStatusLabel(selected.status)} · {((selected.status === 'running' ? Math.max(0, Date.now() - new Date(selected.started_at).getTime()) : selected.elapsed_ms) / 1000).toFixed(1)}s</dd></div>
                 {!frame && selected.status === 'running' && <div style={{ color: 'var(--text-muted)' }}>{t('chromiumFrameNote')}</div>}
               </dl>
             </div>
