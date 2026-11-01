@@ -68,7 +68,13 @@
     "saveAndRun": "保存为用例并运行",
     "errorTitle": "浏览器连接或操作未完成",
     "errorDetails": "查看错误详情",
-    "retry": "重试"
+    "retry": "重试",
+    "saveBoth": "保存 UI+API 用例",
+    "savingBoth": "保存中…",
+    "saveBothHint": "一次保存：UI 用例 + 当前捕获的全部 API 用例",
+    "saveBothSummary": "保存结果",
+    "uiCaseSaved": "UI 用例：{{path}}",
+    "uiCaseSkipped": "没有生成 UI 脚本，已跳过 UI 用例。"
   },
   "naturalFlow": {
     "title": "自然语言操作流程",

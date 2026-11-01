@@ -185,3 +185,25 @@ OpenAPI import now keeps the response schema and turns it into a deterministic c
 
 Tests: 2 new backend contract tests (emit+enforce, invalid schema rejected), 2 frontend parser/payload
 tests; 27 backend tests, 256 frontend tests, Ruff/tsc/ESLint/vite build/i18n green.
+
+---
+
+## Round 8: one action saves both case kinds
+
+Recorder header gained **「保存 UI+API 用例」**: it writes the UI script, saves the UI case, then saves
+every captured API call as an API case, and renders a **保存结果** panel with links to each case.
+Partial failures no longer abort the other half — they are reported in the summary.
+
+Evidence: `evidence/recorder-merge-save-1440x900.png`.
+
+| Check | Result |
+|---|---|
+| Recorded steps | 3 (one real click forwarded to the browser) |
+| Captured API calls | `GET /api/info 200`, `GET /api/stats 200` |
+| One click result | UI case `tests/test_recorded_case.py` + API cases `tests/test_get_api_info.py`, `tests/test_get_api_stats.py` |
+| Files on disk | all three exist (2120 / 2397 / 2150 chars) |
+| Summary links | both case kinds linked from the 保存结果 panel |
+
+So the original ask — “recording produces both a UI case and an API case” — is now a single action.
+
+Gates: 256 frontend tests, tsc, ESLint, vite build, i18n 29 / 3,701 keys, Ruff clean.

@@ -1568,3 +1568,11 @@ git diff --check
 - 实测：匹配 schema PASSED；缺少 required 字段 FAILED（`$: missing required key …`）。
 - 测试：后端 27、前端 256、Ruff/tsc/ESLint/vite build/i18n 全绿。
 - 待办：录制面板合并「保存 UI+API」单入口；批量保存后汇总视图。
+
+## 3.64 一次录制、一次保存：UI + API 两种用例（Round 8）
+
+- 录制器头部新增「保存 UI+API 用例」：写 UI 脚本 → 保存 UI 用例 → 批量保存捕获的 API 用例 → 汇总面板显示各类用例链接。
+- 部分失败不互相中断：UI 生成失败或某条 API 保存失败会汇总到错误行，其余继续。
+- 实测：录制 3 步 + 2 条接口，一次点击后 `tests/test_recorded_case.py`、`tests/test_get_api_info.py`、`tests/test_get_api_stats.py` 全部落盘并可点开。
+- 测试：前端 256、vite build、i18n 29/3,701、Ruff clean。
+- 待办：批量保存后的统一跳转/汇总页；录制回放时的接口重放（mock）策略。

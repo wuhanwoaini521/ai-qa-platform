@@ -204,6 +204,13 @@ export const RecorderPage: React.FC<{
   const [apiCallMessage, setApiCallMessage] = useState('');
   const [apiCallCaseId, setApiCallCaseId] = useState<string | null>(null);
   const [apiSavingAll, setApiSavingAll] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeSummary, setMergeSummary] = useState<{
+    uiCaseId?: string;
+    uiPath?: string;
+    apiCases: { id: string; path: string }[];
+    error?: string;
+  } | null>(null);
   const [code, setCode] = useState('');
   const [variables, setVariables] = useState<{ name: string; default: string; source: string; hint?: string }[]>([]);
   const [scriptGeneration, setScriptGeneration] = useState(0);
@@ -1112,6 +1119,52 @@ export const RecorderPage: React.FC<{
     });
   };
 
+  const saveUiAndApiCases = async () => {
+    if (!projectId || !sessionId || !recorderSessionWorkAllowed) return;
+    setMergeBusy(true);
+    setMergeSummary(null);
+    let uiCaseId: string | undefined;
+    let uiPath: string | undefined;
+    const problems: string[] = [];
+    try {
+      const normalizedPath = normalizeRecorderFilePath(filePath);
+      if (!normalizedPath.endsWith('.py') || normalizedPath.split('/').includes('..')) {
+        throw new Error(t('errors.pythonFilePath'));
+      }
+      let script = code;
+      if (!script.trim()) {
+        await generate();
+        script = code;
+      }
+      if (script.trim()) {
+        await api.writeWorkspaceFile(projectId, normalizedPath, script);
+        const uiCase = await saveRecorderCase(normalizedPath);
+        uiCaseId = uiCase.test_case.id;
+        uiPath = normalizedPath;
+      } else {
+        problems.push(t('header.uiCaseSkipped'));
+      }
+    } catch (reason) {
+      problems.push(reason instanceof Error ? reason.message : String(reason));
+    }
+    const apiCases: { id: string; path: string }[] = [];
+    for (const call of apiCalls.slice(0, 20)) {
+      try {
+        const saved = await api.saveRecorderApiCase(sessionId, call.id);
+        apiCases.push({ id: saved.test_case.id, path: saved.file_path });
+      } catch (reason) {
+        problems.push(reason instanceof Error ? reason.message : String(reason));
+      }
+    }
+    setMergeSummary({
+      uiCaseId,
+      uiPath,
+      apiCases,
+      error: problems.length ? problems.join(' · ') : undefined,
+    });
+    setMergeBusy(false);
+  };
+
   const openRecordedCaseInStudio = async () => {
     if (!projectId || !canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current)) return;
     if (!code.trim()) { await generate(); return; }
@@ -1298,6 +1351,15 @@ export const RecorderPage: React.FC<{
           </button>
           <button type="button" className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
             <Save size={16} /> {t('header.saveAndRun')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!recorderSessionWorkAllowed || mergeBusy || busy || !!aiTask.busy || agentTaskRunning}
+            onClick={() => void saveUiAndApiCases()}
+            title={t('header.saveBothHint')}
+          >
+            <Save size={16} /> {mergeBusy ? t('header.savingBoth') : t('header.saveBoth')}
           </button>
         </div>
       </header>
@@ -1681,6 +1743,29 @@ export const RecorderPage: React.FC<{
               )}
             </div>
           </details>
+
+          {mergeSummary && (
+            <div className="recorder-merge-summary" role="status">
+              <strong>{t('header.saveBothSummary')}</strong>
+              {mergeSummary.error && <p className="recorder-api-calls-error">{mergeSummary.error}</p>}
+              {mergeSummary.uiCaseId && (
+                <p>
+                  {t('header.uiCaseSaved', { path: mergeSummary.uiPath ?? '' })}{' '}
+                  <Link to={`/test-cases/${mergeSummary.uiCaseId}`}>{t('apiCalls.openCase')}</Link>
+                </p>
+              )}
+              {mergeSummary.apiCases.length > 0 && (
+                <ul className="recorder-merge-api-list">
+                  {mergeSummary.apiCases.map((item) => (
+                    <li key={item.id}>
+                      <code>{item.path}</code>
+                      <Link to={`/test-cases/${item.id}`}>{t('apiCalls.openCase')}</Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <details className="recorder-case-settings">
             <summary>{t('settings.title')}</summary>

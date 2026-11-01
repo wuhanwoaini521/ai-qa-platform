@@ -6328,3 +6328,9 @@ button, input, select, textarea {
 .api-case-criterion input { margin-top: 2px; accent-color: var(--brand); }
 .api-case-criterion strong { margin-right: 4px; color: var(--ink); }
 .api-case-contract { grid-column: span 2; min-height: 72px; font-family: var(--font-mono); font-size: var(--fs-xs); resize: vertical; }
+
+.recorder-merge-summary { display: grid; gap: 6px; margin-top: 10px; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-md); font-size: var(--fs-xs); color: var(--ink-soft); }
+.recorder-merge-summary p { margin: 0; }
+.recorder-merge-api-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.recorder-merge-api-list li { display: flex; gap: 8px; align-items: center; }
+.recorder-merge-api-list code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

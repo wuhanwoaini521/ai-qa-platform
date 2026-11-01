@@ -68,7 +68,13 @@
     "saveAndRun": "Save as case and run",
     "errorTitle": "Browser connection or action incomplete",
     "errorDetails": "View error details",
-    "retry": "Retry"
+    "retry": "Retry",
+    "saveBoth": "Save UI + API cases",
+    "savingBoth": "Saving…",
+    "saveBothHint": "Save the UI case and every captured API call in one action",
+    "saveBothSummary": "Save result",
+    "uiCaseSaved": "UI case: {{path}}",
+    "uiCaseSkipped": "No UI script was generated, so the UI case was skipped."
   },
   "naturalFlow": {
     "title": "Natural-language task",
