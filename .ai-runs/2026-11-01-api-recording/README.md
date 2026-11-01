@@ -29,3 +29,26 @@ Goal: recording should capture API traffic, and the product should have an API a
 
 - No recorder-panel tab yet (import uses the session id).
 - No HAR/OpenAPI import yet; assertions are status/JSON-path/body-contains.
+
+---
+
+## Round 2: capture and save API cases inside the recorder
+
+The recorder view now has an inline **「接口调用（录制捕获）」** panel:
+
+- polls `GET /recorder/sessions/{id}/api-calls` every 5s while a session is open
+- lists method, URL and status for every captured XHR/fetch
+- one click saves a pytest API case into the workspace (`tests/test_<method>_<path>.py`)
+
+Live evidence: `evidence/recorder-api-panel-1440x900.png`,
+`evidence/recorder-api-saved-1440x900.png`, `evidence/recorder-api-panel.json`.
+
+| Check | Result |
+|---|---|
+| Recorded session on `/new/` | panel shows `GET http://127.0.0.1:8099/api/info 200` |
+| Save button | `已保存 API 用例：tests/test_get_api_info.py` |
+| File content | real pytest + httpx case (status assertion from the captured call) |
+| Run it | `tests/test_get_api_info.py::test_get_api_info` → **PASSED** |
+
+So one recording session now produces both case kinds: the UI case through the existing
+「保存为用例并运行」, and the API case through this panel.

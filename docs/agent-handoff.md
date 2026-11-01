@@ -1521,3 +1521,10 @@ git diff --check
 - 新页面 `/http-workbench`：请求构建器、实时预览、保存到工作区、运行、从录制会话导入（注意：不能用 `/api-*` 路由，Vite 会把 `/api` 前缀代理到后端）。
 - 实测：录制捕获 `GET /api/info` 200 → 编译 `test_api_info` → 运行 PASSED；录制导入在 UI 中可见。
 - 待办：录制面板内联 API Tab、HAR/OpenAPI 导入、API 断言↔验收标准绑定、鉴权流程捕获。
+
+## 3.58 录制视图内直接保存 API 用例（Round 2）
+
+- RecorderPage 新增「接口调用（录制捕获）」面板：5s 轮询 api-calls、展示 method/url/status、一键「保存 API 用例」到工作区。
+- 实测：录制 `/new/` → 面板显示 `GET /api/info 200` → 保存 `tests/test_get_api_info.py` → 运行 PASSED。
+- 同一录制会话现在可产出两类用例：UI 用例（既有「保存为用例并运行」）+ API 用例（新面板）。
+- 待办：HAR/OpenAPI 导入、API 断言↔验收标准绑定、鉴权 token 捕获。

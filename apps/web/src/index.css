@@ -6304,3 +6304,15 @@ button, input, select, textarea {
 @media (max-width: 1100px) {
   .api-case-layout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Recorder: API calls captured during the browser session. */
+.recorder-api-calls { margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.recorder-api-calls summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--ink); font-size: var(--fs-label); font-weight: 600; }
+.recorder-api-calls-body { display: grid; gap: 8px; padding-top: 8px; }
+.recorder-api-calls-hint { margin: 0; color: var(--ink-muted); font-size: var(--fs-xs); line-height: 1.5; }
+.recorder-api-calls-error { margin: 0; color: var(--accent-red); font-size: var(--fs-xs); }
+.recorder-api-calls-message { margin: 0; color: var(--ink-soft); font-size: var(--fs-xs); }
+.recorder-api-calls-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.recorder-api-calls-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-md); }
+.recorder-api-calls-list code { flex: 1; overflow: hidden; color: var(--ink-soft); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.recorder-api-calls-status { color: var(--ink-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }

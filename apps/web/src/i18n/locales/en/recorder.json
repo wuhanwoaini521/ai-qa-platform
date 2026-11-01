@@ -229,5 +229,16 @@
     "textarea": "Generated Python script"
   },
   "variablesCount": "{{count}} parameter(s)",
-  "variablesHint": "Generated code reads these from environment variables; override with QA_DATA_* / QA_BASE_URL"
+  "variablesHint": "Generated code reads these from environment variables; override with QA_DATA_* / QA_BASE_URL",
+  "apiCalls": {
+    "title": "API calls (from recording)",
+    "hint": "XHR/fetch requests made by the browser while recording appear here; saving generates a pytest API case you can keep editing in the API workbench.",
+    "refresh": "Refresh calls",
+    "refreshing": "Refreshing…",
+    "empty": "No API calls captured yet. Record a page that loads an API to see them.",
+    "save": "Save API case",
+    "saving": "Saving…",
+    "saved": "Saved API case: {{path}}",
+    "saveFailed": "Could not save the API case: {{reason}}"
+  }
 }

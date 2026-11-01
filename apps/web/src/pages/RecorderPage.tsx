@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { slugTestName, type RecorderApiCall } from '../features/api-cases/apiCase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, CirclePause, CirclePlay, Code2, Crosshair, MousePointer2, RotateCw, Save, Square, Trash2 } from 'lucide-react';
 import { api, getRecorderSocketUrl } from '../api/client';
@@ -195,6 +196,11 @@ export const RecorderPage: React.FC<{
   const [suiteName, setSuiteName] = useState(() => t('defaults.suiteName'));
   const [tagsText, setTagsText] = useState('recorder');
   const [markersText, setMarkersText] = useState('');
+  const [apiCalls, setApiCalls] = useState<RecorderApiCall[]>([]);
+  const [apiCallsBusy, setApiCallsBusy] = useState(false);
+  const [apiCallsError, setApiCallsError] = useState('');
+  const [apiCallSaving, setApiCallSaving] = useState<string | null>(null);
+  const [apiCallMessage, setApiCallMessage] = useState('');
   const [code, setCode] = useState('');
   const [variables, setVariables] = useState<{ name: string; default: string; source: string; hint?: string }[]>([]);
   const [scriptGeneration, setScriptGeneration] = useState(0);
@@ -214,6 +220,51 @@ export const RecorderPage: React.FC<{
   const pickTargetStepRef = useRef<string | null>(null);
   const [priority, setPriority] = useState<TestCasePriority>('P2');
   const aiTask = useContextTask(projectId, 'recorder', sessionId);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setApiCalls([]);
+      return;
+    }
+    let alive = true;
+    const load = async () => {
+      try {
+        const result = await api.getRecorderApiCalls(sessionId);
+        if (alive) {
+          setApiCalls(result.calls);
+          setApiCallsError('');
+        }
+      } catch (reason) {
+        if (alive) setApiCallsError(String(reason));
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [sessionId]);
+
+  const saveApiCall = async (call: RecorderApiCall) => {
+    if (!projectId) return;
+    setApiCallSaving(call.id);
+    setApiCallMessage('');
+    try {
+      const compiled = await api.compileApiCase({
+        test_name: slugTestName(`${call.method}_${call.url.replace(/^https?:\/\/[^/]+/, '').replace(/[^a-z0-9]+/gi, '_')}`),
+        method: call.method,
+        url: call.url,
+        assertions: [{ kind: 'status', expected: Number(call.status ?? 200) }],
+      });
+      await api.writeWorkspaceFile(projectId, `tests/${compiled.test_name}.py`, compiled.code);
+      setApiCallMessage(t('apiCalls.saved', { path: `tests/${compiled.test_name}.py` }));
+    } catch (reason) {
+      setApiCallMessage(t('apiCalls.saveFailed', { reason: String(reason) }));
+    } finally {
+      setApiCallSaving(null);
+    }
+  };
   const agentTaskRunning = Boolean(aiTask.task && !['COMPLETED','FAILED','BLOCKED','CANCELLED'].includes(aiTask.task.status));
   const closeAllowed = canCloseRecorderSession({
     closePending,
@@ -1547,6 +1598,54 @@ export const RecorderPage: React.FC<{
             })}
             {!steps.length && <div className="recorder-steps-empty">{t('steps.noSteps')}</div>}
           </div>
+
+          <details className="recorder-api-calls" open>
+            <summary>
+              <span>{t('apiCalls.title')}</span>
+              <span className="recorder-step-count">{apiCalls.length}</span>
+            </summary>
+            <div className="recorder-api-calls-body">
+              <p className="recorder-api-calls-hint">{t('apiCalls.hint')}</p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!sessionId || apiCallsBusy}
+                onClick={() => {
+                  if (!sessionId) return;
+                  setApiCallsBusy(true);
+                  void api.getRecorderApiCalls(sessionId)
+                    .then((result) => { setApiCalls(result.calls); setApiCallsError(''); })
+                    .catch((reason) => setApiCallsError(String(reason)))
+                    .finally(() => setApiCallsBusy(false));
+                }}
+              >
+                {apiCallsBusy ? t('apiCalls.refreshing') : t('apiCalls.refresh')}
+              </button>
+              {apiCallsError && <p className="recorder-api-calls-error" role="alert">{apiCallsError}</p>}
+              {apiCallMessage && <p className="recorder-api-calls-message" role="status">{apiCallMessage}</p>}
+              {apiCalls.length === 0 ? (
+                <p className="recorder-api-calls-hint">{t('apiCalls.empty')}</p>
+              ) : (
+                <ul className="recorder-api-calls-list">
+                  {apiCalls.map((call) => (
+                    <li key={call.id}>
+                      <span className={`api-case-method is-${call.method.toLowerCase()}`}>{call.method}</span>
+                      <code title={call.url}>{call.url}</code>
+                      <span className="recorder-api-calls-status">{call.status ?? '—'}</span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={!projectId || apiCallSaving === call.id}
+                        onClick={() => void saveApiCall(call)}
+                      >
+                        {apiCallSaving === call.id ? t('apiCalls.saving') : t('apiCalls.save')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </details>
 
           <details className="recorder-case-settings">
             <summary>{t('settings.title')}</summary>
