@@ -47,6 +47,7 @@ from app.api import (
 )
 from app.api.authz import StreamTicketQuerySanitizer, authorize_request
 from app.api.errors import http_error, validation_error
+from app.api.flows import router as flows_router
 from app.api.language_service import router as language_service_router
 from app.api.lifecycle import router as lifecycle_router
 from app.api.runtime import router as runtime_router
@@ -210,6 +211,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(debugger_router, prefix="/api")
 app.include_router(decision_router, prefix="/api")
 app.include_router(lifecycle_router, prefix="/api")
+app.include_router(flows_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(recorder_router, prefix="/api")
 app.include_router(requirements_router, prefix="/api")

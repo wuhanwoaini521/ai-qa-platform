@@ -20,5 +20,6 @@
   "kindCriterion": "Criterion",
   "kindScenario": "Scenario",
   "kindAction": "Action",
-  "kindAssert": "Expectation"
+  "kindAssert": "Expectation",
+  "editFlow": "Edit flow"
 }

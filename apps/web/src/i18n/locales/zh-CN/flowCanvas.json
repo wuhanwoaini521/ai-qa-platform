@@ -20,5 +20,6 @@
   "kindCriterion": "验收标准",
   "kindScenario": "场景",
   "kindAction": "动作",
-  "kindAssert": "期望/断言"
+  "kindAssert": "期望/断言",
+  "editFlow": "编辑流程"
 }

@@ -1158,6 +1158,14 @@ export const api = {
     }>(
       `/tasks/${encodeURIComponent(taskId)}/runtime/steps/${encodeURIComponent(stepId)}`,
     ),
+  compileFlow: (document: Record<string, unknown>) =>
+    request<{ code: string; test_name: string; node_count: number; step_count: number; warnings: string[] }>(
+      '/flows/compile',
+      {
+        method: 'POST',
+        body: JSON.stringify(document),
+      },
+    ),
   createTestRun: (data: TestRunCreate) =>
     request<TestRun>('/runs', {
       method: 'POST',

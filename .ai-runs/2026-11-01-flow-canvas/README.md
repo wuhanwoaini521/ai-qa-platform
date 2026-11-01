@@ -33,3 +33,56 @@ horizontal page overflow).
 Editable canvas: node palette + drag/connect, `flow_to_steps()` compiling to the existing
 `RecorderStep[]` → `generate_python_case`, preview diff, human save, then the existing run/evidence
 path. No new execution engine.
+
+---
+
+# P1 editable editor + P2 branches/variables (same day)
+
+## Editor
+
+`/flows/edit?projectId=…&requirementId=…[&scenarioId=…]` (linked from the read-only canvas and the
+requirement design tab).
+
+- Tree editor: node palette (navigate/click/fill/assert_text/assert_visible/wait/condition), drag or
+  up/down to reorder, inline inspector per node kind, delete.
+- Condition nodes own two branches (`条件成立` / `条件不成立`) with their own step lists.
+- Client validation mirrors the server contract and blocks compile with readable messages.
+- Compile happens through `POST /api/flows/compile` (debounced) → code preview + node/step counts.
+- Save writes `tests/<test_name>.py` via the existing workspace file API; Run creates the normal
+  `TestRun` for `tests/<name>.py::<name>` and navigates to the run page.
+- Deviation: connections are structural (tree order/branches), not free-form wiring. Free-form
+  edges cannot express branches without an execution engine; the tree keeps every flow compilable.
+
+## P2: branches and data variables
+
+- `RecorderStep` gained optional `condition_kind` / `condition_value` / `then_steps` / `else_steps`;
+  `generate_python_case` now renders them recursively (`if …count() > 0: … else: …`) with the existing
+  evidence markers, so compiled branches stay on the verified generation path.
+- Fill nodes can read a run environment variable (`QA_DATA_*`) instead of a literal, reusing the
+  existing `value_redacted` + `secret_env_var` generation.
+- `apps/api/app/services/flow_compiler.py` validates the authored document (start node, duplicates,
+  depth ≤ 5, per-kind requirements) and compiles it through the recorder generator.
+- `POST /api/flows/compile` returns `{code, test_name, node_count, step_count, warnings}`. Read-only:
+  nothing is written or executed by this endpoint.
+
+## Verification (real runs)
+
+| Check | Result |
+|---|---|
+| Compiler tests | **14 passed** (`apps/api/tests/test_flow_compiler.py`) |
+| Recorder regression | **74 passed** (save flow, service, variables, websocket) |
+| Frontend | **244 passed** (6 new editor-model tests), tsc, ESLint, i18n 3,620 keys |
+| Lint | Ruff check + format clean |
+| Editor screenshot | 6 nodes from the real scenario, code preview 2,418 chars, 1440 & 1280 |
+| Branch run (true) | `test_flow_offer_true` → **PASSED** (page with `#offer` → accept) |
+| Branch run (false) | `test_flow_offer_false` → **PASSED** (page without `#offer` → dismiss) |
+
+Evidence: `evidence/flow-editor-1440x900.png`, `flow-editor-1280x800.png`,
+`flow-compile-runs.json` (both compiled sources and run results).
+
+## Notes / limits
+
+- Recorded URLs are redacted by `SensitiveRedactor` (query strings are dropped), so fixture pages
+  must be addressable by path; compiled flows inherit this security behaviour by design.
+- The tree editor has no explicit "connect" interaction; reorder + branches cover the flows this
+  product can execute today.

@@ -86,6 +86,14 @@ export const FlowCanvasPage: React.FC = () => {
             <ArrowLeft size={14} aria-hidden="true" />
             {t('backToRequirement')}
           </Link>
+          {requirement && (
+            <Link
+              className="btn btn-secondary btn-sm"
+              to={`/flows/edit?projectId=${encodeURIComponent(requirement.project_id)}&requirementId=${encodeURIComponent(requirement.id)}${activeScenario ? `&scenarioId=${encodeURIComponent(activeScenario.id)}` : ''}`}
+            >
+              {t('editFlow')}
+            </Link>
+          )}
         </nav>
       </header>
 

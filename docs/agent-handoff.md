@@ -1491,3 +1491,11 @@ git diff --check
 - 数据只来自现有 `RequirementDocument`：验收标准 → 场景 → 动作 → 期望四列；纯函数 `buildScenarioFlow` + 4 条前端测试；自适应缩放避免右列裁切。
 - 只读：不写库、不执行、无新接口；为 P1「可编辑 + 编译为 RecorderStep」留出同一数据模型。
 - 验证：tsc、ESLint、前端 238 passed、`vite build`、i18n 27 命名空间 3,558 keys；证据 `.ai-runs/2026-11-01-flow-canvas/`。
+
+## 3.54 流程画板 P1/P2（可编辑 + 条件分支/变量）
+
+- `/flows/edit`：节点面板、拖拽/上下移动、条件节点双分支、按节点类型的属性面板、客户端校验、编译预览、保存到工作区、一键运行。
+- 编译链复用录制生成器：`RecorderStep` 新增 condition 字段，`generate_python_case` 递归渲染 if/else；`POST /api/flows/compile` 只编译不写不跑。
+- 变量：fill 节点可绑定 `QA_DATA_*` 环境变量，沿用既有脱敏/`secret_env_var` 生成逻辑。
+- 验证：编译 14 测试、录制回归 74 测试、前端 244 测试、tsc/ESLint/Ruff/i18n 全绿；真实分支运行 true/false 两条路径均 PASSED（证据 `.ai-runs/2026-11-01-flow-canvas/`）。
+- 已知限制：录制 URL 会脱敏（query 丢弃），因此画板 fixture 需用路径区分；树状结构不做自由连线。

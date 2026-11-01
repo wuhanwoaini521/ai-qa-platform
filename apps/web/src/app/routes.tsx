@@ -54,6 +54,12 @@ const FlowCanvasPage = lazy(() =>
   })),
 );
 
+const FlowEditorPage = lazy(() =>
+  import('../pages/FlowEditorPage').then((m) => ({
+    default: m.FlowEditorPage,
+  })),
+);
+
 const WorkflowPage = lazy(() =>
   import('../features/workflow/WorkflowPage').then((m) => ({
     default: m.WorkflowPage,
@@ -299,6 +305,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/workspace/:projectId" element={<WorkspacePage />} />
       <Route path="/workflow" element={<WorkflowRoute />} />
       <Route path="/flows" element={<FlowCanvasPage />} />
+      <Route path="/flows/edit" element={<FlowEditorPage />} />
       <Route path="/library" element={<LibraryPage />} />
       <Route path="/projects" element={<ProjectsRoute />} />
       <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />

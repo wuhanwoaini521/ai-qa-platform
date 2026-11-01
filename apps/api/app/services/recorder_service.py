@@ -247,6 +247,7 @@ class RecorderStep(BaseModel):
         "assert_url",
         "assert_title",
         "assert_count",
+        "condition",
     ]
     locator: RecorderLocator | None = None
     frame_path: list[str] = Field(default_factory=list, max_length=8)
@@ -259,6 +260,21 @@ class RecorderStep(BaseModel):
     description: str = Field(default="", max_length=160)
     locator_decision: dict[str, Any] | None = None
     evidence: RecorderStepEvidence | None = None
+    # Conditional step authored by the flow canvas: runs `then_steps` when the condition matches.
+    condition_kind: Literal["css", "text", "test_id"] = "css"
+    condition_value: str | None = Field(default=None, max_length=500)
+    then_steps: list["RecorderStep"] = Field(default_factory=list, max_length=50)
+    else_steps: list["RecorderStep"] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_condition_shape(self):
+        if self.action == "condition" and not (self.condition_value or "").strip():
+            raise ValueError("Condition step requires a condition value")
+        if self.action != "condition" and (self.then_steps or self.else_steps):
+            raise ValueError("Only condition steps may carry branches")
+        if self.id in {step.id for step in (*self.then_steps, *self.else_steps)}:
+            raise ValueError("Condition branches may not reuse the parent step id")
+        return self
 
     @model_validator(mode="after")
     def redact_private_values(self):
@@ -349,6 +365,9 @@ class RecorderStepEvidence(BaseModel):
         if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False)) > 32_000:
             raise ValueError("Recorder step evidence exceeds 32 KB")
         return self
+
+
+RecorderStep.model_rebuild()
 
 
 class RecorderLocatorAIResponse(BaseModel):
@@ -1543,84 +1562,116 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "        try:",
         "            page = browser.new_page()",
     ]
-    for index, step in enumerate(request.steps, start=1):
+    max_depth = 3
+
+    def condition_expression(step) -> str:
+        value = _py_literal(step.condition_value or "")
+        if step.condition_kind == "text":
+            return f"page.get_by_text({value})"
+        if step.condition_kind == "test_id":
+            return f"page.get_by_test_id({value})"
+        return f"page.locator({value})"
+
+    def render_step(step, index: int, indent: str, depth: int) -> int:
+        """Render one step at the given indent; returns the number of lines added."""
         step_lines_start = len(lines)
-        lines.append(f"            # Step {index}: {step.description or step.action}")
-        if step.action == "navigate":
+        lines.append(f"{indent}# Step {index}: {step.description or step.action}")
+        if step.action == "condition":
+            nested = indent + "    "
+            lines.append(f"{indent}if {condition_expression(step)}.count() > 0:")
+            if step.then_steps:
+                render_steps(step.then_steps, nested, depth + 1)
+            else:
+                lines.append(f"{nested}pass")
+            if step.else_steps:
+                lines.append(f"{indent}else:")
+                render_steps(step.else_steps, nested, depth + 1)
+        elif step.action == "navigate":
             base = split_origin(step.url or "")
             if base and any(item.name == "QA_BASE_URL" for item in variables):
                 origin, rest = base
                 if rest:
                     lines.append(
-                        f'            page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}) + {_py_literal(rest)})'
+                        f'{indent}page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}) + {_py_literal(rest)})'
                     )
                 else:
-                    lines.append(f'            page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}))')
+                    lines.append(f'{indent}page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}))')
             else:
-                lines.append(f"            page.goto({_py_literal(step.url)})")
+                lines.append(f"{indent}page.goto({_py_literal(step.url)})")
         elif step.action == "back":
-            lines.append("            page.go_back()")
+            lines.append(f"{indent}page.go_back()")
         elif step.action == "scroll":
             direction = -650 if str(step.value or "down").lower() == "up" else 650
-            lines.append(f"            page.mouse.wheel(0, {direction})")
+            lines.append(f"{indent}page.mouse.wheel(0, {direction})")
         elif step.action == "wait":
-            lines.append(f"            page.wait_for_timeout({int(step.value or '1000')})")
+            lines.append(f"{indent}page.wait_for_timeout({int(step.value or '1000')})")
         elif step.action == "assert_url":
-            lines.append(f"            expect(page).to_have_url(re.compile({_py_literal(step.value)}))")
+            lines.append(f"{indent}expect(page).to_have_url(re.compile({_py_literal(step.value)}))")
         elif step.action == "assert_title":
-            lines.append(f"            expect(page).to_have_title(re.compile({_py_literal(step.value)}))")
+            lines.append(f"{indent}expect(page).to_have_title(re.compile({_py_literal(step.value)}))")
         else:
             locator = _locator_expression(step.locator, step.frame_path)
             if step.action == "click":
-                lines.append(f"            {locator}.click()")
+                lines.append(f"{indent}{locator}.click()")
             elif step.action == "double_click":
-                lines.append(f"            {locator}.dblclick()")
+                lines.append(f"{indent}{locator}.dblclick()")
             elif step.action == "fill":
                 if step.value_redacted:
                     variable = step.secret_env_var or f"QA_RECORDER_SECRET_{step.id.upper()}"
                     local_name = f"recorder_secret_{index}"
-                    lines.append(f"            {local_name} = os.getenv({_py_literal(variable)})")
+                    lines.append(f"{indent}{local_name} = os.getenv({_py_literal(variable)})")
                     lines.append(
-                        f"            if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
+                        f"{indent}if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
                     )
-                    lines.append(f"            {locator}.fill({local_name})")
+                    lines.append(f"{indent}{locator}.fill({local_name})")
                 else:
                     variable = variable_for_fill(variables, step)
                     if variable is not None:
                         lines.append(
-                            f"            {locator}.fill(os.getenv({_py_literal(variable.name)}, {_py_literal(variable.default)}))"
+                            f"{indent}{locator}.fill(os.getenv({_py_literal(variable.name)}, {_py_literal(variable.default)}))"
                         )
                     else:
-                        lines.append(f"            {locator}.fill({_py_literal(step.value)})")
+                        lines.append(f"{indent}{locator}.fill({_py_literal(step.value)})")
             elif step.action == "select":
                 option_key = "value" if step.select_by_value else "label"
                 if step.value_redacted:
                     variable = step.secret_env_var or f"QA_RECORDER_SECRET_{step.id.upper()}"
                     local_name = f"recorder_secret_{index}"
-                    lines.append(f"            {local_name} = os.getenv({_py_literal(variable)})")
+                    lines.append(f"{indent}{local_name} = os.getenv({_py_literal(variable)})")
                     lines.append(
-                        f"            if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
+                        f"{indent}if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
                     )
-                    lines.append(f"            {locator}.select_option({option_key}={local_name})")
+                    lines.append(f"{indent}{locator}.select_option({option_key}={local_name})")
                 else:
-                    lines.append(f"            {locator}.select_option({option_key}={_py_literal(step.value)})")
+                    lines.append(f"{indent}{locator}.select_option({option_key}={_py_literal(step.value)})")
             elif step.action == "check":
-                lines.append(f"            {locator}.check()")
+                lines.append(f"{indent}{locator}.check()")
             elif step.action == "uncheck":
-                lines.append(f"            {locator}.uncheck()")
+                lines.append(f"{indent}{locator}.uncheck()")
             elif step.action == "press":
-                lines.append(f"            {locator}.press({_py_literal(step.key)})")
+                lines.append(f"{indent}{locator}.press({_py_literal(step.key)})")
             elif step.action == "hover":
-                lines.append(f"            {locator}.hover()")
+                lines.append(f"{indent}{locator}.hover()")
             elif step.action == "assert_visible":
-                lines.append(f"            expect({locator}).to_be_visible()")
+                lines.append(f"{indent}expect({locator}).to_be_visible()")
             elif step.action == "assert_text":
-                lines.append(f"            expect({locator}).to_contain_text({_py_literal(step.value)})")
+                lines.append(f"{indent}expect({locator}).to_contain_text({_py_literal(step.value)})")
             elif step.action == "assert_count":
-                lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
-        marker = f"  # qa_step_id={step.id} qa_evidence_id=recorder:{step.id}"
-        for line_index in range(step_lines_start + 1, len(lines)):
-            if lines[line_index].strip() and not lines[line_index].lstrip().startswith("#"):
-                lines[line_index] += marker
+                lines.append(f"{indent}expect({locator}).to_have_count({int(step.value or '1')})")
+        return len(lines) - step_lines_start
+
+    def render_steps(steps, indent: str, depth: int) -> None:
+        if depth > max_depth:
+            raise ValueError(f"Conditional nesting deeper than {max_depth} levels is not supported")
+        for index, step in enumerate(steps, start=1):
+            start_index = len(lines)
+            render_step(step, index, indent, depth)
+            marker = f"  # qa_step_id={step.id} qa_evidence_id=recorder:{step.id}"
+            for line_index in range(start_index + 1, len(lines)):
+                line = lines[line_index]
+                if line.strip() and not line.lstrip().startswith("#") and "qa_step_id=" not in line:
+                    lines[line_index] = line + marker
+
+    render_steps(request.steps, "            ", 0)
     lines.extend(["        finally:", "            browser.close()", ""])
     return "\n".join(lines)
