@@ -227,3 +227,35 @@ Network access came back this round, so the conventions were checked against Bru
 
 Tests: 7 new parser/variable tests (18 in the API model file); frontend suite **263 passed**, tsc,
 ESLint, vite build, i18n 29 / 3,707 keys, Ruff clean.
+
+---
+
+## Round 10: record → replay loop (mock the APIs of a recorded UI case)
+
+The recorder now captures response bodies and can generate a UI case that replays them through
+`page.route`, so the UI case runs on recorded API data instead of the live backend.
+
+- Async capture: response bodies are read with `await response.body()` on the async runtime (a sync
+  handler cannot); XHR/fetch text payloads are captured even when a static server serves them as
+  octet-stream, bounded to 64 KiB and redacted.
+- Generator: `mock_responses` produce `page.route(...)` fulfill handlers. One real bug found and fixed:
+  Playwright calls the handler as `(route, request)`, so the closure parameter must be
+  `lambda route, request, m=mock` — the earlier `(route, m=mock)` swallowed the request and every fetch
+  failed.
+- Recorder UI: the API panel has a replay toggle showing how many response bodies are available; when on,
+  generation sends the captured mocks.
+
+Live proof (`evidence/replay-loop.json`):
+
+| Step | Result |
+|---|---|
+| Record with the fixture serving `service=fixture` | captured `{"service": "fixture", "count": 3}` |
+| Change the server to `service=changed-live` after recording | — |
+| Replay of the recorded bodies | **PASSED** (page showed `service=fixture orders=3`) |
+| Same steps without mocks against the changed server | **FAILED** — actual `service=changed-live orders=3` |
+
+UI: `evidence/recorder-replay-toggle-1440x900.png`; the intercepted generate request carried
+`mock_responses` with 2 entries.
+
+Tests: 3 mock tests (route generation + handler signature, no routes without mocks, body passthrough);
+backend 16 in the affected set, frontend 263, tsc/ESLint/vite build/i18n 3,709, Ruff clean.

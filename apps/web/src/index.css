@@ -6340,3 +6340,7 @@ button, input, select, textarea {
 .api-case-variables-head > span { color: var(--ink-muted); font-size: var(--fs-xs); font-weight: 600; }
 .api-case-curl { display: grid; gap: 8px; }
 .api-case-curl .api-case-body { min-height: 70px; }
+
+.recorder-api-replay { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-soft); }
+.recorder-api-replay input { accent-color: var(--brand); }
+.recorder-api-replay small { color: var(--ink-muted); }

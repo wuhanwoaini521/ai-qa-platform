@@ -1584,3 +1584,12 @@ git diff --check
 - 实测：`curl '{{BASE_URL}}/api/info'` + `BASE_URL=http://127.0.0.1:8099` → 预览含解析后的主机；截图 `api-workbench-curl-vars-1440x900.png`。
 - 测试：前端 263（+7）、tsc/ESLint/vite build/i18n 3,707、Ruff 全绿。
 - 待办：接口 mock/replay、批量保存汇总页。
+
+## 3.66 录制 → 回放闭环（Round 10）
+
+- 响应体捕获：在异步运行时用 `await response.body()`（同步 handler 拿不到 body），XHR/fetch 文本体可捕获（含 octet-stream），限 64 KiB 并脱敏。
+- 生成器新增 `mock_responses` → `page.route` 回放；修复真实缺陷：Playwright handler 是 `(route, request)`，闭包必须 `lambda route, request, m=mock`。
+- 录制面板新增回放开关（显示可用响应体数量）；开启后生成请求携带 `mock_responses`。
+- 实测：录制 `service=fixture` → 服务端改为 `changed-live` → 回放 PASSED（页面显示 fixture 值），同一用例不回放 FAILED（显示 changed-live）。
+- 测试：后端相关 16、前端 263、tsc/ESLint/build/i18n 3,709、Ruff 全绿。
+- 待办：HAR 导入直接生成 mock 集；回放开关持久化到项目配置。

@@ -218,7 +218,7 @@ class PlaywrightBrowserRuntime:
             context.on("page", lambda new_page: self.set_active_page(session.id, new_page))
             page.on("console", lambda message: self._record_console(session, message))
             page.on("requestfailed", lambda request: self._record_network(session, request, failed=True))
-            page.on("response", lambda response: self._record_network(session, response, failed=False))
+            page.on("response", lambda response: asyncio.ensure_future(self._record_response(session, response)))
             async with self._lock:
                 self._sessions[session.id] = session
             self._start_expiry_task()
@@ -652,7 +652,7 @@ class PlaywrightBrowserRuntime:
             session.current_url = page.url
             page.on("console", lambda message: self._record_console(session, message))
             page.on("requestfailed", lambda request: self._record_network(session, request, failed=True))
-            page.on("response", lambda response: self._record_network(session, response, failed=False))
+            page.on("response", lambda response: asyncio.ensure_future(self._record_response(session, response)))
 
     async def add_init_script(self, session_id: str, script: str) -> None:
         session = await self._require_session(session_id)
@@ -795,7 +795,40 @@ class PlaywrightBrowserRuntime:
         return safe
 
     @classmethod
+    async def _record_response(cls, session: BrowserRuntimeSession, response: Any) -> None:
+        """Record a response and await its body from the async runtime (sync handlers cannot)."""
+        entry = cls._network_entry(session, response, failed=False)
+        if entry is None:
+            return
+        headers = getattr(response, "headers", None) or {}
+        content_type = str(headers.get("content-type", "")).lower()
+        textual = any(kind in content_type for kind in ("json", "text", "javascript", "xml"))
+        if textual or entry.get("resource_type") in {"xhr", "fetch"}:
+            try:
+                raw = await response.body()
+            except Exception:
+                raw = None
+            if isinstance(raw, (bytes, bytearray)) and raw and len(raw) <= 65536:
+                try:
+                    text = bytes(raw).decode("utf-8")
+                except UnicodeDecodeError:
+                    text = ""
+                if text and (
+                    textual or sum(1 for char in text if char.isprintable() or char in "\n\r\t") / len(text) >= 0.85
+                ):
+                    entry["response_body"] = SensitiveRedactor.redact_text(text)[:65536]
+        session.network.append(entry)
+
+    @classmethod
     def _record_network(cls, session: BrowserRuntimeSession, request_or_response: Any, *, failed: bool) -> None:
+        entry = cls._network_entry(session, request_or_response, failed=failed)
+        if entry is not None:
+            session.network.append(entry)
+
+    @classmethod
+    def _network_entry(
+        cls, session: BrowserRuntimeSession, request_or_response: Any, *, failed: bool
+    ) -> dict[str, Any] | None:
         request = getattr(request_or_response, "request", request_or_response)
         response = None if failed else request_or_response
         entry: dict[str, Any] = {
@@ -813,7 +846,7 @@ class PlaywrightBrowserRuntime:
                 entry["request_body"] = SensitiveRedactor.redact_text(raw_body)[:4000]
         if response is not None:
             entry["response_headers"] = cls._network_headers(getattr(response, "headers", None))
-        session.network.append(entry)
+        return entry
 
 
 browser_runtime = PlaywrightBrowserRuntime()

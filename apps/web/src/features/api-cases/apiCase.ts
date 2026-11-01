@@ -36,6 +36,15 @@ export interface RecorderApiCall {
   request_headers: Record<string, string>;
   request_body: string | null;
   response_content_type: string;
+  response_body?: string | null;
+}
+
+export interface RecorderMockResponse {
+  url: string;
+  method: string;
+  status: number;
+  headers: Record<string, string>;
+  body: string | null;
 }
 
 let counter = 0;

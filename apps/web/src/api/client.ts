@@ -840,6 +840,7 @@ export const api = {
       file_path: string;
       test_name: string;
       steps: RecorderStep[];
+      mock_responses?: import('../features/api-cases/apiCase').RecorderMockResponse[];
     },
   ) =>
     request<{ code: string; project_id: string; variables?: { name: string; default: string; source: string; hint?: string }[] }>(

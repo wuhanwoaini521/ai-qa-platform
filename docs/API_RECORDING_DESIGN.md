@@ -65,6 +65,14 @@ Following Bruno's documented cURL import:
 - variables: `{{name}}` substitution before compilation; undefined names are reported instead of being
   sent literally. Basic auth is stored as a `QA_API_SECRET_AUTHORIZATION` reference, never as a literal.
 
+## 4c. Record → replay (implemented)
+
+- response bodies are captured on the async runtime (`await response.body()`), bounded to 64 KiB, redacted
+- the generator can emit `page.route(...)` handlers from `mock_responses`; the handler signature is
+  `(route, request)` so the mock is bound with a default argument
+- the recorder panel exposes a replay toggle; the generated UI case then runs against recorded API data
+- verified by changing the live server after recording: replay PASSED, same case without mocks FAILED
+
 ## 5. Roadmap
 
 1. Recorder UI tab that lists captured API calls inline and saves UI+API cases together.

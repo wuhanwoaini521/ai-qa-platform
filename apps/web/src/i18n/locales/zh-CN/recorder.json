@@ -249,6 +249,8 @@
     "openCase": "打开 API 用例",
     "saveAll": "保存全部 API 用例",
     "savingAll": "批量保存中…",
-    "savedAll": "已保存 {{count}} 个 API 用例"
+    "savedAll": "已保存 {{count}} 个 API 用例",
+    "replay": "生成时回放捕获的接口响应（mock）",
+    "replayHint": "{{count}} 条响应体可用"
   }
 }

@@ -249,6 +249,8 @@
     "openCase": "Open API case",
     "saveAll": "Save all API cases",
     "savingAll": "Saving all…",
-    "savedAll": "Saved {{count}} API case(s)"
+    "savedAll": "Saved {{count}} API case(s)",
+    "replay": "Replay captured API responses when generating (mock)",
+    "replayHint": "{{count}} response bodies available"
   }
 }

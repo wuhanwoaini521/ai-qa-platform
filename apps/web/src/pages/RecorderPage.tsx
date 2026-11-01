@@ -204,6 +204,7 @@ export const RecorderPage: React.FC<{
   const [apiCallMessage, setApiCallMessage] = useState('');
   const [apiCallCaseId, setApiCallCaseId] = useState<string | null>(null);
   const [apiSavingAll, setApiSavingAll] = useState(false);
+  const [replayMocks, setReplayMocks] = useState(false);
   const [mergeBusy, setMergeBusy] = useState(false);
   const [mergeSummary, setMergeSummary] = useState<{
     uiCaseId?: string;
@@ -979,11 +980,28 @@ export const RecorderPage: React.FC<{
     setSteps((current) => [...current, step]); send('add_step', { step });
   };
 
+  const recordedMocks = () =>
+    apiCalls
+      .filter((call) => call.response_body)
+      .map((call) => ({
+        url: call.url,
+        method: call.method,
+        status: call.status ?? 200,
+        headers: { 'content-type': call.response_content_type || 'application/json' },
+        body: call.response_body ?? null,
+      }));
+
   const generate = async () => {
     if (!canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || busy) return;
     setBusy(true); setError('');
     try {
-      const result = await api.generateRecorderCode(sessionId, { case_name: caseName, file_path: filePath, test_name: testName, steps });
+      const result = await api.generateRecorderCode(sessionId, {
+        case_name: caseName,
+        file_path: filePath,
+        test_name: testName,
+        steps,
+        ...(replayMocks ? { mock_responses: recordedMocks() } : {}),
+      });
       setCode(result.code);
       setVariables(result.variables ?? []);
       setOptimization(null); setPreviewMode('raw');
@@ -1700,6 +1718,16 @@ export const RecorderPage: React.FC<{
               >
                 {apiCallsBusy ? t('apiCalls.refreshing') : t('apiCalls.refresh')}
               </button>
+              <label className="recorder-api-replay">
+                <input
+                  type="checkbox"
+                  checked={replayMocks}
+                  disabled={apiCalls.length === 0}
+                  onChange={(event) => setReplayMocks(event.target.checked)}
+                />
+                <span>{t('apiCalls.replay')}</span>
+                <small>{t('apiCalls.replayHint', { count: apiCalls.filter((call) => call.response_body).length })}</small>
+              </label>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"

@@ -395,11 +395,22 @@ class RecorderSessionCreate(BaseModel):
         return value
 
 
+class RecorderMockResponse(BaseModel):
+    """A captured API response replayed through page.route during the generated test."""
+
+    url: str = Field(min_length=1, max_length=2000)
+    method: str = Field(default="GET", max_length=20)
+    status: int = Field(default=200, ge=100, le=599)
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = Field(default=None, max_length=100000)
+
+
 class RecorderGenerateRequest(BaseModel):
     case_name: str = "recorded_case"
     file_path: str = "tests/test_recorded_case.py"
     test_name: str = "test_recorded_case"
     steps: list[RecorderStep] = Field(max_length=500)
+    mock_responses: list[RecorderMockResponse] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def reject_embedded_sensitive_values(self):
@@ -715,6 +726,7 @@ class BrowserRecorderService:
                     "request_headers": entry.get("request_headers") or {},
                     "request_body": entry.get("request_body"),
                     "response_content_type": str(response_headers.get("content-type") or "")[:120],
+                    "response_body": entry.get("response_body"),
                 }
             )
         return calls[-50:]
@@ -1605,6 +1617,18 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "        try:",
         "            page = browser.new_page()",
     ]
+    if request.mock_responses:
+        lines.append("            # Replay captured API responses (recorded mocks)")
+        lines.append(
+            "            mocks = "
+            + json.dumps([mock.model_dump(mode="json") for mock in request.mock_responses], ensure_ascii=False)
+        )
+        lines.append("            for mock in mocks:")
+        lines.append(
+            "                page.route(mock['url'], lambda route, request, m=mock: "
+            "route.fulfill(status=m['status'], headers=m['headers'], body=m['body'] or ''))"
+        )
+
     max_depth = 3
 
     def condition_expression(step) -> str:
