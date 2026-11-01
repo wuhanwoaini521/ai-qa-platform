@@ -42,5 +42,9 @@
   "importOpenapi": "Import OpenAPI",
   "parseFailed": "Could not parse the file: {{reason}}",
   "noOperations": "This document has no importable operation.",
-  "useOperation": "Use this operation"
+  "useOperation": "Use this operation",
+  "requirement": "Requirement (optional)",
+  "noRequirement": "No requirement",
+  "criteria": "Acceptance criteria",
+  "openCase": "Open API case"
 }

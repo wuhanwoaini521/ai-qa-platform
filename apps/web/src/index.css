@@ -6320,3 +6320,10 @@ button, input, select, textarea {
 .api-case-file-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .api-case-file-row .btn { cursor: pointer; }
 .api-case-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.api-case-bind-row { display: grid; gap: 8px; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); align-items: start; }
+.api-case-criteria { display: grid; gap: 4px; max-height: 120px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-inset); }
+.api-case-criteria > span { color: var(--ink-muted); font-size: var(--fs-xs); font-weight: 600; }
+.api-case-criterion { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-xs); color: var(--ink-soft); cursor: pointer; }
+.api-case-criterion input { margin-top: 2px; accent-color: var(--brand); }
+.api-case-criterion strong { margin-right: 4px; color: var(--ink); }

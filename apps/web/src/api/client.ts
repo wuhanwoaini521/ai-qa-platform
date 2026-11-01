@@ -1181,6 +1181,19 @@ export const api = {
     request<{ session_id: string; calls: import('../features/api-cases/apiCase').RecorderApiCall[] }>(
       `/recorder/sessions/${encodeURIComponent(sessionId)}/api-calls`,
     ),
+  saveApiCase: (payload: {
+    project_id: string;
+    requirement_id?: string | null;
+    criterion_ids?: string[];
+    request: Record<string, unknown>;
+  }) =>
+    request<{
+      file_path: string;
+      nodeid: string;
+      reused: boolean;
+      test_case: { id: string; title: string };
+      assertions: { criterion_id: string }[];
+    }>('/api-cases/save', { method: 'POST', body: JSON.stringify(payload) }),
   compileApiCase: (payload: Record<string, unknown>) =>
     request<{ code: string; test_name: string; assertion_count: number }>('/api-cases/compile', {
       method: 'POST',

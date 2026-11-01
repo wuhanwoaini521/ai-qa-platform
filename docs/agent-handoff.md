@@ -1543,3 +1543,11 @@ git diff --check
 - 实测：HAR 2 条 API 调用（静态脚本被过滤）、OpenAPI 2 个操作；点击后预填 `POST /api/orders` + 201 并生成预览。
 - 测试：前端 254（+4 解析测试）、vite build、i18n 29/3,685。纯前端解析，不新增执行路径。
 - 待办：API 断言↔验收标准绑定、鉴权 token 捕获、录制面板一次保存 UI+API。
+
+## 3.61 API 用例绑定验收标准与用例追溯（Round 5）
+
+- 新增 `POST /api/api-cases/save`：编译 API 请求 → 写文件 → 创建/复用 `tc_api_*` 用例 → 绑定 nodeid →（可选）写入 `TCA-API-*` 断言行。
+- API 工作台保存改为该接口，支持选择需求与验收标准；保存后显示「打开 API 用例」。
+- 实测：绑定 AC-001 保存后断言 state=NEVER_RUN，运行 PASSED 后变为 PASSED，nodeid 正确。
+- 测试：新增 3 条持久化测试；前端 254、后端 16（相关集合）、Ruff/tsc/ESLint/i18n/vite build 全绿。
+- 待办：鉴权 token 捕获、录制面板一次保存 UI+API、契约级断言（OpenAPI schema）。

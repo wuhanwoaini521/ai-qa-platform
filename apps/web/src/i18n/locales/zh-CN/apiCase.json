@@ -42,5 +42,9 @@
   "importOpenapi": "导入 OpenAPI",
   "parseFailed": "解析失败：{{reason}}",
   "noOperations": "该文档没有可导入的接口。",
-  "useOperation": "用这个接口"
+  "useOperation": "用这个接口",
+  "requirement": "关联需求（可选）",
+  "noRequirement": "不关联需求",
+  "criteria": "验收标准",
+  "openCase": "打开 API 用例"
 }

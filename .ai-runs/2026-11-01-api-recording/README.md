@@ -103,3 +103,27 @@ suite 254 passed; `vite build` and i18n (29 namespaces / 3,685 keys) green.
 
 Design note: import is authoring-only. Nothing executes or writes until the human saves the case; the
 same pytest/httpx compiler and runner stay the only execution path.
+
+---
+
+## Round 5: API cases join the case-assertion traceability
+
+The workbench save now goes through `POST /api/api-cases/save`, which:
+
+- compiles the request and writes the pytest file
+- creates/refreshes the `tc_api_*` case with a nodeid binding
+- when a requirement is selected, stores `CaseAssertion` rows (`TCA-API-…`) carrying
+  `criterion_id`, `nodeid` and a `check` describing the request, so the API case appears in the same
+  assertion panel as UI cases and reports run state per criterion
+
+Evidence: `evidence/api-workbench-bound-1440x900.png`, `evidence/api-case-criteria-binding.json`.
+
+| Check | Result |
+|---|---|
+| Save with requirement + AC-001 | `tests/test_get_api_info.py`, case `tc_api_4caf648facabf5c67176d9a9d0353` |
+| Assertions before run | `AC-001 → NEVER_RUN` (nodeid `tests/test_get_api_info.py::test_get_api_info`) |
+| Run | **PASSED** |
+| Assertions after run | `AC-001 → PASSED` |
+
+Tests: 3 persistence tests (file+case+assertions, unknown criterion 422, no requirement), plus compiler
+and recorder API tests; frontend 254 tests, vite build, i18n 29 / 3,689 keys, Ruff clean.

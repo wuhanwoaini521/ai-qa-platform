@@ -38,6 +38,11 @@ export const ApiCasesPage: React.FC = () => {
   const [importError, setImportError] = useState('');
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [requirements, setRequirements] = useState<{ id: string; title: string }[]>([]);
+  const [requirementId, setRequirementId] = useState('');
+  const [criteria, setCriteria] = useState<{ id: string; description: string }[]>([]);
+  const [criterionIds, setCriterionIds] = useState<string[]>([]);
+  const [savedCaseId, setSavedCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -52,6 +57,32 @@ export const ApiCasesPage: React.FC = () => {
       alive = false;
     };
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    let alive = true;
+    void api.getRequirements(selectedProjectId).then((items) => {
+      if (alive) setRequirements(items.map((item) => ({ id: item.id, title: item.title })));
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    setCriterionIds([]);
+    setCriteria([]);
+    if (!requirementId) return;
+    let alive = true;
+    void api.getRequirement(requirementId).then((item) => {
+      if (!alive) return;
+      const doc = item.qa_model as unknown as { criteria?: { id: string; description: string }[] } | null;
+      setCriteria(doc?.criteria ?? []);
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [requirementId]);
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const payload = useMemo(() => {
@@ -144,12 +175,19 @@ export const ApiCasesPage: React.FC = () => {
   };
 
   const save = async () => {
-    if (!selectedProjectId || !code) return;
+    if (!selectedProjectId || !code || !payload) return;
     setSaving(true);
     setMessage('');
+    setSavedCaseId(null);
     try {
-      await api.writeWorkspaceFile(selectedProjectId, filePath, code);
-      setMessage(t('saved', { path: filePath }));
+      const saved = await api.saveApiCase({
+        project_id: selectedProjectId,
+        requirement_id: requirementId || null,
+        criterion_ids: criterionIds,
+        request: payload,
+      });
+      setMessage(t('saved', { path: saved.file_path }));
+      setSavedCaseId(saved.test_case.id);
     } catch (reason) {
       setMessage(t('saveFailed', { reason: String(reason) }));
     } finally {
@@ -216,6 +254,38 @@ export const ApiCasesPage: React.FC = () => {
               onChange={(event) => patch({ test_name: event.target.value.replace(/[^A-Za-z0-9_]/g, '_') })}
             />
           </label>
+          <div className="api-case-bind-row">
+            <label className="flow-editor-field">
+              <span>{t('requirement')}</span>
+              <select className="form-select" value={requirementId} onChange={(event) => setRequirementId(event.target.value)}>
+                <option value="">{t('noRequirement')}</option>
+                {requirements.map((item) => (
+                  <option key={item.id} value={item.id}>{item.title}</option>
+                ))}
+              </select>
+            </label>
+            {criteria.length > 0 && (
+              <div className="api-case-criteria">
+                <span>{t('criteria')}</span>
+                {criteria.map((criterion) => (
+                  <label key={criterion.id} className="api-case-criterion">
+                    <input
+                      type="checkbox"
+                      checked={criterionIds.includes(criterion.id)}
+                      onChange={() =>
+                        setCriterionIds((current) =>
+                          current.includes(criterion.id)
+                            ? current.filter((id) => id !== criterion.id)
+                            : [...current, criterion.id],
+                        )
+                      }
+                    />
+                    <span><strong>{criterion.id}</strong> {criterion.description}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="api-case-url-row">
             <select className="form-select" value={draft.method} onChange={(event) => patch({ method: event.target.value as ApiCaseDraft['method'] })}>
               {METHODS.map((method) => (
@@ -226,7 +296,16 @@ export const ApiCasesPage: React.FC = () => {
               className="form-input"
               placeholder="/api/health or https://host/api/..."
               value={draft.url}
-              onChange={(event) => patch({ url: event.target.value })}
+              onChange={(event) => {
+                const url = event.target.value;
+                const autoName = draft.test_name === 'api_case';
+                patch({
+                  url,
+                  ...(autoName && url.trim()
+                    ? { test_name: slugTestName(`${draft.method}_${url.replace(/^https?:\/\/[^/]+/, '')}`) }
+                    : {}),
+                });
+              }}
             />
           </div>
           <h4>{t('headers')}</h4>
@@ -294,7 +373,17 @@ export const ApiCasesPage: React.FC = () => {
             <h3>{t('preview')}</h3>
             <span className="flow-canvas-chip">{filePath}</span>
           </header>
-          {message && <p className="flow-editor-save-message">{message}</p>}
+          {message && (
+            <p className="flow-editor-save-message">
+              {message}
+              {savedCaseId && (
+                <>
+                  {' · '}
+                  <a href={`/test-cases/${savedCaseId}`}>{t('openCase')}</a>
+                </>
+              )}
+            </p>
+          )}
           {compileError && <p className="flow-editor-error">{compileError}</p>}
           {code ? <pre className="flow-editor-code">{code}</pre> : <p className="flow-editor-hint">{t('previewPending')}</p>}
         </section>

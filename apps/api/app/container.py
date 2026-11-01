@@ -31,6 +31,7 @@ from app.repositories.test_run_repo import TestRunRepository
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.ai_service import AIService
 from app.services.ai_settings_service import AISettingsService
+from app.services.api_case_persistence import ApiCaseSaveService
 from app.services.api_read_service import (
     ApiKeyService,
     AuditQueryService,
@@ -410,6 +411,21 @@ def get_task_runtime_service() -> TaskRuntimeService:
             recorder_session_resolver=recorder_service.get,
         )
     return _task_runtime_service
+
+
+def get_api_case_save_service(session: AsyncSession = Depends(get_db)) -> ApiCaseSaveService:
+    case_repo = TestCaseRepository(session)
+    binding_repo = AutomationBindingRepository(session)
+    return ApiCaseSaveService(
+        project_repo=ProjectRepository(session),
+        requirement_repo=RequirementRepository(session),
+        test_case_repo=case_repo,
+        binding_repo=binding_repo,
+        binding_service=AutomationBindingService(
+            binding_repo, case_repo, WorkspaceRepository(session), WorkspaceService()
+        ),
+        workspace_service=WorkspaceService(),
+    )
 
 
 def get_flow_binding_service(session: AsyncSession = Depends(get_db)) -> FlowBindingService:
