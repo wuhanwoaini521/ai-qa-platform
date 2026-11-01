@@ -239,6 +239,7 @@
     "save": "Save API case",
     "saving": "Saving…",
     "saved": "Saved API case: {{path}}",
-    "saveFailed": "Could not save the API case: {{reason}}"
+    "saveFailed": "Could not save the API case: {{reason}}",
+    "openCase": "Open API case"
   }
 }

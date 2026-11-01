@@ -1166,6 +1166,17 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+  saveRecorderApiCase: (sessionId: string, callId: string, testName?: string) =>
+    request<{
+      file_path: string;
+      nodeid: string;
+      reused: boolean;
+      code: string;
+      test_case: { id: string; title: string };
+    }>(`/recorder/sessions/${encodeURIComponent(sessionId)}/save-api-case`, {
+      method: 'POST',
+      body: JSON.stringify({ call_id: callId, ...(testName ? { test_name: testName } : {}) }),
+    }),
   getRecorderApiCalls: (sessionId: string) =>
     request<{ session_id: string; calls: import('../features/api-cases/apiCase').RecorderApiCall[] }>(
       `/recorder/sessions/${encodeURIComponent(sessionId)}/api-calls`,

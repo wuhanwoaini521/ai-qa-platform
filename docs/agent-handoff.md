@@ -1528,3 +1528,11 @@ git diff --check
 - 实测：录制 `/new/` → 面板显示 `GET /api/info 200` → 保存 `tests/test_get_api_info.py` → 运行 PASSED。
 - 同一录制会话现在可产出两类用例：UI 用例（既有「保存为用例并运行」）+ API 用例（新面板）。
 - 待办：HAR/OpenAPI 导入、API 断言↔验收标准绑定、鉴权 token 捕获。
+
+## 3.59 录制 API 用例落成真实 TestCase（Round 3）
+
+- 新增 `POST /recorder/sessions/{id}/save-api-case`：编译捕获的接口调用、写工作区文件、创建/复用 `tc_api_*` 用例并绑定 nodeid。
+- 录制面板保存改为该接口，并显示「打开 API 用例」链接。
+- 实测：`GET /api/info` → `tests/test_get_api_info.py` + 用例 `tc_api_7078e4…` + 运行 PASSED。
+- 测试：新增 2 条集成测试（保存/复用/未知调用）；前端 250、tsc/ESLint/i18n、vite build 全绿。
+- 待办：HAR/OpenAPI 导入、API 用例断言↔验收标准绑定、鉴权 token 捕获。

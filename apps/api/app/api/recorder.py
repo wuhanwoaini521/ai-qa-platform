@@ -24,7 +24,10 @@ from app.services.recorder_service import (
     validate_recording_optimization,
 )
 from app.services.recorder_variables import extract_variables
-from app.services.recorder_workflow_service import RecorderWorkflowService
+from app.services.recorder_workflow_service import (
+    RecorderSaveApiCaseRequest,
+    RecorderWorkflowService,
+)
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
 RECORDER_NAVIGATION_COMMANDS = frozenset({"back", "click", "double_click", "forward", "navigate", "press", "reload"})
@@ -151,6 +154,23 @@ async def save_recorded_case(
         raise HTTPException(status_code=404, detail=str(error)) from error
     except FileExistsError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/sessions/{session_id}/save-api-case")
+async def save_recorded_api_case(
+    session_id: str,
+    request: RecorderSaveApiCaseRequest,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+    workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
+):
+    """Save one captured API call as an API test case (human-triggered)."""
+    await _get_accessible_session(session_id, user)
+    try:
+        return await workflow.save_api_case(session_id, user.id, request)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
