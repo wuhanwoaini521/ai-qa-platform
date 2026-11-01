@@ -37,5 +37,10 @@
   "errorJsonPath": "A JSON path is required.",
   "errorStatus": "Status must be a three-digit code.",
   "warnNoStatus": "Keep at least one status assertion.",
-  "loadCalls": "Load calls"
+  "loadCalls": "Load calls",
+  "importHar": "Import HAR",
+  "importOpenapi": "Import OpenAPI",
+  "parseFailed": "Could not parse the file: {{reason}}",
+  "noOperations": "This document has no importable operation.",
+  "useOperation": "Use this operation"
 }

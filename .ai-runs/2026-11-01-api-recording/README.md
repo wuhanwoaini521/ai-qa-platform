@@ -76,3 +76,30 @@ Live evidence: `evidence/api-case-recorded-case.json`.
 | Recorder UI | `已保存 API 用例：tests/test_get_api_info.py · 打开 API 用例` |
 
 Tests: 2 integration tests for save/reuse/unknown-call, 8 compiler tests, recorder save-flow regression.
+
+---
+
+## Round 4: HAR and OpenAPI import (learn from har2case / Schemathesis)
+
+The API workbench now imports real inputs instead of only hand-typed requests:
+
+- **导入 HAR** — parses a captured HAR file, keeps XHR/fetch or JSON/GraphQL responses, dedupes by
+  `(method, url, status)` and maps request headers/body/status into the same call list used by the
+  recorder. Clicking a call prefills method, URL, headers, JSON body and a status assertion.
+- **导入 OpenAPI** — parses an OpenAPI 3 / Swagger 2 document, lists each operation with its preferred
+  2xx status, and prefills a case (path + expected status) in one click.
+
+Evidence: `evidence/api-workbench-import-1440x900.png` (HAR calls + OpenAPI operations, POST /api/orders
+prefilled with status 201 and `test_post_api_orders` generated).
+
+| Check | Result |
+|---|---|
+| HAR import | 2 API calls (script entry filtered out), headers/body/status mapped |
+| OpenAPI import | `GET /api/info → 200`, `POST /api/orders → 201` listed |
+| One-click prefill | method `POST`, URL `/api/orders`, assertion `201`, preview generated |
+
+Tests: 4 new parser tests (HAR filter/dedupe/mapping/errors, OpenAPI listing/status/errors); frontend
+suite 254 passed; `vite build` and i18n (29 namespaces / 3,685 keys) green.
+
+Design note: import is authoring-only. Nothing executes or writes until the human saves the case; the
+same pytest/httpx compiler and runner stay the only execution path.

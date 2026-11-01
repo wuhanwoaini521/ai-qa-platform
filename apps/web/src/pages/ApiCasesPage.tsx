@@ -6,6 +6,9 @@ import { api } from '../api/client';
 import { useProjectScope } from '../app/ProjectScope';
 import {
   ApiAssertion,
+  OpenApiOperation,
+  fromHarDocument,
+  fromOpenApiDocument,
   ApiCaseDraft,
   ApiHeaderRow,
   RecorderApiCall,
@@ -13,6 +16,7 @@ import {
   fromRecorderCall,
   newAssertion,
   newHeader,
+  slugTestName,
   toPayload,
   validateDraft,
 } from '../features/api-cases/apiCase';
@@ -30,6 +34,7 @@ export const ApiCasesPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [calls, setCalls] = useState<RecorderApiCall[]>([]);
+  const [operations, setOperations] = useState<OpenApiOperation[]>([]);
   const [importError, setImportError] = useState('');
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -105,6 +110,37 @@ export const ApiCasesPage: React.FC = () => {
       setCalls([]);
       setImportError(String(reason));
     }
+  };
+
+  const readFile = async (file: File | undefined, kind: 'har' | 'openapi') => {
+    setImportError('');
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (kind === 'har') {
+        const imported = fromHarDocument(parsed);
+        setCalls(imported);
+        setOperations([]);
+        if (imported.length === 0) setImportError(t('noCalls'));
+      } else {
+        const imported = fromOpenApiDocument(parsed);
+        setOperations(imported);
+        if (imported.length === 0) setImportError(t('noOperations'));
+      }
+    } catch (reason) {
+      setCalls([]);
+      setOperations([]);
+      setImportError(t('parseFailed', { reason: String(reason) }));
+    }
+  };
+
+  const applyOperation = (operation: OpenApiOperation) => {
+    setDraft({
+      ...emptyDraft(slugTestName(operation.summary || `${operation.method}_${operation.path}`)),
+      method: operation.method,
+      url: operation.path,
+      assertions: [{ ...newAssertion('status'), expected: operation.expectedStatus }],
+    });
   };
 
   const save = async () => {
@@ -280,6 +316,40 @@ export const ApiCasesPage: React.FC = () => {
           </button>
         </div>
         {importError && <p className="flow-editor-error">{importError}</p>}
+        <div className="api-case-file-row">
+          <label className="btn btn-secondary btn-sm">
+            {t('importHar')}
+            <input
+              type="file"
+              accept="application/json,.har"
+              className="api-case-file-input"
+              onChange={(event) => void readFile(event.target.files?.[0], 'har')}
+            />
+          </label>
+          <label className="btn btn-secondary btn-sm">
+            {t('importOpenapi')}
+            <input
+              type="file"
+              accept="application/json,.yaml,.yml"
+              className="api-case-file-input"
+              onChange={(event) => void readFile(event.target.files?.[0], 'openapi')}
+            />
+          </label>
+        </div>
+        {operations.length > 0 && (
+          <ul className="api-case-calls">
+            {operations.map((operation) => (
+              <li key={`${operation.method} ${operation.path}`}>
+                <span className={`api-case-method is-${operation.method.toLowerCase()}`}>{operation.method}</span>
+                <code title={operation.summary}>{operation.path}</code>
+                <span className="flow-canvas-chip">{operation.expectedStatus}</span>
+                <button className="btn btn-secondary btn-sm" type="button" onClick={() => applyOperation(operation)}>
+                  {t('useOperation')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {calls.length > 0 && (
           <ul className="api-case-calls">
             {calls.map((call) => (

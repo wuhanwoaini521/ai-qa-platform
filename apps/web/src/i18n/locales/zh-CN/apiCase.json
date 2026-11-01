@@ -37,5 +37,10 @@
   "errorJsonPath": "JSON 路径不能为空。",
   "errorStatus": "状态码需要是三位数字。",
   "warnNoStatus": "建议至少保留一条状态码断言。",
-  "loadCalls": "加载接口"
+  "loadCalls": "加载接口",
+  "importHar": "导入 HAR",
+  "importOpenapi": "导入 OpenAPI",
+  "parseFailed": "解析失败：{{reason}}",
+  "noOperations": "该文档没有可导入的接口。",
+  "useOperation": "用这个接口"
 }

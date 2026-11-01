@@ -1536,3 +1536,10 @@ git diff --check
 - 实测：`GET /api/info` → `tests/test_get_api_info.py` + 用例 `tc_api_7078e4…` + 运行 PASSED。
 - 测试：新增 2 条集成测试（保存/复用/未知调用）；前端 250、tsc/ESLint/i18n、vite build 全绿。
 - 待办：HAR/OpenAPI 导入、API 用例断言↔验收标准绑定、鉴权 token 捕获。
+
+## 3.60 HAR / OpenAPI 导入（Round 4）
+
+- API 工作台支持「导入 HAR」与「导入 OpenAPI」：解析为统一的调用/操作列表，一键预填 method/URL/headers/body/状态码断言。
+- 实测：HAR 2 条 API 调用（静态脚本被过滤）、OpenAPI 2 个操作；点击后预填 `POST /api/orders` + 201 并生成预览。
+- 测试：前端 254（+4 解析测试）、vite build、i18n 29/3,685。纯前端解析，不新增执行路径。
+- 待办：API 断言↔验收标准绑定、鉴权 token 捕获、录制面板一次保存 UI+API。

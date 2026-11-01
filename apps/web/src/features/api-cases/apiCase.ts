@@ -139,3 +139,98 @@ export function toPayload(draft: ApiCaseDraft): Record<string, unknown> {
   }
   return payload;
 }
+
+
+// ---------------------------------------------------------------------------------------------
+// HAR / OpenAPI import (authoring convenience; nothing here executes).
+
+export interface HarDocumentLike {
+  log?: {
+    entries?: {
+      request?: {
+        method?: string;
+        url?: string;
+        headers?: { name?: string; value?: string }[];
+        postData?: { text?: string; mimeType?: string };
+      };
+      response?: { status?: number; content?: { mimeType?: string } };
+      _resourceType?: string;
+      resourceType?: string;
+    }[];
+  };
+}
+
+export interface OpenApiOperation {
+  method: ApiMethod;
+  path: string;
+  summary: string;
+  expectedStatus: string;
+}
+
+const IMPORT_LIMIT = 300;
+const MAX_IMPORTED = 300;
+
+/** Turn a HAR file into the same call list the recorder produces. */
+export function fromHarDocument(raw: unknown): RecorderApiCall[] {
+  if (!raw || typeof raw !== 'object') throw new Error('invalid-har');
+  const entries = (raw as HarDocumentLike).log?.entries;
+  if (!Array.isArray(entries)) throw new Error('invalid-har');
+  const calls: RecorderApiCall[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries.slice(0, 500)) {
+    const request = entry?.request;
+    const url = request?.url ?? '';
+    const method = (request?.method ?? 'GET').toUpperCase();
+    if (!/^https?:/i.test(url)) continue;
+    const resourceType = entry?._resourceType ?? entry?.resourceType ?? '';
+    const mime = entry?.response?.content?.mimeType ?? '';
+    const looksApi = ['xhr', 'fetch'].includes(String(resourceType).toLowerCase()) || /json|graphql/i.test(mime);
+    if (!looksApi) continue;
+    const status = entry?.response?.status ?? null;
+    const key = `${method} ${url} ${status}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    calls.push({
+      id: `har-${seen.size}`,
+      method,
+      url,
+      status,
+      failed: status !== null && status >= 400,
+      request_headers: Object.fromEntries(
+        (request?.headers ?? [])
+          .filter((header) => header?.name)
+          .map((header) => [String(header.name).toLowerCase(), String(header.value ?? '')]),
+      ),
+      request_body: request?.postData?.text ?? null,
+      response_content_type: mime,
+    });
+    if (calls.length >= MAX_IMPORTED) break;
+  }
+  return calls;
+}
+
+/** List HTTP operations from an OpenAPI 3 / Swagger 2 document. */
+export function fromOpenApiDocument(raw: unknown): OpenApiOperation[] {
+  const document = raw as {
+    paths?: Record<string, Record<string, { summary?: string; operationId?: string; responses?: Record<string, unknown> }>>;
+  };
+  if (!document || typeof document !== 'object' || typeof document.paths !== 'object' || document.paths === null) {
+    throw new Error('invalid-openapi');
+  }
+  const methods = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options']);
+  const operations: OpenApiOperation[] = [];
+  for (const [path, item] of Object.entries(document.paths).slice(0, IMPORT_LIMIT)) {
+    for (const [method, operation] of Object.entries(item ?? {})) {
+      if (!methods.has(method.toLowerCase())) continue;
+      const statuses = Object.keys(operation?.responses ?? {});
+      const preferred = statuses.find((code) => /^2\d\d$/.test(code)) ?? statuses[0] ?? '200';
+      operations.push({
+        method: method.toUpperCase() as ApiMethod,
+        path,
+        summary: operation?.summary || operation?.operationId || `${method.toUpperCase()} ${path}`,
+        expectedStatus: preferred.replace(/[^0-9]/g, '').slice(0, 3) || '200',
+      });
+    }
+  }
+  return operations.slice(0, IMPORT_LIMIT);
+}

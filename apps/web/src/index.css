@@ -6316,3 +6316,7 @@ button, input, select, textarea {
 .recorder-api-calls-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-md); }
 .recorder-api-calls-list code { flex: 1; overflow: hidden; color: var(--ink-soft); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .recorder-api-calls-status { color: var(--ink-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+
+.api-case-file-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.api-case-file-row .btn { cursor: pointer; }
+.api-case-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

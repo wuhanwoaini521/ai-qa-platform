@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { emptyDraft, validateDraft, toPayload, fromRecorderCall, slugTestName } = await import(
+const { emptyDraft, validateDraft, toPayload, fromRecorderCall, slugTestName, fromHarDocument, fromOpenApiDocument } = await import(
   '../src/features/api-cases/apiCase.ts'
 );
 
@@ -69,4 +69,62 @@ test('recorder calls prefill method, path, status and headers', () => {
 test('api test names stay ascii and prefixed', () => {
   assert.equal(slugTestName('GET /api/health'), 'test_get_api_health');
   assert.equal(slugTestName('接口 检查'), 'test_api_case');
+});
+
+test('HAR import keeps API traffic only and maps request details', () => {
+  const har = {
+    log: {
+      entries: [
+        {
+          _resourceType: 'xhr',
+          request: {
+            method: 'GET',
+            url: 'http://127.0.0.1:8099/api/info?x=1',
+            headers: [{ name: 'Accept', value: 'application/json' }],
+          },
+          response: { status: 200, content: { mimeType: 'application/json' } },
+        },
+        { ...{}, _resourceType: 'xhr', request: { method: 'GET', url: 'http://127.0.0.1:8099/api/info?x=1' }, response: { status: 200 } },
+        { _resourceType: 'script', request: { method: 'GET', url: 'http://127.0.0.1:8099/app.js' }, response: { status: 200, content: { mimeType: 'text/javascript' } } },
+        { _resourceType: 'fetch', request: { method: 'POST', url: 'http://127.0.0.1:8099/api/orders', headers: [], postData: { text: '{"sku":"tee"}' } }, response: { status: 201, content: { mimeType: 'application/json' } } },
+      ],
+    },
+  };
+  const calls = fromHarDocument(har);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, 'http://127.0.0.1:8099/api/info?x=1');
+  assert.equal(calls[0].request_headers.accept, 'application/json');
+  assert.equal(calls[1].method, 'POST');
+  assert.equal(calls[1].request_body, '{"sku":"tee"}');
+  assert.equal(calls[1].status, 201);
+});
+
+test('HAR import rejects a document without entries', () => {
+  assert.throws(() => fromHarDocument(null), /invalid-har/);
+  assert.throws(() => fromHarDocument({ log: {} }), /invalid-har/);
+});
+
+test('OpenAPI import lists operations with a preferred success status', () => {
+  const operations = fromOpenApiDocument({
+    paths: {
+      '/api/orders': {
+        get: { summary: 'List orders', responses: { '200': {}, '500': {} } },
+        post: { operationId: 'createOrder', responses: { '201': {}, '400': {} } },
+      },
+      '/api/health': { parameters: [], get: { responses: { default: {} } } },
+    },
+  });
+  assert.deepEqual(
+    operations.map((item) => [item.method, item.path, item.expectedStatus]),
+    [
+      ['GET', '/api/orders', '200'],
+      ['POST', '/api/orders', '201'],
+      ['GET', '/api/health', '200'],
+    ],
+  );
+  assert.equal(operations[1].summary, 'createOrder');
+});
+
+test('OpenAPI import rejects a document without paths', () => {
+  assert.throws(() => fromOpenApiDocument({}), /invalid-openapi/);
 });
