@@ -21,5 +21,9 @@
   "kindScenario": "场景",
   "kindAction": "动作",
   "kindAssert": "期望/断言",
-  "editFlow": "编辑流程"
+  "editFlow": "编辑流程",
+  "viewSwitch": "视图切换",
+  "tabView": "画板视图",
+  "tabEdit": "编辑流程",
+  "subtitleEdit": "在这里直接编辑流程节点、条件分支和断言关联，无需离开当前视图。"
 }

@@ -43,7 +43,7 @@ interface CompileResult {
 const PALETTE: FlowKind[] = ['navigate', 'click', 'fill', 'assert_text', 'assert_visible', 'wait', 'condition'];
 const LOCATOR_KINDS: LocatorKind[] = ['css', 'test_id', 'role', 'label', 'placeholder', 'id', 'name', 'text'];
 
-export const FlowEditorPage: React.FC = () => {
+export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { t } = useTranslation('flowEditor');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -280,7 +280,8 @@ export const FlowEditorPage: React.FC = () => {
   );
 
   return (
-    <div className="page-container flow-editor-page">
+    <div className={embedded ? "flow-editor-page is-embedded" : "page-container flow-editor-page"}>
+      {!embedded && (
       <header className="page-header flow-page-header">
         <div>
           <span className="workspace-eyebrow">{t('eyebrow')}</span>
@@ -304,6 +305,20 @@ export const FlowEditorPage: React.FC = () => {
           </button>
         </nav>
       </header>
+      )}
+
+      {embedded && (
+        <div className="flow-page-actions flow-editor-actions" role="toolbar" aria-label={t('actions')}>
+          <button className="btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !compile}>
+            <Save size={14} aria-hidden="true" />
+            {saving ? t('saving') : t('save')}
+          </button>
+          <button className="btn btn-primary btn-sm" type="button" onClick={run} disabled={starting || !compile}>
+            <Play size={14} aria-hidden="true" />
+            {starting ? t('starting') : t('run')}
+          </button>
+        </div>
+      )}
 
       <section className="card flow-editor-meta">
         <label className="flow-editor-field">

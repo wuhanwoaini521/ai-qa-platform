@@ -1506,3 +1506,9 @@ git diff --check
 - 编译输出新增 `assertions[]`；保存时人工触发 `POST /api/flows/bind-case`，写入用例 `test_model.assertions`（含 criterion_id / nodeid / statement / check）并绑定工作区 nodeid；不修改需求脚本映射（该映射属于断言生成路径且有断言前置条件）。
 - 实测：编辑器保存生成用例 `tc_flow_3ce3…`，运行 `test_scn_004` PASSED，用例断言页显示 AC-001/AC-002 均 PASSED 且带 nodeid。
 - 测试：绑定 3 条 + 编译 14 条 + 录制回归 74 条；前端 245 测试、tsc/ESLint/Ruff/i18n 全绿。
+
+## 3.56 视图内编辑
+
+- `/flows` 现在是同一个 workflow 视图的两个模式：`画板视图`（只读）与 `编辑流程`（内嵌编辑器，`?mode=edit`）。
+- 切换走路由参数不跳页；内嵌模式保留「保存到工作区 / 运行此流程」按钮，编辑态有独立副标题。
+- `/flows/edit` 仍保留为深链。验证：tsc/ESLint/245 前端测试/vite build/i18n 3,630 keys；截图 `flow-inview-edit-1440x900.png`。

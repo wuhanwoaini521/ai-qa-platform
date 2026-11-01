@@ -21,5 +21,9 @@
   "kindScenario": "Scenario",
   "kindAction": "Action",
   "kindAssert": "Expectation",
-  "editFlow": "Edit flow"
+  "editFlow": "Edit flow",
+  "viewSwitch": "View switch",
+  "tabView": "Canvas view",
+  "tabEdit": "Edit flow",
+  "subtitleEdit": "Edit nodes, branches and assertion bindings right here without leaving the view."
 }

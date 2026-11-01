@@ -6252,3 +6252,31 @@ button, input, select, textarea {
 .flow-editor-criterion { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-label); color: var(--ink-soft); cursor: pointer; }
 .flow-editor-criterion input { margin-top: 3px; accent-color: var(--brand); }
 .flow-editor-criterion strong { margin-right: 4px; color: var(--ink); font-weight: 600; }
+
+/* In-view switch: read-only canvas and editor share one workflow route. */
+.flow-view-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+}
+.flow-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.flow-view-tab:hover { color: var(--ink); }
+.flow-view-tab.is-active { color: var(--ink); background: var(--surface); box-shadow: 0 1px 2px rgba(23, 24, 26, 0.06); }
+.flow-view-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+.flow-editor-page.is-embedded { display: grid; gap: 12px; }
+.flow-editor-actions { justify-content: flex-end; }

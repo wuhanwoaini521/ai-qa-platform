@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Workflow } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Pencil, Workflow } from 'lucide-react';
 import { api } from '../api/client';
 import { Project, Requirement } from '../types';
 import { FlowCanvas } from '../features/flow-canvas/FlowCanvas';
+import { FlowEditorPage } from './FlowEditorPage';
 import type { ScenarioLike } from '../features/flow-canvas/flowGraph';
 
 export const FlowCanvasPage: React.FC = () => {
   const { t } = useTranslation('flowCanvas');
   const [searchParams, setSearchParams] = useSearchParams();
+  const mode = searchParams.get('mode') === 'edit' ? 'edit' : 'view';
   const projectId = searchParams.get('projectId') ?? '';
   const requirementId = searchParams.get('requirementId') ?? '';
   const scenarioId = searchParams.get('scenarioId') ?? '';
@@ -58,6 +60,18 @@ export const FlowCanvasPage: React.FC = () => {
   const activeScenario = scenarios.find((item) => item.id === scenarioId) ?? scenarios[0] ?? null;
   const criteria = (document?.criteria ?? []).map((item) => ({ id: item.id, description: item.description }));
 
+  const switchMode = (next: 'view' | 'edit') => {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next === 'edit') params.set('mode', 'edit');
+        else params.delete('mode');
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
   const selectScenario = (nextId: string) => {
     setSearchParams(
       (current) => {
@@ -79,21 +93,36 @@ export const FlowCanvasPage: React.FC = () => {
         <div>
           <span className="workspace-eyebrow">{t('eyebrow')}</span>
           <h2>{t('title')}</h2>
-          <p className="subtitle">{t('subtitle')}</p>
+          <p className="subtitle">{mode === 'edit' ? t('subtitleEdit') : t('subtitle')}</p>
         </div>
         <nav className="flow-page-actions" aria-label={t('actions')}>
           <Link className="btn btn-secondary btn-sm" to={backHref}>
             <ArrowLeft size={14} aria-hidden="true" />
             {t('backToRequirement')}
           </Link>
-          {requirement && (
-            <Link
-              className="btn btn-secondary btn-sm"
-              to={`/flows/edit?projectId=${encodeURIComponent(requirement.project_id)}&requirementId=${encodeURIComponent(requirement.id)}${activeScenario ? `&scenarioId=${encodeURIComponent(activeScenario.id)}` : ''}`}
+          <div className="flow-view-tabs" role="tablist" aria-label={t('viewSwitch')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'view'}
+              className={`flow-view-tab${mode === 'view' ? ' is-active' : ''}`}
+              onClick={() => switchMode('view')}
             >
-              {t('editFlow')}
-            </Link>
-          )}
+              <LayoutDashboard size={13} aria-hidden="true" />
+              {t('tabView')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'edit'}
+              className={`flow-view-tab${mode === 'edit' ? ' is-active' : ''}`}
+              onClick={() => switchMode('edit')}
+              disabled={!requirement}
+            >
+              <Pencil size={13} aria-hidden="true" />
+              {t('tabEdit')}
+            </button>
+          </div>
         </nav>
       </header>
 
@@ -107,7 +136,11 @@ export const FlowCanvasPage: React.FC = () => {
         </div>
       )}
 
-      {!loading && !error && document && activeScenario && (
+      {!loading && !error && document && mode === 'edit' && requirement && (
+        <FlowEditorPage embedded />
+      )}
+
+      {!loading && !error && document && activeScenario && mode === 'view' && (
         <>
           <section className="card flow-page-toolbar">
             <div className="flow-page-title">

@@ -125,3 +125,18 @@ Evidence: `evidence/flow-editor-1440x900.png`, `flow-editor-1280x800.png`,
 - Binding happens on save and only when at least one assertion has a criterion; otherwise the save
   still writes the file and the editor says so.
 - Case identity is deterministic (`tc_flow_<hash>`), so re-saving refreshes the same case.
+
+---
+
+# P4: edit directly inside the workflow view
+
+The workflow route is now a single shell with two views instead of two pages:
+
+- `画板视图` — the read-only scenario canvas (unchanged default)
+- `编辑流程` — the full editor rendered in place (`?mode=edit`), with 保存/运行 in an embedded toolbar
+
+Switching uses router search params (no navigation, no lost context). `/flows/edit` remains as a deep
+link. Evidence: `evidence/flow-inview-edit-1440x900.png`, `evidence/flow-view-tabs-1440x900.png`.
+
+Verified: tsc, ESLint, 245 frontend tests, `vite build`, i18n 3,630 keys; tabs switch both ways and the
+URL carries `mode=edit`.
