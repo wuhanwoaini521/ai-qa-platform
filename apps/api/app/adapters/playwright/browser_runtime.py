@@ -10,6 +10,8 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from qa_core.failure.redactor import SensitiveRedactor
+
 from app.adapters.playwright.locator import verify_locator
 from app.adapters.playwright.proxy import browser_proxy_options, launch_chromium
 from app.ports.browser_runtime import BrowserPage, BrowserRuntimeSession, BrowserSnapshot
@@ -753,17 +755,65 @@ class PlaywrightBrowserRuntime:
         if getattr(message, "type", "") == "error":
             session.console.append({"type": "error", "text": str(getattr(message, "text", ""))[:1000]})
 
-    @staticmethod
-    def _record_network(session: BrowserRuntimeSession, request_or_response: Any, *, failed: bool) -> None:
+    _NETWORK_SAFE_HEADERS = {
+        "content-type",
+        "accept",
+        "accept-language",
+        "origin",
+        "referer",
+        "user-agent",
+    }
+    _NETWORK_SECRET_HEADERS = {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "proxy-authorization",
+        "x-api-key",
+        "x-auth-token",
+    }
+
+    @classmethod
+    def _network_headers(cls, headers: Any) -> dict[str, str]:
+        """Keep the headers that describe an API call; secret values never leave the page.
+
+        Request headers are also what the API-case editor prefills, so the allowlist is narrow on
+        purpose: anything else is dropped, and known credential headers keep only their name.
+        """
+        if not isinstance(headers, dict):
+            try:
+                headers = dict(headers or {})
+            except (TypeError, ValueError):
+                return {}
+        safe: dict[str, str] = {}
+        for raw_name, raw_value in headers.items():
+            name = str(raw_name).lower()
+            value = str(raw_value)
+            if name in cls._NETWORK_SECRET_HEADERS:
+                safe[name] = "[REDACTED]"
+            elif name in cls._NETWORK_SAFE_HEADERS:
+                safe[name] = SensitiveRedactor.redact_text(value)[:500]
+        return safe
+
+    @classmethod
+    def _record_network(cls, session: BrowserRuntimeSession, request_or_response: Any, *, failed: bool) -> None:
         request = getattr(request_or_response, "request", request_or_response)
-        session.network.append(
-            {
-                "url": str(getattr(request, "url", ""))[:2000],
-                "method": str(getattr(request, "method", "GET"))[:20],
-                "failed": failed,
-                "status": getattr(request_or_response, "status", None),
-            }
-        )
+        response = None if failed else request_or_response
+        entry: dict[str, Any] = {
+            "url": str(getattr(request, "url", ""))[:2000],
+            "method": str(getattr(request, "method", "GET"))[:20],
+            "failed": failed,
+            "status": getattr(request_or_response, "status", None),
+            "resource_type": str(getattr(request, "resource_type", ""))[:32],
+            "request_headers": cls._network_headers(getattr(request, "headers", None)),
+            "request_body": None,
+        }
+        if str(entry["method"]).upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            raw_body = getattr(request, "post_data", None)
+            if isinstance(raw_body, str) and raw_body:
+                entry["request_body"] = SensitiveRedactor.redact_text(raw_body)[:4000]
+        if response is not None:
+            entry["response_headers"] = cls._network_headers(getattr(response, "headers", None))
+        session.network.append(entry)
 
 
 browser_runtime = PlaywrightBrowserRuntime()

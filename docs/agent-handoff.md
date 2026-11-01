@@ -1512,3 +1512,12 @@ git diff --check
 - `/flows` 现在是同一个 workflow 视图的两个模式：`画板视图`（只读）与 `编辑流程`（内嵌编辑器，`?mode=edit`）。
 - 切换走路由参数不跳页；内嵌模式保留「保存到工作区 / 运行此流程」按钮，编辑态有独立副标题。
 - `/flows/edit` 仍保留为深链。验证：tsc/ESLint/245 前端测试/vite build/i18n 3,630 keys；截图 `flow-inview-edit-1440x900.png`。
+
+## 3.57 录制 API 流量 + API 工作台（第一刀）
+
+- 浏览器运行时已采集 XHR/fetch：`resource_type`、安全请求头、脱敏请求体、响应 content-type；未新增代理或第二套采集。
+- 新接口 `GET /api/recorder/sessions/{id}/api-calls`（过滤/去重/脱敏）。
+- 新编译器 `POST /api/api-cases/compile`：请求规格 → pytest + httpx，支持 `QA_BASE_URL`、`QA_API_SECRET_*`、状态码/JSON 路径/响应包含断言。
+- 新页面 `/http-workbench`：请求构建器、实时预览、保存到工作区、运行、从录制会话导入（注意：不能用 `/api-*` 路由，Vite 会把 `/api` 前缀代理到后端）。
+- 实测：录制捕获 `GET /api/info` 200 → 编译 `test_api_info` → 运行 PASSED；录制导入在 UI 中可见。
+- 待办：录制面板内联 API Tab、HAR/OpenAPI 导入、API 断言↔验收标准绑定、鉴权流程捕获。

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import re
 import time
@@ -675,6 +676,48 @@ class BrowserRecorderService:
             "steps": session.steps,
             "steps_revision": session.steps_revision,
         }
+
+    @staticmethod
+    def api_calls(session: RecorderSession) -> list[dict[str, Any]]:
+        """Normalise the runtime's XHR/fetch traffic into reviewable API calls.
+
+        Only browser-observed network exists here: no recorder-side proxy, no second capture. Entries
+        are redacted on the way out, de-duplicated by (method, url, status) and bounded.
+        """
+        runtime_session = getattr(session, "runtime_session", None)
+        entries = getattr(runtime_session, "network", []) or []
+        calls: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, Any]] = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("resource_type") or "") not in {"xhr", "fetch"}:
+                continue
+            method = str(entry.get("method") or "GET").upper()
+            if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+                continue
+            url = str(entry.get("url") or "")
+            if not url.startswith(("http://", "https://")):
+                continue
+            status = entry.get("status")
+            key = (method, url, status)
+            if key in seen:
+                continue
+            seen.add(key)
+            response_headers = entry.get("response_headers") or {}
+            calls.append(
+                {
+                    "id": hashlib.sha256(f"{method}\0{url}\0{status}".encode("utf-8")).hexdigest()[:12],
+                    "method": method,
+                    "url": SensitiveRedactor.redact_url(url),
+                    "status": status,
+                    "failed": bool(entry.get("failed")),
+                    "request_headers": entry.get("request_headers") or {},
+                    "request_body": entry.get("request_body"),
+                    "response_content_type": str(response_headers.get("content-type") or "")[:120],
+                }
+            )
+        return calls[-50:]
 
     @staticmethod
     def element_evidence_bundle(session: RecorderSession) -> dict[str, Any]:

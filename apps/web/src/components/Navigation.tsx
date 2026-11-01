@@ -6,6 +6,7 @@ import {
   PanelsTopLeft,
   GitBranch,
   FolderGit2,
+  Braces,
   Flame,
   ShieldCheck,
   Shield,
@@ -42,6 +43,7 @@ export type NavTab =
   | 'recorder'
   | 'runs'
   | 'tasks'
+  | 'apiCases'
   | 'flaky'
   | 'failures'
   | 'quality'
@@ -177,6 +179,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
   const visibleNavItems = compact ? navItems.filter((item) => item.id !== 'workspace') : navItems;
   const settingsItem: NavItem = { id: 'settings', labelKey: 'settings', icon: Settings, to: scopedHref('/settings') };
   const platformItems: NavItem[] = [
+    { id: 'apiCases', labelKey: 'apiCases', icon: Braces, to: scopedHref('/http-workbench') },
     { id: 'flaky', labelKey: 'flaky', icon: Flame, to: scopedHref('/flaky') },
     { id: 'security', labelKey: 'security', icon: Shield, to: scopedHref('/security') },
     { id: 'workers', labelKey: 'workers', icon: Server, to: scopedHref('/workers') },

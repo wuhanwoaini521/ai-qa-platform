@@ -36,6 +36,8 @@ export function pathForTab(tab: NavTab, projectId: string | null): string {
       return projectId
         ? `/workspace/${projectId}?view=browser`
         : '/projects';
+    case 'apiCases':
+      return '/http-workbench';
     case 'flaky':
       return '/flaky';
     case 'failures':

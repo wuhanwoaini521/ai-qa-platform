@@ -76,6 +76,16 @@ async def get_recorder_session(
     return recorder_service.session_status(session)
 
 
+@router.get("/sessions/{session_id}/api-calls")
+async def get_recorder_api_calls(
+    session_id: str,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+):
+    """API calls observed while recording, ready to turn into API cases."""
+    session = await _get_accessible_session(session_id, user)
+    return {"session_id": session.id, "calls": recorder_service.api_calls(session)}
+
+
 @router.post("/sessions/{session_id}/generate")
 async def generate_case(
     session_id: str,

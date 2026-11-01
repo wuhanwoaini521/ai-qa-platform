@@ -1166,6 +1166,15 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+  getRecorderApiCalls: (sessionId: string) =>
+    request<{ session_id: string; calls: import('../features/api-cases/apiCase').RecorderApiCall[] }>(
+      `/recorder/sessions/${encodeURIComponent(sessionId)}/api-calls`,
+    ),
+  compileApiCase: (payload: Record<string, unknown>) =>
+    request<{ code: string; test_name: string; assertion_count: number }>('/api-cases/compile', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   compileFlow: (document: Record<string, unknown>) =>
     request<{ code: string; test_name: string; node_count: number; step_count: number; warnings: string[] }>(
       '/flows/compile',
