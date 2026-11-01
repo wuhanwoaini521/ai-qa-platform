@@ -6246,3 +6246,9 @@ button, input, select, textarea {
 @media (max-width: 1180px) {
   .flow-editor-layout { grid-template-columns: 180px minmax(0, 1fr) 260px; }
 }
+
+.flow-editor-criteria { display: grid; gap: 6px; padding-top: 4px; }
+.flow-editor-criteria > span { color: var(--ink-muted); font-size: var(--fs-xs); font-weight: 600; }
+.flow-editor-criterion { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-label); color: var(--ink-soft); cursor: pointer; }
+.flow-editor-criterion input { margin-top: 3px; accent-color: var(--brand); }
+.flow-editor-criterion strong { margin-right: 4px; color: var(--ink); font-weight: 600; }

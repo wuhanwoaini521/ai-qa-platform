@@ -28,6 +28,8 @@ export interface FlowNode {
   env_var: string;
   condition_kind: 'css' | 'text' | 'test_id';
   condition_value: string;
+  /** Acceptance criteria this assertion verifies; empty until the author binds them. */
+  criterion_ids: string[];
   then: FlowNode[];
   else_nodes: FlowNode[];
 }
@@ -72,6 +74,7 @@ export function emptyNode(kind: FlowKind): FlowNode {
     env_var: '',
     condition_kind: 'css',
     condition_value: '',
+    criterion_ids: [],
     then: [],
     else_nodes: [],
   };
@@ -200,6 +203,9 @@ export function validateFlow(flow: FlowDoc): FlowValidation {
       if (node.kind === 'condition' && node.then.length === 0 && node.else_nodes.length === 0) {
         warnings.push(`warnEmptyBranches|${label}`);
       }
+      if ((node.kind === 'assert_text' || node.kind === 'assert_visible') && node.criterion_ids.length === 0) {
+        warnings.push(`warnCriterionMissing|${label}`);
+      }
       walk(node.then);
       walk(node.else_nodes);
     }
@@ -212,6 +218,13 @@ export function validateFlow(flow: FlowDoc): FlowValidation {
 }
 
 /** Seed an editable flow from the read-only scenario model (P0 data). */
+export function toggleCriterion(node: FlowNode, criterionId: string): FlowNode {
+  const selected = node.criterion_ids.includes(criterionId)
+    ? node.criterion_ids.filter((item) => item !== criterionId)
+    : [...node.criterion_ids, criterionId];
+  return { ...node, criterion_ids: selected };
+}
+
 export function flowFromScenario(
   scenario: { title: string; actions: string[]; expected_outcomes: string[] },
   startUrl: string,

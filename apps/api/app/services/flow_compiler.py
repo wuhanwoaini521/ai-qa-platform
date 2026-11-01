@@ -35,6 +35,8 @@ class FlowNode(BaseModel):
     locator_value: str | None = Field(default=None, max_length=2000)
     locator_name: str | None = Field(default=None, max_length=500)
     value: str | None = Field(default=None, max_length=4000)
+    # Assertion-to-criterion binding: assert nodes carry the acceptance criteria they verify.
+    criterion_ids: list[str] = Field(default_factory=list, max_length=10)
     condition_kind: Literal["css", "text", "test_id"] = "css"
     condition_value: str | None = Field(default=None, max_length=500)
     # Data variables: a fill value read from the run environment instead of the authored literal.
@@ -181,8 +183,29 @@ def compile_flow(document: FlowDocument) -> dict:
         "test_name": _normalized_test_name(document.test_name),
         "node_count": len(FlowDocument._collect_ids(document.nodes)),
         "step_count": _count_steps(steps),
+        "assertions": _assertions(document.nodes),
         "warnings": _warnings(document),
     }
+
+
+def _assertions(nodes: list[FlowNode]) -> list[dict]:
+    """Assertion nodes that declare criteria, flattened in execution order."""
+    found: list[dict] = []
+    for node in nodes:
+        if node.kind in {"assert_text", "assert_visible"} and node.criterion_ids:
+            requirement = node.kind == "assert_text" and f' contains "{node.value}"' or ""
+            statement = (node.description or f"assert {node.locator_value}{requirement}").strip()
+            found.append(
+                {
+                    "node_id": node.id,
+                    "criterion_ids": node.criterion_ids,
+                    "statement": statement[:400],
+                    "check": f"{node.kind}:{node.locator_kind}={node.locator_value}{requirement}",
+                }
+            )
+        found.extend(_assertions(node.then))
+        found.extend(_assertions(node.else_nodes))
+    return found
 
 
 def _normalized_test_name(name: str) -> str:

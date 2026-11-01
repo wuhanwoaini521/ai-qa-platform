@@ -59,5 +59,11 @@
   "errorBranchesOnlyOnCondition": "{{label}}: only condition nodes may carry branches.",
   "errorDuplicateIds": "Duplicate node ids.",
   "errorDepth": "Conditional nesting exceeds 5 levels.",
-  "warnEmptyBranches": "{{label}}: both branches are empty; the compiled step will be skipped."
+  "warnEmptyBranches": "{{label}}: both branches are empty; the compiled step will be skipped.",
+  "criterionBinding": "Acceptance criteria",
+  "noCriteria": "This requirement has no criteria yet; run the analysis first.",
+  "warnCriterionMissing": "{{label}}: no acceptance criterion bound yet.",
+  "boundCase": "Registered case {{id}}",
+  "noAssertionsToBind": "No assertion node has a criterion, so no case was registered.",
+  "openCase": "Open the case assertions"
 }

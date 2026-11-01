@@ -16,6 +16,7 @@ import {
   emptyNode,
   flowFromScenario,
   slugTestName,
+  toggleCriterion,
   insertNode,
   moveNode,
   removeNode,
@@ -23,11 +24,19 @@ import {
   validateFlow,
 } from '../features/flow-canvas/flowDoc';
 
+interface CompileAssertion {
+  node_id: string;
+  criterion_ids: string[];
+  statement: string;
+  check: string;
+}
+
 interface CompileResult {
   code: string;
   test_name: string;
   node_count: number;
   step_count: number;
+  assertions: CompileAssertion[];
   warnings: string[];
 }
 
@@ -52,6 +61,10 @@ export const FlowEditorPage: React.FC = () => {
   const [runId, setRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [seeded, setSeeded] = useState(false);
+  const [criteria, setCriteria] = useState<{ id: string; description: string }[]>([]);
+  const [requirementTitle, setRequirementTitle] = useState('');
+  const [boundCaseId, setBoundCaseId] = useState<string | null>(null);
+  const [bindingMessage, setBindingMessage] = useState('');
   const dragFrom = useRef<{ parentId: string | null; branch: FlowBranch; index: number } | null>(null);
 
   const validation = useMemo(() => validateFlow(flow), [flow]);
@@ -82,6 +95,13 @@ export const FlowEditorPage: React.FC = () => {
         expected_outcomes: string[];
       }[];
       const scenario = scenarios.find((item) => item.id === scenarioId) ?? scenarios[0];
+      setCriteria(
+        ((requirement.qa_model?.criteria ?? []) as unknown as { id: string; description: string }[]).map((item) => ({
+          id: item.id,
+          description: item.description,
+        })),
+      );
+      setRequirementTitle(requirement.title);
       const startUrl = project?.sut_base_url ?? '';
       if (scenario) {
         const seededFlow = flowFromScenario(scenario, startUrl);
@@ -155,6 +175,29 @@ export const FlowEditorPage: React.FC = () => {
     try {
       await api.writeWorkspaceFile(projectId, filePath, compile.code);
       setSaveMessage(t('saved', { path: filePath }));
+      if (requirementId && compile.assertions.length > 0) {
+        const assertions = compile.assertions.flatMap((item) =>
+          item.criterion_ids.map((criterionId) => ({
+            criterion_id: criterionId,
+            statement: item.statement,
+            check: item.check,
+          })),
+        );
+        const bound = await api.bindFlowCase({
+          project_id: projectId,
+          requirement_id: requirementId,
+          scenario_id: scenarioId || null,
+          file_path: filePath,
+          test_name: flow.test_name,
+          title: requirementTitle || flow.test_name,
+          steps: flow.nodes.map((node) => node.description || node.kind).filter(Boolean),
+          assertions,
+        });
+        setBoundCaseId(bound.case_id);
+        setBindingMessage(t('boundCase', { id: bound.case_id }));
+      } else if (requirementId) {
+        setBindingMessage(t('noAssertionsToBind'));
+      }
     } catch (reason) {
       setSaveMessage(t('saveFailed', { reason: String(reason) }));
     } finally {
@@ -310,7 +353,9 @@ export const FlowEditorPage: React.FC = () => {
           {activeNode ? (
             <NodeInspector
               node={activeNode}
+              criteria={criteria}
               onChange={(patch) => setFlow(updateNode(flow, activeNode.id, patch))}
+              onToggleCriterion={(criterionId) => setFlow(updateNode(flow, activeNode.id, { criterion_ids: toggleCriterion(activeNode, criterionId).criterion_ids }))}
             />
           ) : (
             <p className="flow-editor-hint">{t('selectNode')}</p>
@@ -328,6 +373,12 @@ export const FlowEditorPage: React.FC = () => {
           )}
         </header>
         {saveMessage && <p className="flow-editor-save-message">{saveMessage}</p>}
+        {bindingMessage && <p className="flow-editor-save-message">{bindingMessage}</p>}
+        {boundCaseId && (
+          <p className="flow-editor-save-message">
+            <a href={`/test-cases/${boundCaseId}`}>{t('openCase')}</a>
+          </p>
+        )}
         {compileError && <p className="flow-editor-error">{compileError}</p>}
         {compile ? <pre className="flow-editor-code">{compile.code}</pre> : <p className="flow-editor-hint">{t('previewPending')}</p>}
       </section>
@@ -390,7 +441,12 @@ const FlowCard: React.FC<{
   );
 };
 
-const NodeInspector: React.FC<{ node: FlowNode; onChange: (patch: Partial<FlowNode>) => void }> = ({ node, onChange }) => {
+const NodeInspector: React.FC<{
+  node: FlowNode;
+  criteria: { id: string; description: string }[];
+  onChange: (patch: Partial<FlowNode>) => void;
+  onToggleCriterion: (criterionId: string) => void;
+}> = ({ node, criteria, onChange, onToggleCriterion }) => {
   const { t } = useTranslation('flowEditor');
   return (
     <div className="flow-editor-inspector-body">
@@ -458,6 +514,24 @@ const NodeInspector: React.FC<{ node: FlowNode; onChange: (patch: Partial<FlowNo
             onChange={(event) => onChange({ env_var: event.target.value.toUpperCase() })}
           />
         </label>
+      )}
+      {(node.kind === 'assert_text' || node.kind === 'assert_visible') && (
+        <div className="flow-editor-criteria">
+          <span>{t('criterionBinding')}</span>
+          {criteria.length === 0 && <p className="flow-editor-hint">{t('noCriteria')}</p>}
+          {criteria.map((criterion) => (
+            <label key={criterion.id} className="flow-editor-criterion">
+              <input
+                type="checkbox"
+                checked={node.criterion_ids.includes(criterion.id)}
+                onChange={() => onToggleCriterion(criterion.id)}
+              />
+              <span>
+                <strong>{criterion.id}</strong> {criterion.description}
+              </span>
+            </label>
+          ))}
+        </div>
       )}
       {node.kind === 'wait' && (
         <label className="flow-editor-field">

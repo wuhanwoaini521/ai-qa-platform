@@ -12,6 +12,7 @@ const {
   validateFlow,
   flowFromScenario,
   slugTestName,
+  toggleCriterion,
 } = await import('../src/features/flow-canvas/flowDoc.ts');
 
 const base = () => {
@@ -92,4 +93,22 @@ test('scenario seeding creates actions then expectation nodes', () => {
   assert.equal(flow.test_name, 'test_apply_a_valid_discount_code');
   assert.equal(slugTestName('SCN-004'), 'test_scn_004');
   assert.equal(slugTestName('商品搜索 与 购物车'), 'test_flow_canvas_case');
+});
+
+test('assertion nodes warn until a criterion is bound, then stay valid', () => {
+  const { flow } = base();
+  const assertion = emptyNode('assert_visible');
+  assertion.locator_value = '#offer';
+  const withAssertion = insertNode(flow, null, 'then', assertion);
+  const warned = validateFlow(withAssertion);
+  assert.deepEqual(warned.errors, []);
+  assert.ok(warned.warnings.some((code) => code.startsWith('warnCriterionMissing')));
+
+  const bound = { ...assertion, ...toggleCriterion(assertion, 'AC-001') };
+  const boundFlow = updateNode(withAssertion, assertion.id, { criterion_ids: bound.criterion_ids });
+  assert.deepEqual(validateFlow(boundFlow).errors, []);
+  assert.deepEqual(validateFlow(boundFlow).warnings, []);
+
+  const unbound = toggleCriterion(bound, 'AC-001');
+  assert.deepEqual(unbound.criterion_ids, []);
 });

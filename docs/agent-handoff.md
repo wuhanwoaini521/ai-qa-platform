@@ -1499,3 +1499,10 @@ git diff --check
 - 变量：fill 节点可绑定 `QA_DATA_*` 环境变量，沿用既有脱敏/`secret_env_var` 生成逻辑。
 - 验证：编译 14 测试、录制回归 74 测试、前端 244 测试、tsc/ESLint/Ruff/i18n 全绿；真实分支运行 true/false 两条路径均 PASSED（证据 `.ai-runs/2026-11-01-flow-canvas/`）。
 - 已知限制：录制 URL 会脱敏（query 丢弃），因此画板 fixture 需用路径区分；树状结构不做自由连线。
+
+## 3.55 画板断言 → 验收标准 → 用例追溯（P3）
+
+- 断言节点可勾选需求验收标准；未关联只告警不阻塞。
+- 编译输出新增 `assertions[]`；保存时人工触发 `POST /api/flows/bind-case`，写入用例 `test_model.assertions`（含 criterion_id / nodeid / statement / check）并绑定工作区 nodeid；不修改需求脚本映射（该映射属于断言生成路径且有断言前置条件）。
+- 实测：编辑器保存生成用例 `tc_flow_3ce3…`，运行 `test_scn_004` PASSED，用例断言页显示 AC-001/AC-002 均 PASSED 且带 nodeid。
+- 测试：绑定 3 条 + 编译 14 条 + 录制回归 74 条；前端 245 测试、tsc/ESLint/Ruff/i18n 全绿。

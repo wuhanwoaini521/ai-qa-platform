@@ -59,5 +59,11 @@
   "errorBranchesOnlyOnCondition": "{{label}}：只有条件节点可以包含分支。",
   "errorDuplicateIds": "节点 ID 重复。",
   "errorDepth": "条件嵌套超过 5 层。",
-  "warnEmptyBranches": "{{label}}：两个分支都为空，编译后只会跳过。"
+  "warnEmptyBranches": "{{label}}：两个分支都为空，编译后只会跳过。",
+  "criterionBinding": "关联验收标准",
+  "noCriteria": "该需求还没有验收标准，可先分析需求生成。",
+  "warnCriterionMissing": "{{label}}：尚未关联验收标准。",
+  "boundCase": "已登记用例 {{id}}",
+  "noAssertionsToBind": "断言节点尚未关联验收标准，未登记用例。",
+  "openCase": "打开该用例的断言页"
 }

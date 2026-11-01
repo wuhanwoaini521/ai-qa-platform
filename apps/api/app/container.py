@@ -45,6 +45,7 @@ from app.services.decision_service import DecisionService
 from app.services.decision_settings_service import DecisionSettingsService
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
+from app.services.flow_binding_service import FlowBindingService
 from app.services.golden_demo_service import GoldenDemoService
 from app.services.health_service import HealthService
 from app.services.jira_service import JiraService
@@ -409,6 +410,19 @@ def get_task_runtime_service() -> TaskRuntimeService:
             recorder_session_resolver=recorder_service.get,
         )
     return _task_runtime_service
+
+
+def get_flow_binding_service(session: AsyncSession = Depends(get_db)) -> FlowBindingService:
+    case_repo = TestCaseRepository(session)
+    binding_repo = AutomationBindingRepository(session)
+    return FlowBindingService(
+        requirement_repo=RequirementRepository(session),
+        test_case_repo=case_repo,
+        binding_repo=binding_repo,
+        binding_service=AutomationBindingService(
+            binding_repo, case_repo, WorkspaceRepository(session), WorkspaceService()
+        ),
+    )
 
 
 def get_recorder_workflow_service(session: AsyncSession = Depends(get_db)) -> RecorderWorkflowService:

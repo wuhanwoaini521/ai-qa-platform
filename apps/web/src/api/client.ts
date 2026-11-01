@@ -1158,6 +1158,14 @@ export const api = {
     }>(
       `/tasks/${encodeURIComponent(taskId)}/runtime/steps/${encodeURIComponent(stepId)}`,
     ),
+  bindFlowCase: (payload: Record<string, unknown>) =>
+    request<{ case_id: string; nodeid: string; created: boolean; assertions: { criterion_id: string; statement: string; nodeid: string }[] }>(
+      '/flows/bind-case',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    ),
   compileFlow: (document: Record<string, unknown>) =>
     request<{ code: string; test_name: string; node_count: number; step_count: number; warnings: string[] }>(
       '/flows/compile',

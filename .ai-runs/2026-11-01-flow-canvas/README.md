@@ -86,3 +86,42 @@ Evidence: `evidence/flow-editor-1440x900.png`, `flow-editor-1280x800.png`,
   must be addressable by path; compiled flows inherit this security behaviour by design.
 - The tree editor has no explicit "connect" interaction; reorder + branches cover the flows this
   product can execute today.
+
+---
+
+# P3: assertion → criterion → case traceability (same day)
+
+## What was added
+
+- Assert nodes carry `criterion_ids` (checkbox list from the requirement's real criteria).
+- Validation warns (does not block) when an assertion node has no criterion: `warnCriterionMissing`.
+- `POST /api/flows/compile` now returns `assertions[]` (`node_id`, `criterion_ids`, `statement`, `check`).
+- **Human-triggered bind** on save: `POST /api/flows/bind-case` writes/updates a test case whose
+  `test_model.assertions` are `CaseAssertion` rows carrying `criterion_id`, `statement`, `check` and the
+  flow's `nodeid`, then binds the nodeid to the workspace file. The requirement's script map is left
+  untouched: it is owned by the generated-from-assertions path and requires requirement assertions.
+- The existing case assertion panel therefore shows run state per criterion without any new table.
+
+## Live evidence (real UI + real run)
+
+`evidence/flow-bind-evidence.json`, `evidence/flow-editor-bound-1440x900.png`:
+
+| Step | Result |
+|---|---|
+| Editor seeds SCN-004, fill locators, bind AC-001 / AC-002 to the two assertion nodes | save |
+| Save → `POST /api/flows/bind-case` | case `tc_flow_3ce338440e498ec2d5ba63284bf10` created |
+| Run `tests/test_scn_004.py::test_scn_004` | **PASSED** |
+| `GET /api/test-cases/{case}/assertions` | `AC-001 → PASSED`, `AC-002 → PASSED`, nodeid `tests/test_scn_004.py::test_scn_004` |
+
+## Tests
+
+- `apps/api/tests/test_flow_binding.py`: bind creates case assertions with nodeid; re-bind is idempotent;
+  unknown criterion → 422; cross-project requirement → 422.
+- Frontend: `toggleCriterion` + warning lifecycle (7 editor-model tests); 245 frontend tests total.
+- Backend regression: 77 passed (flow binding + compiler + recorder save/service/variables/websocket).
+
+## Limits
+
+- Binding happens on save and only when at least one assertion has a criterion; otherwise the save
+  still writes the file and the editor says so.
+- Case identity is deterministic (`tc_flow_<hash>`), so re-saving refreshes the same case.
