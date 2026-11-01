@@ -127,3 +127,39 @@ Evidence: `evidence/api-workbench-bound-1440x900.png`, `evidence/api-case-criter
 
 Tests: 3 persistence tests (file+case+assertions, unknown criterion 422, no requirement), plus compiler
 and recorder API tests; frontend 254 tests, vite build, i18n 29 / 3,689 keys, Ruff clean.
+
+---
+
+## Round 6: auth tokens stay out of code; bulk save the captured API cases
+
+### Auth capture
+
+Recorded API cases now keep the captured request headers/body, so an `Authorization` header becomes a
+`QA_API_SECRET_AUTHORIZATION` reference instead of a literal token.
+
+`evidence/api-auth-token.json`:
+
+| Check | Result |
+|---|---|
+| Captured header | `authorization: [REDACTED]` (never the token) |
+| Generated code | references `QA_API_SECRET_AUTHORIZATION`, no token literal |
+| Run without the env var | **FAILED** — `RuntimeError: Set environment variable QA_API_SECRET_AUTHORIZATION` |
+| Run with `QA_API_SECRET_AUTHORIZATION=Bearer fixture-token` | **PASSED** |
+
+Two real bugs surfaced and were fixed on the way:
+
+1. the compiler rendered secret headers as a **set literal** (`{"authorization": {secret}}`), which made
+   httpx reject the header value;
+2. `project_subprocess_environment` filtered every `QA_API_SECRET_*` name as a credential, so the run
+   environment could never supply the token. Explicit `QA_API_SECRET_*` values are now forwarded like
+   recorder secrets, while ambient credentials stay filtered.
+
+### Bulk save
+
+The recorder API panel gained **「保存全部 API 用例」**. A fixture page with two XHR calls produced:
+
+- entries: `GET /api/info 200`, `GET /api/stats 200`
+- bulk save: `已保存 2 个 API 用例` (`evidence/recorder-api-save-all-1440x900.png`)
+
+Tests: 25 backend (recorder API, compiler, persistence, redaction) + 254 frontend; Ruff, tsc, ESLint,
+vite build and i18n green.

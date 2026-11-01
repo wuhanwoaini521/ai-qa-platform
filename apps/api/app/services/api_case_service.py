@@ -99,7 +99,7 @@ def _request_call(request: ApiCaseRequest) -> tuple[list[str], str]:
         setup.append(f'    base = os.getenv("QA_BASE_URL", {json.dumps(request.base_url.strip())})')
         setup.append(f"    url = base + {json.dumps(url)}")
 
-    headers: dict[str, str] = {}
+    headers: dict[str, tuple[bool, str]] = {}
     for header in request.headers:
         name = header.name.strip()
         if not name:
@@ -109,13 +109,13 @@ def _request_call(request: ApiCaseRequest) -> tuple[list[str], str]:
             local = f"secret_{_safe_identifier(name).lower()}"
             setup.append(f"    {local} = os.getenv({json.dumps(env)})")
             setup.append(f"    if {local} is None: raise RuntimeError({json.dumps('Set environment variable ' + env)})")
-            headers[name] = f"{{{local}}}"
+            headers[name] = (True, local)
         else:
-            headers[name] = header.value
+            headers[name] = (False, header.value)
     if headers:
         rendered = ", ".join(
-            f"{json.dumps(name)}: {value if value.startswith('{') else json.dumps(value)}"
-            for name, value in headers.items()
+            f"{json.dumps(name)}: {value if is_expression else json.dumps(value)}"
+            for name, (is_expression, value) in headers.items()
         )
         setup.append(f"    headers = {{{rendered}}}")
     else:

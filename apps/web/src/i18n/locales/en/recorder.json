@@ -240,6 +240,9 @@
     "saving": "Saving…",
     "saved": "Saved API case: {{path}}",
     "saveFailed": "Could not save the API case: {{reason}}",
-    "openCase": "Open API case"
+    "openCase": "Open API case",
+    "saveAll": "Save all API cases",
+    "savingAll": "Saving all…",
+    "savedAll": "Saved {{count}} API case(s)"
   }
 }

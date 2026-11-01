@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
 from project_model.models import (
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.test_case_repo import TestCaseRepository
-from app.services.api_case_service import ApiAssertion, ApiCaseRequest, compile_api_case
+from app.services.api_case_service import ApiAssertion, ApiCaseRequest, ApiHeader, compile_api_case
 from app.services.automation_binding_service import AutomationBindingService
 from app.services.recorder_service import BrowserRecorderService, RecorderSaveCaseRequest, RecorderSessionCreate
 from app.services.workspace_service import WorkspaceService
@@ -103,11 +104,27 @@ class RecorderWorkflowService:
         call = next((item for item in self.recorder.api_calls(recording) if item["id"] == request.call_id), None)
         if call is None:
             raise ValueError("Captured API call not found")
+        headers = [
+            ApiHeader(name=name, value=value)
+            for name, value in (call.get("request_headers") or {}).items()
+            if value is not None
+        ]
+        raw_body = call.get("request_body")
+        json_body = None
+        body = None
+        if raw_body:
+            try:
+                json_body = json.loads(raw_body)
+            except ValueError:
+                body = raw_body
         compiled = compile_api_case(
             ApiCaseRequest(
                 test_name=_api_case_test_name(call["method"], call["url"], request.test_name),
                 method=call["method"],
                 url=call["url"],
+                headers=headers,
+                json_body=json_body,
+                body=body,
                 assertions=[ApiAssertion(kind="status", expected=call.get("status") or 200)],
             )
         )

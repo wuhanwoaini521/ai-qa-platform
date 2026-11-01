@@ -53,7 +53,7 @@ def test_secret_header_reads_environment_and_fails_loudly():
     assert "QA_API_SECRET_AUTHORIZATION" in code
     assert "Bearer leak" not in code
     assert "Set environment variable QA_API_SECRET_AUTHORIZATION" in code
-    assert 'headers = {"Authorization": {secret_authorization}}' in code
+    assert 'headers = {"Authorization": secret_authorization}' in code
 
 
 def test_relative_url_requires_and_uses_base_url():

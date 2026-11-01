@@ -104,3 +104,11 @@ def test_recorder_secret_variables_are_forwarded_explicitly(monkeypatch):
     environment = project_subprocess_environment({"QA_RECORDER_SECRET_ABC123": "value", "QA_DATABASE_URL": "sqlite://"})
     assert environment["QA_RECORDER_SECRET_ABC123"] == "value"
     assert "QA_DATABASE_URL" not in environment
+
+
+def test_api_secret_variables_are_forwarded_explicitly():
+    from qa_core.execution.environment import project_subprocess_environment
+
+    environment = project_subprocess_environment({"QA_API_SECRET_AUTHORIZATION": "Bearer test", "QA_OTHER_SECRET": "x"})
+    assert environment["QA_API_SECRET_AUTHORIZATION"] == "Bearer test"
+    assert "QA_OTHER_SECRET" not in environment

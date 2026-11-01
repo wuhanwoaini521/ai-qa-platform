@@ -64,6 +64,46 @@ async def test_save_api_case_writes_file_creates_case_and_reuses(client: AsyncCl
 
 
 @pytest.mark.asyncio
+async def test_save_api_case_keeps_auth_as_environment_reference(client: AsyncClient, monkeypatch):
+    from app.api.recorder import recorder_service
+
+    project = await client.post("/api/projects", json={"name": "Recorder API auth", "bootstrap_workspace": True})
+    project_id = project.json()["id"]
+    url = "http://127.0.0.1:8099/api/info"
+    session = SimpleNamespace(
+        id="recorder-api-auth",
+        project_id=project_id,
+        runtime_session=SimpleNamespace(
+            network=[
+                {
+                    "url": url,
+                    "method": "GET",
+                    "failed": False,
+                    "status": 200,
+                    "resource_type": "fetch",
+                    "request_headers": {
+                        "accept": "application/json",
+                        "authorization": "[REDACTED]",
+                    },
+                    "request_body": None,
+                    "response_headers": {"content-type": "application/json"},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(recorder_service, "get", AsyncMock(return_value=session))
+    saved = await client.post(
+        "/api/recorder/sessions/test-session/save-api-case",
+        json={"call_id": _call_id("GET", url, 200)},
+    )
+    assert saved.status_code == 200, saved.text
+    code = saved.json()["code"]
+    assert "QA_API_SECRET_AUTHORIZATION" in code
+    assert "Bearer" not in code
+    assert "[REDACTED]" not in code
+
+
+@pytest.mark.asyncio
 async def test_save_api_case_rejects_unknown_call(client: AsyncClient, monkeypatch):
     from app.api.recorder import recorder_service
 

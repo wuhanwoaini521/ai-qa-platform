@@ -1551,3 +1551,12 @@ git diff --check
 - 实测：绑定 AC-001 保存后断言 state=NEVER_RUN，运行 PASSED 后变为 PASSED，nodeid 正确。
 - 测试：新增 3 条持久化测试；前端 254、后端 16（相关集合）、Ruff/tsc/ESLint/i18n/vite build 全绿。
 - 待办：鉴权 token 捕获、录制面板一次保存 UI+API、契约级断言（OpenAPI schema）。
+
+## 3.62 鉴权 token 注入 + 批量保存 API 用例（Round 6）
+
+- 录制保存 API 用例时保留捕获的 headers/body：`Authorization` → `QA_API_SECRET_AUTHORIZATION` 引用，token 不写入代码。
+- 修复两个真实缺陷：秘密 header 被渲染成 set 字面量；`QA_API_SECRET_*` 被环境过滤导致运行拿不到 token。
+- 录制面板新增「保存全部 API 用例」：一次录制可批量落成多个 API 用例。
+- 实测：无 token 运行 FAILED（明确报错），带 token 运行 PASSED；两条接口批量保存成功。
+- 测试：后端 25、前端 254、Ruff/tsc/ESLint/vite build/i18n 全绿。
+- 待办：契约级断言（OpenAPI schema 生成字段/类型检查）、录制面板合并「保存 UI+API」单入口。

@@ -240,6 +240,9 @@
     "saving": "保存中…",
     "saved": "已保存 API 用例：{{path}}",
     "saveFailed": "保存 API 用例失败：{{reason}}",
-    "openCase": "打开 API 用例"
+    "openCase": "打开 API 用例",
+    "saveAll": "保存全部 API 用例",
+    "savingAll": "批量保存中…",
+    "savedAll": "已保存 {{count}} 个 API 用例"
   }
 }

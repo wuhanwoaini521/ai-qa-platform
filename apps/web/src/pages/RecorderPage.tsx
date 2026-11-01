@@ -203,6 +203,7 @@ export const RecorderPage: React.FC<{
   const [apiCallSaving, setApiCallSaving] = useState<string | null>(null);
   const [apiCallMessage, setApiCallMessage] = useState('');
   const [apiCallCaseId, setApiCallCaseId] = useState<string | null>(null);
+  const [apiSavingAll, setApiSavingAll] = useState(false);
   const [code, setCode] = useState('');
   const [variables, setVariables] = useState<{ name: string; default: string; source: string; hint?: string }[]>([]);
   const [scriptGeneration, setScriptGeneration] = useState(0);
@@ -247,6 +248,25 @@ export const RecorderPage: React.FC<{
       window.clearInterval(timer);
     };
   }, [sessionId]);
+
+  const saveAllApiCalls = async () => {
+    if (!sessionId || apiCalls.length === 0) return;
+    setApiSavingAll(true);
+    setApiCallMessage('');
+    setApiCallCaseId(null);
+    let savedCount = 0;
+    try {
+      for (const call of apiCalls) {
+        await api.saveRecorderApiCase(sessionId, call.id);
+        savedCount += 1;
+      }
+      setApiCallMessage(t('apiCalls.savedAll', { count: savedCount }));
+    } catch (reason) {
+      setApiCallMessage(t('apiCalls.saveFailed', { reason: String(reason) }));
+    } finally {
+      setApiSavingAll(false);
+    }
+  };
 
   const saveApiCall = async (call: RecorderApiCall) => {
     if (!projectId) return;
@@ -1617,6 +1637,14 @@ export const RecorderPage: React.FC<{
                 }}
               >
                 {apiCallsBusy ? t('apiCalls.refreshing') : t('apiCalls.refresh')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!sessionId || apiCalls.length === 0 || apiSavingAll}
+                onClick={() => void saveAllApiCalls()}
+              >
+                {apiSavingAll ? t('apiCalls.savingAll') : t('apiCalls.saveAll')}
               </button>
               {apiCallsError && <p className="recorder-api-calls-error" role="alert">{apiCallsError}</p>}
               {apiCallMessage && (
