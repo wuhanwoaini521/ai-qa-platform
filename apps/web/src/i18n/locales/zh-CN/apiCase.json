@@ -46,5 +46,8 @@
   "requirement": "关联需求（可选）",
   "noRequirement": "不关联需求",
   "criteria": "验收标准",
-  "openCase": "打开 API 用例"
+  "openCase": "打开 API 用例",
+  "assertContract": "响应契约",
+  "contractHint": "简化 JSON schema：type / required / properties / items",
+  "errorContractSchema": "契约需要一个包含 type 的 JSON schema。"
 }

@@ -46,5 +46,8 @@
   "requirement": "Requirement (optional)",
   "noRequirement": "No requirement",
   "criteria": "Acceptance criteria",
-  "openCase": "Open API case"
+  "openCase": "Open API case",
+  "assertContract": "Response contract",
+  "contractHint": "Simplified JSON schema: type / required / properties / items",
+  "errorContractSchema": "Contract needs a JSON schema with a type."
 }

@@ -8,7 +8,7 @@ export interface ApiHeaderRow {
   value: string;
 }
 
-export type ApiAssertionKind = 'status' | 'json_path' | 'body_contains';
+export type ApiAssertionKind = 'status' | 'json_path' | 'body_contains' | 'json_contract';
 
 export interface ApiAssertion {
   id: string;
@@ -103,6 +103,14 @@ export function validateDraft(draft: ApiCaseDraft): DraftValidation {
   }
   for (const assertion of draft.assertions) {
     if (assertion.kind === 'json_path' && !assertion.path.trim()) errors.push('errorJsonPath');
+    if (assertion.kind === 'json_contract') {
+      try {
+        const schema = JSON.parse(assertion.expected || '');
+        if (!schema || typeof schema !== 'object' || typeof schema.type !== 'string') errors.push('errorContractSchema');
+      } catch {
+        errors.push('errorContractSchema');
+      }
+    }
     if (assertion.kind === 'status' && !/^\d{3}$/.test(assertion.expected.trim())) errors.push('errorStatus');
   }
   if (!draft.assertions.some((item) => item.kind === 'status')) warnings.push('warnNoStatus');
@@ -129,6 +137,9 @@ export function toPayload(draft: ApiCaseDraft): Record<string, unknown> {
           /* keep the raw string when it is not valid JSON */
         }
         return { kind: 'json_path', path: assertion.path.trim(), expected: parsed };
+      }
+      if (assertion.kind === 'json_contract') {
+        return { kind: 'json_contract', expected: JSON.parse(assertion.expected || '{}') };
       }
       return { kind: 'body_contains', expected: assertion.expected };
     }),
@@ -165,6 +176,33 @@ export interface OpenApiOperation {
   path: string;
   summary: string;
   expectedStatus: string;
+  responseSchema?: Record<string, unknown>;
+}
+
+// Only the keywords the generated checker understands; anything else is dropped on purpose.
+const CONTRACT_KEYS = ['type', 'required', 'properties', 'items'];
+
+function simplifySchema(value: unknown, depth = 0): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || depth > 6) return undefined;
+  const source = value as Record<string, unknown>;
+  const schema: Record<string, unknown> = {};
+  for (const key of CONTRACT_KEYS) {
+    if (key === 'properties' && source.properties && typeof source.properties === 'object') {
+      schema.properties = Object.fromEntries(
+        Object.entries(source.properties as Record<string, unknown>)
+          .map(([name, sub]) => [name, simplifySchema(sub, depth + 1)])
+          .filter(([, sub]) => sub),
+      );
+    } else if (key === 'items') {
+      const item = simplifySchema(source.items, depth + 1);
+      if (item) schema.items = item;
+    } else if (key === 'required') {
+      if (Array.isArray(source.required)) schema.required = source.required.filter((item) => typeof item === 'string');
+    } else if (typeof source[key] === 'string') {
+      schema[key] = source[key];
+    }
+  }
+  return typeof schema.type === 'string' ? schema : undefined;
 }
 
 const IMPORT_LIMIT = 300;
@@ -222,13 +260,17 @@ export function fromOpenApiDocument(raw: unknown): OpenApiOperation[] {
   for (const [path, item] of Object.entries(document.paths).slice(0, IMPORT_LIMIT)) {
     for (const [method, operation] of Object.entries(item ?? {})) {
       if (!methods.has(method.toLowerCase())) continue;
-      const statuses = Object.keys(operation?.responses ?? {});
+      const responses = (operation?.responses ?? {}) as Record<string, { content?: Record<string, { schema?: unknown }> }>;
+      const statuses = Object.keys(responses);
       const preferred = statuses.find((code) => /^2\d\d$/.test(code)) ?? statuses[0] ?? '200';
+      const media = responses[preferred]?.content ?? {};
+      const jsonSchema = media['application/json']?.schema ?? media['*/*']?.schema;
       operations.push({
         method: method.toUpperCase() as ApiMethod,
         path,
         summary: operation?.summary || operation?.operationId || `${method.toUpperCase()} ${path}`,
         expectedStatus: preferred.replace(/[^0-9]/g, '').slice(0, 3) || '200',
+        responseSchema: simplifySchema(jsonSchema),
       });
     }
   }

@@ -170,7 +170,12 @@ export const ApiCasesPage: React.FC = () => {
       ...emptyDraft(slugTestName(operation.summary || `${operation.method}_${operation.path}`)),
       method: operation.method,
       url: operation.path,
-      assertions: [{ ...newAssertion('status'), expected: operation.expectedStatus }],
+      assertions: [
+        { ...newAssertion('status'), expected: operation.expectedStatus },
+        ...(operation.responseSchema
+          ? [{ ...newAssertion('json_contract'), expected: JSON.stringify(operation.responseSchema) }]
+          : []),
+      ],
     });
   };
 
@@ -346,16 +351,27 @@ export const ApiCasesPage: React.FC = () => {
                   <option value="status">{t('assertStatus')}</option>
                   <option value="json_path">{t('assertJsonPath')}</option>
                   <option value="body_contains">{t('assertBody')}</option>
+                  <option value="json_contract">{t('assertContract')}</option>
                 </select>
                 {assertion.kind === 'json_path' && (
                   <input className="form-input" placeholder="data.items[0].id" value={assertion.path} onChange={(event) => patchAssertion(assertion.id, { path: event.target.value })} />
                 )}
-                <input
-                  className="form-input"
-                  placeholder={assertion.kind === 'status' ? '200' : t('expected')}
-                  value={assertion.expected}
-                  onChange={(event) => patchAssertion(assertion.id, { expected: event.target.value })}
-                />
+                {assertion.kind === 'json_contract' ? (
+                  <textarea
+                    className="form-input api-case-contract"
+                    rows={3}
+                    title={t('contractHint')}
+                    value={assertion.expected}
+                    onChange={(event) => patchAssertion(assertion.id, { expected: event.target.value })}
+                  />
+                ) : (
+                  <input
+                    className="form-input"
+                    placeholder={assertion.kind === 'status' ? '200' : t('expected')}
+                    value={assertion.expected}
+                    onChange={(event) => patchAssertion(assertion.id, { expected: event.target.value })}
+                  />
+                )}
                 <button type="button" className="icon-btn" aria-label={t('remove')} onClick={() => patch({ assertions: draft.assertions.filter((row) => row.id !== assertion.id) })}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>

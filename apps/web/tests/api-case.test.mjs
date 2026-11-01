@@ -128,3 +128,51 @@ test('OpenAPI import lists operations with a preferred success status', () => {
 test('OpenAPI import rejects a document without paths', () => {
   assert.throws(() => fromOpenApiDocument({}), /invalid-openapi/);
 });
+
+test('OpenAPI import extracts a simplified response schema', () => {
+  const operations = fromOpenApiDocument({
+    paths: {
+      '/api/info': {
+        get: {
+          responses: {
+            200: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    description: 'should be dropped',
+                    required: ['ok', 'service'],
+                    properties: {
+                      ok: { type: 'boolean' },
+                      service: { type: 'string' },
+                      count: { type: 'integer' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  assert.deepEqual(operations[0].responseSchema, {
+    type: 'object',
+    required: ['ok', 'service'],
+    properties: { ok: { type: 'boolean' }, service: { type: 'string' }, count: { type: 'integer' } },
+  });
+});
+
+test('contract assertions serialize and validate', () => {
+  const draft = {
+    ...valid(),
+    assertions: [{ id: 'a', kind: 'json_contract', path: '', expected: '{"type":"object","required":["ok"]}' }],
+  };
+  assert.deepEqual(validateDraft(draft).errors, []);
+  assert.deepEqual(toPayload(draft).assertions, [
+    { kind: 'json_contract', expected: { type: 'object', required: ['ok'] } },
+  ]);
+
+  const broken = { ...draft, assertions: [{ id: 'a', kind: 'json_contract', path: '', expected: '{oops' }] };
+  assert.ok(validateDraft(broken).errors.includes('errorContractSchema'));
+});

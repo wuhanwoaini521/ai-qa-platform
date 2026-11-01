@@ -6327,3 +6327,4 @@ button, input, select, textarea {
 .api-case-criterion { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-xs); color: var(--ink-soft); cursor: pointer; }
 .api-case-criterion input { margin-top: 2px; accent-color: var(--brand); }
 .api-case-criterion strong { margin-right: 4px; color: var(--ink); }
+.api-case-contract { grid-column: span 2; min-height: 72px; font-family: var(--font-mono); font-size: var(--fs-xs); resize: vertical; }

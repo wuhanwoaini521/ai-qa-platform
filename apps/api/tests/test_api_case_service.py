@@ -118,3 +118,50 @@ def test_recorder_api_calls_filter_dedupe_and_redact():
     assert "token" not in calls[0]["url"]
     assert calls[0]["response_content_type"] == "application/json"
     assert {call["status"] for call in calls} == {200, 500}
+
+
+def test_contract_assertion_emits_and_enforces_a_schema():
+    code = _code(
+        ApiCaseRequest(
+            test_name="contract",
+            method="GET",
+            url="/api/info",
+            base_url="http://127.0.0.1:8099",
+            assertions=[
+                {"kind": "status", "expected": 200},
+                {
+                    "kind": "json_contract",
+                    "expected": {
+                        "type": "object",
+                        "required": ["ok", "service"],
+                        "properties": {"ok": {"type": "boolean"}, "count": {"type": "integer"}},
+                    },
+                },
+            ],
+        )
+    )
+    assert "_check_contract(response.json()" in code
+    namespace: dict = {}
+    exec(compile(code, "api_case.py", "exec"), namespace)  # noqa: S102 - generated test module
+    check = namespace["_check_contract"]
+    schema = {
+        "type": "object",
+        "required": ["ok", "service"],
+        "properties": {"ok": {"type": "boolean"}, "count": {"type": "integer"}},
+    }
+    check({"ok": True, "service": "fixture", "count": 3}, schema)
+    with pytest.raises(AssertionError):
+        check({"ok": "yes", "service": "fixture"}, {"type": "object", "properties": {"ok": {"type": "boolean"}}})
+    with pytest.raises(AssertionError):
+        check({"ok": True}, {"type": "object", "required": ["service"]})
+
+
+def test_contract_assertion_rejects_unsupported_schema():
+    with pytest.raises(ValueError, match="supported type"):
+        ApiCaseRequest(
+            test_name="bad",
+            method="GET",
+            url="/api/info",
+            base_url="http://127.0.0.1:8099",
+            assertions=[{"kind": "json_contract", "expected": {"type": "unknown"}}],
+        )

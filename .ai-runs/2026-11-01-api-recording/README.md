@@ -163,3 +163,25 @@ The recorder API panel gained **「保存全部 API 用例」**. A fixture page 
 
 Tests: 25 backend (recorder API, compiler, persistence, redaction) + 254 frontend; Ruff, tsc, ESLint,
 vite build and i18n green.
+
+---
+
+## Round 7: contract-level assertions (Schemathesis direction)
+
+OpenAPI import now keeps the response schema and turns it into a deterministic contract check.
+
+- Backend: new assertion kind `json_contract` with an embedded simplified schema
+  (`type / required / properties / items`). The generated pytest module carries a small
+  `_check_contract()` helper — no new dependency, no jsonschema package.
+- Frontend: OpenAPI import extracts the 2xx `application/json` schema (simplified, depth ≤ 6, bounded),
+  adds a `json_contract` assertion on "use this operation", and shows it as an editable contract row.
+- Evidence: `evidence/api-contract.json`, `evidence/api-workbench-contract-1440x900.png`.
+
+| Check | Result |
+|---|---|
+| Schema matches fixture | `test_api_contract_ok` → **PASSED** |
+| Schema requires a missing field | `test_api_contract_bad` → **FAILED** — `$: missing required key missing_field` |
+| OpenAPI import in UI | assertion kinds `['status', 'json_contract']`, contract editor present |
+
+Tests: 2 new backend contract tests (emit+enforce, invalid schema rejected), 2 frontend parser/payload
+tests; 27 backend tests, 256 frontend tests, Ruff/tsc/ESLint/vite build/i18n green.

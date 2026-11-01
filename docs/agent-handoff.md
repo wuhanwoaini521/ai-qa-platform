@@ -1560,3 +1560,11 @@ git diff --check
 - 实测：无 token 运行 FAILED（明确报错），带 token 运行 PASSED；两条接口批量保存成功。
 - 测试：后端 25、前端 254、Ruff/tsc/ESLint/vite build/i18n 全绿。
 - 待办：契约级断言（OpenAPI schema 生成字段/类型检查）、录制面板合并「保存 UI+API」单入口。
+
+## 3.63 契约级断言（Round 7）
+
+- 新增 `json_contract` 断言：内嵌简化 schema（type/required/properties/items），生成 `_check_contract()` 校验器，无新依赖。
+- OpenAPI 导入提取 2xx JSON schema → “用这个接口”自动附带契约断言；工作台可编辑契约 JSON。
+- 实测：匹配 schema PASSED；缺少 required 字段 FAILED（`$: missing required key …`）。
+- 测试：后端 27、前端 256、Ruff/tsc/ESLint/vite build/i18n 全绿。
+- 待办：录制面板合并「保存 UI+API」单入口；批量保存后汇总视图。

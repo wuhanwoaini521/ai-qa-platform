@@ -35,9 +35,26 @@ class ApiHeader(BaseModel):
 
 
 class ApiAssertion(BaseModel):
-    kind: Literal["status", "json_path", "body_contains"]
+    kind: Literal["status", "json_path", "body_contains", "json_contract"]
     path: str | None = Field(default=None, max_length=200)
     expected: Any = None
+
+    @model_validator(mode="after")
+    def validate_contract(self):
+        if self.kind == "json_contract":
+            schema = self.expected
+            if not isinstance(schema, dict) or schema.get("type") not in {
+                "object",
+                "array",
+                "string",
+                "number",
+                "integer",
+                "boolean",
+            }:
+                raise ValueError("json_contract assertions need a simplified schema with a supported type")
+            if len(json.dumps(schema, ensure_ascii=False)) > 6000:
+                raise ValueError("json_contract schema is too large")
+        return self
 
 
 class ApiCaseRequest(BaseModel):
@@ -72,7 +89,9 @@ def _assertion_lines(assertions: list[ApiAssertion]) -> list[str]:
     if not assertions:
         assertions = [ApiAssertion(kind="status", expected=200)]
     for assertion in assertions:
-        if assertion.kind == "status":
+        if assertion.kind == "json_contract":
+            lines.append(f"    _check_contract(response.json(), {json.dumps(assertion.expected, ensure_ascii=False)})")
+        elif assertion.kind == "status":
             expected = int(assertion.expected or 200)
             lines.append(f"    assert response.status_code == {expected}, response.text[:500]")
         elif assertion.kind == "body_contains":
@@ -139,6 +158,31 @@ def compile_api_case(request: ApiCaseRequest) -> dict:
         "import os",
         "",
         "import httpx",
+        "",
+        "",
+        "def _check_contract(value, schema, path='$'):",
+        "    expected_type = schema.get('type')",
+        "    if expected_type == 'object':",
+        "        assert isinstance(value, dict), f'{path}: expected object'",
+        "        for key in schema.get('required') or []:",
+        "            assert key in value, f'{path}: missing required key {key}'",
+        "        for key, subschema in (schema.get('properties') or {}).items():",
+        "            if key in value:",
+        "                _check_contract(value[key], subschema, f'{path}.{key}')",
+        "    elif expected_type == 'array':",
+        "        assert isinstance(value, list), f'{path}: expected array'",
+        "        items = schema.get('items')",
+        "        if isinstance(items, dict):",
+        "            for index, element in enumerate(value):",
+        "                _check_contract(element, items, f'{path}[{index}]')",
+        "    elif expected_type == 'string':",
+        "        assert isinstance(value, str), f'{path}: expected string'",
+        "    elif expected_type == 'integer':",
+        "        assert isinstance(value, int) and not isinstance(value, bool), f'{path}: expected integer'",
+        "    elif expected_type == 'number':",
+        "        assert isinstance(value, (int, float)) and not isinstance(value, bool), f'{path}: expected number'",
+        "    elif expected_type == 'boolean':",
+        "        assert isinstance(value, bool), f'{path}: expected boolean'",
         "",
         "",
         "def _value_at(payload, path):",
