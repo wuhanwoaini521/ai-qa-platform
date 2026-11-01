@@ -16,7 +16,11 @@ import {
   fromRecorderCall,
   newAssertion,
   newHeader,
+  EnvVariable,
+  newVariable,
+  parseCurl,
   slugTestName,
+  substituteVariables,
   toPayload,
   validateDraft,
 } from '../features/api-cases/apiCase';
@@ -43,6 +47,8 @@ export const ApiCasesPage: React.FC = () => {
   const [criteria, setCriteria] = useState<{ id: string; description: string }[]>([]);
   const [criterionIds, setCriterionIds] = useState<string[]>([]);
   const [savedCaseId, setSavedCaseId] = useState<string | null>(null);
+  const [variables, setVariables] = useState<EnvVariable[]>([]);
+  const [curlText, setCurlText] = useState('');
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -84,10 +90,24 @@ export const ApiCasesPage: React.FC = () => {
     };
   }, [requirementId]);
 
-  const validation = useMemo(() => validateDraft(draft), [draft]);
+  const resolved = useMemo(() => {
+    const url = substituteVariables(draft.url, variables);
+    const body = substituteVariables(draft.body, variables);
+    const headers = draft.headers.map((header) => ({
+      ...header,
+      value: substituteVariables(header.value, variables).text,
+    }));
+    const unresolved = [...new Set([...url.unresolved, ...body.unresolved])];
+    return {
+      draft: { ...draft, url: url.text, body: body.text, headers },
+      unresolved,
+    };
+  }, [draft, variables]);
+
+  const validation = useMemo(() => validateDraft(resolved.draft), [resolved]);
   const payload = useMemo(() => {
     try {
-      const base = toPayload(draft);
+      const base = toPayload(resolved.draft);
       const url = String(base.url ?? '');
       if (url && !/^https?:\/\//i.test(url) && baseUrl) {
         base.base_url = baseUrl;
@@ -96,7 +116,7 @@ export const ApiCasesPage: React.FC = () => {
     } catch {
       return null;
     }
-  }, [draft, baseUrl]);
+  }, [resolved, baseUrl]);
 
   useEffect(() => {
     if (validation.errors.length > 0 || !payload) {
@@ -140,6 +160,17 @@ export const ApiCasesPage: React.FC = () => {
     } catch (reason) {
       setCalls([]);
       setImportError(String(reason));
+    }
+  };
+
+  const importCurl = () => {
+    setImportError('');
+    try {
+      const result = parseCurl(curlText);
+      setDraft(result.draft);
+      if (result.warnings.length > 0) setImportError(result.warnings.join(' · '));
+    } catch (reason) {
+      setImportError(t('curlParseFailed', { reason: reason instanceof Error ? reason.message : String(reason) }));
     }
   };
 
@@ -291,6 +322,37 @@ export const ApiCasesPage: React.FC = () => {
               </div>
             )}
           </div>
+          <div className="api-case-variables">
+            <div className="api-case-variables-head">
+              <span>{t('variables')}</span>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setVariables((current) => [...current, newVariable()])}>
+                <Plus size={12} aria-hidden="true" />
+                {t('addVariable')}
+              </button>
+            </div>
+            {variables.map((variable) => (
+              <div key={variable.id} className="api-case-row">
+                <input
+                  className="form-input"
+                  placeholder="BASE_URL"
+                  value={variable.name}
+                  onChange={(event) => setVariables((current) => current.map((item) => (item.id === variable.id ? { ...item, name: event.target.value } : item)))}
+                />
+                <input
+                  className="form-input"
+                  placeholder="http://127.0.0.1:8099"
+                  value={variable.value}
+                  onChange={(event) => setVariables((current) => current.map((item) => (item.id === variable.id ? { ...item, value: event.target.value } : item)))}
+                />
+                <button type="button" className="icon-btn" aria-label={t('remove')} onClick={() => setVariables((current) => current.filter((item) => item.id !== variable.id))}>
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+            {resolved.unresolved.length > 0 && (
+              <p className="flow-editor-warning">{t('unresolvedVariables', { names: resolved.unresolved.join(', ') })}</p>
+            )}
+          </div>
           <div className="api-case-url-row">
             <select className="form-select" value={draft.method} onChange={(event) => patch({ method: event.target.value as ApiCaseDraft['method'] })}>
               {METHODS.map((method) => (
@@ -421,6 +483,18 @@ export const ApiCasesPage: React.FC = () => {
           </button>
         </div>
         {importError && <p className="flow-editor-error">{importError}</p>}
+        <div className="api-case-curl">
+          <textarea
+            className="form-input api-case-body"
+            rows={3}
+            placeholder={t('curlPlaceholder')}
+            value={curlText}
+            onChange={(event) => setCurlText(event.target.value)}
+          />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={importCurl} disabled={!curlText.trim()}>
+            {t('curlImport')}
+          </button>
+        </div>
         <div className="api-case-file-row">
           <label className="btn btn-secondary btn-sm">
             {t('importHar')}

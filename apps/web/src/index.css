@@ -6334,3 +6334,9 @@ button, input, select, textarea {
 .recorder-merge-api-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .recorder-merge-api-list li { display: flex; gap: 8px; align-items: center; }
 .recorder-merge-api-list code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.api-case-variables { display: grid; gap: 6px; }
+.api-case-variables-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.api-case-variables-head > span { color: var(--ink-muted); font-size: var(--fs-xs); font-weight: 600; }
+.api-case-curl { display: grid; gap: 8px; }
+.api-case-curl .api-case-body { min-height: 70px; }

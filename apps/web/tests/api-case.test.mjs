@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { emptyDraft, validateDraft, toPayload, fromRecorderCall, slugTestName, fromHarDocument, fromOpenApiDocument } = await import(
+const { emptyDraft, validateDraft, toPayload, fromRecorderCall, slugTestName, fromHarDocument, fromOpenApiDocument, parseCurl, substituteVariables, newVariable } = await import(
   '../src/features/api-cases/apiCase.ts'
 );
 
@@ -175,4 +175,59 @@ test('contract assertions serialize and validate', () => {
 
   const broken = { ...draft, assertions: [{ id: 'a', kind: 'json_contract', path: '', expected: '{oops' }] };
   assert.ok(validateDraft(broken).errors.includes('errorContractSchema'));
+});
+
+test('cURL import maps method, headers and JSON body', () => {
+  const { draft, warnings } = parseCurl(
+    `curl 'https://api.example.test/orders' -XPOST -H 'Content-Type: application/json' -H 'Authorization: Bearer token' --data-raw '{"sku":"tee"}'`,
+  );
+  assert.equal(draft.method, 'POST');
+  assert.equal(draft.url, 'https://api.example.test/orders');
+  assert.equal(draft.useJsonBody, true);
+  assert.equal(draft.body, '{"sku":"tee"}');
+  assert.ok(draft.headers.some((header) => header.name === 'Authorization' && header.value === 'Bearer token'));
+  assert.equal(draft.test_name, 'test_post_orders');
+  assert.deepEqual(warnings, []);
+});
+
+test('cURL import handles scheme-less URLs and --json promoting GET to POST', () => {
+  const { draft } = parseCurl("curl api.example.test/users --json '{\"name\":\"a\"}'");
+  assert.equal(draft.url, 'https://api.example.test/users');
+  assert.equal(draft.method, 'POST');
+  assert.equal(draft.useJsonBody, true);
+  assert.ok(draft.headers.some((header) => header.name.toLowerCase() === 'content-type'));
+});
+
+test('cURL import moves data into query for -G and decodes ANSI-C strings', () => {
+  const { draft } = parseCurl("curl -G 'https://api.example.test/search' --data 'q=tee&limit=2'");
+  assert.equal(draft.method, 'GET');
+  assert.ok(draft.url.endsWith('/search?q=tee&limit=2'));
+
+  const ansi = parseCurl(`curl 'https://api.example.test/x' -X POST -H 'Content-Type: application/json' -d $'{"line":"a\\nb"}'`);
+  assert.equal(ansi.draft.body, '{"line":"a\nb"}');
+});
+
+test('cURL import records ignored connection flags and basic auth', () => {
+  const { draft, warnings } = parseCurl('curl -L -k -u user:pass https://api.example.test/x');
+  assert.equal(draft.method, 'GET');
+  assert.ok(warnings.some((warning) => warning.includes('-L')));
+  assert.ok(warnings.some((warning) => warning.includes('-k')));
+  assert.ok(draft.headers.some((header) => header.name.toLowerCase() === 'authorization' && header.value.startsWith('Basic ')));
+  assert.ok(warnings.some((warning) => warning.includes('QA_API_SECRET_AUTHORIZATION')));
+});
+
+test('cURL import keeps a variable URL untouched', () => {
+  const { draft } = parseCurl("curl '{{BASE_URL}}/api/info' -H 'Accept: application/json'");
+  assert.equal(draft.url, '{{BASE_URL}}/api/info');
+});
+
+test('cURL import rejects a non-curl command', () => {
+  assert.throws(() => parseCurl('wget https://x.test'), /not-curl/);
+});
+
+test('variables substitute in text and report unresolved names', () => {
+  const variables = [{ ...newVariable('BASE_URL', 'http://127.0.0.1:8099'), id: 'v1' }, { ...newVariable('TOKEN', 'abc'), id: 'v2' }];
+  const result = substituteVariables('{{BASE_URL}}/api/{{MISSING}}?t={{ TOKEN }}', variables);
+  assert.equal(result.text, 'http://127.0.0.1:8099/api/{{MISSING}}?t=abc');
+  assert.deepEqual(result.unresolved, ['MISSING']);
 });

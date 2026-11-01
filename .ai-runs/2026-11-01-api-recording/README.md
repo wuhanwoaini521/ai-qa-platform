@@ -207,3 +207,23 @@ Evidence: `evidence/recorder-merge-save-1440x900.png`.
 So the original ask — “recording produces both a UI case and an API case” — is now a single action.
 
 Gates: 256 frontend tests, tsc, ESLint, vite build, i18n 29 / 3,701 keys, Ruff clean.
+
+---
+
+## Round 9: cURL import + {{variables}} (checked against Bruno's docs)
+
+Network access came back this round, so the conventions were checked against Bruno's published
+[curl → GUI](https://blog.usebruno.com/curl-to-gui-import-curl-commands) material instead of memory.
+
+- **从 cURL 导入** in the workbench: `-X/-H/-A/-d/--data-raw/--json/-u/-b/-G/-I`, `-XPOST` normalization,
+  scheme-less URLs, ANSI-C `$'…'` strings; connection-only flags (`-L`, `-k`, `-o`, proxy, timeouts,
+  `--cert/--key`) are reported as ignored rather than silently dropped.
+- **变量 `{{name}}`**: name/value rows resolve in URL, header values and body before compilation;
+  unresolved names are listed instead of being sent literally. A URL that starts with `{{VAR}}` is kept
+  intact (no forced `https://`).
+- Basic auth from `-u` becomes a `QA_API_SECRET_AUTHORIZATION` reference, never a literal credential.
+- Evidence: `evidence/api-workbench-curl-vars-1440x900.png` — imported `curl '{{BASE_URL}}/api/info' …`,
+  variable `BASE_URL=http://127.0.0.1:8099`, preview 2,197 chars containing the resolved host.
+
+Tests: 7 new parser/variable tests (18 in the API model file); frontend suite **263 passed**, tsc,
+ESLint, vite build, i18n 29 / 3,707 keys, Ruff clean.

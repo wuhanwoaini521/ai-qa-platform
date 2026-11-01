@@ -49,5 +49,11 @@
   "openCase": "打开 API 用例",
   "assertContract": "响应契约",
   "contractHint": "简化 JSON schema：type / required / properties / items",
-  "errorContractSchema": "契约需要一个包含 type 的 JSON schema。"
+  "errorContractSchema": "契约需要一个包含 type 的 JSON schema。",
+  "variables": "变量（{{name}} 替换）",
+  "addVariable": "加变量",
+  "unresolvedVariables": "未定义变量：{{names}}",
+  "curlImport": "从 cURL 导入",
+  "curlPlaceholder": "粘贴 curl 命令（支持 -X/-H/-d/--json/-u/-G/-I）",
+  "curlParseFailed": "解析 cURL 失败：{{reason}}"
 }

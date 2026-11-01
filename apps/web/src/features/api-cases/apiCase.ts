@@ -276,3 +276,245 @@ export function fromOpenApiDocument(raw: unknown): OpenApiOperation[] {
   }
   return operations.slice(0, IMPORT_LIMIT);
 }
+
+
+// ---------------------------------------------------------------------------------------------
+// cURL import and {{variable}} substitution.
+// Semantics follow Bruno's documented cURL import (method, headers, body flags, -u, -G, -I, --json,
+// scheme-less URLs, -XPOST, ANSI-C strings) while ignoring connection-only flags (-L, -k, -o, proxy,
+// timeouts) exactly as Bruno does. See docs/API_RECORDING_DESIGN.md for the reference links.
+
+function decodeAnsiC(value: string): string {
+  return value.replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)/g, (match, code: string) => {
+    if (code.startsWith('x')) return String.fromCharCode(parseInt(code.slice(1), 16));
+    if (code.startsWith('u')) return String.fromCharCode(parseInt(code.slice(1), 16));
+    const simple: Record<string, string> = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"' };
+    return simple[code] ?? match;
+  });
+}
+
+function tokenizeCurl(command: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  let started = false;
+  let ansi = false;
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (ansi) {
+      if (char === "'") ansi = false;
+      else current += char;
+      continue;
+    }
+    if (char === '$' && command[index + 1] === "'") {
+      ansi = true;
+      started = true;
+      index += 1;
+      continue;
+    }
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      else current += char;
+      continue;
+    }
+    if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === '\\' && index + 1 < command.length) current += command[(index += 1)];
+      else current += char;
+      continue;
+    }
+    if (char === '\\' && command[index + 1] === '\n') {
+      index += 1;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (started) {
+        tokens.push(current);
+        current = '';
+        started = false;
+      }
+      continue;
+    }
+    current += char;
+    started = true;
+  }
+  if (started) tokens.push(decodeAnsiC(current));
+  return tokens;
+}
+
+export interface CurlParseResult {
+  draft: ApiCaseDraft;
+  warnings: string[];
+}
+
+const CURL_IGNORED_FLAGS = new Set([
+  '-L', '--location', '-k', '--insecure', '-o', '--output', '-O', '--remote-name',
+  '-x', '--proxy', '--max-time', '--connect-timeout', '--retry', '-v', '--verbose', '--compressed',
+  '--cert', '--key', '--cacert', '-s', '--silent', '-i', '--include',
+]);
+
+export function parseCurl(command: string): CurlParseResult {
+  const warnings: string[] = [];
+  const tokens = tokenizeCurl(command.trim().replace(/^\$\s+/, ''));
+  if (tokens[0] === 'curl.exe') tokens[0] = 'curl';
+  if (tokens[0] !== 'curl') throw new Error('not-curl');
+  const draft = emptyDraft('api_case');
+  let url = '';
+  const headers: ApiHeaderRow[] = [];
+  let method = '';
+  let headMode = false;
+  let getMode = false;
+  let data: string | null = null;
+  let jsonMode = false;
+  let basicAuth: string | null = null;
+
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = () => {
+      index += 1;
+      return tokens[index] ?? '';
+    };
+    let flag = token;
+    let inlineValue: string | null = null;
+    const eq = token.indexOf('=');
+    if (token.startsWith('--') && eq > 0) {
+      flag = token.slice(0, eq);
+      inlineValue = token.slice(eq + 1);
+    } else if (/^-[A-Za-z].+/.test(token) && token.length > 2) {
+      flag = token.slice(0, 2);
+      inlineValue = token.slice(2);
+    }
+    const value = () => (inlineValue !== null ? inlineValue : next());
+    if (CURL_IGNORED_FLAGS.has(flag)) {
+      warnings.push(`ignored ${flag}`);
+      if (['-o', '--output', '-x', '--proxy', '--max-time', '--connect-timeout', '--retry', '--cert', '--key', '--cacert'].includes(flag)) {
+        index += 1;
+      }
+      continue;
+    }
+    switch (flag) {
+      case '-X':
+      case '--request':
+        method = value().toUpperCase();
+        break;
+      case '-H':
+      case '--header': {
+        const raw = value();
+        const colon = raw.indexOf(':');
+        if (colon > 0) headers.push(newHeader(raw.slice(0, colon).trim(), raw.slice(colon + 1).trim()));
+        break;
+      }
+      case '-A':
+      case '--user-agent':
+        headers.push(newHeader('user-agent', value()));
+        break;
+      case '-d':
+      case '--data':
+      case '--data-raw':
+      case '--data-ascii':
+      case '--data-urlencode':
+        data = data === null ? value() : `${data}&${value()}`;
+        break;
+      case '--data-binary': {
+        const raw = value();
+        data = raw.startsWith('@') ? raw.slice(1) : raw;
+        break;
+      }
+      case '--json':
+        jsonMode = true;
+        data = value();
+        headers.push(newHeader('content-type', 'application/json'));
+        break;
+      case '-u':
+      case '--user': {
+        const raw = value();
+        basicAuth = raw;
+        headers.push(newHeader('authorization', `Basic ${btoa(raw)}`));
+        break;
+      }
+      case '-b':
+      case '--cookie':
+        headers.push(newHeader('cookie', value()));
+        break;
+      case '-G':
+      case '--get':
+        getMode = true;
+        break;
+      case '-I':
+      case '--head':
+        headMode = true;
+        break;
+      default:
+        if (flag.startsWith('-')) warnings.push(`unsupported ${flag}`);
+        else if (!url) url = token;
+        break;
+    }
+  }
+
+  if (!url) throw new Error('missing-url');
+  if (!/^https?:\/\//i.test(url) && !url.startsWith('{{')) url = `https://${url}`;
+  if (getMode && data !== null) {
+    url += `${url.includes('?') ? '&' : '?'}${data}`;
+    data = null;
+  }
+  if (headMode) method = 'HEAD';
+  if (jsonMode && (!method || method === 'GET' || method === 'HEAD')) method = 'POST';
+  if (!method) method = data !== null ? 'POST' : 'GET';
+
+  const contentType = headers.find((header) => header.name.toLowerCase() === 'content-type')?.value ?? '';
+  const useJson = data !== null && (jsonMode || contentType.includes('json'));
+  if (data !== null && useJson) {
+    try {
+      JSON.parse(data);
+    } catch {
+      warnings.push('body is not valid JSON');
+    }
+  }
+  if (basicAuth) warnings.push('basic auth is stored as QA_API_SECRET_AUTHORIZATION');
+
+  return {
+    draft: {
+      ...draft,
+      test_name: slugTestName(`${method}_${url.replace(/^https?:\/\/[^/]+/, '')}`),
+      method: method as ApiMethod,
+      url,
+      headers: headers.length ? headers : draft.headers,
+      body: data ?? '',
+      useJsonBody: useJson,
+      assertions: [{ ...newAssertion('status'), expected: '200' }],
+    },
+    warnings,
+  };
+}
+
+export interface EnvVariable {
+  id: string;
+  name: string;
+  value: string;
+}
+
+export function newVariable(name = '', value = ''): EnvVariable {
+  return { id: nextId('v'), name, value };
+}
+
+/** Bruno/Postman-style {{name}} substitution, applied before the case is compiled. */
+export function substituteVariables(
+  text: string,
+  variables: EnvVariable[],
+): { text: string; unresolved: string[] } {
+  const unresolved: string[] = [];
+  const byName = new Map(variables.filter((item) => item.name.trim()).map((item) => [item.name.trim(), item.value]));
+  const result = text.replace(/\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g, (match, name: string) => {
+    if (!byName.has(name)) {
+      unresolved.push(name);
+      return match;
+    }
+    return byName.get(name) ?? match;
+  });
+  return { text: result, unresolved };
+}

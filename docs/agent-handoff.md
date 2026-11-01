@@ -1576,3 +1576,11 @@ git diff --check
 - 实测：录制 3 步 + 2 条接口，一次点击后 `tests/test_recorded_case.py`、`tests/test_get_api_info.py`、`tests/test_get_api_stats.py` 全部落盘并可点开。
 - 测试：前端 256、vite build、i18n 29/3,701、Ruff clean。
 - 待办：批量保存后的统一跳转/汇总页；录制回放时的接口重放（mock）策略。
+
+## 3.65 cURL 导入 + {{变量}}（Round 9）
+
+- 网络恢复后按 Bruno 官方文档对齐 cURL 导入语义（方法/头/体/--json/-u/-G/-I、无 scheme URL、ANSI-C 字符串），连接类 flag 明确忽略。
+- 工作台新增变量表（name/value）与 `{{name}}` 替换（URL/头值/请求体），未定义变量会提示；`-u` 转 `QA_API_SECRET_AUTHORIZATION` 引用。
+- 实测：`curl '{{BASE_URL}}/api/info'` + `BASE_URL=http://127.0.0.1:8099` → 预览含解析后的主机；截图 `api-workbench-curl-vars-1440x900.png`。
+- 测试：前端 263（+7）、tsc/ESLint/vite build/i18n 3,707、Ruff 全绿。
+- 待办：接口 mock/replay、批量保存汇总页。

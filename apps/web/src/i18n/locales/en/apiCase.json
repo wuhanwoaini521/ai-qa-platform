@@ -49,5 +49,11 @@
   "openCase": "Open API case",
   "assertContract": "Response contract",
   "contractHint": "Simplified JSON schema: type / required / properties / items",
-  "errorContractSchema": "Contract needs a JSON schema with a type."
+  "errorContractSchema": "Contract needs a JSON schema with a type.",
+  "variables": "Variables ({{name}} substitution)",
+  "addVariable": "Add variable",
+  "unresolvedVariables": "Undefined variables: {{names}}",
+  "curlImport": "Import from cURL",
+  "curlPlaceholder": "Paste a curl command (-X/-H/-d/--json/-u/-G/-I supported)",
+  "curlParseFailed": "Could not parse the curl command: {{reason}}"
 }

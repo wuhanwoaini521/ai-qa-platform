@@ -12,8 +12,9 @@ The recorder only produced UI cases. Two gaps:
 
 ## 2. Reference points (open-source)
 
-External network access is **blocked in this environment**, so these are the established principles of
-the named projects (to be re-validated against upstream docs when network is available), not quotes:
+Earlier in this session external network access was blocked; it is reachable again, so the cURL-import
+and variable conventions below are checked against Bruno's published material:
+[curl → GUI](https://blog.usebruno.com/curl-to-gui-import-curl-commands).
 
 | Project | Principle worth copying |
 |---|---|
@@ -50,6 +51,19 @@ in the environment, and one deterministic runner owns PASS/FAIL.**
 - No new execution engine or HTTP proxy.
 - No automatic HAR parsing yet.
 - No response-schema assertions yet (only exact value checks).
+
+## 4b. cURL import and variables (implemented after the first slice)
+
+Following Bruno's documented cURL import:
+
+- supported: `-X/--request` (`-XPOST` normalized), `-H/--header`, `-A`, `-d/--data/--data-raw/--data-ascii/
+  --data-urlencode`, `--data-binary @file` (path only), `--json` (sets JSON content type and promotes
+  GET/HEAD to POST), `-u/--user` (Basic auth), `-b/--cookie`, `-G/--get` (moves data into the query),
+  `-I/--head`, scheme-less URLs, ANSI-C `$'…'` strings from “Copy as cURL”
+- intentionally ignored (connection concerns, like Bruno): `-L`, `-k`, `-o/-O`, `-x/--proxy`,
+  `--max-time`, `--connect-timeout`, `--retry`, `-v`, `--compressed`, `--cert/--key/--cacert`
+- variables: `{{name}}` substitution before compilation; undefined names are reported instead of being
+  sent literally. Basic auth is stored as a `QA_API_SECRET_AUTHORIZATION` reference, never as a literal.
 
 ## 5. Roadmap
 
