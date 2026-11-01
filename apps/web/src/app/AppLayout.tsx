@@ -48,6 +48,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   }, [location.pathname, startPage, navigate]);
 
   const fullBleed = location.pathname.includes('/studio');
+  const dashboardRoute = location.pathname === '/';
   const workspaceRoute = location.pathname === '/workspace' || location.pathname.startsWith('/workspace/');
   const workspaceParams = new URLSearchParams(location.search);
   const workspaceStage = workspaceParams.get('stage');
@@ -65,7 +66,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
 
   return (
     <div className="app-container">
-      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${graphiteRoute ? ' is-graphite' : ''}`}>
+      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${graphiteRoute ? ' is-graphite' : ''}${dashboardRoute ? ' is-dashboard-route' : ''}`}>
         <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
         <Header
           title={title}

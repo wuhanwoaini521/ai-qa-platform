@@ -230,7 +230,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       detailLabel: t('testsExecutedToday'),
       detailValue: countValue(stats?.tests_executed_today),
       Icon: Activity,
-      tone: 'is-blue',
+      tone: 'is-green',
     },
     {
       label: t('runsToday'),
@@ -238,7 +238,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       detailLabel: t('totalExecutions'),
       detailValue: countValue(stats?.total_runs),
       Icon: ListChecks,
-      tone: 'is-green',
+      tone: 'dashboard-neutral',
     },
     {
       label: t('totalFailures'),
@@ -258,7 +258,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       detailLabel: t('rerunRecoveries'),
       detailValue: countValue(stats?.rerun_recovery_count),
       Icon: Clock,
-      tone: 'is-violet',
+      tone: 'dashboard-neutral',
     },
   ];
 
@@ -269,118 +269,48 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <h2>{t('overviewTitle')}</h2>
           <p>{t('overviewSubtitle')}</p>
         </div>
-        <dl className="dashboard-project-scope" aria-label={t('projectOverview')}>
-          {[
-            { key: 'qaProjects', Icon: FolderGit2, value: countValue(stats?.total_projects) },
-            { key: 'requirements', Icon: FileText, value: countValue(stats?.total_requirements) },
-            { key: 'testCases', Icon: CheckSquare, value: countValue(stats?.total_test_cases) },
-          ].map(({ key, Icon, value }) => (
-            <div className="dashboard-scope-metric" key={key}>
-              <dt><Icon size={14} aria-hidden="true" />{t(key)}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="dashboard-project-summary">
+          <span className="dashboard-project-summary-scope">{t('platformScope')}</span>
+          <dl className="dashboard-project-scope" aria-label={t('projectOverview')}>
+            {[
+              { key: 'qaProjects', Icon: FolderGit2, value: countValue(stats?.total_projects) },
+              { key: 'requirements', Icon: FileText, value: countValue(stats?.total_requirements) },
+              { key: 'testCases', Icon: CheckSquare, value: countValue(stats?.total_test_cases) },
+            ].map(({ key, Icon, value }) => (
+              <div className="dashboard-scope-metric" key={key}>
+                <dt><Icon size={14} aria-hidden="true" />{t(key)}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </header>
 
-      <section className="card dashboard-continue" aria-labelledby="dashboard-continue-title">
-        <div className="dashboard-continue-heading">
-          <div className="dashboard-continue-project">
-            <span>{currentProject ? t('currentProject') : focusProject ? t('latestRunProject') : t('currentProject')}</span>
-            <h3 id="dashboard-continue-title">
-              {focusProject?.name ?? (projectLoading ? t('projectContextLoading') : projectError ? t('projectContextUnavailable') : t('noCurrentProject'))}
-            </h3>
-            {focusProject ? <small>{t('projectWorkspaceMeta', { framework: focusProject.framework_type, branch: focusProject.default_branch })}</small>
-              : <p>{projectLoading ? t('projectContextLoadingDescription') : projectError ? t('projectContextUnavailableDescription') : projects.length ? t('selectProjectDescription') : t('firstProjectDescription')}</p>}
-          </div>
-          {nextStep ? (
-            <div className="dashboard-next-step">
-              <span>{t('nextStep')}</span>
-              <button type="button" className="btn btn-primary" onClick={nextStep.onClick}>
-                <ArrowRight size={15} aria-hidden="true" />{nextStep.label}
-              </button>
-              {attentionItems[0] && focusProject && (
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('workspace', focusProject.id)}>
-                  <FolderGit2 size={14} aria-hidden="true" />{t('openWorkspace')}
-                </button>
-              )}
-            </div>
-          ) : focusProject ? (
-            <button type="button" className="btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
-              <FolderGit2 size={15} aria-hidden="true" />{t('openWorkspace')}
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
-              <FolderGit2 size={15} aria-hidden="true" />{canCreateFirstProject ? t('createFirstProject') : t('goToProjects')}
-            </button>
-          )}
+      <section className="dashboard-context-line" aria-labelledby="dashboard-continue-title">
+        <div className="dashboard-continue-project">
+          <span>{currentProject ? t('currentProject') : focusProject ? t('latestRunProject') : t('currentProject')}</span>
+          <h3 id="dashboard-continue-title">
+            {focusProject?.name ?? (projectLoading ? t('projectContextLoading') : projectError ? t('projectContextUnavailable') : t('noCurrentProject'))}
+          </h3>
+          {focusProject ? <small>{t('projectWorkspaceMeta', { framework: focusProject.framework_type, branch: focusProject.default_branch })}</small>
+            : <p>{projectLoading ? t('projectContextLoadingDescription') : projectError ? t('projectContextUnavailableDescription') : projects.length ? t('selectProjectDescription') : t('firstProjectDescription')}</p>}
         </div>
-        {journeyRun && <section className="dashboard-journey" aria-label={t('executionTrace')}>
-          <div className="dashboard-journey-heading">
-            <div><span>{t('executionTrace')} · {t('latestPersistedRun')}</span><code>{journeyRun.id}</code></div>
-            <div className="dashboard-journey-run-meta">
-              {journeyIsFixture && <span className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</span>}
-              <span className={`dashboard-journey-status is-${journeyRun.status.toLowerCase()}`}>{journeyRun.status}</span>
-              <button type="button" className="dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
-                {journeyRun.passed} / {journeyRun.failed}
-              </button>
-            </div>
-          </div>
-          {journeyExecutions.length ? <ol className="dashboard-journey-steps">
-            {journeyExecutions.map((execution) => {
-              const stepName = execution.nodeid.split('::').pop() || execution.nodeid;
-              return <li key={execution.id} className={`is-${execution.status.toLowerCase()}`}>
-                <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)}>
-                  <span className="dashboard-journey-marker" aria-hidden="true" />
-                  <span className="dashboard-journey-copy"><strong>{stepName}</strong><small>{execution.nodeid}</small></span>
-                  <code>{Math.round(execution.duration_ms)}ms</code>
-                </button>
-              </li>;
-            })}
-          </ol> : <p className="dashboard-journey-empty">{t('noExecutionSteps')}</p>}
-        </section>}
-        {currentProject && <>
-          <div className="dashboard-quick-start" aria-label={t('quickStart')}>
-            <span className="dashboard-quick-start-label">{t('quickStart')}</span>
-            <button type="button" onClick={() => onNavigate('requirements', currentProject.id)}><FileText size={14} aria-hidden="true" />{t('quickRequirements')}</button>
-            <button type="button" onClick={() => onNavigate('discovery', currentProject.id)}><Sparkles size={14} aria-hidden="true" />{t('quickExplore')}</button>
-            <button type="button" onClick={() => onNavigate('test_cases', currentProject.id)}><CheckSquare size={14} aria-hidden="true" />{t('quickTestCases')}</button>
-            {runnableCaseId && <button type="button" onClick={() => onOpenRunnableTest ? onOpenRunnableTest(runnableCaseId) : onNavigate('workspace', currentProject.id)}><PlayCircle size={14} aria-hidden="true" />{t('quickRunnableTest')}</button>}
-          </div>
-          <div className="dashboard-resume-tasks">
-            <div className="dashboard-resume-heading">
-              <strong>{t('unfinishedTasks')}</strong>
-              {visibleRecentTasks.length > 0 && <span>{visibleRecentTasks.length}</span>}
-            </div>
-            {tasksUnavailable ? <p className="dashboard-resume-empty">{t('recentTasksUnavailableMessage')}</p>
-              : loading ? <p className="dashboard-resume-empty" role="status">{t('resumeTasksLoading')}</p>
-                : visibleRecentTasks.length > 0 ? <div className="dashboard-resume-list">
-                  {visibleRecentTasks.map((task) => <button key={task.id} type="button" className="dashboard-resume-task" onClick={() => onOpenTask?.(task)}>
-                    <span><strong>{taskT(`type_${task.type}`)}</strong><small>{task.goal}</small>{task.id.toLowerCase().includes('fixture') && <small className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</small>}</span>
-                    <span className={`dashboard-attention-status is-${task.status.toLowerCase()}`}>{task.status}</span>
-                    <ArrowRight size={13} aria-hidden="true" />
-                  </button>)}
-                </div> : <p className="dashboard-resume-empty">{t('noUnfinishedTasks')}</p>}
-            {testCasesUnavailable && <p className="dashboard-runnable-note" role="status">{t('runnableTestsUnavailable')}</p>}
-          </div>
-        </>}
-      </section>
-
-      <section className="card dashboard-project-registry" aria-labelledby="dashboard-project-registry-title">
-        <header className="dashboard-project-registry-heading">
-          <div><h3 id="dashboard-project-registry-title">{t('projectRegistry')}</h3><span>{t('projectCount', { count: projects.length })}</span></div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate('projects')}>{t('viewAll')} <ArrowRight size={14} aria-hidden="true" /></button>
-        </header>
-        {projects.length ? <ul className="dashboard-project-registry-list">
-          {projects.slice(0, 5).map((project) => <li key={project.id} className={project.id === selectedProjectId ? 'is-current' : ''}>
-            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)}>
-              <span className="dashboard-project-mark"><FolderGit2 size={16} aria-hidden="true" /></span>
-              <span className="dashboard-project-copy"><strong>{project.name}</strong><small>{project.framework_type} · {project.default_branch}</small></span>
-              <span className="dashboard-project-action">{project.id === selectedProjectId ? t('currentProject') : t('openWorkspace')}</span>
-              <ArrowRight size={14} aria-hidden="true" />
+        {nextStep ? (
+          <div className="dashboard-next-step">
+            <span>{t('nextStep')}</span>
+            <button type="button" className="btn btn-primary" onClick={nextStep.onClick}>
+              <ArrowRight size={15} aria-hidden="true" />{nextStep.label}
             </button>
-          </li>)}
-        </ul> : <p className="dashboard-project-registry-empty">{projectLoading ? t('projectContextLoading') : projectError ? t('projectContextUnavailableDescription') : t('firstProjectDescription')}</p>}
+          </div>
+        ) : focusProject ? (
+          <button type="button" className="btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
+            <FolderGit2 size={15} aria-hidden="true" />{t('openWorkspace')}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
+            <FolderGit2 size={15} aria-hidden="true" />{canCreateFirstProject ? t('createFirstProject') : t('goToProjects')}
+          </button>
+        )}
       </section>
 
       <section className="dashboard-signals card" aria-label={t('executionSignals')}>
@@ -402,8 +332,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </section>
 
-      <div className="dashboard-workbench-grid">
-        <section className="dashboard-attention card" aria-labelledby="dashboard-attention-title">
+      <div className="dashboard-primary-grid dashboard-composite">
+        <section className={`dashboard-trend${!loading && !runsUnavailable && trendPoints.length <= 1 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-trend-title">
+          <div className="card-header">
+            <div>
+              <h3 id="dashboard-trend-title" className="card-title">{t('executionTrend')}</h3>
+              <p className="card-subtitle">{t('executionTrendSubtitle')}</p>
+            </div>
+          </div>
+          <div className="card-body dashboard-trend-body">
+            {trendPoints.length > 1 ? (
+              <TrendChart points={trendPoints} ariaLabel={t('executionTrend')} format={(value) => `${value}%`} height={150} />
+            ) : (
+              <div className="chart-insufficient">
+                <Activity size={16} strokeWidth={1.6} aria-hidden="true" />
+                <span>{t('trendInsufficient')}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className={`dashboard-attention${sourcesUnavailable ? ' is-unavailable' : ''}`} aria-labelledby="dashboard-attention-title">
           <div className="dashboard-attention-heading">
             <div>
               <h3 id="dashboard-attention-title">{t('needsAttention')}</h3>
@@ -441,35 +390,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           )}
         </section>
-
-        <section className="dashboard-workflow card" aria-labelledby="dashboard-workflow-title">
-          <div className="dashboard-workflow-heading">
-            <div>
-              <h3 id="dashboard-workflow-title">{t('workflowHeading')}</h3>
-              <p className="card-subtitle">{t('lifecycleFlowSubtitle')}</p>
-            </div>
-          </div>
-          <div className="dashboard-workflow-groups">
-            {workflowGroups.map((group) => (
-              <section className="dashboard-workflow-group" key={group.key} aria-label={group.title}>
-                <h4>{group.title}</h4>
-                <div className="dashboard-workflow-links">
-                  {group.items.map((item) => (
-                    <button key={item.tab} type="button" className="dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
-                      <span className="link-row-icon"><item.Icon size={14} strokeWidth={1.7} aria-hidden="true" /></span>
-                      <span className="link-row-title">{item.label}</span>
-                      <ArrowRight size={13} aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </section>
       </div>
 
-      <div className="dashboard-evidence-grid">
-        <section className="card dashboard-recent-runs" aria-labelledby="dashboard-recent-runs-title">
+      <div className="dashboard-secondary-grid dashboard-composite">
+        <section className={`dashboard-recent-runs${!loading && !runsUnavailable && recentRuns.length === 0 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-recent-runs-title">
           <div className="card-header">
             <div>
               <h3 id="dashboard-recent-runs-title" className="card-title">{t('recentRuns')}</h3>
@@ -479,6 +403,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               {t('viewAll')} <ArrowRight size={14} strokeWidth={1.7} />
             </button>
           </div>
+          {journeyRun && <section className="dashboard-journey" aria-label={t('executionTrace')}>
+            <div className="dashboard-journey-heading">
+              <div><span>{t('executionTrace')} · {t('latestPersistedRun')}</span><code>{journeyRun.id}</code></div>
+              <div className="dashboard-journey-run-meta">
+                {journeyIsFixture && <span className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</span>}
+                <span className={`dashboard-journey-status is-${journeyRun.status.toLowerCase()}`}>{journeyRun.status}</span>
+                <button type="button" className="dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
+                  {journeyRun.passed} / {journeyRun.failed}
+                </button>
+              </div>
+            </div>
+            {journeyExecutions.length ? <ol className="dashboard-journey-steps">
+              {journeyExecutions.map((execution) => {
+                const stepName = execution.nodeid.split('::').pop() || execution.nodeid;
+                return <li key={execution.id} className={`is-${execution.status.toLowerCase()}`}>
+                  <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)}>
+                    <span className="dashboard-journey-marker" aria-hidden="true" />
+                    <span className="dashboard-journey-copy"><strong>{stepName}</strong><small>{execution.nodeid}</small></span>
+                    <code>{Math.round(execution.duration_ms)}ms</code>
+                  </button>
+                </li>;
+              })}
+            </ol> : <p className="dashboard-journey-empty">{t('noExecutionSteps')}</p>}
+          </section>}
           {loading ? (
             <div className="chart-insufficient dashboard-loading-evidence" role="status"><Activity size={16} aria-hidden="true" />{t('loadingRuns')}</div>
           ) : recentRuns.length > 0 ? (
@@ -524,25 +472,73 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           )}
         </section>
 
-        <section className="card dashboard-trend" aria-labelledby="dashboard-trend-title">
-          <div className="card-header">
-            <div>
-              <h3 id="dashboard-trend-title" className="card-title">{t('executionTrend')}</h3>
-              <p className="card-subtitle">{t('executionTrendSubtitle')}</p>
-            </div>
-          </div>
-          <div className="card-body dashboard-trend-body">
-            {trendPoints.length > 1 ? (
-              <TrendChart points={trendPoints} ariaLabel={t('executionTrend')} format={(value) => `${value}%`} height={150} />
-            ) : (
-              <div className="chart-insufficient">
-                <Activity size={16} strokeWidth={1.6} aria-hidden="true" />
-                <span>{t('trendInsufficient')}</span>
+        <div className="dashboard-support-lists">
+          <section className="dashboard-workflow" aria-labelledby="dashboard-workflow-title">
+            <div className="dashboard-workflow-heading">
+              <div>
+                <h3 id="dashboard-workflow-title">{t('workflowHeading')}</h3>
+                <p className="card-subtitle">{t('lifecycleFlowSubtitle')}</p>
               </div>
-            )}
-          </div>
-        </section>
+            </div>
+            <div className="dashboard-workflow-groups">
+              {workflowGroups.map((group) => (
+                <section className="dashboard-workflow-group" key={group.key} aria-label={group.title}>
+                  <h4>{group.title}</h4>
+                  <div className="dashboard-workflow-links">
+                    {group.items.map((item) => (
+                      <button key={item.tab} type="button" className="dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
+                        <span className="link-row-icon"><item.Icon size={14} strokeWidth={1.7} aria-hidden="true" /></span>
+                        <span className="link-row-title">{item.label}</span>
+                        <ArrowRight size={13} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </section>
+          {currentProject && <>
+            <div className="dashboard-quick-start" aria-label={t('quickStart')}>
+              <span className="dashboard-quick-start-label">{t('quickStart')}</span>
+              <button type="button" onClick={() => onNavigate('discovery', currentProject.id)}><Sparkles size={14} aria-hidden="true" />{t('quickExplore')}</button>
+              {runnableCaseId && <button type="button" onClick={() => onOpenRunnableTest ? onOpenRunnableTest(runnableCaseId) : onNavigate('workspace', currentProject.id)}><PlayCircle size={14} aria-hidden="true" />{t('quickRunnableTest')}</button>}
+            </div>
+            <div className="dashboard-resume-tasks">
+              <div className="dashboard-resume-heading">
+                <strong>{t('unfinishedTasks')}</strong>
+                {visibleRecentTasks.length > 0 && <span>{visibleRecentTasks.length}</span>}
+              </div>
+              {tasksUnavailable ? <p className="dashboard-resume-empty">{t('recentTasksUnavailableMessage')}</p>
+                : loading ? <p className="dashboard-resume-empty" role="status">{t('resumeTasksLoading')}</p>
+                  : visibleRecentTasks.length > 0 ? <div className="dashboard-resume-list">
+                    {visibleRecentTasks.map((task) => <button key={task.id} type="button" className="dashboard-resume-task" onClick={() => onOpenTask?.(task)}>
+                      <span><strong>{taskT(`type_${task.type}`)}</strong><small>{task.goal}</small>{task.id.toLowerCase().includes('fixture') && <small className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</small>}</span>
+                      <span className={`dashboard-attention-status is-${task.status.toLowerCase()}`}>{task.status}</span>
+                      <ArrowRight size={13} aria-hidden="true" />
+                    </button>)}
+                  </div> : <p className="dashboard-resume-empty">{t('noUnfinishedTasks')}</p>}
+              {testCasesUnavailable && <p className="dashboard-runnable-note" role="status">{t('runnableTestsUnavailable')}</p>}
+            </div>
+          </>}
+        </div>
       </div>
+
+      <section className="card dashboard-project-registry" aria-labelledby="dashboard-project-registry-title">
+        <header className="dashboard-project-registry-heading">
+          <div><h3 id="dashboard-project-registry-title">{t('projectRegistry')}</h3><span>{t('projectCount', { count: projects.length })}</span></div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate('projects')}>{t('viewAll')} <ArrowRight size={14} aria-hidden="true" /></button>
+        </header>
+        {projects.length ? <ul className="dashboard-project-registry-list">
+          {projects.slice(0, 5).map((project) => <li key={project.id} className={project.id === selectedProjectId ? 'is-current' : ''}>
+            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)}>
+              <span className="dashboard-project-mark"><FolderGit2 size={16} aria-hidden="true" /></span>
+              <span className="dashboard-project-copy"><strong>{project.name}</strong><small>{project.framework_type} · {project.default_branch}</small></span>
+              <span className="dashboard-project-action">{project.id === selectedProjectId ? t('currentProject') : t('openWorkspace')}</span>
+              <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          </li>)}
+        </ul> : <p className="dashboard-project-registry-empty">{projectLoading ? t('projectContextLoading') : projectError ? t('projectContextUnavailableDescription') : t('firstProjectDescription')}</p>}
+      </section>
 
       <footer className="dashboard-boundary-note">{t('qualityBoundary')}</footer>
     </div>
