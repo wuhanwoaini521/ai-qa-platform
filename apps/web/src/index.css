@@ -1047,20 +1047,28 @@ button, input, select, textarea {
 .content-viewport.is-workspace .workspace-shell {
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 @media (min-width: 821px) {
-  .content-viewport.is-workspace .workspace-shell { grid-template-rows: auto auto minmax(0, 1fr); }
+  .content-viewport.is-workspace .workspace-shell { grid-template-rows: auto auto auto minmax(0, 1fr); }
+  .content-viewport.is-workspace .workspace-shell.is-empty { grid-template-rows: auto minmax(0, 1fr); }
 }
+
+.content-viewport.is-workspace .workspace-shell.is-empty { grid-template-rows: auto minmax(0, 1fr); }
 
 .content-viewport.is-workspace-result .workspace-shell {
   height: auto;
   min-height: 100%;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto auto auto;
 }
 
-.content-viewport.is-workspace .workspace-grid:not(.is-debug-view) {
+.content-viewport.is-workspace .workspace-grid:not(.is-result-view) {
+  min-height: 0;
+  height: auto;
+}
+
+.content-viewport.is-workspace .workspace-shell.has-project > .workspace-grid:not(.is-result-view) {
   min-height: 0;
   height: auto;
 }
@@ -6316,6 +6324,65 @@ button, input, select, textarea {
   --sidebar-w: 236px;
 }
 
+:root[data-theme='light'] .app-frame.is-dashboard-route {
+  color-scheme: light;
+  --dashboard-canvas: #f4f3f0;
+  --dashboard-rail: #f7f6f3;
+  --dashboard-surface: #ffffff;
+  --dashboard-raised: #ffffff;
+  --dashboard-inset: #f7f6f3;
+  --dashboard-hover: #f1efeb;
+  --dashboard-line: #e6e3de;
+  --dashboard-line-strong: #d8d4ce;
+  --dashboard-line-soft: #efece7;
+  --dashboard-scrollbar: #b8b3ab;
+  --dashboard-ink: #17181a;
+  --dashboard-ink-soft: #3f4247;
+  --dashboard-ink-muted: #6e7176;
+  --dashboard-ink-faint: #85878b;
+  --dashboard-mint: #c2410c;
+  --dashboard-mint-soft: #fff1e7;
+  --dashboard-blue: var(--accent-blue);
+  --dashboard-blue-soft: var(--accent-blue-soft);
+  --dashboard-amber: var(--accent-amber);
+  --dashboard-amber-soft: var(--accent-amber-soft);
+  --dashboard-red: var(--accent-red);
+  --dashboard-red-soft: var(--accent-red-soft);
+  --dashboard-violet: var(--accent-violet);
+  --dashboard-violet-soft: var(--accent-violet-soft);
+  --dashboard-focus: rgba(194, 65, 12, 0.28);
+  --canvas: var(--dashboard-canvas);
+  --surface-frame: var(--dashboard-rail);
+  --surface-toolbar: var(--dashboard-rail);
+  --surface: var(--dashboard-surface);
+  --surface-raised: var(--dashboard-raised);
+  --surface-field: var(--dashboard-raised);
+  --surface-inset: var(--dashboard-inset);
+  --surface-hover: var(--dashboard-hover);
+  --surface-active: var(--dashboard-inset);
+  --line: var(--dashboard-line);
+  --line-soft: var(--dashboard-line-soft);
+  --line-strong: var(--dashboard-line-strong);
+  --ink: var(--dashboard-ink);
+  --ink-soft: var(--dashboard-ink-soft);
+  --ink-muted: var(--dashboard-ink-muted);
+  --ink-faint: var(--dashboard-ink-faint);
+  --accent-blue: #526783;
+  --accent-blue-soft: #e8edf3;
+  --accent-green: #287a4b;
+  --accent-green-soft: #e8f3ec;
+  --accent-amber: #93600a;
+  --accent-amber-soft: #f8f0df;
+  --accent-red: #b42318;
+  --accent-red-soft: #fbe9e7;
+  --accent-violet: #7051a3;
+  --accent-violet-soft: #f0ebf8;
+  --brand: var(--dashboard-mint);
+  --primary: var(--dashboard-mint);
+  --primary-hover: #9a3412;
+  --ui-focus: var(--dashboard-focus);
+}
+
 .app-frame.is-dashboard-route .app-topbar {
   color: var(--dashboard-ink);
   border-color: color-mix(in srgb, var(--dashboard-line) var(--glass-border-mix), transparent);
@@ -6545,20 +6612,27 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-signal-value { color: var(--dashboard-ink); font-size: var(--dashboard-type-large); font-variant-numeric: tabular-nums; }
 .app-frame.is-dashboard-route .dashboard-signal-detail { color: var(--dashboard-ink-muted); font-size: var(--dashboard-type-meta); }
 .app-frame.is-dashboard-route .dashboard-signal-detail strong { color: var(--dashboard-ink-soft); font-size: var(--dashboard-type-meta); }
-.app-frame.is-dashboard-route .dashboard-composite { overflow: visible; }
+.app-frame.is-dashboard-route .dashboard-composite { overflow: visible; border: 0; border-radius: 0; background: transparent; }
 .app-frame.is-dashboard-route .dashboard-primary-grid,
 .app-frame.is-dashboard-route .dashboard-secondary-grid {
   display: grid;
   width: 100%;
-  max-width: 1440px;
   min-width: 0;
-  margin-inline: auto;
+  margin-inline: 0;
 }
 .app-frame.is-dashboard-route .dashboard-primary-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 360px); }
 .app-frame.is-dashboard-route .dashboard-secondary-grid { grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); }
 .app-frame.is-dashboard-route .dashboard-primary-grid.dashboard-composite,
-.app-frame.is-dashboard-route .dashboard-secondary-grid.dashboard-composite { gap: 0; }
-.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-trend { border-left: 0; }
+.app-frame.is-dashboard-route .dashboard-secondary-grid.dashboard-composite { gap: var(--sp-3); }
+.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-trend,
+.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-attention,
+.app-frame.is-dashboard-route .dashboard-secondary-grid > .dashboard-recent-runs,
+.app-frame.is-dashboard-route .dashboard-secondary-grid > .dashboard-support-lists {
+  border: 1px solid var(--dashboard-line);
+  border-radius: var(--r-card);
+  background: var(--dashboard-surface);
+}
+.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-trend { border-left: 1px solid var(--dashboard-line); }
 .app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-attention { border-left: 1px solid var(--dashboard-line); }
 .app-frame.is-dashboard-route .dashboard-attention,
 .app-frame.is-dashboard-route .dashboard-workflow,
@@ -6573,7 +6647,7 @@ button, input, select, textarea {
   min-width: 0;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border-left: 1px solid var(--dashboard-line);
+  border: 1px solid var(--dashboard-line);
 }
 .app-frame.is-dashboard-route .dashboard-support-lists > .dashboard-workflow,
 .app-frame.is-dashboard-route .dashboard-support-lists > .dashboard-quick-start,
@@ -6664,7 +6738,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table td { color: var(--dashboard-ink-soft); border-color: var(--dashboard-line-soft); font-size: var(--dashboard-type-body); }
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table tbody tr:hover td { background: var(--dashboard-hover); }
 .app-frame.is-dashboard-route .dashboard-run-link { color: var(--dashboard-blue); }
-.app-frame.is-dashboard-route .dashboard-trend { border-left: 0; }
+.app-frame.is-dashboard-route .dashboard-trend { border-left: 1px solid var(--dashboard-line); }
 .app-frame.is-dashboard-route .dashboard-trend-body { min-height: 104px; padding: var(--sp-2) var(--sp-4); color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-trend .chart-insufficient { color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-recent-runs.is-ready-empty .async-state {

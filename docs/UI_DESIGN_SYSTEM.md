@@ -8,15 +8,15 @@ React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用�
 充裕留白；导航常驻文字标签；主操作使用近黑实心按钮；强调色只用一支暖橙，状态色以柔和胶囊表达。
 整体观感对齐产品参考稿：安静、明亮、信息优先，不做深色主题或霓虹装饰。
 
-**Dashboard route exception:** `/` alone uses Graphite across its route-local shell and Dashboard content, applied through `.app-frame.is-dashboard-route` and local `--dashboard-*` tokens. Keep shared `:root` values and `.app-frame.is-graphite` aliases unchanged; every other route retains Warm Light. Dashboard evidence surfaces stay opaque, with mint used sparingly and red/amber/blue retaining their status meanings.
+**Dashboard route styling:** `/` keeps route-local `--dashboard-*` tokens for its layout and visual hierarchy, but follows the selected app theme: Warm Light in light mode and the shared dark palette in dark mode. Keep shared `:root` values and `.app-frame.is-graphite` aliases unchanged. Dashboard evidence surfaces stay opaque, with the warm accent used sparingly and red/amber/blue retaining their status meanings.
 
 ## 视觉基线
 
-- 默认页面使用单一 Warm Light 外观：暖中性画布（`#f4f3f0`）、白色内容卡片、近黑正文；仅 `/` Dashboard 例外，由 `.app-frame.is-dashboard-route` 限定 Graphite shell 与内容主题。
+- 默认页面使用单一 Warm Light 外观：暖中性画布（`#f4f3f0`）、白色内容卡片、近黑正文；`/` Dashboard 可保留局部布局 token，但颜色随系统设置的浅色/深色外观切换，与其他页面保持一致。
 - App Shell 统一为左侧常驻文字导航（品牌 → 搜索 → 主导航 → 平台分组 → 设置/语言），所有路由共用同一外壳；不再按路由切换成 64px 图标栏或另一套侧栏。顶部工具栏与内容保持不透明，优先保证阅读对比度。
 - 运行状态胶囊只在 URL 明确带有 `runId` 时出现，读取现有 `useRunStore`，并返回到已有 Workspace 结果/失败面板；不推断“最近”或“最新”运行。
 - 阴影、渐变和高饱和装饰用于层级提示，不替代正文对比度或状态文字。
-- `--graphite-*` 共享别名保留原名并继续使用现有全局值；`/` Dashboard 使用 `.app-frame.is-dashboard-route` 内的 `--dashboard-*` 局部 token 覆盖 route 语义，不改 `:root` 或 `.app-frame.is-graphite` 的共享值。
+- `--graphite-*` 共享别名保留原名并继续使用现有全局值；`/` Dashboard 使用 `.app-frame.is-dashboard-route` 内的 `--dashboard-*` 局部 token 覆盖 route 语义，并随 `data-theme` 适配浅色或深色，不改共享 root 值或 `.app-frame.is-graphite` 的共享值。
 - 旧 `--ui-*` 与 `--text-*` 别名族统一指向同一套浅色调色板；`--ui-indigo*` 不再引入第二种品牌色，只作暖橙强调的别名。
 
 ## 设计 Tokens

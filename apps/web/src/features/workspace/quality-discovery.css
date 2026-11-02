@@ -1,4 +1,4 @@
-.quality-discovery { display: grid; gap: 16px; max-width: 1360px; margin: 0 auto; padding: 4px 0 24px; color: var(--ink); font-size: 13px; }
+.quality-discovery { display: grid; align-content: start; gap: 16px; min-height: 100%; width: 100%; margin: 0; padding: 4px 0 24px; color: var(--ink); font-size: 13px; }
 .qd-scope { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 0; padding: 12px; background: var(--surface-inset); border-radius: 8px; }
 .qd-scope dt { color: var(--ink-muted); font-size: 12px; margin-bottom: 5px; }
 .qd-scope dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; }

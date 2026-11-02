@@ -161,3 +161,19 @@ export function configForRerun(run: TestRun, fallback: WorkspaceRunConfig): Work
     workers: run.parallel_workers ?? fallback.workers,
   };
 }
+
+export type WorkspaceFailureAvailability = 'checking' | 'unknown' | 'available' | 'none';
+
+export function workspaceFailureAvailability(
+  dataLoaded: boolean,
+  dataLoading: boolean,
+  hasLoadError: boolean,
+  failureCount: number,
+  runStatus?: string | null,
+): WorkspaceFailureAvailability {
+  if (hasLoadError) return 'unknown';
+  if (!dataLoaded || dataLoading) return 'checking';
+  return failureCount > 0 || runStatus === 'FAILED' || runStatus === 'ERROR'
+    ? 'available'
+    : 'none';
+}

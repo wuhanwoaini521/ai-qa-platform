@@ -14,6 +14,13 @@
   },
   "chooseProject": "未选择项目",
   "openWorkflow": "查看进度",
+  "tools": { "label": "辅助工具", "context": "上下文" },
+  "currentObject": { "requirement": "当前需求", "case": "当前用例" },
+  "failureStatus": {
+    "handle": "失败处理",
+    "checking": "正在检查失败…",
+    "unknown": "失败状态待确认"
+  },
   "tabs": {
     "label": "工作区视图",
     "requirement": "需求",

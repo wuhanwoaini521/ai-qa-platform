@@ -2,6 +2,20 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
+## 当前活动里程碑：Workspace 桌面布局 m01207（2026-11-02）
+
+- **当前目标**：按用户 m01207 将 Workspace 改成紧凑标题行、等宽五阶段导航和单行内容工具栏。该布局要求取代旧 m00337 视觉验收，但保留其阶段、模式、画布、检查器、上下文和运行详情交互。
+- **代码**：`apps/web/src/features/workspace/WorkspacePage.tsx` 和 `apps/web/src/features/workspace/workspace.css`。标题行右侧是 Canvas / Context / Inspector / 条件式 View Progress；工具栏左为模式，右为 REQ/TC/返回需求；删除重复阶段标题与“工作模式/辅助工具”标签。颜色、字体、图标、圆角不变。
+- **验证**：`pnpm --dir apps/web test` PASS（302/302），`pnpm --dir apps/web build` PASS（TypeScript + Vite 6.4.3，3599 modules；有既存大 chunk 警告），`git diff --check` PASS。Playwright 1.62/Chromium 151 在既有本地服务上重新验收 1280×800、1440×900、1920×1080：5 阶段、subtitle、标题工具、无横向溢出、焦点轮廓可见；当前 DOM 与截图对应最新源码。只读既有 PASS/FAILED 运行验证 View Progress 和失败界面；在 1440×900 用现有 FAILED 运行点击“失败处理”，只切换本地 stage/context 并加载只读失败数据；无 run/task/failure 域写入。进度面板已等至稳定态。运行中外观由现有 PASS 运行的 GET 响应合成，Stop 未点击、无 run endpoint 非 GET 请求；只证明 UI 呈现，不证明真实运行生命周期。无 page/console 错误。
+- **截图**：`.ai-runs/2026-11-02-workspace-navigation-hierarchy/screenshots/m01207-before-{1280x800,1440x900}.png`、`m01207-after-{1280x800,1440x900}.png`、`m01207-after-{1280x800,1440x900}-with-run.png`；修正版焦点/悬停/选中态：`m01207-focus-1280x800.png`、`m01207-hover-1280x800.png`、`m01207-selected-1440x900.png`。
+- **质量审查**：独立代码复核为 OK with notes（先前发现的 conditional View Progress 与 Workspace subtitle 已恢复）；design-director 视觉门 **PASS**；最终 release-engineer integration review **PASS**。真实 RUNNING 生命周期和 Stop 行为未测（遵循用户边界）。
+- **Git 边界**：分支 `handoff/company-pc-2026-10-29`，HEAD `0adbdce59c8091181788a8db3dca0d6f028cbd38`。保留此前用户授权的其他修改和所有 `.ai-runs/**`、`runtime/backups/**`；未 commit/push/merge/deploy。
+- **待续/UNKNOWN**：原 m01946 浏览器 harness 与 payload 无可复用记录，因此其原始脚本契约仍 UNKNOWN。已依据用户停点明确的无失败/失败/运行中展示意图，独立构建当前 m01207 浏览器矩阵：PASS/FAILED 用既有记录只读，FAILED 的失败处理按钮只切换本地 stage/context（相关 API 请求为 GET），RUNNING 仅用 GET 拦截合成。无已有活跃 run，因此真实 RUNNING 生命周期未验证；按用户要求未启动/停止运行或服务。
+
+**m01207 authoritative handoff:** This 2026-11-02 entry is the only current status. The archived 2026-10-29 and earlier sections below are historical snapshots and must not be treated as current branch, code, verification, or open-task status unless a later user message explicitly reactivates them.
+
+## Historical handoff archive — do not use as current status
+
 ## Current styling remediation handoff
 
 User reported Workspace styling breakage and provided the route `/workspace/proj_golden_shop_v1?...&stage=automation&view=code`. Starting HEAD: `833cac1` on `main`. Initial CSS-cycle/theme scoping repair was insufficient. Real browser inspection (Chrome 150, temporary profile/CDP; active route at 1200×853) found the actual additional defects: stage-nav markup had no component styles, desktop `.workspace-shell` grid still allocated only two rows so the new stage navigation collapsed to zero height and overlapped the workspace, header flex children collapsed the title/mode controls, and `journey`/`journeyFacts`/`stages` localization keys were missing. These have now been repaired in `apps/web/src/features/workspace/workspace.css`, `apps/web/src/index.css`, and both `apps/web/src/i18n/locales/{zh-CN,en}/workspace.json`; prior `AppLayout.tsx`, `index.css`, and design-system regression changes remain. Stage nav now has six readable desktop cards; heading uses stable grid columns; shell reserves heading + stage nav + content rows. No business logic or API behavior changed.

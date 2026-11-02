@@ -14,6 +14,13 @@
   },
   "chooseProject": "No project selected",
   "openWorkflow": "View progress",
+  "tools": { "label": "Workspace tools", "context": "Context" },
+  "currentObject": { "requirement": "Current requirement", "case": "Current test case" },
+  "failureStatus": {
+    "handle": "Failure handling",
+    "checking": "Checking failures…",
+    "unknown": "Failure status unconfirmed"
+  },
   "tabs": {
     "label": "Workspace views",
     "requirement": "Requirement",

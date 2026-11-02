@@ -9,6 +9,7 @@ const {
   terminalRunStatus,
   workspaceGoalTarget,
   workspaceRunDockPlacement,
+  workspaceFailureAvailability,
 } = await import('../src/features/workspace/workspaceRunModel.ts');
 
 test('run dock opens below a top trigger and stays within narrow viewport gutters', () => {
@@ -108,4 +109,18 @@ test('workspace AI action defaults to the selected scope and generates unbound a
   assert.match(defaultWorkspaceGoal({ requirementId: 'req-1', stage: 'requirement', hasAutomation: false }), /需求测试完整/);
   assert.match(defaultWorkspaceGoal({ testCaseId: 'case-1', stage: 'cases', hasAutomation: false }), /生成自动化并运行/);
   assert.match(defaultWorkspaceGoal({ testCaseId: 'case-1', stage: 'cases', hasAutomation: true }), /运行当前用例/);
+});
+
+test('failure availability remains unresolved while context data is loading or broken', () => {
+  assert.equal(workspaceFailureAvailability(false, true, false, 0, 'FAILED'), 'checking');
+  assert.equal(workspaceFailureAvailability(false, false, true, 0), 'unknown');
+  assert.equal(workspaceFailureAvailability(false, false, false, 0), 'checking');
+});
+
+test('failure handling appears only after records load or the selected run has failed', () => {
+  assert.equal(workspaceFailureAvailability(true, false, false, 1, 'PASSED'), 'available');
+  assert.equal(workspaceFailureAvailability(true, false, false, 0, 'FAILED'), 'available');
+  assert.equal(workspaceFailureAvailability(true, false, false, 0, 'ERROR'), 'available');
+  assert.equal(workspaceFailureAvailability(true, false, false, 0, 'PASSED'), 'none');
+  assert.equal(workspaceFailureAvailability(true, false, false, 0, 'CANCELLED'), 'none');
 });
