@@ -2532,7 +2532,7 @@
 }
 
 @media (min-width: 821px) {
-  .workspace-shell .recorder-page.is-embedded { gap: var(--sp-3); }
+  .workspace-shell .recorder-page.is-embedded { gap: var(--sp-3); padding: var(--sp-3); }
   .workspace-shell .recorder-page.is-embedded .recorder-page-header { gap: var(--sp-2); }
   .workspace-shell .recorder-page.is-embedded .recorder-actions { gap: var(--sp-2); }
   .workspace-shell .recorder-page.is-embedded .recorder-actions .btn { min-height: 34px; padding: 6px 10px; font-size: 12px; }
