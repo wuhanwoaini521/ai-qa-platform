@@ -14,10 +14,13 @@ import { AIStatusResponse, RunnerProfile } from '../types';
 import { api } from '../api/client';
 import { SUPPORTED_LANGUAGES } from '../i18n';
 import { usePreferences } from '../app/Preferences';
+import type { WorkspaceContext } from '../app/workspaceContext';
+import { RunStatusIsland } from './RunStatusIsland';
 
 interface HeaderProps {
   title: string;
   selectedProjectId: string | null;
+  selectedRunContext?: WorkspaceContext | null;
   onSignOut: () => void;
 }
 
@@ -28,6 +31,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   title,
   selectedProjectId,
+  selectedRunContext,
   onSignOut,
 }) => {
   const { t } = useTranslation('common');
@@ -97,6 +101,12 @@ export const Header: React.FC<HeaderProps> = ({
 
         <h1 className="topbar-page-title">{title}</h1>
       </div>
+
+      {selectedRunContext?.runId && (
+        <div className="topbar-run-island-slot">
+          <RunStatusIsland context={selectedRunContext} />
+        </div>
+      )}
 
       <div className="topbar-utility-section">
         <div className="topbar-status" ref={panelRef}>

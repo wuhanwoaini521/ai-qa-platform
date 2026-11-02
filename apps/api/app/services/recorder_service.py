@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import re
 import time
@@ -19,7 +20,14 @@ from qa_core.healing.locator_intelligence import rank_locator_candidates
 
 from app.ports.browser_runtime import BrowserRuntime, BrowserRuntimeSession
 from app.ports.repository_scope import RepositoryScopeFactory
+from app.services.recorder_variables import extract_variables, split_origin, variable_for_fill
 from app.settings import get_config
+
+RECORDER_STEP_COMMAND_ACTIONS = frozenset({"add_step", "replace_steps", "edit_step", "delete_step", "reorder"})
+RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS = frozenset({"navigate"})
+RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS = frozenset({"back", "forward", "reload"})
+RECORDER_NAVIGATION_COMMAND_ACTIONS = RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS | RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS
+MAX_RECORDER_COMMAND_HISTORY = 1024
 
 RECORDER_INIT_SCRIPT = r"""(() => {
   if (window.__qaRecorderInstalled) return;
@@ -240,6 +248,7 @@ class RecorderStep(BaseModel):
         "assert_url",
         "assert_title",
         "assert_count",
+        "condition",
     ]
     locator: RecorderLocator | None = None
     frame_path: list[str] = Field(default_factory=list, max_length=8)
@@ -252,6 +261,21 @@ class RecorderStep(BaseModel):
     description: str = Field(default="", max_length=160)
     locator_decision: dict[str, Any] | None = None
     evidence: RecorderStepEvidence | None = None
+    # Conditional step authored by the flow canvas: runs `then_steps` when the condition matches.
+    condition_kind: Literal["css", "text", "test_id"] = "css"
+    condition_value: str | None = Field(default=None, max_length=500)
+    then_steps: list["RecorderStep"] = Field(default_factory=list, max_length=50)
+    else_steps: list["RecorderStep"] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_condition_shape(self):
+        if self.action == "condition" and not (self.condition_value or "").strip():
+            raise ValueError("Condition step requires a condition value")
+        if self.action != "condition" and (self.then_steps or self.else_steps):
+            raise ValueError("Only condition steps may carry branches")
+        if self.id in {step.id for step in (*self.then_steps, *self.else_steps)}:
+            raise ValueError("Condition branches may not reuse the parent step id")
+        return self
 
     @model_validator(mode="after")
     def redact_private_values(self):
@@ -344,6 +368,9 @@ class RecorderStepEvidence(BaseModel):
         return self
 
 
+RecorderStep.model_rebuild()
+
+
 class RecorderLocatorAIResponse(BaseModel):
     candidate_id: str | None = None
     alternative_candidate_id: str | None = None
@@ -368,11 +395,22 @@ class RecorderSessionCreate(BaseModel):
         return value
 
 
+class RecorderMockResponse(BaseModel):
+    """A captured API response replayed through page.route during the generated test."""
+
+    url: str = Field(min_length=1, max_length=2000)
+    method: str = Field(default="GET", max_length=20)
+    status: int = Field(default=200, ge=100, le=599)
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = Field(default=None, max_length=100000)
+
+
 class RecorderGenerateRequest(BaseModel):
     case_name: str = "recorded_case"
     file_path: str = "tests/test_recorded_case.py"
     test_name: str = "test_recorded_case"
     steps: list[RecorderStep] = Field(max_length=500)
+    mock_responses: list[RecorderMockResponse] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def reject_embedded_sensitive_values(self):
@@ -538,6 +576,14 @@ def _step_evidence(event: dict[str, Any], selection: dict[str, Any]) -> Recorder
     )
 
 
+class RecorderStreamReplaced(RuntimeError):
+    """Raised when a WebSocket stream attempts work after a newer stream took ownership."""
+
+
+class RecorderStepsRevisionConflict(ValueError):
+    """Raised when a replace_steps command is based on an older canonical revision."""
+
+
 @dataclass
 class RecorderSession:
     id: str
@@ -556,6 +602,10 @@ class RecorderSession:
     pending_pick_action: str = "click"
     last_locator_verification: dict[str, Any] | None = None
     steps_revision: int = 0
+    applied_step_command_ids: dict[str, None] = field(default_factory=dict)
+    processed_navigation_command_ids: dict[str, None] = field(default_factory=dict)
+    stream_generation: int = 0
+    closed: bool = False
 
     @property
     def browser_session_id(self) -> str:
@@ -639,6 +689,49 @@ class BrowserRecorderService:
         }
 
     @staticmethod
+    def api_calls(session: RecorderSession) -> list[dict[str, Any]]:
+        """Normalise the runtime's XHR/fetch traffic into reviewable API calls.
+
+        Only browser-observed network exists here: no recorder-side proxy, no second capture. Entries
+        are redacted on the way out, de-duplicated by (method, url, status) and bounded.
+        """
+        runtime_session = getattr(session, "runtime_session", None)
+        entries = getattr(runtime_session, "network", []) or []
+        calls: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, Any]] = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("resource_type") or "") not in {"xhr", "fetch"}:
+                continue
+            method = str(entry.get("method") or "GET").upper()
+            if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+                continue
+            url = str(entry.get("url") or "")
+            if not url.startswith(("http://", "https://")):
+                continue
+            status = entry.get("status")
+            key = (method, url, status)
+            if key in seen:
+                continue
+            seen.add(key)
+            response_headers = entry.get("response_headers") or {}
+            calls.append(
+                {
+                    "id": hashlib.sha256(f"{method}\0{url}\0{status}".encode("utf-8")).hexdigest()[:12],
+                    "method": method,
+                    "url": SensitiveRedactor.redact_url(url),
+                    "status": status,
+                    "failed": bool(entry.get("failed")),
+                    "request_headers": entry.get("request_headers") or {},
+                    "request_body": entry.get("request_body"),
+                    "response_content_type": str(response_headers.get("content-type") or "")[:120],
+                    "response_body": entry.get("response_body"),
+                }
+            )
+        return calls[-50:]
+
+    @staticmethod
     def element_evidence_bundle(session: RecorderSession) -> dict[str, Any]:
         steps = []
         for raw_step in getattr(session, "steps", []):
@@ -655,11 +748,13 @@ class BrowserRecorderService:
                     not isinstance(value, str)
                     or safe.get("value") != value
                     or _safe_recorder_text(value, 2000) != value
-                    or "[redacted]" in value.casefold()
-                    or "***redacted***" in value.casefold()
+                    or SensitiveRedactor.contains_redaction_placeholder(value)
                     or (
                         isinstance(name, str)
-                        and (_safe_recorder_text(name, 500) != name or "[redacted]" in name.casefold())
+                        and (
+                            _safe_recorder_text(name, 500) != name
+                            or SensitiveRedactor.contains_redaction_placeholder(name)
+                        )
                     )
                 ):
                     continue
@@ -687,13 +782,12 @@ class BrowserRecorderService:
             if safe_locator and (
                 safe_locator.get("value") != locator.get("value")
                 or _safe_recorder_text(str(locator.get("value") or ""), 2000) != locator.get("value")
-                or "[redacted]" in str(locator.get("value") or "").casefold()
-                or "***redacted***" in str(locator.get("value") or "").casefold()
+                or SensitiveRedactor.contains_redaction_placeholder(str(locator.get("value") or ""))
                 or (
                     isinstance(locator.get("name"), str)
                     and (
                         _safe_recorder_text(locator["name"], 500) != locator["name"]
-                        or "[redacted]" in locator["name"].casefold()
+                        or SensitiveRedactor.contains_redaction_placeholder(locator["name"])
                     )
                 )
             ):
@@ -729,7 +823,99 @@ class BrowserRecorderService:
     def navigation_failed(session: RecorderSession, message: str) -> None:
         session.navigation_error = SensitiveRedactor.redact_text(message)
 
-    async def apply_command(self, session: RecorderSession, command: dict[str, Any]) -> str | None:
+    async def claim_websocket_stream(self, session: RecorderSession) -> int:
+        async with session.lock:
+            async with self._lock:
+                if self._sessions.get(session.id) is not session:
+                    raise RecorderStreamReplaced("Recorder session is closed or expired")
+            session.stream_generation += 1
+            return session.stream_generation
+
+    @staticmethod
+    def _require_current_stream(session: RecorderSession, stream_generation: int | None) -> None:
+        if stream_generation is not None and session.stream_generation != stream_generation:
+            raise RecorderStreamReplaced("Recorder stream replaced")
+
+    def _record_processed_navigation_command(self, session: RecorderSession, command_id: str) -> None:
+        session.processed_navigation_command_ids[command_id] = None
+        if len(session.processed_navigation_command_ids) > MAX_RECORDER_COMMAND_HISTORY:
+            session.processed_navigation_command_ids.pop(next(iter(session.processed_navigation_command_ids)))
+        self.touch(session)
+
+    async def apply_command(
+        self,
+        session: RecorderSession,
+        command: dict[str, Any],
+        *,
+        stream_generation: int | None = None,
+    ) -> str | None:
+        async with session.lock:
+            self._require_current_stream(session, stream_generation)
+            action = command.get("action")
+            if action in RECORDER_STEP_COMMAND_ACTIONS:
+                command_id = command.get("command_id")
+                if isinstance(command_id, str) and 0 < len(command_id) <= 128:
+                    if command_id in session.applied_step_command_ids:
+                        return None
+                else:
+                    command_id = None
+                self._apply_step_command(session, command)
+                if command_id is not None:
+                    session.applied_step_command_ids[command_id] = None
+                    if len(session.applied_step_command_ids) > MAX_RECORDER_COMMAND_HISTORY:
+                        session.applied_step_command_ids.pop(next(iter(session.applied_step_command_ids)))
+                return None
+            if action in RECORDER_NAVIGATION_COMMAND_ACTIONS:
+                command_id = command.get("command_id")
+                if isinstance(command_id, str) and 0 < len(command_id) <= 128:
+                    if command_id in session.processed_navigation_command_ids:
+                        return None
+                else:
+                    command_id = None
+                if command_id is not None and action in RECORDER_AT_MOST_ONCE_NAVIGATION_ACTIONS:
+                    # History navigation and reload can take effect before their wait raises.
+                    # Record the attempt first so reconnect cannot repeat that side effect.
+                    self._record_processed_navigation_command(session, command_id)
+                current_url = await self._apply_command(session, command)
+                if command_id is not None and action in RECORDER_REPLAY_SAFE_NAVIGATION_ACTIONS:
+                    self._record_processed_navigation_command(session, command_id)
+                return current_url
+            return await self._apply_command(session, command)
+
+    def _apply_step_command(self, session: RecorderSession, command: dict[str, Any]) -> None:
+        action = command.get("action")
+        if action == "add_step":
+            added = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
+            if not any(step.get("id") == added["id"] for step in session.steps):
+                session.steps.append(added)
+        elif action == "replace_steps":
+            raw_steps = command.get("steps")
+            if not isinstance(raw_steps, list) or len(raw_steps) > 500:
+                raise ValueError("A recorder session can contain at most 500 steps.")
+            if "command_id" in command:
+                base_revision = command.get("base_steps_revision")
+                if isinstance(base_revision, bool) or not isinstance(base_revision, int):
+                    raise ValueError("Recorder replacement requires a current steps revision.")
+                if base_revision != session.steps_revision:
+                    raise RecorderStepsRevisionConflict(
+                        "Recorder steps changed since the command snapshot; refresh before replacing."
+                    )
+            session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
+        elif action == "edit_step":
+            updated = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
+            session.steps = [updated if step["id"] == updated["id"] else step for step in session.steps]
+        elif action == "delete_step":
+            session.steps = [step for step in session.steps if step["id"] != command.get("id")]
+        elif action == "reorder":
+            order = command.get("ids", [])
+            by_id = {step["id"]: step for step in session.steps}
+            session.steps = [by_id[item] for item in order if item in by_id] + [
+                step for step in session.steps if step["id"] not in order
+            ]
+        session.steps_revision += 1
+        self.touch(session)
+
+    async def _apply_command(self, session: RecorderSession, command: dict[str, Any]) -> str | None:
         runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
         if runtime_session is None:
             raise RuntimeError("Recorder browser session is closed or expired")
@@ -800,25 +986,7 @@ class BrowserRecorderService:
                 await self.browser_runtime.select_page(session.browser_session_id, index)
             except IndexError:
                 pass
-        elif action == "add_step":
-            session.steps.append(RecorderStep.model_validate(command["step"]).model_dump(mode="json"))
-        elif action == "replace_steps":
-            raw_steps = command.get("steps")
-            if not isinstance(raw_steps, list) or len(raw_steps) > 500:
-                raise ValueError("A recorder session can contain at most 500 steps.")
-            session.steps = [RecorderStep.model_validate(step).model_dump(mode="json") for step in raw_steps]
-        elif action == "edit_step":
-            updated = RecorderStep.model_validate(command["step"]).model_dump(mode="json")
-            session.steps = [updated if step["id"] == updated["id"] else step for step in session.steps]
-        elif action == "delete_step":
-            session.steps = [step for step in session.steps if step["id"] != command.get("id")]
-        elif action == "reorder":
-            order = command.get("ids", [])
-            by_id = {step["id"]: step for step in session.steps}
-            session.steps = [by_id[item] for item in order if item in by_id] + [
-                step for step in session.steps if step["id"] not in order
-            ]
-        if action in {"start", "add_step", "replace_steps", "edit_step", "delete_step", "reorder", "verify_locator"}:
+        if action in {"start", "verify_locator"}:
             session.steps_revision += 1
         self.touch(session)
         return SensitiveRedactor.redact_url(page.url) if action == "navigate" else None
@@ -828,10 +996,13 @@ class BrowserRecorderService:
         if not session:
             return
         async with self._lifecycle_lock:
-            async with self._lock:
-                if self._sessions.pop(session_id, None) is None:
-                    return
-            await self.browser_runtime.close_session(session.browser_session_id)
+            async with session.lock:
+                async with self._lock:
+                    if self._sessions.pop(session_id, None) is None:
+                        return
+                session.closed = True
+                session.stream_generation += 1
+                await self.browser_runtime.close_session(session.browser_session_id)
 
     async def close_all(self) -> None:
         for session in list(self._sessions.values()):
@@ -852,7 +1023,17 @@ class BrowserRecorderService:
             )
         )
 
-    async def page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
+    async def page_snapshot(
+        self,
+        session: RecorderSession,
+        *,
+        stream_generation: int | None = None,
+    ) -> dict[str, Any]:
+        async with session.lock:
+            self._require_current_stream(session, stream_generation)
+            return await self._page_snapshot(session)
+
+    async def _page_snapshot(self, session: RecorderSession) -> dict[str, Any]:
         runtime_session = await self.browser_runtime.get_session(session.browser_session_id)
         if runtime_session is None:
             return {
@@ -861,6 +1042,7 @@ class BrowserRecorderService:
                 "url": "",
                 "state": "CRASHED",
                 "steps": session.steps,
+                "steps_revision": session.steps_revision,
             }
         page = await self.browser_runtime.get_page(session.browser_session_id)
         try:
@@ -872,6 +1054,7 @@ class BrowserRecorderService:
                     "url": SensitiveRedactor.redact_url(page.url),
                     "state": session.state,
                     "steps": session.steps,
+                    "steps_revision": session.steps_revision,
                 }
             snapshot = await self.browser_runtime.snapshot(
                 session.browser_session_id,
@@ -1090,6 +1273,12 @@ class BrowserRecorderService:
         evidence.context["revalidated_url"] = current_url
 
     async def analyze_locator_with_ai(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
+        async with session.lock:
+            if session.closed:
+                raise LookupError("Recorder session is closed or expired")
+            return await self._analyze_locator_with_ai_locked(session, step_id)
+
+    async def _analyze_locator_with_ai_locked(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
         from app.services.ai_runtime import build_ai_orchestrator
 
         step = next((item for item in session.steps if item.get("id") == step_id), None)
@@ -1197,6 +1386,12 @@ class BrowserRecorderService:
         return analysis
 
     async def request_jev_locator_decision(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
+        async with session.lock:
+            if session.closed:
+                raise LookupError("Recorder session is closed or expired")
+            return await self._request_jev_locator_decision_locked(session, step_id)
+
+    async def _request_jev_locator_decision_locked(self, session: RecorderSession, step_id: str) -> dict[str, Any]:
         from app.services.locator_decision_service import LocatorDecisionService
 
         step = next((item for item in session.steps if item.get("id") == step_id), None)
@@ -1375,6 +1570,7 @@ def _locator_expression(locator: RecorderLocator | None, frame_path: list[str] |
 
 
 def generate_python_case(request: RecorderGenerateRequest) -> str:
+    variables = extract_variables(request.steps)
     test_name = re.sub(r"\W+", "_", request.test_name).strip("_") or "test_recorded_case"
     if test_name[0].isdigit():
         test_name = "test_" + test_name
@@ -1421,68 +1617,128 @@ def generate_python_case(request: RecorderGenerateRequest) -> str:
         "        try:",
         "            page = browser.new_page()",
     ]
-    for index, step in enumerate(request.steps, start=1):
+    if request.mock_responses:
+        lines.append("            # Replay captured API responses (recorded mocks)")
+        lines.append(
+            "            mocks = "
+            + json.dumps([mock.model_dump(mode="json") for mock in request.mock_responses], ensure_ascii=False)
+        )
+        lines.append("            for mock in mocks:")
+        lines.append(
+            "                page.route(mock['url'], lambda route, request, m=mock: "
+            "route.fulfill(status=m['status'], headers=m['headers'], body=m['body'] or ''))"
+        )
+
+    max_depth = 3
+
+    def condition_expression(step) -> str:
+        value = _py_literal(step.condition_value or "")
+        if step.condition_kind == "text":
+            return f"page.get_by_text({value})"
+        if step.condition_kind == "test_id":
+            return f"page.get_by_test_id({value})"
+        return f"page.locator({value})"
+
+    def render_step(step, index: int, indent: str, depth: int) -> int:
+        """Render one step at the given indent; returns the number of lines added."""
         step_lines_start = len(lines)
-        lines.append(f"            # Step {index}: {step.description or step.action}")
-        if step.action == "navigate":
-            lines.append(f"            page.goto({_py_literal(step.url)})")
+        lines.append(f"{indent}# Step {index}: {step.description or step.action}")
+        if step.action == "condition":
+            nested = indent + "    "
+            lines.append(f"{indent}if {condition_expression(step)}.count() > 0:")
+            if step.then_steps:
+                render_steps(step.then_steps, nested, depth + 1)
+            else:
+                lines.append(f"{nested}pass")
+            if step.else_steps:
+                lines.append(f"{indent}else:")
+                render_steps(step.else_steps, nested, depth + 1)
+        elif step.action == "navigate":
+            base = split_origin(step.url or "")
+            if base and any(item.name == "QA_BASE_URL" for item in variables):
+                origin, rest = base
+                if rest:
+                    lines.append(
+                        f'{indent}page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}) + {_py_literal(rest)})'
+                    )
+                else:
+                    lines.append(f'{indent}page.goto(os.getenv("QA_BASE_URL", {_py_literal(origin)}))')
+            else:
+                lines.append(f"{indent}page.goto({_py_literal(step.url)})")
         elif step.action == "back":
-            lines.append("            page.go_back()")
+            lines.append(f"{indent}page.go_back()")
         elif step.action == "scroll":
             direction = -650 if str(step.value or "down").lower() == "up" else 650
-            lines.append(f"            page.mouse.wheel(0, {direction})")
+            lines.append(f"{indent}page.mouse.wheel(0, {direction})")
         elif step.action == "wait":
-            lines.append(f"            page.wait_for_timeout({int(step.value or '1000')})")
+            lines.append(f"{indent}page.wait_for_timeout({int(step.value or '1000')})")
         elif step.action == "assert_url":
-            lines.append(f"            expect(page).to_have_url(re.compile({_py_literal(step.value)}))")
+            lines.append(f"{indent}expect(page).to_have_url(re.compile({_py_literal(step.value)}))")
         elif step.action == "assert_title":
-            lines.append(f"            expect(page).to_have_title(re.compile({_py_literal(step.value)}))")
+            lines.append(f"{indent}expect(page).to_have_title(re.compile({_py_literal(step.value)}))")
         else:
             locator = _locator_expression(step.locator, step.frame_path)
             if step.action == "click":
-                lines.append(f"            {locator}.click()")
+                lines.append(f"{indent}{locator}.click()")
             elif step.action == "double_click":
-                lines.append(f"            {locator}.dblclick()")
+                lines.append(f"{indent}{locator}.dblclick()")
             elif step.action == "fill":
                 if step.value_redacted:
                     variable = step.secret_env_var or f"QA_RECORDER_SECRET_{step.id.upper()}"
                     local_name = f"recorder_secret_{index}"
-                    lines.append(f"            {local_name} = os.getenv({_py_literal(variable)})")
+                    lines.append(f"{indent}{local_name} = os.getenv({_py_literal(variable)})")
                     lines.append(
-                        f"            if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
+                        f"{indent}if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
                     )
-                    lines.append(f"            {locator}.fill({local_name})")
+                    lines.append(f"{indent}{locator}.fill({local_name})")
                 else:
-                    lines.append(f"            {locator}.fill({_py_literal(step.value)})")
+                    variable = variable_for_fill(variables, step)
+                    if variable is not None:
+                        lines.append(
+                            f"{indent}{locator}.fill(os.getenv({_py_literal(variable.name)}, {_py_literal(variable.default)}))"
+                        )
+                    else:
+                        lines.append(f"{indent}{locator}.fill({_py_literal(step.value)})")
             elif step.action == "select":
                 option_key = "value" if step.select_by_value else "label"
                 if step.value_redacted:
                     variable = step.secret_env_var or f"QA_RECORDER_SECRET_{step.id.upper()}"
                     local_name = f"recorder_secret_{index}"
-                    lines.append(f"            {local_name} = os.getenv({_py_literal(variable)})")
+                    lines.append(f"{indent}{local_name} = os.getenv({_py_literal(variable)})")
                     lines.append(
-                        f"            if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
+                        f"{indent}if {local_name} is None: raise RuntimeError({_py_literal('Set environment variable ' + variable)})"
                     )
-                    lines.append(f"            {locator}.select_option({option_key}={local_name})")
+                    lines.append(f"{indent}{locator}.select_option({option_key}={local_name})")
                 else:
-                    lines.append(f"            {locator}.select_option({option_key}={_py_literal(step.value)})")
+                    lines.append(f"{indent}{locator}.select_option({option_key}={_py_literal(step.value)})")
             elif step.action == "check":
-                lines.append(f"            {locator}.check()")
+                lines.append(f"{indent}{locator}.check()")
             elif step.action == "uncheck":
-                lines.append(f"            {locator}.uncheck()")
+                lines.append(f"{indent}{locator}.uncheck()")
             elif step.action == "press":
-                lines.append(f"            {locator}.press({_py_literal(step.key)})")
+                lines.append(f"{indent}{locator}.press({_py_literal(step.key)})")
             elif step.action == "hover":
-                lines.append(f"            {locator}.hover()")
+                lines.append(f"{indent}{locator}.hover()")
             elif step.action == "assert_visible":
-                lines.append(f"            expect({locator}).to_be_visible()")
+                lines.append(f"{indent}expect({locator}).to_be_visible()")
             elif step.action == "assert_text":
-                lines.append(f"            expect({locator}).to_contain_text({_py_literal(step.value)})")
+                lines.append(f"{indent}expect({locator}).to_contain_text({_py_literal(step.value)})")
             elif step.action == "assert_count":
-                lines.append(f"            expect({locator}).to_have_count({int(step.value or '1')})")
-        marker = f"  # qa_step_id={step.id} qa_evidence_id=recorder:{step.id}"
-        for line_index in range(step_lines_start + 1, len(lines)):
-            if lines[line_index].strip() and not lines[line_index].lstrip().startswith("#"):
-                lines[line_index] += marker
+                lines.append(f"{indent}expect({locator}).to_have_count({int(step.value or '1')})")
+        return len(lines) - step_lines_start
+
+    def render_steps(steps, indent: str, depth: int) -> None:
+        if depth > max_depth:
+            raise ValueError(f"Conditional nesting deeper than {max_depth} levels is not supported")
+        for index, step in enumerate(steps, start=1):
+            start_index = len(lines)
+            render_step(step, index, indent, depth)
+            marker = f"  # qa_step_id={step.id} qa_evidence_id=recorder:{step.id}"
+            for line_index in range(start_index + 1, len(lines)):
+                line = lines[line_index]
+                if line.strip() and not line.lstrip().startswith("#") and "qa_step_id=" not in line:
+                    lines[line_index] = line + marker
+
+    render_steps(request.steps, "            ", 0)
     lines.extend(["        finally:", "            browser.close()", ""])
     return "\n".join(lines)

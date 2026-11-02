@@ -73,5 +73,15 @@
   "errorBindingSaveFailed": "绑定保存失败：{{message}}",
   "pageObjectsUsed": "复用项目中的页面对象/流程：{{list}}",
   "pageObjectsMissing": "该项目还没有可复用的页面对象（pages/*.py）：草稿自带全部定位。可在自动化工作室中创建页面对象，让后续草稿复用它。",
-  "bindingRecord": "录制此用例"
+  "bindingRecord": "录制此用例",
+  "assertionsTitle": "用例断言",
+  "assertionsCount": "{{count}} 条",
+  "statePassed": "已通过",
+  "stateFailed": "未通过",
+  "stateSkipped": "已跳过",
+  "stateCancelled": "已取消",
+  "stateError": "执行错误",
+  "stateNeverRun": "未执行",
+  "stateUnbound": "未绑定",
+  "viewRunResult": "查看运行结果"
 }

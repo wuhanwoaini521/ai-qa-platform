@@ -12,6 +12,7 @@ export const runtimeActive = (status: string) =>
     'CANCELED',
     'SKIPPED',
     'ABORTED',
+    'PAUSED',
   ].includes(status.toUpperCase());
 export const runtimeNeedsTerminalRefresh = (status: string) =>
   ['BLOCKED', 'FAILED'].includes(status.toUpperCase());

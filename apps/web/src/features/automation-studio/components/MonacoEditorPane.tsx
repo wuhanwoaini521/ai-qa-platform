@@ -30,6 +30,7 @@ interface MonacoEditorPaneProps {
   initialFocusLineNumber?: number;
   executionLocation?: { path: string; line: number } | null;
   readOnly?: boolean;
+  embedded?: boolean;
 }
 
 const getLanguage = (path: string | null): string => {

@@ -8,8 +8,10 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
+import { dashboardExecutionHref } from '../pages/dashboardModel';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { AppLayout } from './AppLayout';
 import { useProjectScope, useRouteProjectScope } from './ProjectScope';
@@ -46,6 +48,24 @@ const WorkspacePage = lazy(() =>
     default: m.WorkspacePage,
   })),
 );
+const FlowCanvasPage = lazy(() =>
+  import('../pages/FlowCanvasPage').then((m) => ({
+    default: m.FlowCanvasPage,
+  })),
+);
+
+const ApiCasesPage = lazy(() =>
+  import('../pages/ApiCasesPage').then((m) => ({
+    default: m.ApiCasesPage,
+  })),
+);
+
+const FlowEditorPage = lazy(() =>
+  import('../pages/FlowEditorPage').then((m) => ({
+    default: m.FlowEditorPage,
+  })),
+);
+
 const WorkflowPage = lazy(() =>
   import('../features/workflow/WorkflowPage').then((m) => ({
     default: m.WorkflowPage,
@@ -60,11 +80,36 @@ const LibraryPage = lazy(() =>
 const DashboardRoute: React.FC = () => {
   const nav = useAppNavigation();
   const navigate = useNavigate();
+  const { projects, selectedProjectId, loading, error } = useProjectScope();
   return (
     <DashboardPage
+      projects={projects}
+      selectedProjectId={selectedProjectId}
+      projectLoading={loading}
+      projectError={error}
       onNavigate={nav.toTab}
-      onOpenTask={(id) => navigate(`/tasks?taskId=${encodeURIComponent(id)}`)}
+      onOpenTask={(task) => {
+        const inputRequirementId = task.inputs.requirement_id;
+        const contextRequirementId = task.context.requirement_id;
+        const requirementId = typeof inputRequirementId === 'string'
+          ? inputRequirementId
+          : typeof contextRequirementId === 'string' ? contextRequirementId : undefined;
+        navigate(buildWorkflowHref({
+          projectId: task.project_id ?? selectedProjectId ?? undefined,
+          requirementId,
+          taskId: task.id,
+        }));
+      }}
       onOpenRun={nav.toRun}
+      onOpenExecution={(run, execution) => {
+        const href = dashboardExecutionHref(run, execution, selectedProjectId);
+        if (!href) {
+          nav.toRun(run.id);
+          return;
+        }
+        navigate(href);
+      }}
+      onOpenRunnableTest={(testCaseId) => navigate(buildWorkspaceHref({ projectId: selectedProjectId ?? undefined, testCaseId, stage: 'cases', view: 'cases' }))}
       onOpenCreateProject={() => navigate('/projects?create=1')}
     />
   );
@@ -73,7 +118,7 @@ const DashboardRoute: React.FC = () => {
 const ProjectsRoute: React.FC = () => {
   const { projectId } = useParams();
   const nav = useAppNavigation();
-  const { projects, loading, refresh, createProject, selectProject } =
+  const { projects, loading, error, selectedProjectId, refresh, createProject, selectProject } =
     useProjectScope();
   useRouteProjectScope(projectId);
 
@@ -81,6 +126,8 @@ const ProjectsRoute: React.FC = () => {
     <ProjectsPage
       projects={projects}
       loading={loading}
+      error={error}
+      selectedProjectId={selectedProjectId}
       onRefresh={refresh}
       onCreateProject={async (data) => {
         await createProject(data);
@@ -183,18 +230,29 @@ const FailuresRoute: React.FC = () => {
 
 const RunWorkspaceRoute: React.FC = () => {
   const { runId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const requirementId = searchParams.get('requirementId') ?? undefined;
+  const nodeId = searchParams.get('nodeId') ?? undefined;
   const [projectId, setProjectId] = useState('');
+  const [runContext, setRunContext] = useState<{ requirementId?: string; caseId?: string }>({});
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     let active = true;
     setProjectId('');
+    setRunContext({});
     setMissing(false);
     void api.getTestRun(runId).then((run) => {
-      if (active) setProjectId(run.project_id);
+      if (!active) return;
+      setProjectId(run.project_id);
+      // The run carries its own requirement/case identity; URL parameters only override it.
+      setRunContext({
+        requirementId: run.requirement_id ?? undefined,
+        caseId: run.case_id ?? undefined,
+      });
     }).catch(() => { if (active) setMissing(true); });
     return () => { active = false; };
   }, [runId]);
-  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, stage: 'result', view: 'results' })} />;
+  if (projectId) return <Navigate replace to={buildWorkspaceHref({ projectId, runId, ...((requirementId ?? runContext.requirementId) ? { requirementId: requirementId ?? runContext.requirementId } : {}), ...(nodeId ? { nodeId } : {}), ...(runContext.caseId ? { testCaseId: runContext.caseId } : {}), stage: 'result', view: 'results' })} />;
   if (missing) return <Navigate replace to="/runs" />;
   return <div className="page-loading" aria-busy="true">Loading run…</div>;
 };
@@ -252,6 +310,9 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/workspace" element={<WorkspacePage />} />
       <Route path="/workspace/:projectId" element={<WorkspacePage />} />
       <Route path="/workflow" element={<WorkflowRoute />} />
+      <Route path="/flows" element={<FlowCanvasPage />} />
+      <Route path="/flows/edit" element={<FlowEditorPage />} />
+      <Route path="/http-workbench" element={<ApiCasesPage />} />
       <Route path="/library" element={<LibraryPage />} />
       <Route path="/projects" element={<ProjectsRoute />} />
       <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />

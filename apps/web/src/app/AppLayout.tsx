@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectScope } from './ProjectScope';
 import { usePreferences } from './Preferences';
 import { ReadinessNotice } from '../components/ReadinessNotice';
+import { readExplicitRunId, readWorkspaceContext } from './workspaceContext';
 
 /** Title keys per route, resolved through i18n (`titles` namespace). */
 const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
@@ -47,6 +48,7 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   }, [location.pathname, startPage, navigate]);
 
   const fullBleed = location.pathname.includes('/studio');
+  const dashboardRoute = location.pathname === '/';
   const workspaceRoute = location.pathname === '/workspace' || location.pathname.startsWith('/workspace/');
   const workspaceParams = new URLSearchParams(location.search);
   const workspaceStage = workspaceParams.get('stage');
@@ -54,21 +56,28 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const workspaceResultsRoute = workspaceRoute && (
     workspaceStage === 'result' || (!workspaceStage && workspaceView === 'results')
   );
+  const graphiteWorkspace = workspaceRoute && workspaceStage === 'automation' &&
+    (workspaceView === 'browser' || workspaceView === 'debug');
+  const graphiteRoute = location.pathname === '/' || graphiteWorkspace;
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
+  const selectedRunContext = readExplicitRunId(location.search)
+    ? readWorkspaceContext(location.search, selectedProjectId)
+    : null;
 
   return (
     <div className="app-container">
-      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}`}>
+      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${graphiteRoute ? ' is-graphite' : ''}${dashboardRoute ? ' is-dashboard-route' : ''}`}>
         <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
         <Header
           title={title}
           selectedProjectId={selectedProjectId}
+          selectedRunContext={selectedRunContext}
           onSignOut={onSignOut}
         />
 
         <div className="app-body">
-          <Navigation compact={workspaceRoute} />
+          <Navigation compact={false} graphite={graphiteRoute} />
           <div className="app-main">
             <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
               <ReadinessNotice />

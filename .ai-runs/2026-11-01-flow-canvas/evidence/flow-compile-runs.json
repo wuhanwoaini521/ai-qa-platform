@@ -1,0 +1,328 @@
+{
+  "test_flow_offer_true": {
+    "run": {
+      "id": "run_c8b09acc0af0",
+      "task_id": null,
+      "parent_run_id": null,
+      "origin_failure_id": null,
+      "project_id": "proj_67767c6f93df",
+      "requirement_id": null,
+      "case_id": null,
+      "workspace_id": "proj_67767c6f93df",
+      "status": "PASSED",
+      "requested_by": "user",
+      "environment": {
+        "AI_QA_BROWSER_CHANNEL": "chrome"
+      },
+      "browser": "chromium",
+      "parallel_workers": 1,
+      "markers": [],
+      "nodeids": [
+        "tests/test_flow_offer_true.py::test_flow_offer_true"
+      ],
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 3254.3950119998044,
+      "runner_type": "LOCAL",
+      "runner_profile_id": null,
+      "external_job_id": null,
+      "external_build_url": null,
+      "queue_duration_ms": 0.0,
+      "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_flow_offer_true.py::test_flow_offer_true PASSED\n\n============================== 1 passed in 2.72s ===============================",
+      "started_at": "2026-11-01T00:13:57.442291Z",
+      "finished_at": "2026-11-01T00:14:00.726472Z",
+      "created_at": "2026-11-01T00:13:57.430002Z",
+      "executions": [
+        {
+          "id": "exec_3147b1a74c61",
+          "run_id": "run_c8b09acc0af0",
+          "nodeid": "tests/test_flow_offer_true.py::test_flow_offer_true",
+          "status": "PASSED",
+          "duration_ms": 2702.096146000258,
+          "error_message": null,
+          "stack_trace": null,
+          "failure_category": null,
+          "artifact_paths": [
+            "/api/artifacts/84dfae5f-3230-47c3-aaf9-b1fa4a169e33/download"
+          ],
+          "started_at": "2026-11-01T00:13:58.021454Z",
+          "finished_at": "2026-11-01T00:14:00.723550Z"
+        }
+      ],
+      "browser_sessions": [
+        {
+          "page_evidence": {
+            "url": "http://127.0.0.1:8099/new/",
+            "title": "Offer",
+            "controls": [
+              {
+                "tag": "button",
+                "type": "",
+                "role": "button",
+                "name": "Accept",
+                "candidates": [
+                  {
+                    "kind": "role",
+                    "value": "button",
+                    "name": "Accept",
+                    "exact": true
+                  },
+                  {
+                    "kind": "test_id",
+                    "value": "accept"
+                  },
+                  {
+                    "kind": "text",
+                    "value": "Accept",
+                    "exact": true
+                  },
+                  {
+                    "kind": "css",
+                    "value": "button"
+                  }
+                ],
+                "visible": true,
+                "enabled": true
+              }
+            ],
+            "console_logs": [
+              {
+                "level": "error",
+                "text": "Failed to load resource: the server responded with a status of 404 (File not found)",
+                "timestamp": "2026-11-01T00:13:59.616583+00:00"
+              }
+            ],
+            "network_logs": [
+              {
+                "url": "http://127.0.0.1:8099/new/",
+                "method": "GET",
+                "duration_ms": 43.5,
+                "request": {
+                  "content_type": "",
+                  "body": "[not captured: absent, non-JSON or oversized]"
+                },
+                "status": 200,
+                "response": {
+                  "content_type": "text/html",
+                  "body": "[not captured: non-JSON, unknown or oversized length]"
+                },
+                "timestamp": "2026-11-01T00:13:59.612947+00:00"
+              }
+            ],
+            "recent_steps": [
+              {
+                "action": "click",
+                "locator": "internal:testid=[data-testid=\"accept\"s]",
+                "status": "PASSED",
+                "duration_ms": 83.7,
+                "file": "tests/test_flow_offer_true.py",
+                "line": 45,
+                "step_id": "t1",
+                "evidence_id": "recorder:t1",
+                "timestamp": "2026-11-01T00:13:59.973478+00:00"
+              }
+            ],
+            "last_frame_artifact_id": "84dfae5f-3230-47c3-aaf9-b1fa4a169e33"
+          },
+          "id": "148c2aa38ccc46988a43f691c3a4ebe9",
+          "run_id": "run_c8b09acc0af0",
+          "case_execution_id": "exec_3147b1a74c61",
+          "worker_id": "main",
+          "browser_session_id": "148c2aa38ccc46988a43f691c3a4ebe9",
+          "page_id": "2124ec964f374d94b4453da923f93088",
+          "nodeid": "tests/test_flow_offer_true.py::test_flow_offer_true",
+          "case_name": "test_flow_offer_true",
+          "current_url": "http://127.0.0.1:8099/new/",
+          "status": "passed",
+          "elapsed_ms": 1054.893,
+          "started_at": "2026-11-01T00:13:59.546785Z",
+          "finished_at": "2026-11-01T00:14:00.601678Z"
+        }
+      ],
+      "external_artifacts": [
+        {
+          "id": "art_cf1b9701a5e4",
+          "run_id": "run_c8b09acc0af0",
+          "name": "browser-148c2aa38ccc46988a43f691c3a4ebe9-last.jpg",
+          "type": "SCREENSHOT",
+          "url": "/api/artifacts/84dfae5f-3230-47c3-aaf9-b1fa4a169e33/download",
+          "metadata_json": {
+            "artifact_id": "84dfae5f-3230-47c3-aaf9-b1fa4a169e33",
+            "content_type": "image/jpeg",
+            "browser_session_id": "148c2aa38ccc46988a43f691c3a4ebe9",
+            "frame_kind": "last"
+          },
+          "created_at": "2026-11-01T00:14:00.720664Z"
+        }
+      ]
+    },
+    "code": "import os\nimport re\nfrom urllib.parse import unquote, urlsplit\nfrom playwright.sync_api import sync_playwright, expect\n\ndef _browser_proxy():\n    raw = os.getenv('BROWSER_PROXY_URL')\n    if not raw:\n        return None\n    parsed = urlsplit(raw if '://' in raw else f'http://{raw}')\n    if (parsed.scheme not in {'http', 'https', 'socks5'} or not parsed.hostname\n            or parsed.path not in {'', '/'} or parsed.query or parsed.fragment):\n        raise ValueError('BROWSER_PROXY_URL must be an HTTP, HTTPS or SOCKS5 proxy URL')\n    proxy = {'server': f\"{parsed.scheme}://{parsed.netloc.rsplit('@', 1)[-1]}\"}\n    if parsed.username:\n        proxy['username'] = unquote(parsed.username)\n    if parsed.password:\n        proxy['password'] = unquote(parsed.password)\n    bypass = os.getenv('BROWSER_PROXY_BYPASS')\n    if bypass:\n        proxy['bypass'] = bypass\n    return proxy\n\ndef test_flow_offer_true():\n    with sync_playwright() as playwright:\n        proxy = _browser_proxy()\n        channels = [None, 'msedge', 'chrome']\n        browser = None\n        launch_error = None\n        for channel in dict.fromkeys(channels):\n            try:\n                browser = playwright.chromium.launch(headless=True, channel=channel, **({'proxy': proxy} if proxy else {}))\n                break\n            except Exception as error:\n                launch_error = error\n        if browser is None:\n            raise launch_error\n        try:\n            page = browser.new_page()\n            # Step 1: open page\n            page.goto(os.getenv(\"QA_BASE_URL\", \"http://127.0.0.1:8099\") + \"/new/\")  # qa_step_id=n1 qa_evidence_id=recorder:n1\n            # Step 2: offer shown?\n            if page.locator(\"#offer\").count() > 0:  # qa_step_id=c1 qa_evidence_id=recorder:c1\n                # Step 1: accept offer\n                page.get_by_test_id(\"accept\").click()  # qa_step_id=t1 qa_evidence_id=recorder:t1\n                # Step 2: status accepted\n                expect(page.locator(\"#status\")).to_contain_text(\"accepted\")  # qa_step_id=t2 qa_evidence_id=recorder:t2\n            else:  # qa_step_id=c1 qa_evidence_id=recorder:c1\n                # Step 1: dismiss\n                page.get_by_test_id(\"dismiss\").click()  # qa_step_id=e1 qa_evidence_id=recorder:e1\n                # Step 2: status dismissed\n                expect(page.locator(\"#status\")).to_contain_text(\"dismissed\")  # qa_step_id=e2 qa_evidence_id=recorder:e2\n        finally:\n            browser.close()\n",
+    "file": "tests/test_flow_offer_true.py"
+  },
+  "test_flow_offer_false": {
+    "run": {
+      "id": "run_b12ebd0ffdbf",
+      "task_id": null,
+      "parent_run_id": null,
+      "origin_failure_id": null,
+      "project_id": "proj_67767c6f93df",
+      "requirement_id": null,
+      "case_id": null,
+      "workspace_id": "proj_67767c6f93df",
+      "status": "PASSED",
+      "requested_by": "user",
+      "environment": {
+        "AI_QA_BROWSER_CHANNEL": "chrome"
+      },
+      "browser": "chromium",
+      "parallel_workers": 1,
+      "markers": [],
+      "nodeids": [
+        "tests/test_flow_offer_false.py::test_flow_offer_false"
+      ],
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 3167.6018429998294,
+      "runner_type": "LOCAL",
+      "runner_profile_id": null,
+      "external_job_id": null,
+      "external_build_url": null,
+      "queue_duration_ms": 0.0,
+      "log_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- /Users/hans/Code/github/ai-qa-platform/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/hans/Code/github/ai-qa-platform/runtime/workspaces/proj_67767c6f93df\nconfigfile: pytest.ini\nplugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 1 item\n\ntests/test_flow_offer_false.py::test_flow_offer_false PASSED\n\n============================== 1 passed in 2.65s ===============================",
+      "started_at": "2026-11-01T00:14:01.525680Z",
+      "finished_at": "2026-11-01T00:14:04.723214Z",
+      "created_at": "2026-11-01T00:14:01.513773Z",
+      "executions": [
+        {
+          "id": "exec_4064a608c0d8",
+          "run_id": "run_b12ebd0ffdbf",
+          "nodeid": "tests/test_flow_offer_false.py::test_flow_offer_false",
+          "status": "PASSED",
+          "duration_ms": 2628.6426589995244,
+          "error_message": null,
+          "stack_trace": null,
+          "failure_category": null,
+          "artifact_paths": [
+            "/api/artifacts/55d3799f-c0be-41e7-a0af-34674ec16db9/download"
+          ],
+          "started_at": "2026-11-01T00:14:02.090375Z",
+          "finished_at": "2026-11-01T00:14:04.719018Z"
+        }
+      ],
+      "browser_sessions": [
+        {
+          "page_evidence": {
+            "url": "http://127.0.0.1:8099/old/",
+            "title": "No offer",
+            "controls": [
+              {
+                "tag": "button",
+                "type": "",
+                "role": "button",
+                "name": "Dismiss",
+                "candidates": [
+                  {
+                    "kind": "role",
+                    "value": "button",
+                    "name": "Dismiss",
+                    "exact": true
+                  },
+                  {
+                    "kind": "test_id",
+                    "value": "dismiss"
+                  },
+                  {
+                    "kind": "text",
+                    "value": "Dismiss",
+                    "exact": true
+                  },
+                  {
+                    "kind": "css",
+                    "value": "button"
+                  }
+                ],
+                "visible": true,
+                "enabled": true
+              }
+            ],
+            "console_logs": [
+              {
+                "level": "error",
+                "text": "Failed to load resource: the server responded with a status of 404 (File not found)",
+                "timestamp": "2026-11-01T00:14:03.766032+00:00"
+              }
+            ],
+            "network_logs": [
+              {
+                "url": "http://127.0.0.1:8099/old/",
+                "method": "GET",
+                "duration_ms": 41.6,
+                "request": {
+                  "content_type": "",
+                  "body": "[not captured: absent, non-JSON or oversized]"
+                },
+                "status": 200,
+                "response": {
+                  "content_type": "text/html",
+                  "body": "[not captured: non-JSON, unknown or oversized length]"
+                },
+                "timestamp": "2026-11-01T00:14:03.615965+00:00"
+              }
+            ],
+            "recent_steps": [
+              {
+                "action": "click",
+                "locator": "internal:testid=[data-testid=\"dismiss\"s]",
+                "status": "PASSED",
+                "duration_ms": 72.9,
+                "file": "tests/test_flow_offer_false.py",
+                "line": 50,
+                "step_id": "e1",
+                "evidence_id": "recorder:e1",
+                "timestamp": "2026-11-01T00:14:03.947778+00:00"
+              }
+            ],
+            "last_frame_artifact_id": "55d3799f-c0be-41e7-a0af-34674ec16db9"
+          },
+          "id": "ab16d8025b234843a013fbb1f92d4579",
+          "run_id": "run_b12ebd0ffdbf",
+          "case_execution_id": "exec_4064a608c0d8",
+          "worker_id": "main",
+          "browser_session_id": "ab16d8025b234843a013fbb1f92d4579",
+          "page_id": "419e20042d2e407b9363f88e8fc3a119",
+          "nodeid": "tests/test_flow_offer_false.py::test_flow_offer_false",
+          "case_name": "test_flow_offer_false",
+          "current_url": "http://127.0.0.1:8099/old/",
+          "status": "passed",
+          "elapsed_ms": 1034.672,
+          "started_at": "2026-11-01T00:14:03.552858Z",
+          "finished_at": "2026-11-01T00:14:04.587530Z"
+        }
+      ],
+      "external_artifacts": [
+        {
+          "id": "art_b39123aa4c4f",
+          "run_id": "run_b12ebd0ffdbf",
+          "name": "browser-ab16d8025b234843a013fbb1f92d4579-last.jpg",
+          "type": "SCREENSHOT",
+          "url": "/api/artifacts/55d3799f-c0be-41e7-a0af-34674ec16db9/download",
+          "metadata_json": {
+            "artifact_id": "55d3799f-c0be-41e7-a0af-34674ec16db9",
+            "content_type": "image/jpeg",
+            "browser_session_id": "ab16d8025b234843a013fbb1f92d4579",
+            "frame_kind": "last"
+          },
+          "created_at": "2026-11-01T00:14:04.715959Z"
+        }
+      ]
+    },
+    "code": "import os\nimport re\nfrom urllib.parse import unquote, urlsplit\nfrom playwright.sync_api import sync_playwright, expect\n\ndef _browser_proxy():\n    raw = os.getenv('BROWSER_PROXY_URL')\n    if not raw:\n        return None\n    parsed = urlsplit(raw if '://' in raw else f'http://{raw}')\n    if (parsed.scheme not in {'http', 'https', 'socks5'} or not parsed.hostname\n            or parsed.path not in {'', '/'} or parsed.query or parsed.fragment):\n        raise ValueError('BROWSER_PROXY_URL must be an HTTP, HTTPS or SOCKS5 proxy URL')\n    proxy = {'server': f\"{parsed.scheme}://{parsed.netloc.rsplit('@', 1)[-1]}\"}\n    if parsed.username:\n        proxy['username'] = unquote(parsed.username)\n    if parsed.password:\n        proxy['password'] = unquote(parsed.password)\n    bypass = os.getenv('BROWSER_PROXY_BYPASS')\n    if bypass:\n        proxy['bypass'] = bypass\n    return proxy\n\ndef test_flow_offer_false():\n    with sync_playwright() as playwright:\n        proxy = _browser_proxy()\n        channels = [None, 'msedge', 'chrome']\n        browser = None\n        launch_error = None\n        for channel in dict.fromkeys(channels):\n            try:\n                browser = playwright.chromium.launch(headless=True, channel=channel, **({'proxy': proxy} if proxy else {}))\n                break\n            except Exception as error:\n                launch_error = error\n        if browser is None:\n            raise launch_error\n        try:\n            page = browser.new_page()\n            # Step 1: open page\n            page.goto(os.getenv(\"QA_BASE_URL\", \"http://127.0.0.1:8099\") + \"/old/\")  # qa_step_id=n1 qa_evidence_id=recorder:n1\n            # Step 2: offer shown?\n            if page.locator(\"#offer\").count() > 0:  # qa_step_id=c1 qa_evidence_id=recorder:c1\n                # Step 1: accept offer\n                page.get_by_test_id(\"accept\").click()  # qa_step_id=t1 qa_evidence_id=recorder:t1\n                # Step 2: status accepted\n                expect(page.locator(\"#status\")).to_contain_text(\"accepted\")  # qa_step_id=t2 qa_evidence_id=recorder:t2\n            else:  # qa_step_id=c1 qa_evidence_id=recorder:c1\n                # Step 1: dismiss\n                page.get_by_test_id(\"dismiss\").click()  # qa_step_id=e1 qa_evidence_id=recorder:e1\n                # Step 2: status dismissed\n                expect(page.locator(\"#status\")).to_contain_text(\"dismissed\")  # qa_step_id=e2 qa_evidence_id=recorder:e2\n        finally:\n            browser.close()\n",
+    "file": "tests/test_flow_offer_false.py"
+  }
+}

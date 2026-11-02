@@ -21,4 +21,5 @@ type MonacoWorkerGlobal = typeof globalThis & {
 };
 
 // Bundling Monaco locally avoids the default CDN dependency and keeps the editor usable offline.
+// The editor follows the app theme (light/dark) instead of shipping a separate dark palette.
 loader.config({ monaco });

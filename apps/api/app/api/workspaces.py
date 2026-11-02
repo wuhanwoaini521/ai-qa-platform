@@ -100,8 +100,15 @@ async def write_workspace_file(
     service: WorkspaceService = Depends(get_workspace_service),
 ):
     try:
-        await service.write_file(workspace_id, payload.path, payload.content)
+        if payload.expected_exists is None:
+            await service.write_file(workspace_id, payload.path, payload.content)
+        else:
+            await service.write_file_if_unchanged(
+                workspace_id, payload.path, payload.content, payload.expected_exists, payload.expected_sha256
+            )
         return {"status": "saved", "path": payload.path}
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except SecurityException as e:
         raise HTTPException(status_code=400, detail=str(e))
 

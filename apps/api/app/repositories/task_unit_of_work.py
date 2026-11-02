@@ -44,6 +44,7 @@ class TaskRepositoryUnitOfWork:
         self.failure_analyses = FailureAnalysisRepository(session)
         self.breakpoints = BreakpointRepository(session)
         self.projects = ProjectRepository(session)
+        self.quality_discovery = QualityDiscoveryRepository(session)
         self.requirements = RequirementRepository(session)
         self.test_cases = TestCaseRepository(session)
         self.test_designs = TestDesignRepository(session)

@@ -9,6 +9,8 @@ import {
   buildWorkspaceHref,
   readWorkspaceContext,
   resolveCanonicalFile,
+  resolveLineNumberForFile,
+  shouldPreserveRunExecutionNode,
   writeWorkspaceContext,
   type WorkspaceContext,
   type WorkspaceMode,
@@ -97,12 +99,6 @@ const workspaceStages: { stage: MainWorkspaceStage; view: WorkspaceView }[] = [
   { stage: 'automation', view: 'code' },
   { stage: 'result', view: 'results' },
 ];
-const modeViews: Record<WorkspaceMode, WorkspaceView[]> = {
-  explore: ['browser', 'discover', 'requirement'],
-  write: ['cases', 'code'],
-  debug: ['debug', 'results'],
-  repair: [],
-};
 const stageForView: Record<WorkspaceView, WorkspaceStage> = {
   requirement: 'requirement',
   discover: 'discover',
@@ -116,6 +112,8 @@ const stageForView: Record<WorkspaceView, WorkspaceStage> = {
 
 export function WorkspacePage() {
   const { t } = useTranslation('workspace');
+  const localizeStatus = (status: string, group: 'taskStatus' | 'testRunStatus') =>
+    t(`result.${group}.${status.toUpperCase()}`, { defaultValue: status });
   const { projectId: routeProjectId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { projects, selectedProjectId, selectProject } = useProjectScope();
@@ -126,10 +124,10 @@ export function WorkspacePage() {
   const view = context.view ?? (fallbackStage === 'automation' ? 'code' : fallbackStage === 'result' || fallbackStage === 'failure' ? 'results' : fallbackStage);
   const stage = context.stage ?? stageForView[view];
   const activeMode = workspaceModeForContext({ stage, view });
-  const isWorkbenchHeader = activeMode === 'debug' || activeMode === 'explore';
   const runtimeKind = context.taskId ? 'task' : 'run';
   const runtimeId = context.taskId ?? context.runId ?? '';
   const runtime = useRuntimeSnapshot(runtimeKind, runtimeId);
+  const latestDebugActivity = runtime.snapshot?.events.at(-1);
   const taskRunId = runtime.snapshot?.kind === 'task'
     ? [...runtime.snapshot.runs].reverse().find((item) => item.task_id === context.taskId)?.id ?? null
     : null;
@@ -417,6 +415,19 @@ export function WorkspacePage() {
     // newly opened Explore workspace into a selected requirement/case context.
     if (view === 'discover' && !context.requirementId && !context.testCaseId) return;
     const selectedCase = cases.find((item) => item.id === context.testCaseId);
+    const selectedRun = context.runId
+      ? runs.find((item) => item.id === context.runId)
+        ?? (runLive.run?.id === context.runId ? runLive.run : undefined)
+      : undefined;
+    // Keep URL execution context while the selected run is still resolving. Once
+    // its saved executions load, validate the node against that run's records.
+    const selectedRunNodeIds = selectedRun?.executions.map((item) => item.nodeid)
+      ?? (context.runId && context.nodeId ? [context.nodeId] : []);
+    const preserveRunExecutionContext = shouldPreserveRunExecutionNode(
+      view,
+      context.nodeId,
+      selectedRunNodeIds,
+    );
     const selectedCaseRequirementId = selectedCase?.requirement_id;
     const requirementId = selectedCaseRequirementId && requirements.some((item) => item.id === selectedCaseRequirementId)
       ? selectedCaseRequirementId
@@ -442,13 +453,13 @@ export function WorkspacePage() {
         testDesignId: nextCase?.test_design_id ?? undefined,
         automationBindingId: nextCase?.binding?.id,
         file: resolveCanonicalFile(context, nextCase?.binding?.file_path),
-        lineNumber: preserveFailureDebugContext ? context.lineNumber : undefined,
-        nodeId: preserveFailureDebugContext ? context.nodeId : nextCase?.binding?.nodeid,
+        lineNumber: preserveFailureDebugContext || preserveRunExecutionContext ? context.lineNumber : undefined,
+        nodeId: preserveFailureDebugContext || preserveRunExecutionContext ? context.nodeId : nextCase?.binding?.nodeid,
         stage: context.stage ?? 'requirement',
       }, true);
     }
     // URL remains the source of truth after the first actual data load.
-  }, [projectId, contextDataLoaded, requirements, cases, context.requirementId, context.testCaseId, context.testDesignId, context.automationBindingId, context.nodeId, context.stage, view]);
+  }, [projectId, contextDataLoaded, requirements, cases, runs, runLive.run?.id, runLive.run?.executions, context.requirementId, context.testCaseId, context.testDesignId, context.automationBindingId, context.runId, context.nodeId, context.stage, view]);
 
   function updateContext(patch: Partial<WorkspaceContext>, replace = false) {
     setSearchParams((current) => writeWorkspaceContext(current, {
@@ -610,9 +621,11 @@ export function WorkspacePage() {
   const analysisFailed = !analysisRunning && ['FAILED', 'BLOCKED'].includes(latestAnalysisRecord?.status ?? '');
   const project = projects.find((item: Project) => item.id === projectId);
   const projectDisplayNames = buildProjectDisplayNames(projects);
+  const taskRuntimeStatus = runtime.snapshot?.status ?? task?.status;
   const completedGoalResult = stage === 'result'
     && task?.type === 'QA_GOAL'
-    && !runtimeActive(runtime.snapshot?.status ?? task.status);
+    && taskRuntimeStatus !== 'PAUSED'
+    && !runtimeActive(taskRuntimeStatus ?? '');
   const resultFailed = Boolean(currentRun && ['FAILED', 'ERROR'].includes(currentRun.status))
     || Boolean(task && ['FAILED', 'BLOCKED'].includes(runtime.snapshot?.status ?? task.status));
   const activeBoundCases = relatedCases.filter((item) => item.binding?.status === 'ACTIVE' && Boolean(item.binding.nodeid)).length;
@@ -676,16 +689,19 @@ export function WorkspacePage() {
     }, true);
   }, [contextDataLoaded, stage, currentFailure?.test_nodeid, currentRun?.id, currentRun?.nodeids, currentRun?.executions, cases, context.nodeId, context.testCaseId, context.requirementId]);
 
-  const openStudio = (filePath?: string, lineNumber?: number) => updateContext({
-    testCaseId: selectedCase?.id ?? context.testCaseId,
-    automationBindingId: binding?.id ?? context.automationBindingId,
-    file: filePath ?? context.file ?? binding?.file_path,
-    lineNumber,
-    nodeId: binding?.nodeid ?? context.nodeId,
-    returnTo: 'workspace',
-    stage: 'automation',
-    view: 'code',
-  });
+  const openStudio = (filePath?: string, lineNumber?: number) => {
+    const targetFile = filePath ?? context.file ?? binding?.file_path;
+    updateContext({
+      testCaseId: selectedCase?.id ?? context.testCaseId,
+      automationBindingId: binding?.id ?? context.automationBindingId,
+      file: targetFile,
+      lineNumber: resolveLineNumberForFile(targetFile, context.file, lineNumber, context.lineNumber),
+      nodeId: binding?.nodeid ?? context.nodeId,
+      returnTo: 'workspace',
+      stage: 'automation',
+      view: 'code',
+    });
+  };
 
   const openRecordedCase = (saved: Awaited<ReturnType<typeof api.saveRecorderCase>>, filePath: string) => {
     setCases((current) => [
@@ -790,6 +806,8 @@ export function WorkspacePage() {
         project_id: projectId,
         workspace_id: projectId,
         nodeids: [nodeId],
+        requirement_id: context.requirementId ?? selectedRequirement?.id ?? null,
+        case_id: selectedCase?.id ?? context.testCaseId ?? null,
         requested_by: `Workspace · ${selectedCase?.title ?? nodeId}`,
         browser: selectedRunConfig.browser,
         environment: {
@@ -844,8 +862,10 @@ export function WorkspacePage() {
     const runId = extra.runId ?? activeRunId;
     if (taskId) {
       setRuntimePanelKind('task');
-      if (extra.taskId && extra.taskId !== context.taskId) {
-        updateContext({ taskId: extra.taskId, runId: undefined });
+      if (extra.taskId && (extra.taskId !== context.taskId || 'requirementId' in extra)) {
+        const taskContext: Partial<WorkspaceContext> = { taskId: extra.taskId, runId: undefined };
+        if ('requirementId' in extra) taskContext.requirementId = extra.requirementId;
+        updateContext(taskContext);
       }
     } else if (runId) {
       setRuntimePanelKind('run');
@@ -977,20 +997,21 @@ export function WorkspacePage() {
 
   return (
     <div className={`workspace-shell is-${activeMode}${stage === 'result' ? ' is-result-stage' : ''}`}>
-      <header className={`workspace-heading${isWorkbenchHeader ? ' is-workbench-heading' : ''}`}>
+      <header className="workspace-heading is-workbench-heading">
         <div>
           <span className="workspace-eyebrow">{workspaceEyebrow}</span>
           <h1 title={workspaceHeading}>{workspaceHeading}</h1>
           <p>{t('subtitle')}</p>
         </div>
-        {isWorkbenchHeader && renderModeNavigation(true)}
+        {renderModeNavigation(true)}
         <div className="workspace-heading-actions">
-          {selectedRequirement && <span className="workspace-context-chip"><GitBranch size={14} aria-hidden="true" />{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span>}
+          {selectedRequirement && <span className="workspace-context-chip" title={selectedRequirement.title}><GitBranch size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.requirement')}:</span><span className="workspace-context-chip-value">{selectedRequirement.qa_model?.display_id ?? selectedRequirement.title}</span></span>}
+          {selectedRequirement && stage !== 'requirement' && <a className="workspace-return-link" href={`/workspace/${projectId}?projectId=${projectId}&requirementId=${selectedRequirement.id}&stage=requirement`}>{t('backToRequirement')}</a>}
+          {selectedCase && <span className="workspace-context-chip workspace-context-chip-case" title={selectedCase.title}><Workflow size={14} aria-hidden="true" /><span className="workspace-context-chip-label">{t('inspector.case')}:</span><span className="workspace-context-chip-value">{selectedCase.test_model?.display_id ?? selectedCase.title}</span></span>}
           {projectId && stage !== 'result' && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
             {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
             <span>{t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}</span>
           </button>}
-          {projectId && view !== 'browser' && <button type="button" className="btn btn-secondary btn-sm workspace-browser-shortcut" onClick={() => setView('browser')}>{t('modeViews.browser')}</button>}
           {projectId && <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>}
           {projectId && view !== 'discover' && (!currentRun || stage !== 'result') && <WorkspaceRunDock
             caseLabel={workspaceRunCaseLabel(dockCase?.test_model?.display_id, dockCase?.id, stage === 'failure' ? failureDockName : undefined)}
@@ -1065,7 +1086,6 @@ export function WorkspacePage() {
           </span>
         </button>
       </nav>}
-      {!isWorkbenchHeader && renderModeNavigation(false)}
 
       {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
       {!projectId ? (
@@ -1114,7 +1134,7 @@ export function WorkspacePage() {
                 limit={8}
                 filterText={(item) => `${item.id} ${item.status} ${item.requested_by ?? ''}`}
                 renderItem={(item) => <button key={item.id} type="button" className={item.id === context.runId ? 'is-selected' : ''} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'automation', view: 'debug' })}>
-                  <span className="workspace-run-status">{item.status}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
+                  <span className="workspace-run-status">{localizeStatus(item.status, 'testRunStatus')}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
                 </button>}
                 emptyState={<p className="workspace-muted">{t('context.noRuns')}</p>}
               />
@@ -1168,9 +1188,6 @@ export function WorkspacePage() {
           <section className={`workspace-main-panel is-${view}-panel${view === 'debug' && isMobileWorkspace ? ' is-mobile-workspace' : ''}`} aria-label={t('main.title')}>
             <div className="workspace-main-heading">
               <div><span className="workspace-eyebrow">{t('main.currentStage')}</span><h2>{stage === 'failure' ? t('stage.failure') : t(`tabs.${view}`)}</h2></div>
-              {!!modeViews[activeMode].length && <nav className="workspace-tool-nav" role="tablist" aria-label={t(`modes.${activeMode}Views`)}>
-                {modeViews[activeMode].map((item) => <button key={item} type="button" role="tab" aria-selected={view === item} className={`workspace-view-tab${view === item ? ' is-current' : ''}`} onClick={() => setView(item)}>{t(`modeViews.${item}`)}</button>)}
-              </nav>}
             </div>
             <div className="workspace-main-scroll">
               {aiRunOpen && <section className="workspace-ai-run-panel" aria-label={t('aiRun.title')}>
@@ -1231,7 +1248,7 @@ export function WorkspacePage() {
                 }}
                 onOpenAutomation={(testCaseId, filePath) => updateContext({ testCaseId, file: filePath, nodeId: undefined, stage: 'automation', view: 'code', returnTo: 'workspace' })}
                 onOpenRun={(runId, testCaseId) => updateContext({ runId, testCaseId, taskId: undefined, failureId: undefined, stage: 'result', view: 'results' })}
-                onOpenTask={(taskId) => openRunDetails({ taskId })}
+                onOpenTask={(taskId, requirementId) => openRunDetails({ taskId, requirementId })}
               />}
               {view === 'cases' && <TestCasesPage
                 projects={projects}
@@ -1291,7 +1308,24 @@ export function WorkspacePage() {
                   }}
                 />}
                 {view === 'debug' && <details className="workspace-debug-runtime" open={viewportWidth > 820 || (isMobileWorkspace && debugMobilePanel === 'browser')}>
-                  <summary><MonitorPlay size={15} aria-hidden="true" /><span>{t('debugBrowser.title')}</span><small>{runtime.snapshot?.status ?? runtime.connection}</small></summary>
+                  <summary>
+                    <MonitorPlay size={15} aria-hidden="true" />
+                    <span className="workspace-debug-summary-copy">
+                      <span>{t('debugBrowser.title')}</span>
+                      <small className="workspace-debug-summary-status" role="status" aria-live="polite">
+                        {runtime.snapshot && <>{runtime.snapshot.kind === 'task'
+                          ? t('debugBrowser.taskStatus', { status: localizeStatus(runtime.snapshot.status, 'taskStatus') })
+                          : t('debugBrowser.runStatus', { status: localizeStatus(runtime.snapshot.status, 'testRunStatus') })} · </>}
+                        {t('debugBrowser.runtimeUpdates', {
+                          status: t(`debugBrowser.connection.${runtime.connection}`, { defaultValue: runtime.connection }),
+                        })}
+                      </small>
+                      {latestDebugActivity && <small
+                        className="workspace-debug-summary-activity"
+                        title={latestDebugActivity.summary || latestDebugActivity.title}
+                      >{t('debugBrowser.recentActivity', { activity: latestDebugActivity.summary || latestDebugActivity.title })}</small>}
+                    </span>
+                  </summary>
                   <div className="workspace-debug-runtime-content">
                     {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert">
                       <strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p>
@@ -1451,8 +1485,8 @@ export function WorkspacePage() {
             </div>}
             {inspectorTab === 'ai' && <div className="workspace-inspector-content" role="tabpanel" id="workspace-inspector-tabpanel" aria-labelledby={`workspace-inspector-tab-${inspectorTab}`} tabIndex={0}>
               {task ? <section className="workspace-inspector-section">
-                <span>{t('inspector.task')}</span><strong>{runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status}</strong><p>{task.goal}</p>
-                {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{step.status}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
+                <span>{t('inspector.task')}</span><strong>{localizeStatus(runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status, 'taskStatus')}</strong><p>{task.goal}</p>
+                {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{localizeStatus(step.status, 'taskStatus')}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
                 {!!runtime.snapshot?.decisions.length && <details className="workspace-decision-trace"><summary>{t('inspector.decisionTrace')}</summary>{runtime.snapshot.decisions.map((decision) => <p key={decision.id}><strong>{decision.selected}</strong> · {decision.name}</p>)}</details>}
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('inspector.advancedTrace')}</button>
               </section> : <p className="workspace-muted">{t('inspector.aiIdle')}</p>}
@@ -1460,7 +1494,7 @@ export function WorkspacePage() {
             </div>}
             {inspectorTab === 'run' && <div className="workspace-inspector-content" role="tabpanel" id="workspace-inspector-tabpanel" aria-labelledby={`workspace-inspector-tab-${inspectorTab}`} tabIndex={0}>
               {currentRun ? <section className="workspace-inspector-section">
-                <span>{t('inspector.run')}</span><strong>{currentRun.status}</strong>
+                <span>{t('inspector.run')}</span><strong>{localizeStatus(currentRun.status, 'testRunStatus')}</strong>
                 <p>{currentRun.passed} / {currentRun.total || '—'} {t('runtime.tests')} · {currentRun.failed} {t('dock.failed')}</p>
                 <div className="workspace-inspector-fact"><span>{t('inspector.browser')}</span><strong>{currentRun.browser}</strong></div>
                 {currentRun.log_output && <pre className="workspace-inspector-log">{currentRun.log_output.slice(-900)}</pre>}

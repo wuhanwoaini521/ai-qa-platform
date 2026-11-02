@@ -9,6 +9,7 @@ from project_model.models import (
 )
 
 from app.api.authz import authenticate_websocket_stream, has_permission, require_permission
+from app.api.project_acl import enforce_project_access
 from app.container import get_recorder_workflow_service, recorder_service
 from app.services.ai_runtime import build_ai_orchestrator
 from app.services.recorder_service import (
@@ -16,13 +17,28 @@ from app.services.recorder_service import (
     RecorderOptimization,
     RecorderSaveCaseRequest,
     RecorderSessionCreate,
+    RecorderStepsRevisionConflict,
+    RecorderStreamReplaced,
     generate_python_case,
     normalize_recording_steps,
     validate_recording_optimization,
 )
-from app.services.recorder_workflow_service import RecorderWorkflowService
+from app.services.recorder_variables import extract_variables
+from app.services.recorder_workflow_service import (
+    RecorderSaveApiCaseRequest,
+    RecorderWorkflowService,
+)
 
 router = APIRouter(prefix="/recorder", tags=["Browser Recorder"])
+RECORDER_NAVIGATION_COMMANDS = frozenset({"back", "click", "double_click", "forward", "navigate", "press", "reload"})
+
+
+async def _get_accessible_session(session_id: str, user: User):
+    session = await recorder_service.get(session_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Recorder session not found")
+    await enforce_project_access(user, session.project_id)
+    return session
 
 
 @router.post("/sessions")
@@ -31,6 +47,12 @@ async def create_recorder_session(
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
     workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
 ):
+    await enforce_project_access(user, data.project_id)
+    # A project's SUT address is the default starting point for a recording.
+    if data.start_url == "about:blank":
+        project = await workflow.project_repo.get_by_id(data.project_id)
+        if project is not None and project.sut_base_url:
+            data = data.model_copy(update={"start_url": project.sut_base_url})
     try:
         created = await workflow.create_session(user.id, data)
     except LookupError as error:
@@ -53,10 +75,18 @@ async def get_recorder_session(
     session_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     return recorder_service.session_status(session)
+
+
+@router.get("/sessions/{session_id}/api-calls")
+async def get_recorder_api_calls(
+    session_id: str,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+):
+    """API calls observed while recording, ready to turn into API cases."""
+    session = await _get_accessible_session(session_id, user)
+    return {"session_id": session.id, "calls": recorder_service.api_calls(session)}
 
 
 @router.post("/sessions/{session_id}/generate")
@@ -65,10 +95,13 @@ async def generate_case(
     request: RecorderGenerateRequest,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
-    return {"code": generate_python_case(request), "project_id": recorder_service.session_status(session)["project_id"]}
+    session = await _get_accessible_session(session_id, user)
+    variables = [variable.as_dict() for variable in extract_variables(request.steps)]
+    return {
+        "code": generate_python_case(request),
+        "project_id": recorder_service.session_status(session)["project_id"],
+        "variables": variables,
+    }
 
 
 @router.post("/sessions/{session_id}/steps/{step_id}/ai-analysis")
@@ -77,9 +110,7 @@ async def analyze_recorder_locator(
     step_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     try:
         return await recorder_service.analyze_locator_with_ai(session, step_id)
     except LookupError as error:
@@ -96,9 +127,7 @@ async def decide_recorder_locator_with_jev(
     step_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    session = await _get_accessible_session(session_id, user)
     try:
         return await recorder_service.request_jev_locator_decision(session, step_id)
     except LookupError as error:
@@ -118,6 +147,7 @@ async def save_recorded_case(
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
     workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
 ):
+    await _get_accessible_session(session_id, user)
     try:
         return await workflow.save_case(session_id, user.id, request)
     except LookupError as error:
@@ -128,15 +158,30 @@ async def save_recorded_case(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+@router.post("/sessions/{session_id}/save-api-case")
+async def save_recorded_api_case(
+    session_id: str,
+    request: RecorderSaveApiCaseRequest,
+    user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
+    workflow: RecorderWorkflowService = Depends(get_recorder_workflow_service),
+):
+    """Save one captured API call as an API test case (human-triggered)."""
+    await _get_accessible_session(session_id, user)
+    try:
+        return await workflow.save_api_case(session_id, user.id, request)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.post("/sessions/{session_id}/optimize")
 async def optimize_recording(
     session_id: str,
     request: RecorderGenerateRequest,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
-    session = await recorder_service.get(session_id, user.id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Recorder session not found")
+    await _get_accessible_session(session_id, user)
     if not request.steps or len(request.steps) > 500:
         raise HTTPException(status_code=400, detail="Optimize between 1 and 500 recorded steps.")
     import json
@@ -239,6 +284,7 @@ async def close_recorder_session(
     session_id: str,
     user: User = Depends(require_permission(Permission.AUTOMATION_EDIT)),
 ):
+    await _get_accessible_session(session_id, user)
     await recorder_service.close(session_id, user.id)
     return {"closed": True}
 
@@ -254,12 +300,33 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
     if not session:
         await websocket.close(code=4404, reason="Recorder session not found")
         return
+    try:
+        await enforce_project_access(user, session.project_id)
+    except HTTPException:
+        await websocket.close(code=4404, reason="Recorder session not found")
+        return
     recorder_service.touch(session)
     last_steps_revision = -1
+    initial_snapshot_sent = False
+    pending_navigation_snapshot_count = 0
     try:
+        stream_generation = await recorder_service.claim_websocket_stream(session)
         while True:
             recorder_service.touch(session)
-            frame = await recorder_service.page_snapshot(session)
+            frame = await recorder_service.page_snapshot(session, stream_generation=stream_generation)
+            if not initial_snapshot_sent:
+                frame["applied_step_command_ids"] = list(session.applied_step_command_ids)
+                frame["processed_navigation_command_ids"] = list(session.processed_navigation_command_ids)
+                # Keep the former field for already-loaded clients during a rolling deployment.
+                frame["applied_navigation_command_ids"] = frame["processed_navigation_command_ids"]
+                if frame.get("type") == "navigating":
+                    pending_navigation_snapshot_count = max(1, pending_navigation_snapshot_count)
+                initial_snapshot_sent = True
+            if frame.get("type") in {"frame", "error"}:
+                frame["settled_navigation_count"] = pending_navigation_snapshot_count
+                pending_navigation_snapshot_count = 0
+            else:
+                frame["settled_navigation_count"] = 0
             revision = frame.get("steps_revision")
             if revision == last_steps_revision:
                 frame.pop("steps", None)
@@ -271,24 +338,49 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
             except asyncio.TimeoutError:
                 continue
             action = command.get("action")
+            if action in RECORDER_NAVIGATION_COMMANDS:
+                pending_navigation_snapshot_count += 1
+            command_id = command.get("command_id")
             try:
-                current_url = await recorder_service.apply_command(session, command)
+                current_url = await recorder_service.apply_command(
+                    session, command, stream_generation=stream_generation
+                )
+                # A periodic frame may race with a later command; acknowledge completion explicitly.
+                response = {"type": "command_success", "action": action}
+                if isinstance(command_id, str):
+                    response["command_id"] = command_id
+                if action in {"add_step", "edit_step", "replace_steps", "delete_step", "reorder"}:
+                    response["steps_revision"] = session.steps_revision
                 if current_url is not None:
-                    await websocket.send_json({"type": "command_success", "action": "navigate", "url": current_url})
+                    response["url"] = current_url
+                await websocket.send_json(response)
+            except RecorderStreamReplaced:
+                raise
             except Exception as error:
+                if action in {"add_step", "edit_step", "replace_steps", "delete_step", "reorder"}:
+                    last_steps_revision = -1
                 if action == "navigate":
                     recorder_service.navigation_failed(session, str(error))
-                await websocket.send_json(
-                    {
-                        "type": "command_error",
-                        "message": str(error),
-                        "url": command.get("url")
-                        if action == "navigate"
-                        else recorder_service.session_status(session)["url"],
-                    }
-                )
+                error_response = {
+                    "type": "command_error",
+                    "action": action,
+                    "message": str(error),
+                    "url": command.get("url")
+                    if action == "navigate"
+                    else recorder_service.session_status(session)["url"],
+                }
+                if isinstance(command_id, str):
+                    error_response["command_id"] = command_id
+                if isinstance(error, RecorderStepsRevisionConflict):
+                    error_response["code"] = "steps_revision_conflict"
+                await websocket.send_json(error_response)
     except WebSocketDisconnect:
         pass
+    except RecorderStreamReplaced:
+        try:
+            await websocket.close(code=1012, reason="Recorder stream replaced")
+        except Exception:
+            pass
     except Exception:
         try:
             await websocket.close(code=1011)

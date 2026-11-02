@@ -30,7 +30,7 @@ export function QualityDiscoveryPanel({
   onOpenCase?: (testCaseId: string, requirementId?: string) => void;
   onOpenAutomation?: (testCaseId: string, filePath: string) => void;
   onOpenRun?: (runId: string, testCaseId?: string) => void;
-  onOpenTask?: (taskId: string) => void;
+  onOpenTask?: (taskId: string, requirementId?: string) => void;
 }) {
   const { t } = useTranslation('qualityDiscovery');
   const [requirements, setRequirements] = useState<Requirement[]>([]);
@@ -333,7 +333,7 @@ export function QualityDiscoveryPanel({
     setDraftError('');
     try {
       const task = await api.createQualityDiscoveryPytestDraft(run.id, journeyId);
-      onOpenTask(task.id);
+      onOpenTask(task.id, run.requirement_id ?? undefined);
     } catch (reason) {
       setDraftError(reason instanceof Error ? reason.message : String(reason));
     } finally {

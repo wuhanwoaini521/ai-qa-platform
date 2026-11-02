@@ -31,6 +31,7 @@ EXAMPLE_DIR = Path(__file__).resolve().parents[4] / "examples" / "quickstart"
 EXAMPLE_FILES = (
     ".gitignore",
     "README.md",
+    "conftest.py",
     "pytest.ini",
     "components/__init__.py",
     "components/cart.py",
@@ -179,6 +180,11 @@ class WorkspaceService:
             raise FileNotFoundError(f"File not found: {relative_path}")
         async with aiofiles.open(target, "r", encoding="utf-8", errors="replace") as f:
             return await f.read()
+
+    async def delete_file(self, workspace_id: str, relative_path: str) -> None:
+        target = self._resolve_safe_file_path(workspace_id, relative_path)
+        if target.is_file():
+            target.unlink()
 
     async def write_file(self, workspace_id: str, relative_path: str, content: str) -> None:
         target = self._resolve_safe_file_path(workspace_id, relative_path)

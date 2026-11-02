@@ -34,6 +34,7 @@ from app.repositories.workflow_definition_repo import WorkflowDefinitionReposito
 from app.repositories.workspace_repo import WorkspaceRepository
 from app.services.ai_service import AIService
 from app.services.ai_settings_service import AISettingsService
+from app.services.api_case_persistence import ApiCaseSaveService
 from app.services.api_read_service import (
     ApiKeyService,
     AuditQueryService,
@@ -51,6 +52,7 @@ from app.services.discovery_intelligence_service import DiscoveryIntelligenceSer
 from app.services.execution_trace_service import ExecutionTraceService
 from app.services.failure_service import FailureService
 from app.services.failure_workflow_service import FailureWorkflowService
+from app.services.flow_binding_service import FlowBindingService
 from app.services.golden_demo_service import GoldenDemoService
 from app.services.health_service import HealthService
 from app.services.jira_service import JiraService
@@ -477,6 +479,34 @@ def get_execution_trace_service(session: AsyncSession = Depends(get_db)) -> Exec
         invocations=AIRepository(session=session),
         runs=TestRunRepository(session),
         suggestions=DiscoverySuggestionRepository(session),
+    )
+
+
+def get_api_case_save_service(session: AsyncSession = Depends(get_db)) -> ApiCaseSaveService:
+    case_repo = TestCaseRepository(session)
+    binding_repo = AutomationBindingRepository(session)
+    return ApiCaseSaveService(
+        project_repo=ProjectRepository(session),
+        requirement_repo=RequirementRepository(session),
+        test_case_repo=case_repo,
+        binding_repo=binding_repo,
+        binding_service=AutomationBindingService(
+            binding_repo, case_repo, WorkspaceRepository(session), WorkspaceService()
+        ),
+        workspace_service=WorkspaceService(),
+    )
+
+
+def get_flow_binding_service(session: AsyncSession = Depends(get_db)) -> FlowBindingService:
+    case_repo = TestCaseRepository(session)
+    binding_repo = AutomationBindingRepository(session)
+    return FlowBindingService(
+        requirement_repo=RequirementRepository(session),
+        test_case_repo=case_repo,
+        binding_repo=binding_repo,
+        binding_service=AutomationBindingService(
+            binding_repo, case_repo, WorkspaceRepository(session), WorkspaceService()
+        ),
     )
 
 

@@ -21,6 +21,8 @@ class FailureRepository:
         return FailureRecord(
             id=row.id,
             run_id=row.run_id,
+            requirement_id=getattr(row, "requirement_id", None),
+            case_id=getattr(row, "case_id", None),
             execution_id=row.execution_id,
             test_nodeid=row.test_nodeid,
             test_name=row.test_name,

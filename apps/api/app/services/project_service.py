@@ -34,17 +34,19 @@ class ProjectService:
             repository_url=orm.repository_url,
             default_branch=orm.default_branch,
             framework_type=FrameworkType(orm.framework_type),
+            sut_base_url=orm.sut_base_url,
+            hidden_from_overview=bool(orm.hidden_from_overview),
             owner_id=orm.owner_id,
             team_id=orm.team_id,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
 
-    async def count_projects(self) -> int:
-        return await self.project_repo.count_all()
+    async def count_projects(self, *, include_hidden: bool = False) -> int:
+        return await self.project_repo.count_all(include_hidden=include_hidden)
 
-    async def list_projects(self, limit: int | None = None) -> list[Project]:
-        orms = await self.project_repo.list_all(limit=limit)
+    async def list_projects(self, limit: int | None = None, *, include_hidden: bool = False) -> list[Project]:
+        orms = await self.project_repo.list_all(limit=limit, include_hidden=include_hidden)
         return [self._to_dto(orm) for orm in orms]
 
     async def get_project(self, project_id: str) -> Project | None:

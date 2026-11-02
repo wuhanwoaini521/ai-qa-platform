@@ -13,6 +13,7 @@ class RepositoryScope(Protocol):
     failure_analyses: Any
     breakpoints: Any
     projects: Any
+    quality_discovery: Any
     requirements: Any
     test_cases: Any
     test_designs: Any

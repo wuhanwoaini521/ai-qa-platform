@@ -188,7 +188,7 @@ export const WorkersPage: React.FC = () => {
       {/* Cluster Stats Grid */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-primary)' }}>
+          <div className="stat-icon is-blue">
             <Server size={20} />
           </div>
           <div className="stat-details">
@@ -208,7 +208,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
+          <div className="stat-icon is-green">
             <Radio size={20} />
           </div>
           <div className="stat-details">
@@ -221,7 +221,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)' }}>
+          <div className="stat-icon is-green">
             <Cpu size={20} />
           </div>
           <div className="stat-details">
@@ -242,7 +242,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)' }}>
+          <div className="stat-icon is-amber">
             <Layers size={20} />
           </div>
           <div className="stat-details">
@@ -255,7 +255,7 @@ export const WorkersPage: React.FC = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--accent-violet)' }}>
+          <div className="stat-icon is-violet">
             <Activity size={20} />
           </div>
           <div className="stat-details">

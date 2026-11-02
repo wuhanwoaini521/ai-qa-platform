@@ -25,5 +25,6 @@
   "platform": "Platform",
   "primaryNavigation": "Primary navigation",
   "collapseSidebar": "Collapse sidebar",
-  "expandSidebar": "Expand sidebar"
+  "expandSidebar": "Expand sidebar",
+  "apiCases": "API Workbench"
 }

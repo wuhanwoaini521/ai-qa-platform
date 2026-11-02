@@ -98,7 +98,8 @@ async def main():
         assert body["status"] in {"REAL_CONNECTED", "FALLBACK", "SIMULATION", "UNAVAILABLE"}, body
         assert body["real_model_available"] is (body["status"] == "REAL_CONNECTED"), body
         assert body["fallback_active"] is (body["status"] == "FALLBACK"), body
-        assert "api_key" not in str(body).lower(), body
+        assert "api_key" not in body and "secret_key" not in body, body
+        assert body["failure_reason"] == "missing_api_key", body
 
         jira = await client.get("/api/jira/issues", params={"query": "anything"})
         assert jira.status_code == 200, jira.text

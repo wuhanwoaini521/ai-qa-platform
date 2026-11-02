@@ -127,6 +127,9 @@ class TaskExecutionOrchestrator:
             ),
             recorder_storage_state=self._recorder_storage_state,
             call_code_ai=lambda task, prompt: self.ai_service.call_code_ai(task, prompt),
+            suggest_discovery_assertions=lambda task, candidates: self.ai_service.suggest_discovery_assertions(
+                task, candidates
+            ),
             inspect_source=self._inspect_source,
             review_source=self._review_source,
             validate_python_test=TaskCodeGenerationService._validate_python_test,

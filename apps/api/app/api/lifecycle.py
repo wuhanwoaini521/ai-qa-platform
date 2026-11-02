@@ -1,11 +1,14 @@
 """Lifecycle projections and structured workflows over the existing domain entities."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from project_model.models import Permission
+from pydantic import BaseModel, Field
+from qa_core.ai.budget import BudgetExceededError
+from qa_core.ai.provider import AIProviderError
 
 from app.api.authz import require_permission
-from app.api.project_acl import project_path_access
+from app.api.project_acl import case_access, project_path_access, requirement_id_access
 from app.container import (
     get_golden_demo_service,
     get_project_knowledge_service,
@@ -134,6 +137,125 @@ async def analyze_requirement(
     return StreamingResponse(
         events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
+
+
+@router.post("/requirements/{requirement_id}/assertions/draft", dependencies=[Depends(requirement_id_access)])
+async def draft_assertions(
+    requirement_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Draft assertions grounded in acceptance criteria. Drafts are never applied automatically."""
+    try:
+        return await service.draft_assertions(requirement_id)
+    except BudgetExceededError as error:
+        raise HTTPException(429, str(error)) from error
+    except AIProviderError as error:
+        raise HTTPException(503, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post(
+    "/requirements/{requirement_id}/assertions/{assertion_id}/adoption", dependencies=[Depends(requirement_id_access)]
+)
+async def set_assertion_adoption(
+    requirement_id: str,
+    assertion_id: str,
+    adopted: bool = Body(embed=True),
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Record the human adoption decision for one drafted assertion."""
+    try:
+        return await service.set_assertion_adoption(requirement_id, assertion_id, adopted)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post("/requirements/{requirement_id}/assertions/script", dependencies=[Depends(requirement_id_access)])
+async def generate_assertion_script(
+    requirement_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Return a script draft built from human-adopted assertions. Nothing is written to disk."""
+    try:
+        return await service.generate_assertion_script(requirement_id)
+    except BudgetExceededError as error:
+        raise HTTPException(429, str(error)) from error
+    except AIProviderError as error:
+        raise HTTPException(503, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+class AssertionScriptSavePayload(BaseModel):
+    path: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1)
+    assertion_ids: list[str] = Field(min_length=1, max_length=30)
+
+
+@router.get("/test-cases/{case_id}/assertions", dependencies=[Depends(case_access)])
+async def case_assertions(
+    case_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Case assertions with their bound test function's latest real execution."""
+    try:
+        return await service.case_assertions(case_id)
+    except LookupError as error:
+        raise HTTPException(404, "Test case not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.delete(
+    "/requirements/{requirement_id}/assertions/{assertion_id}",
+    dependencies=[Depends(requirement_id_access)],
+)
+async def discard_assertion(
+    requirement_id: str,
+    assertion_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    try:
+        await service.discard_assertion(requirement_id, assertion_id)
+        return {"status": "discarded", "assertion_id": assertion_id}
+    except LookupError as error:
+        raise HTTPException(404, "Assertion not found") from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post("/requirements/{requirement_id}/assertions/script/save", dependencies=[Depends(requirement_id_access)])
+async def save_assertion_script(
+    requirement_id: str,
+    payload: AssertionScriptSavePayload,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Save a human-approved script and record which adopted assertions it implements."""
+    try:
+        return await service.save_assertion_script(
+            requirement_id, path=payload.path, code=payload.code, assertion_ids=payload.assertion_ids
+        )
+    except RequirementAnalysisBusy as error:
+        raise HTTPException(409, str(error)) from error
+    except FileExistsError as error:
+        raise HTTPException(409, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.get("/requirements/{requirement_id}/assertions/runs", dependencies=[Depends(requirement_id_access)])
+async def assertion_runs(
+    requirement_id: str,
+    service: RequirementLifecycleService = Depends(get_requirement_lifecycle_service),
+):
+    """Return each assertion with its latest real TestRun execution, or NEVER_RUN."""
+    try:
+        return await service.assertion_runs(requirement_id)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @router.post("/requirements/{requirement_id}/lifecycle/designs")

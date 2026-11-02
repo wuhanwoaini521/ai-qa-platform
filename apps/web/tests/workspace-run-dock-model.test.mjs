@@ -15,6 +15,12 @@ test('saved TestRun outcome takes precedence over task status', () => {
   });
 });
 
+test('a paused workflow is not presented as active run work', () => {
+  assert.deepEqual(workspaceRunDockState(null, 'PAUSED'), {
+    status: 'task-paused', active: false, failed: false, passed: false, taskTerminal: false,
+  });
+});
+
 test('task failure and block states remain distinct from TestRun failure', () => {
   assert.equal(workspaceRunDockState(null, 'FAILED').status, 'task-failed');
   assert.equal(workspaceRunDockState(null, 'FAILED').failed, true);

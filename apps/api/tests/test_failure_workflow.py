@@ -1659,10 +1659,11 @@ async def test_jev_upstream_outage_blocks_auto_repair_before_diagnosis_or_write(
 
             service.diagnose_failure_ai = unexpected_diagnosis
             scope = TaskRepositoryScopeFactory()
-            decision = DecisionService(settings_service=LocalJevSettings(), repository_scope=scope)
+            jev_settings = LocalJevSettings()
+            decision = DecisionService(settings_service=jev_settings, repository_scope=scope)
             workflow = FailureWorkflowService(
                 service,
-                LocatorDecisionService(decision_service=decision),
+                LocatorDecisionService(decision_service=decision, settings_service=jev_settings),
                 auto_repair_mode="AUTO",
             )
             events = [event async for event in workflow.stream(failure_id, auto_triggered=True)]
