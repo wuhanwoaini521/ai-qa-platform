@@ -6,6 +6,7 @@ import { NavTab } from '../components/Navigation';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
+import { buildProjectManagementHref } from '../app/workspaceContext';
 import './ProjectsPage.css';
 
 interface ProjectsPageProps {
@@ -159,7 +160,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <p>{currentProject.repository_url || t('localWorkspace')} · {currentProject.framework_type} · {t('columnBranch')}: <code>{currentProject.default_branch}</code></p>
         </div>
         <div className="project-current-actions">
-          <Link className="btn btn-secondary" to={`/projects/${encodeURIComponent(currentProject.id)}/management`} onClick={() => onSelectProject(currentProject.id)}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</Link>
+          <Link className="btn btn-secondary" to={buildProjectManagementHref(currentProject.id)} onClick={() => onSelectProject(currentProject.id)}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</Link>
           <button type="button" className="btn btn-primary" onClick={() => { onSelectProject(currentProject.id); onNavigate('workspace', currentProject.id); }}><Code2 size={14} aria-hidden="true" />{t('openWorkspace')}</button>
         </div>
       </section>}
@@ -259,7 +260,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                             className="btn btn-secondary btn-sm"
                             title={t('viewRequirements')}
                             aria-label={t('viewRequirements')}
-                            to={`/projects/${encodeURIComponent(p.id)}/management`}
+                            to={buildProjectManagementHref(p.id)}
                             onClick={() => onSelectProject(p.id)}
                           >
                             <FileText size={13} aria-hidden="true" />

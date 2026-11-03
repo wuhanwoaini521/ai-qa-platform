@@ -18,6 +18,8 @@
   "dashboardMobile": "总览",
   "workspaceMobile": "工作台",
   "projectsMobile": "项目",
+  "projectRequirements": "需求与用例",
+  "projectRequirementsMobile": "需求",
   "runsMobile": "运行",
   "qualityMobile": "质量",
   "security": "安全与权限",

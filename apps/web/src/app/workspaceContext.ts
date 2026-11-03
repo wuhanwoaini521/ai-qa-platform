@@ -215,6 +215,10 @@ export function buildWorkspaceHomeHref(projectId?: string | null): string {
   return projectId ? `/workspace/${encodeURIComponent(projectId)}` : '/workspace';
 }
 
+export function buildProjectManagementHref(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/management`;
+}
+
 export function buildWorkflowHref(context: WorkspaceContext): string {
   if (!context.taskId && !context.runId && !context.parentRunId) return `/runs/tasks${queryFor(context)}`;
 

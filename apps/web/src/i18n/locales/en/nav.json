@@ -18,6 +18,8 @@
   "dashboardMobile": "Home",
   "workspaceMobile": "Workspace",
   "projectsMobile": "Projects",
+  "projectRequirements": "Requirements & Cases",
+  "projectRequirementsMobile": "Requirements",
   "runsMobile": "Runs",
   "qualityMobile": "Insights",
   "security": "Security & RBAC",

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
@@ -27,6 +27,7 @@ import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import {
   buildWorkspaceHomeHref,
   buildWorkspaceHref,
+  buildProjectManagementHref,
   buildScopedHref,
   readExplicitRunId,
   readWorkspaceContext,
@@ -104,7 +105,10 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     runId: explicitRunId,
     parentRunId: workspaceContext.parentRunId,
   };
-  const scopedProjectId = workspaceContext.projectId ?? selectedProjectId ?? undefined;
+  const routeProjectId =
+    matchPath({ path: '/projects/:projectId', end: false }, pathname)?.params.projectId ??
+    matchPath({ path: '/workspace/:projectId', end: false }, pathname)?.params.projectId;
+  const scopedProjectId = routeProjectId ?? workspaceContext.projectId ?? selectedProjectId ?? undefined;
   const scopedHref = (path: string) =>
     buildScopedHref(path, { projectId: scopedProjectId, ...preservedRunContext });
   const languageToggleLabel = i18n.resolvedLanguage === 'zh-CN' ? 'EN' : '中';
@@ -153,6 +157,11 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
   const workspaceBase = buildWorkspaceHomeHref(scopedProjectId);
   const workspaceRoute = pathname === '/workspace' || pathname.startsWith('/workspace/');
   const projectScopedRoute = (workspaceRoute && pathname !== '/workspace') || pathname.startsWith('/projects/');
+  const projectManagementRoute = matchPath(
+    { path: '/projects/:projectId/management', end: false },
+    pathname,
+  ) !== null;
+  const projectManagementNavVisible = Boolean(scopedProjectId);
   const handleProjectChange = (projectId: string) => {
     const nextProjectId = projectId || null;
     // Navigate before updating selection so the outgoing route cannot restore stale scope.
@@ -168,7 +177,16 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
   const navItems: NavItem[] = [
     { id: 'dashboard', labelKey: 'dashboard', mobileLabelKey: 'dashboardMobile', icon: LayoutDashboard, to: scopedHref('/'), end: true },
     { id: 'workspace', labelKey: 'workspace', mobileLabelKey: 'workspaceMobile', icon: PanelsTopLeft, to: workspaceBase },
-    { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: scopedHref('/projects') },
+    { id: 'projects', labelKey: 'projects', mobileLabelKey: 'projectsMobile', icon: FolderGit2, to: scopedHref('/projects'), end: projectManagementRoute },
+    ...(projectManagementNavVisible && scopedProjectId
+      ? [{
+        id: 'requirements' as const,
+        labelKey: 'projectRequirements',
+        mobileLabelKey: 'projectRequirementsMobile',
+        icon: ClipboardList,
+        to: buildProjectManagementHref(scopedProjectId),
+      }]
+      : []),
     { id: 'runs', labelKey: 'runs', mobileLabelKey: 'runsMobile', icon: GitBranch, to: scopedHref('/runs') },
     { id: 'quality', labelKey: 'quality', mobileLabelKey: 'qualityMobile', icon: ShieldCheck, to: scopedHref('/quality') },
   ];
