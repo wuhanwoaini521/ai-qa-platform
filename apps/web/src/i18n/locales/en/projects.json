@@ -18,7 +18,7 @@
   "emptyTitle": "No projects found",
   "emptyDescription": "Create your first project to configure a Playwright or Pytest test suite with an automated workspace.",
   "localWorkspace": "Local Workspace",
-  "viewRequirements": "View Requirements",
+  "viewRequirements": "Manage requirements & cases",
   "openInAutomationStudio": "Open in Automation Studio",
   "studio": "Studio",
   "columnName": "Project Name",

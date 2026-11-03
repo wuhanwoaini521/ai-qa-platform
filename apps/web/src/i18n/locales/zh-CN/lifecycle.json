@@ -2,6 +2,7 @@
   "projects": "项目",
   "projectWorkspace": "项目工作空间",
   "openWorkspace": "打开 QA 工作台",
+  "managementCenter": "管理需求与用例",
   "projectSections": "项目概览章节",
   "openWorkflow": "运行追踪",
   "returnToFailureContext": "返回失败上下文",

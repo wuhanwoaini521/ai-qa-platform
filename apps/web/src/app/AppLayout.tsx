@@ -18,6 +18,7 @@ const PAGE_TITLES: { match: (path: string) => boolean; titleKey: string }[] = [
   { match: (p) => p === '/workflow' || p === '/runs/tasks', titleKey: 'workflow' },
   { match: (p) => p === '/library', titleKey: 'library' },
   { match: (p) => /^\/projects(\/[^/]+)?$/.test(p), titleKey: 'projects' },
+  { match: (p) => /^\/projects\/[^/]+\/management$/.test(p), titleKey: 'requirements' },
   { match: (p) => p.startsWith('/requirements') || p.includes('/requirements'), titleKey: 'requirements' },
   { match: (p) => p.startsWith('/test-cases'), titleKey: 'testCases' },
   { match: (p) => p.startsWith('/runs'), titleKey: 'runs' },

@@ -159,7 +159,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <p>{currentProject.repository_url || t('localWorkspace')} · {currentProject.framework_type} · {t('columnBranch')}: <code>{currentProject.default_branch}</code></p>
         </div>
         <div className="project-current-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => { onSelectProject(currentProject.id); onNavigate('requirements', currentProject.id); }}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</button>
+          <Link className="btn btn-secondary" to={`/projects/${encodeURIComponent(currentProject.id)}/management`} onClick={() => onSelectProject(currentProject.id)}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</Link>
           <button type="button" className="btn btn-primary" onClick={() => { onSelectProject(currentProject.id); onNavigate('workspace', currentProject.id); }}><Code2 size={14} aria-hidden="true" />{t('openWorkspace')}</button>
         </div>
       </section>}
@@ -255,18 +255,15 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                       <td className="project-created-date">{new Date(p.created_at).toLocaleDateString()}</td>
                       <td className="project-actions-cell">
                         <div className="project-row-actions">
-                          <button
-                            type="button"
+                          <Link
                             className="btn btn-secondary btn-sm"
                             title={t('viewRequirements')}
                             aria-label={t('viewRequirements')}
-                            onClick={() => {
-                              onSelectProject(p.id);
-                              onNavigate('requirements', p.id);
-                            }}
+                            to={`/projects/${encodeURIComponent(p.id)}/management`}
+                            onClick={() => onSelectProject(p.id)}
                           >
                             <FileText size={13} aria-hidden="true" />
-                          </button>
+                          </Link>
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"

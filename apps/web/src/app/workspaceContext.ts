@@ -210,6 +210,11 @@ export function buildWorkspaceHref(context: WorkspaceContext): string {
   return `${path}${queryFor(context)}`;
 }
 
+/** Sidebar entry to Workspace should open its default page, not carry a selected run. */
+export function buildWorkspaceHomeHref(projectId?: string | null): string {
+  return projectId ? `/workspace/${encodeURIComponent(projectId)}` : '/workspace';
+}
+
 export function buildWorkflowHref(context: WorkspaceContext): string {
   if (!context.taskId && !context.runId && !context.parentRunId) return `/runs/tasks${queryFor(context)}`;
 

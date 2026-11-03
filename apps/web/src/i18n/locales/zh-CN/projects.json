@@ -18,7 +18,7 @@
   "emptyTitle": "暂无项目",
   "emptyDescription": "创建第一个项目，即可配置 Playwright 或 Pytest 测试套件以及自动化工作区。",
   "localWorkspace": "本地工作区",
-  "viewRequirements": "查看需求",
+  "viewRequirements": "管理需求与用例",
   "openInAutomationStudio": "在自动化工作室中打开",
   "studio": "工作室",
   "columnName": "项目名称",

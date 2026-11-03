@@ -25,8 +25,8 @@ import i18n, { storeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 import { useProjectScope } from '../app/ProjectScope';
 import { buildProjectDisplayNames } from '../app/projectSelectionModel';
 import {
+  buildWorkspaceHomeHref,
   buildWorkspaceHref,
-  buildWorkflowHref,
   buildScopedHref,
   readExplicitRunId,
   readWorkspaceContext,
@@ -150,11 +150,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     setSearchOpen(false);
   };
 
-  const workspaceBase = explicitRunId || workspaceContext.taskId || workspaceContext.parentRunId
-    ? buildWorkflowHref({ ...workspaceContext, ...preservedRunContext, projectId: scopedProjectId })
-    : scopedProjectId
-      ? `/workspace/${encodeURIComponent(scopedProjectId)}`
-      : '/workspace';
+  const workspaceBase = buildWorkspaceHomeHref(scopedProjectId);
   const workspaceRoute = pathname === '/workspace' || pathname.startsWith('/workspace/');
   const projectScopedRoute = (workspaceRoute && pathname !== '/workspace') || pathname.startsWith('/projects/');
   const handleProjectChange = (projectId: string) => {

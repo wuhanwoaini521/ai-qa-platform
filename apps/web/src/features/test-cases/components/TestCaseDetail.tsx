@@ -70,41 +70,29 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
         {selectedCase.test_model && <ModernCasePanel key={selectedCase.id} item={selectedCase}/>}
         <CaseAssertionsPanel key={`assertions-${selectedCase.id}`} caseId={selectedCase.id} />
         {selectedCase.preconditions && (
-          <div style={{ marginBottom: '14px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-              {t('preconditions')}
-            </div>
-            <div style={{ fontSize: '13px', color: 'var(--ink-soft)', background: 'var(--surface-inset)', padding: '8px 12px', borderRadius: 'var(--r-xs)' }}>
-              {selectedCase.preconditions}
-            </div>
-          </div>
+          <section className="test-case-content-section is-preconditions">
+            <h4 className="test-case-content-label">{t('preconditions')}</h4>
+            <p className="test-case-content-copy">{selectedCase.preconditions}</p>
+          </section>
         )}
 
-        {!selectedCase.test_model && <div style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-            {t('testSteps', { total: selectedCase.steps.length })}
-          </div>
+        {!selectedCase.test_model && <section className="test-case-content-section is-steps">
+          <h4 className="test-case-content-label">{t('testSteps', { total: selectedCase.steps.length })}</h4>
           {selectedCase.steps.length > 0 ? (
-            <ol style={{ paddingLeft: '20px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <ol className="test-case-content-steps">
               {selectedCase.steps.map((st, i) => (
-                <li key={i} style={{ color: 'var(--ink-soft)' }}>
-                  {st}
-                </li>
+                <li key={i}>{st}</li>
               ))}
             </ol>
           ) : (
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('noSteps')}</div>
+            <p className="test-case-content-empty">{t('noSteps')}</p>
           )}
-        </div>}
+        </section>}
 
-        <div style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-            {t('expectedResult')}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--ink-soft)', background: 'var(--accent-green-soft)', border: '1px solid var(--line)', padding: '8px 12px', borderRadius: 'var(--r-xs)' }}>
-            {selectedCase.expected_result || t('noExpectedResult')}
-          </div>
-        </div>
+        <section className="test-case-content-section is-expected-result">
+          <h4 className="test-case-content-label">{t('expectedResult')}</h4>
+          <p className="test-case-content-copy">{selectedCase.expected_result || t('noExpectedResult')}</p>
+        </section>
 
         {selectedCase.tags.length > 0 && (
           <div>

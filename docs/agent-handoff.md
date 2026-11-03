@@ -2,6 +2,14 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
+## 最新活动任务：QA 工作台侧栏清除运行上下文（2026-11-03）
+
+- **目标与范围：**从左侧“QA 工作台”导航进入时打开默认工作台，不继承当前 `runId`、`taskId`、`parentRunId`；保留所选项目。显式 Run 详情与快捷目的地行为保持原有语义。
+- **实现：**`apps/web/src/app/workspaceContext.ts` 新增 `buildWorkspaceHomeHref(projectId)`；`apps/web/src/components/Navigation.tsx` 的侧栏入口改用该 helper；`apps/web/tests/workspace-context.test.mjs` 增加回归。任务日志位于 `.ai-runs/2026-11-03-sidebar-workspace-run-context/`。
+- **验证：**Test Engineer 独立复测：定向上下文测试 16/16、完整前端测试 313/313、typecheck、受影响文件 ESLint、`git diff --check` 均通过（退出码 0）。命令与边界见 `10-test-engineer-independent.md`。
+- **评审与验收边界：**Critical Reviewer 独立代码评审未发现阻断项；Test Engineer 自动化门禁通过。浏览器交互、刷新/历史行为、服务访问和桌面视口均 NOT RUN；不能据此断言当前打开页面已显示改动。交付状态 PARTIAL，真实页面验收待后续安排。
+- **提交前 Git 基线：**`main @ ec4520bc7206d3c43a6235390ec8bddbd59a0723`。保留已有 tracked 修改和所有未跟踪文件；本次交付只提交已批准的产品功能和对应交接记录。OS 级隔离 `UNVERIFIED`。
+
 ## 当前活动里程碑：Workspace 桌面布局 m01207（2026-11-02）
 
 - **当前目标**：按用户 m01207 将 Workspace 改成紧凑标题行、等宽五阶段导航和单行内容工具栏。该布局要求取代旧 m00337 视觉验收，但保留其阶段、模式、画布、检查器、上下文和运行详情交互。
@@ -12,7 +20,15 @@
 - **Git 边界**：分支 `handoff/company-pc-2026-10-29`，HEAD `0adbdce59c8091181788a8db3dca0d6f028cbd38`。保留此前用户授权的其他修改和所有 `.ai-runs/**`、`runtime/backups/**`；未 commit/push/merge/deploy。
 - **待续/UNKNOWN**：原 m01946 浏览器 harness 与 payload 无可复用记录，因此其原始脚本契约仍 UNKNOWN。已依据用户停点明确的无失败/失败/运行中展示意图，独立构建当前 m01207 浏览器矩阵：PASS/FAILED 用既有记录只读，FAILED 的失败处理按钮只切换本地 stage/context（相关 API 请求为 GET），RUNNING 仅用 GET 拦截合成。无已有活跃 run，因此真实 RUNNING 生命周期未验证；按用户要求未启动/停止运行或服务。
 
-**m01207 authoritative handoff:** This 2026-11-02 entry is the only current status. The archived 2026-10-29 and earlier sections below are historical snapshots and must not be treated as current branch, code, verification, or open-task status unless a later user message explicitly reactivates them.
+**m01207 authoritative handoff:** This 2026-11-02 entry remains the authoritative status for the Workspace m01207 milestone. The separate requirements/cases management-center task is recorded below; its entry does not supersede m01207. The archived 2026-10-29 and earlier sections below are historical snapshots and must not be treated as current branch, code, verification, or open-task status unless a later user message explicitly reactivates them.
+
+## Additional active task: project requirements and cases management center (2026-11-02)
+
+- **Scope:** Project-level `/projects/:projectId/management` page with requirements/cases lists, search/filter/sort, requirement-to-case counts and single-case association/reassignment/independent state using existing APIs; add an expandable requirement traceability view and reciprocal navigation; keep legacy Workspace object routes. Also restore vertical scrolling for embedded case details and separate preconditions, numbered steps, and expected result visually.
+- **Git:** repository `/Users/hans/Code/github/ai-qa-platform`; pre-delivery baseline was `main @ ec4520bc7206d3c43a6235390ec8bddbd59a0723`. This delivery stages only the approved product changes and handoff record; the pre-existing edits in `mise.toml`, `package.json`, `scripts/task.py` and unrelated untracked project data remain outside its scope.
+- **Fix update:** Test Engineer’s invalid URL `status` / `priority` finding was fixed by sharing enum normalization between controls and the filtering model. Critical Reviewer then noted old tab counts could briefly appear under the newly selected project. `getProjectScopedCount` now returns a count only when `loadedProjectId === projectId`; otherwise both tabs show `—` until current-project data is loaded. Regression coverage checks mismatched, absent and matching loaded project IDs. Critical Reviewer later found the `test_design_id` relation constraint: the management page now disables association changes for design-linked cases and explains that the requirement must first be changed through the test design. A model regression covers linked, null, and omitted design IDs; no API call is made for disabled selectors, avoiding false success feedback.
+- **Latest Engineer verification (2026-11-03):** `pnpm --dir apps/web test` 312/312; `pnpm --dir apps/web typecheck`, affected-file ESLint, `pnpm --dir apps/web build` (Vite 6.4.3, 3605 modules), and `git diff --check` all exit 0. Build retains existing Monaco large-chunk warning. i18n check was not rerun; the latest recorded independent result is 30 namespaces / 4081 keys. Browser interaction and desktop viewports remain BLOCKED/UNKNOWN: prior agent-browser session directory access was denied; no permission expansion or alternate-path retry.
+- **Delivery boundary:** Before this delivery, product changes were uncommitted; only the approved files for this handoff are included in the main-branch commit and push. No merge or deployment.
 
 ## Historical handoff archive — do not use as current status
 

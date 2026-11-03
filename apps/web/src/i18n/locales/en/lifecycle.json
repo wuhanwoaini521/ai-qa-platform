@@ -2,6 +2,7 @@
   "projects": "Projects",
   "projectWorkspace": "Project workspace",
   "openWorkspace": "Open QA Workspace",
+  "managementCenter": "Manage requirements & cases",
   "projectSections": "Project overview sections",
   "openWorkflow": "Run trace",
   "returnToFailureContext": "Return to failure context",

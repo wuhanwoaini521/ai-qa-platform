@@ -5,6 +5,7 @@ const {
   buildStudioHref,
   buildWorkflowHref,
   buildWorkspaceHref,
+  buildWorkspaceHomeHref,
   buildScopedHref,
   readExplicitRunId,
   readWorkspaceContext,
@@ -170,6 +171,13 @@ test('clears project-bound query state while retaining the selected workspace vi
     assert.equal(params.has(key), false, `${key} should be cleared`);
   }
 });
+
+test('sidebar Workspace home drops run context while keeping the selected project', () => {
+  const context = readWorkspaceContext('?projectId=project-a&runId=run-442548e01e2d&taskId=task-a&parentRunId=parent-a', 'project-b');
+  assert.equal(buildWorkspaceHomeHref(context.projectId), '/workspace/project-a');
+  assert.equal(buildWorkspaceHomeHref(null), '/workspace');
+});
+
 
 test('opens run progress in the Workspace drawer instead of navigating to a second runtime page', () => {
   const href = buildWorkflowHref({ projectId: 'project-a', taskId: 'task-a' });

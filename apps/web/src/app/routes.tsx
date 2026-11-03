@@ -43,6 +43,11 @@ const ProjectOverviewPage = lazy(() =>
     default: m.ProjectOverviewPage,
   })),
 );
+const ProjectManagementPage = lazy(() =>
+  import('../features/management/ProjectManagementPage').then((m) => ({
+    default: m.ProjectManagementPage,
+  })),
+);
 const WorkspacePage = lazy(() =>
   import('../features/workspace/WorkspacePage').then((m) => ({
     default: m.WorkspacePage,
@@ -316,6 +321,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onSignOut }) => (
       <Route path="/library" element={<LibraryPage />} />
       <Route path="/projects" element={<ProjectsRoute />} />
       <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />
+      <Route path="/projects/:projectId/management" element={<ProjectManagementPage />} />
       <Route
         path="/projects/:projectId/requirements"
         element={<RequirementsRoute />}
