@@ -2,7 +2,18 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
-## 最新活动任务：QA 工作台侧栏清除运行上下文（2026-11-03）
+> **最新交付：§3.70 需求与用例页面完整性改进（m01924）— PARTIAL（2026-11-03，未提交）。** 请先读该节与 `.ai-runs/2026-11-03-requirements-cases-management/`。
+
+## 当前任务：项目上下文中的需求与用例导航（2026-11-03）
+
+- **目标与范围**：按用户 m01378 的确认，在当前项目选中时让“需求与用例”成为持久侧栏入口，保留 Projects 列表和 Project Overview 原快捷入口；继续使用现有 `/projects/:projectId/management` 页面，不新增全局需求工作区，不改需求数据/API/运行时或移动样式。
+- **Git 状态**：分支 `feat/project-requirements-navigation`，基线/HEAD `941823433d57a745aaacf6e73fccdffb085fb5d0`；本任务未提交、未推送。保留所有既有未跟踪 `.ai-runs/**` 与 `runtime/backups/**`。
+- **实现**：`apps/web/src/components/Navigation.tsx` 从 URL 路由优先解析项目 ID，再回退项目选择；项目被选中时显示新的侧栏入口，并在需求管理页避免 Projects 项重复高亮。`apps/web/src/app/workspaceContext.ts` 提供共享需求管理 URL 构建器；Projects 列表和 Project Overview 的既有入口继续使用它。导航文案为 EN “Requirements & Cases”、ZH“需求与用例”，并提供紧凑标签。
+- **验证**：`pnpm --filter @ai-qa/web typecheck` PASS；`pnpm --filter @ai-qa/web lint` PASS；`pnpm --filter @ai-qa/web build` PASS（Vite 6.4.3，3,605 modules；既有 MonacoEditorPane 4,031.76KB / >500KB chunk 警告）；`git diff --check` PASS。前端 tests NOT RUN。独立代码复核无发现。Design Director 认为代码层级与文案已符合目标，但视觉验收 PARTIAL。
+- **限制/待办**：浏览器截图、点击和视口验收 NOT AVAILABLE；先前本地默认管理员登录失败，本任务没有重试或修改认证。实际渲染、文字截断、焦点/活动状态仍未由浏览器证实。后续如需视觉验收，应使用已有授权登录会话；不要猜测或重置凭据。
+- **交付状态**：PARTIAL（静态检查和代码复核通过，测试与浏览器验收未执行）。本任务没有 commit/push 授权。
+
+## 上一项任务快照：QA 工作台侧栏清除运行上下文（2026-11-03）
 
 - **目标与范围：**从左侧“QA 工作台”导航进入时打开默认工作台，不继承当前 `runId`、`taskId`、`parentRunId`；保留所选项目。显式 Run 详情与快捷目的地行为保持原有语义。
 - **实现：**`apps/web/src/app/workspaceContext.ts` 新增 `buildWorkspaceHomeHref(projectId)`；`apps/web/src/components/Navigation.tsx` 的侧栏入口改用该 helper；`apps/web/tests/workspace-context.test.mjs` 增加回归。任务日志位于 `.ai-runs/2026-11-03-sidebar-workspace-run-context/`。
@@ -10,7 +21,7 @@
 - **评审与验收边界：**Critical Reviewer 独立代码评审未发现阻断项；Test Engineer 自动化门禁通过。浏览器交互、刷新/历史行为、服务访问和桌面视口均 NOT RUN；不能据此断言当前打开页面已显示改动。交付状态 PARTIAL，真实页面验收待后续安排。
 - **提交前 Git 基线：**`main @ ec4520bc7206d3c43a6235390ec8bddbd59a0723`。保留已有 tracked 修改和所有未跟踪文件；本次交付只提交已批准的产品功能和对应交接记录。OS 级隔离 `UNVERIFIED`。
 
-## 当前活动里程碑：Workspace 桌面布局 m01207（2026-11-02）
+## 历史里程碑：Workspace 桌面布局 m01207（2026-11-02）
 
 - **当前目标**：按用户 m01207 将 Workspace 改成紧凑标题行、等宽五阶段导航和单行内容工具栏。该布局要求取代旧 m00337 视觉验收，但保留其阶段、模式、画布、检查器、上下文和运行详情交互。
 - **代码**：`apps/web/src/features/workspace/WorkspacePage.tsx` 和 `apps/web/src/features/workspace/workspace.css`。标题行右侧是 Canvas / Context / Inspector / 条件式 View Progress；工具栏左为模式，右为 REQ/TC/返回需求；删除重复阶段标题与“工作模式/辅助工具”标签。颜色、字体、图标、圆角不变。
@@ -20,9 +31,9 @@
 - **Git 边界**：分支 `handoff/company-pc-2026-10-29`，HEAD `0adbdce59c8091181788a8db3dca0d6f028cbd38`。保留此前用户授权的其他修改和所有 `.ai-runs/**`、`runtime/backups/**`；未 commit/push/merge/deploy。
 - **待续/UNKNOWN**：原 m01946 浏览器 harness 与 payload 无可复用记录，因此其原始脚本契约仍 UNKNOWN。已依据用户停点明确的无失败/失败/运行中展示意图，独立构建当前 m01207 浏览器矩阵：PASS/FAILED 用既有记录只读，FAILED 的失败处理按钮只切换本地 stage/context（相关 API 请求为 GET），RUNNING 仅用 GET 拦截合成。无已有活跃 run，因此真实 RUNNING 生命周期未验证；按用户要求未启动/停止运行或服务。
 
-**m01207 authoritative handoff:** This 2026-11-02 entry remains the authoritative status for the Workspace m01207 milestone. The separate requirements/cases management-center task is recorded below; its entry does not supersede m01207. The archived 2026-10-29 and earlier sections below are historical snapshots and must not be treated as current branch, code, verification, or open-task status unless a later user message explicitly reactivates them.
+**m01207 历史里程碑说明：**以下记录描述 2026-11-02 Workspace m01207 的验收范围与证据；它不代表当前分支、当前代码状态或当前活动任务。当前状态以本文件顶部的“当前任务”为准。The separate requirements/cases management-center task is recorded below as historical context. The archived 2026-10-29 and earlier sections below are historical snapshots and must not be treated as current branch, code, verification, or open-task status unless a later user message explicitly reactivates them.
 
-## Additional active task: project requirements and cases management center (2026-11-02)
+## 历史任务：项目需求与用例管理中心（2026-11-02）
 
 - **Scope:** Project-level `/projects/:projectId/management` page with requirements/cases lists, search/filter/sort, requirement-to-case counts and single-case association/reassignment/independent state using existing APIs; add an expandable requirement traceability view and reciprocal navigation; keep legacy Workspace object routes. Also restore vertical scrolling for embedded case details and separate preconditions, numbered steps, and expected result visually.
 - **Git:** repository `/Users/hans/Code/github/ai-qa-platform`; pre-delivery baseline was `main @ ec4520bc7206d3c43a6235390ec8bddbd59a0723`. This delivery stages only the approved product changes and handoff record; the pre-existing edits in `mise.toml`, `package.json`, `scripts/task.py` and unrelated untracked project data remain outside its scope.
@@ -2110,3 +2121,24 @@ git diff --check
 - **Evidence and credentials:** Feature-tracked `.ai-runs/**` and `.pi/**` files are included per the user's complete-branch instruction. A masked scan found redacted authorization headers and fixture-only secret values, with no real credentials. New `.ai-runs/merge-validation/**` evidence remains untracked and must be preserved, not staged.
 - **Documentation caveat:** All parent handoff content/headings remain; independently reused `3.x` numbering leaves 16 duplicate section IDs, so historical references may be ambiguous. Preserve historical numbering rather than renumber old reports; record as P2.
 - **Delivery completed:** Merge commit `c463dc46aaa5ce7cc256db9782a77743193b9ed3` has parents `0c0ab204960ab725958d6f97c6fcb82fc6a88609` and `89804a94f5c403bfd1ce5131a28442c533542730`. `git push origin HEAD:main` completed as a normal fast-forward; after fetch, `origin/main` was verified at `c463dc46aaa5ce7cc256db9782a77743193b9ed3`. The isolated merge worktree and `.ai-runs/merge-validation/**` evidence remain in place; the original feature worktree/user untracked files remain untouched.
+
+## 3.70 需求与用例页面完整性改进（m01924）— PARTIAL (2026-11-03)
+
+- 状态：实现完成，自动化门禁全绿，浏览器验收覆盖主要流程；5 项需改动演示数据/制造失败才能验证的条目保持 NOT VERIFIED（见 `.ai-runs/2026-11-03-requirements-cases-management/08-acceptance.md`）。
+- 改动：`apps/web/src/features/lifecycle/requirementCriteria.ts`（新增，验收标准 ID 保留映射）+ `apps/web/tests/requirement-criteria.test.mjs`；`features/management/{ProjectManagementPage.tsx,.css,ProjectManagementMatrix.css,managementModel.ts}`；`RequirementLifecyclePanel.tsx` 改为复用上述 helper；两个表单弹窗增加可选 `error` 属性；`i18n/locales/{en,zh-CN}/projectManagement.json` 25 个新键；`index.css` 增 `.form-error`；`apps/web/tests/management-model.test.mjs` 增 `clearedFilterPatch` 断言。
+- 证据/门禁：`pnpm --filter @ai-qa/web typecheck|lint|test(318 通过)|build` 全通过；`uv run python scripts/i18n_check.py` 通过（4127 键）。浏览器：Python Playwright 1.62 + 本地 5173/8000，脚本与截图在 `.ai-runs/2026-11-03-requirements-cases-management/evidence/`。
+- 数据安全：仅对 `req_9c72a1dabe30` 做过一次验收标准往返并恢复为空；遗留 1 条 `qa_model.history` 审计记录。
+- 未验证：新建需求/新建用例提交、关联用例成功/失败反馈、加载/加载失败、强制保存失败。
+- 下一步：创建一条临时需求与用例验证创建+关联成功路径后删除，可补齐 07/08/16 三项。
+- 未提交、未推送、未部署。
+
+## 3.71 需求与用例模块收尾：隔离环境闭环验证、提交并推送 — PASS (2026-11-03)
+
+- **触发与授权：** 用户先要求「继续收尾这个模块……验证真实业务闭环……发现问题直接修复，并把桌面 UI 走查一遍」，随后明确指示「最终收尾……可以提交并推送」。
+- **隔离验证环境：** 为不污染 seeded 项目，闭环验证使用独立 API 进程 `127.0.0.1:8010` + `SQLite /tmp/aiqa-isolated/closure.db`（不入库），前端复用仓库 Vite `:5173`，浏览器 `/api/*` 经 Playwright `route.fetch()` 转发到 8010。脚本 `.ai-runs/2026-11-03-requirements-cases-management/evidence/closure-check.py`，结果 `evidence/closure-result.json`。
+- **闭环结果 46/46 PASS：** 新建需求（含空值校验、双击只发 1 次 POST、注入 500 显示「创建失败，请重试。」且保留输入、恢复后重试成功）；验收标准首存生成 `AC-001…003`、二次编辑（3→4 条+改文案）编号保持 `AC-001…004`、刷新深链仍在；抽屉内新建用例自动关联；关联已有用例成功持久化、注入失败显示「关联失败，请重试。」且不产生假关联；用例页按需求筛选 3 行 / 追踪表展开 3 条 / 抽屉计数三方一致；加载失败显示「项目记录加载失败。」+ 重试可恢复；1280/1440/1920 三档页面与抽屉横向溢出 0、超长标题完整可读；全程 0 console error。
+- **本轮修复：** 创建/关联的失败被静默吞掉（两个弹窗补 `error` 属性 + `role="alert"`）、连续提交可产生重复记录（`createSubmitting` 守卫）、用例表列宽溢出与行密度（`white-space:nowrap` 收窄到追踪表、名称列 200–400px、用例表用 `management-cases-table` 排除 400px 封顶）、空态重复「清除筛选」、键盘 ← 与 → 行为相同。
+- **环境坑（非产品缺陷）：** 端口 8010 上残留多个 uvicorn 时，旧进程续跑旧库，出现「UI 有新记录、API 查不到 id」的假象；先用纯 API PATCH→GET 轮询证明单实例写入可见延迟 0.01s，再确认多进程后，改为「kill 后校验 `lsof -ti tcp:8010 | wc -l` == 1 再启动」，重跑全绿。详见 `10-closure.md` §4 E1。
+- **门禁：** `pnpm --filter @ai-qa/web typecheck|lint|test(318 通过)|build(2m27s, 既有 >500kB warning)` 与 `uv run python scripts/i18n_check.py`（4127 键）全通过。
+- **未验证（如实记录）：** 执行结果关联列（模块无可信 project/binding/nodeid/run 映射，按约定不伪造）、需求/用例删除流程（本模块无 UI 入口）、并发编辑同一验收标准、移动端（范围外）。
+- **Git：** 仅暂存本任务相关文件与 `.ai-runs/2026-11-03-requirements-cases-management/**`；`workspaceContext.ts`、`Navigation.tsx`、`ProjectOverviewPage.tsx`、`nav.json`×2、`ProjectsPage.tsx` 等既有未提交用户改动保持原样、不纳入。正常推送（非 force），未部署。

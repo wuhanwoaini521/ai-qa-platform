@@ -1,5 +1,5 @@
 {
-  "title": "Requirements & test cases",
+  "title": "Requirements & Cases",
   "subtitle": "Search, review, and open project records in the QA workspace.",
   "projectScope": "Project · {{project}}",
   "projects": "Projects",
@@ -64,7 +64,7 @@
   "emptyCasesHint": "Test cases added to this project will appear here.",
   "noMatches": "No records match these filters.",
   "clearFilters": "Clear filters",
-  "dataScope": "Showing {{count}} matching records from this project.",
+  "dataScope": "Showing {{count}} of {{total}} records.",
   "requirementStatus": {
     "DRAFT": "Draft",
     "READY": "Ready",
@@ -74,5 +74,30 @@
     "MANUAL": "Manual",
     "DRAFT": "Draft",
     "AUTOMATED": "Automated"
-  }
+  },
+  "requirementStatusLabel": "Requirement status",
+  "details": "Details",
+  "closeDetails": "Close details",
+  "requirementDetails": "Requirement details",
+  "noDescription": "No description for this requirement.",
+  "acceptanceCriteria": "Acceptance criteria",
+  "criteriaEditorLabel": "Acceptance criteria (one per line)",
+  "editAcceptanceCriteria": "Edit acceptance criteria",
+  "saveAcceptanceCriteria": "Save acceptance criteria",
+  "criteriaSaved": "Acceptance criteria saved",
+  "criteriaSaveFailed": "Could not save. Try again.",
+  "criteriaEmpty": "No acceptance criteria yet.",
+  "linkExistingCase": "Link an existing case",
+  "selectCasePlaceholder": "Select a case to link",
+  "selectCaseLabel": "Case",
+  "linkCaseAction": "Link case",
+  "caseLinked": "Case linked",
+  "caseLinkFailed": "Could not link the case. Try again.",
+  "noUnlinkedCases": "No independent cases available to link.",
+  "sourceHeading": "Source",
+  "updatedAt": "Updated",
+  "newRequirement": "New requirement",
+  "newCase": "New case",
+  "createFailed": "Could not create the record. Try again.",
+  "removeFilter": "Remove filter: {{filter}}"
 }

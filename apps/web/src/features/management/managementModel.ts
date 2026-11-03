@@ -53,6 +53,13 @@ export function getProjectScopedCount(count: number, loadedProjectId: string | n
   return loadedProjectId === projectId ? count : null;
 }
 
+/** URL patch that clears every filter owned by the given tab; empty values are removed by the page. */
+export function clearedFilterPatch(tab: ManagementTab): Record<string, string> {
+  return tab === 'cases'
+    ? { q: '', status: '', priority: '', requirement: '' }
+    : { q: '', status: '', gap: '', trace: '' };
+}
+
 export function canChangeCaseRequirement(item: Pick<TestCase, 'test_design_id'>): boolean {
   return !item.test_design_id;
 }

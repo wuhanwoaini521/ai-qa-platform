@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Check, Circle, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { api } from '../../api/client';
 import type { AITraceEvent, Requirement, TestDesign } from '../../types';
-import type { AssertionRunsResponse, AssertionScriptDraft, RequirementDocument } from './types';
+import type { AssertionRunsResponse, AssertionScriptDraft } from './types';
+import { criteriaTextFor, requirementDocumentWithCriteria } from './requirementCriteria';
 import { useKnowledge } from './useKnowledge';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { CoveragePanel } from './CoveragePanel';
@@ -26,46 +27,6 @@ function providerFailureMessageKey(code: string | undefined, message: string | u
   if (message && /empty (stream|response)|没有返回可用文本/i.test(message)) return 'providerEmptyResponse';
   if (message && /AI completion timed out|OpenAI completion failed after \d+ retries|AI connection attempts failed/i.test(message)) return 'providerUnavailable';
   return undefined;
-}
-
-function criteriaTextFor(requirement: Requirement) {
-  const criteria = requirement.qa_model?.criteria ?? [];
-  return (criteria.length ? criteria.map((item) => item.description) : requirement.acceptance_criteria.split(/\r?\n/))
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join('\n');
-}
-
-function requirementDocumentWithCriteria(
-  requirement: Requirement,
-  descriptions: string[],
-): RequirementDocument {
-  const document: RequirementDocument = requirement.qa_model ?? {
-    display_id: '',
-    criteria: [],
-    rules: [],
-    constraints: [],
-    dependencies: [],
-    history: [],
-  };
-  const usedIds = new Set<string>();
-  let nextId = 1;
-  const criteria = descriptions.map((description, index) => {
-    const matching = document.criteria.find((item) => item.description === description && !usedIds.has(item.id));
-    const positional = document.criteria[index] && !usedIds.has(document.criteria[index].id)
-      ? document.criteria[index]
-      : undefined;
-    const existing = matching ?? positional;
-    let id = existing?.id;
-    if (!id) {
-      while (usedIds.has(`AC-${String(nextId).padStart(3, '0')}`)) nextId++;
-      id = `AC-${String(nextId).padStart(3, '0')}`;
-      nextId++;
-    }
-    usedIds.add(id);
-    return { id, description, negative_required: existing?.negative_required ?? false };
-  });
-  return { ...document, criteria };
 }
 
 export function RequirementLifecyclePanel({requirement, onChanged, onCaseCreated, onStartAnalysis, analysisRunning = false, showAnalyzeAction = true, showJourney = true}: {requirement: Requirement; onChanged: (item: Requirement) => void; onCaseCreated?: (testCaseId: string, testDesignId?: string) => void; onStartAnalysis?: () => Promise<void>; analysisRunning?: boolean; showAnalyzeAction?: boolean; showJourney?: boolean}) {

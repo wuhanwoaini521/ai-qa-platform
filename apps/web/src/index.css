@@ -1611,6 +1611,16 @@ button, input, select, textarea {
   margin-bottom: 14px;
 }
 
+.form-error {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #f2c9c2;
+  border-radius: var(--r-md);
+  background-color: #fdf1ef;
+  color: #b3271a;
+  font-size: var(--fs-label);
+}
+
 .form-label {
   display: block;
   margin-bottom: 6px;

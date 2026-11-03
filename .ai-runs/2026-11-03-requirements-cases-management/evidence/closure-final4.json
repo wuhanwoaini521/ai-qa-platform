@@ -1,0 +1,234 @@
+{
+  "isolated_project": "proj_7a308b150915",
+  "stamp": "143302",
+  "login": {
+    "ok": true,
+    "detail": "http://127.0.0.1:5173/"
+  },
+  "empty_project_requirements": {
+    "ok": true,
+    "detail": "项目\n/\nClosure Isolated Project\n/\n需求与用例\n\n项目 · Closure Isolated Project\n\n需求与用例\n\n搜索和查看项目记录，并在 QA 工作台中打开单项流程。\n\n新建需求\n刷新\n需求\n0\n测试用例\n0\n独立用例\n0\n查看独立用例\n未关联用例的需求\n0\n查看需求缺口\n需求"
+  },
+  "create_validation_blocks_empty": {
+    "ok": true,
+    "detail": {
+      "POST auth/login": 1,
+      "GET ai/status": 29,
+      "GET runners": 29,
+      "GET ai/system-health": 28,
+      "GET dashboard/stats": 2,
+      "GET tasks": 2,
+      "GET runs": 2,
+      "GET projects": 28,
+      "GET requirements": 27,
+      "GET test-cases": 27,
+      "POST requirements": 4,
+      "PATCH requirements/req_ef4aa0395c54": 2,
+      "POST test-cases": 1,
+      "PATCH test-cases/tc_ecf010fc919a": 2,
+      "PATCH test-cases/tc_1da5965e2e04": 1
+    }
+  },
+  "create_requirement_success": {
+    "ok": true,
+    "detail": {
+      "POST auth/login": 1,
+      "GET ai/status": 29,
+      "GET runners": 29,
+      "GET ai/system-health": 28,
+      "GET dashboard/stats": 2,
+      "GET tasks": 2,
+      "GET runs": 2,
+      "GET projects": 28,
+      "GET requirements": 27,
+      "GET test-cases": 27,
+      "POST requirements": 4,
+      "PATCH requirements/req_ef4aa0395c54": 2,
+      "POST test-cases": 1,
+      "PATCH test-cases/tc_ecf010fc919a": 2,
+      "PATCH test-cases/tc_1da5965e2e04": 1
+    }
+  },
+  "requirement_persisted": {
+    "ok": true,
+    "detail": 1
+  },
+  "create_duplicate_submit_guard": {
+    "ok": true,
+    "detail": 1
+  },
+  "create_failure_shows_error": {
+    "ok": true,
+    "detail": "创建失败，请重试。"
+  },
+  "create_failure_keeps_input": {
+    "ok": true,
+    "detail": "失败后可重试的需求-143302"
+  },
+  "create_retry_after_failure": {
+    "ok": true,
+    "detail": 1
+  },
+  "drawer_matches_row": {
+    "ok": true,
+    "detail": "结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302"
+  },
+  "criteria_read_lag_seconds": 0.0,
+  "criteria_saved_feedback": {
+    "ok": true,
+    "detail": [
+      "AC-001",
+      "AC-002",
+      "AC-003"
+    ]
+  },
+  "criteria_ids_created": {
+    "ok": true,
+    "detail": [
+      "AC-001",
+      "AC-002",
+      "AC-003"
+    ]
+  },
+  "criteria_edit_read_lag_seconds": 0.0,
+  "criteria_ids_preserved_on_edit": {
+    "ok": true,
+    "detail": [
+      "AC-001",
+      "AC-002",
+      "AC-003",
+      "AC-004"
+    ]
+  },
+  "criteria_text_updated": {
+    "ok": true,
+    "detail": "叠加优惠券后总价按最优方案计算（含会员价与新人券）"
+  },
+  "case_form_requirement_context": {
+    "ok": true,
+    "detail": "form opened from drawer"
+  },
+  "case_created_from_drawer_linked": {
+    "ok": true,
+    "detail": 1
+  },
+  "drawer_fact_count_matches": {
+    "ok": true,
+    "detail": "需求状态\n草稿\n关联情况\n已关联 1 个用例\n更新时间\n11/3/2026"
+  },
+  "independent_cases_created": {
+    "ok": true,
+    "detail": {
+      "待关联的独立用例": "tc_1da5965e2e04",
+      "关联失败后的独立用例": "tc_ecf010fc919a"
+    }
+  },
+  "link_failure_shows_error": {
+    "ok": true,
+    "detail": "关联失败，请重试。"
+  },
+  "link_failure_keeps_selection": {
+    "ok": true,
+    "detail": "tc_ecf010fc919a"
+  },
+  "link_failure_no_false_relation": {
+    "ok": true
+  },
+  "link_failure_count_unchanged": {
+    "ok": true
+  },
+  "link_success_feedback": {
+    "ok": true
+  },
+  "link_success_persisted": {
+    "ok": true,
+    "detail": "req_ef4aa0395c54"
+  },
+  "drawer_linked_three": {
+    "ok": true,
+    "detail": 3
+  },
+  "cases_filter_rows_match_linked": {
+    "ok": true,
+    "detail": 3
+  },
+  "cases_filter_summary_matches": {
+    "ok": true,
+    "detail": "显示 3 / 3 条记录。\n所属需求: 395C54\n清除筛选"
+  },
+  "trace_rows_match": {
+    "ok": true,
+    "detail": 3
+  },
+  "trace_count_matches": {
+    "ok": true,
+    "detail": "展开\t编号\t名称\t需求状态\t关联用例\n\n\t395C54\t结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302\n\t草稿\t\n已关联 3 个用例\n查看用例\n\nFC919A\n关联失败后的独立用例\n手动\n5E2E04\n待关联的独立用例\n手动\n003343\n抽屉内新建并自动关联的用例\n手动\n\n\n\t4EAEED\t失败后可重试的需求-143302\n\t草"
+  },
+  "deep_link_title": {
+    "ok": true,
+    "detail": "395C54 · 需求详情\n\n结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302\n需求状态\n草稿\n关联情况\n已关联 3 个用例\n更新时间\n11/3/2026\n描述\n\n隔离环境中"
+  },
+  "deep_link_criteria_persisted": {
+    "ok": true
+  },
+  "deep_link_cases_persisted": {
+    "ok": true
+  },
+  "load_failure_not_empty": {
+    "ok": true,
+    "detail": "项目记录加载失败。\n重试"
+  },
+  "load_failure_offers_retry": {
+    "ok": true,
+    "detail": "项目记录加载失败。\n重试"
+  },
+  "load_retry_recovers": {
+    "ok": true,
+    "detail": 3
+  },
+  "drawer_no_horizontal_overflow_1280": {
+    "ok": true,
+    "detail": 0
+  },
+  "page_no_horizontal_overflow_1280": {
+    "ok": true,
+    "detail": 0
+  },
+  "long_title_row_readable_1280": {
+    "ok": true,
+    "detail": "395C54\t结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302\n\t草稿\t\n已关联 3 个用例\n"
+  },
+  "drawer_no_horizontal_overflow_1440": {
+    "ok": true,
+    "detail": 0
+  },
+  "page_no_horizontal_overflow_1440": {
+    "ok": true,
+    "detail": 0
+  },
+  "long_title_row_readable_1440": {
+    "ok": true,
+    "detail": "395C54\t结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302\n\t草稿\t\n已关联 3 个用例\n"
+  },
+  "drawer_no_horizontal_overflow_1920": {
+    "ok": true,
+    "detail": 0
+  },
+  "page_no_horizontal_overflow_1920": {
+    "ok": true,
+    "detail": 0
+  },
+  "long_title_row_readable_1920": {
+    "ok": true,
+    "detail": "395C54\t结算页优惠券叠加与运费计算在跨区域多仓库存场景下的完整业务流程校验（含超长标题换行与操作列可读性检查）143302\n\t草稿\t\n已关联 3 个用例\n"
+  },
+  "console_errors": {
+    "ok": true,
+    "detail": []
+  },
+  "injected_500_observed": {
+    "ok": true,
+    "detail": 4
+  },
+  "failures": []
+}

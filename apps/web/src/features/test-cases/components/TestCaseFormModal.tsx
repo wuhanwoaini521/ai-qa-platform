@@ -15,6 +15,7 @@ interface TestCaseFormModalProps {
   setTagsText: React.Dispatch<React.SetStateAction<string>>;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
+  error?: string;
 }
 
 export function useTestCaseFormModal(
@@ -97,6 +98,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
   setTagsText,
   onSubmit: handleCreateTestCase,
   onClose,
+  error,
 }) => {
   const { t } = useTranslation('testCases');
   const projectDisplayNames = buildProjectDisplayNames(projects);
@@ -118,6 +120,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                 </button>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
+                {error && <p className="form-error" role="alert">{error}</p>}
                 <div className="form-group">
                   <label className="form-label" htmlFor="test-case-project">{t('formProject')}</label>
                   <select

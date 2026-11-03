@@ -1,5 +1,5 @@
 {
-  "title": "需求与测试用例",
+  "title": "需求与用例",
   "subtitle": "搜索和查看项目记录，并在 QA 工作台中打开单项流程。",
   "projectScope": "项目 · {{project}}",
   "projects": "项目",
@@ -64,7 +64,7 @@
   "emptyCasesHint": "添加到此项目的测试用例会显示在这里。",
   "noMatches": "没有符合这些筛选条件的记录。",
   "clearFilters": "清除筛选",
-  "dataScope": "显示此项目中符合条件的 {{count}} 条记录。",
+  "dataScope": "显示 {{count}} / {{total}} 条记录。",
   "requirementStatus": {
     "DRAFT": "草稿",
     "READY": "就绪",
@@ -74,5 +74,30 @@
     "MANUAL": "手动",
     "DRAFT": "草稿",
     "AUTOMATED": "已自动化"
-  }
+  },
+  "requirementStatusLabel": "需求状态",
+  "details": "详情",
+  "closeDetails": "关闭详情",
+  "requirementDetails": "需求详情",
+  "noDescription": "暂无需求描述。",
+  "acceptanceCriteria": "验收标准",
+  "criteriaEditorLabel": "验收标准（每行一条）",
+  "editAcceptanceCriteria": "编辑验收标准",
+  "saveAcceptanceCriteria": "保存验收标准",
+  "criteriaSaved": "验收标准已保存",
+  "criteriaSaveFailed": "保存失败，请重试。",
+  "criteriaEmpty": "暂无验收标准。",
+  "linkExistingCase": "关联已有用例",
+  "selectCasePlaceholder": "选择要关联的用例",
+  "selectCaseLabel": "用例",
+  "linkCaseAction": "关联",
+  "caseLinked": "用例已关联",
+  "caseLinkFailed": "关联失败，请重试。",
+  "noUnlinkedCases": "没有可关联的独立用例。",
+  "sourceHeading": "来源",
+  "updatedAt": "更新时间",
+  "newRequirement": "新建需求",
+  "newCase": "新建用例",
+  "createFailed": "创建失败，请重试。",
+  "removeFilter": "移除筛选：{{filter}}"
 }

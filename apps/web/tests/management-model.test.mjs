@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canChangeCaseRequirement, countCasesForRequirement, countIndependentCases, filterRequirements, filterTestCases, getCaseDisplayId, getProjectScopedCount, getRequirementDisplayId, INDEPENDENT_CASES_FILTER } from '../src/features/management/managementModel.ts';
+import { canChangeCaseRequirement, clearedFilterPatch, countCasesForRequirement, countIndependentCases, filterRequirements, filterTestCases, getCaseDisplayId, getProjectScopedCount, getRequirementDisplayId, INDEPENDENT_CASES_FILTER } from '../src/features/management/managementModel.ts';
 
 const requirements = [
   { id: 'r3', title: 'Cart validation', description: '', acceptance_criteria: 'reject empty', external_id: null, status: 'DRAFT', updated_at: '2026-11-01T10:00:00Z' },
@@ -67,4 +67,10 @@ test('project-scoped tab counts stay hidden until the selected project data is l
 
 test('case priority sorting uses P0 to P3 order and then title deterministically', () => {
   assert.deepEqual(filterTestCases(cases, { query: '', automationStatus: '', priority: '', sort: 'priority' }).map((item) => item.id), ['c2', 'c1', 'c3']);
+});
+
+test('clearing filters only resets the parameters used by the active tab', () => {
+  assert.deepEqual(clearedFilterPatch('cases'), { q: '', status: '', priority: '', requirement: '' });
+  assert.deepEqual(clearedFilterPatch('requirements'), { q: '', status: '', gap: '', trace: '' });
+  assert.deepEqual(clearedFilterPatch('traceability'), { q: '', status: '', gap: '', trace: '' });
 });

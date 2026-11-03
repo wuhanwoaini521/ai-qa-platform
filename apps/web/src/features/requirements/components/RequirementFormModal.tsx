@@ -10,6 +10,7 @@ interface RequirementFormModalProps {
   setFormData: React.Dispatch<React.SetStateAction<RequirementCreate>>;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
+  error?: string;
 }
 
 export function useRequirementFormModal(defaultProjectId: string) {
@@ -48,6 +49,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
   setFormData: setReqFormData,
   onSubmit: handleCreateRequirement,
   onClose,
+  error,
 }) => {
   const { t } = useTranslation('requirements');
   const projectDisplayNames = buildProjectDisplayNames(projects);
@@ -69,6 +71,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                 </button>
               </div>
               <div className="modal-body">
+                {error && <p className="form-error" role="alert">{error}</p>}
                 <div className="form-group">
                   <label className="form-label" htmlFor="requirement-project">{t('requirementFormProjectLabel')}</label>
                   <select
