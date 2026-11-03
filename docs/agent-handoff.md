@@ -2142,3 +2142,12 @@ git diff --check
 - **门禁：** `pnpm --filter @ai-qa/web typecheck|lint|test(318 通过)|build(2m27s, 既有 >500kB warning)` 与 `uv run python scripts/i18n_check.py`（4127 键）全通过。
 - **未验证（如实记录）：** 执行结果关联列（模块无可信 project/binding/nodeid/run 映射，按约定不伪造）、需求/用例删除流程（本模块无 UI 入口）、并发编辑同一验收标准、移动端（范围外）。
 - **Git：** 仅暂存本任务相关文件与 `.ai-runs/2026-11-03-requirements-cases-management/**`；`workspaceContext.ts`、`Navigation.tsx`、`ProjectOverviewPage.tsx`、`nav.json`×2、`ProjectsPage.tsx` 等既有未提交用户改动保持原样、不纳入。正常推送（非 force），未部署。
+
+## 3.72 需求与用例导航入口补齐 + 收尾盘点 — PASS (2026-11-03)
+
+- **授权：** 用户明确同意补齐「需求与用例」导航入口并提交推送，且**仅限本轮功能相关改动**覆盖此前对这批文件的"保持不动"指示。
+- **实际 diff（提交 `163e8f7`，6 文件 / +34 −6）：** `workspaceContext.ts` 新增 `buildProjectManagementHref(projectId)`；`Navigation.tsx` 由 `/projects/:projectId`、`/workspace/:projectId` 路由推导 scoped project（`matchPath`），并在 项目管理 与 运行 之间插入条件性「需求与用例」项（`id: 'requirements'`，已有 `NavTab` 成员），管理路由激活时 项目管理 项 `end: true`；`ProjectOverviewPage.tsx`、`ProjectsPage.tsx` 改调该 helper（两处）；`nav.json`（en/zh-CN）各加 `projectRequirements` / `projectRequirementsMobile`。逐文件核对无无关 hunk，故按文件整体暂存等价于按 hunk 暂存。
+- **浏览器验证**（隔离 API `:8010` + `:5173`，两个项目 A/B，脚本与截图 `.ai-runs/2026-11-03-requirements-cases-management/evidence/nav-entry/`）：从项目总览「管理中心」按钮进入（非手输 URL）→ 侧栏出现并高亮「需求与用例」；侧栏项目选择器切到 B → URL 与页面数据同步切换、A 数据不残留；刷新后仍高亮且数据为 B；浏览器返回回到 A 的管理页；直接访问 `/projects/<b>/management` 正常；从 `/quality` 点侧栏项进入正确项目；语言切换 zh「需求与用例」/ en「Requirements & Cases」且激活态保持；`page_errors` 为空；侧栏与页面在 1280/1920 横向溢出 0。
+- **门禁：** `typecheck`、`eslint`、`318 tests`、`i18n_check`（4127 键）通过；`vite build` 在同一工作树内容上已通过（此后无源码改动），本轮未重复。
+- **Git / 远端：** `dee0c5c`（需求与用例页面）与 `163e8f7`（导航入口）已普通推送到 `origin/feat/project-requirements-navigation`，无 force，无合并主分支；推送后 `git rev-parse HEAD` 与 `origin/...` 一致。
+- **本机剩余（见同节末尾盘点，勿误删）** 见 3.72 之后的本机盘点小节。
