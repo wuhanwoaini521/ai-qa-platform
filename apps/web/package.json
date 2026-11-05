@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@self/ui-style": "github:wuhanwoaini521/self-ui-style#v0.8.1",
     "@xyflow/react": "^12.12.0",
     "i18next": "^26.4.2",
     "lucide-react": "^1.16.0",

@@ -4,3 +4,4 @@ packages:
 
 allowBuilds:
   esbuild: true
+  '@self/ui-style@https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/v0.8.1': true
