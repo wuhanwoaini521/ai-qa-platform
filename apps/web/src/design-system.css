@@ -288,6 +288,57 @@
 .app-design-system .navigation-palette-results .ds-nav-item .nav-item-label { display: inline; max-width: none; overflow: visible; text-overflow: clip; white-space: normal; font-size: 13px; }
 .app-design-system .navigation-palette-results .ds-nav-item::after { display: none; }
 
+/* Desktop sidebar geometry follows the persisted collapse state at every width. */
+@media (min-width: 761px) {
+  .app-design-system .app-frame .app-sidebar {
+    flex: 0 0 var(--sidebar-w);
+    width: var(--sidebar-w);
+    min-width: 0;
+    max-width: none;
+    align-items: stretch;
+  }
+  .app-design-system .app-sidebar .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--sp-2);
+    padding: 0 0 var(--sp-4);
+  }
+  .app-design-system .app-sidebar .sidebar-project-context { width: auto; border: 0; background: transparent; }
+  .app-design-system .app-sidebar .sidebar-project-icon,
+  .app-design-system .app-sidebar .sidebar-mobile-search { display: none; }
+  .app-design-system .app-sidebar .sidebar-section-label > span,
+  .app-design-system .app-sidebar .sidebar-section-chevron,
+  .app-design-system .app-sidebar .sidebar-footer .lang-badge span { display: inline; }
+  .app-design-system .app-sidebar .sidebar-footer { justify-content: space-between; }
+
+  .app-design-system .app-frame .app-sidebar.is-collapsed {
+    --sidebar-w: 72px;
+    flex-basis: var(--sidebar-w);
+    width: var(--sidebar-w);
+    min-width: 0;
+    max-width: none;
+    padding-inline: var(--sp-2);
+  }
+  .app-design-system .app-sidebar.is-collapsed .sidebar-header { flex-direction: column; justify-content: center; }
+  .app-design-system .app-sidebar.is-collapsed .ds-sidebar-collapse { margin: 0; }
+  .app-design-system .app-sidebar.is-collapsed .sidebar-project-context,
+  .app-design-system .app-sidebar.is-collapsed .sidebar-section-label > span,
+  .app-design-system .app-sidebar.is-collapsed .sidebar-section-chevron { display: none; }
+  .app-design-system .app-sidebar.is-collapsed .sidebar-mobile-search {
+    display: grid;
+    place-items: center;
+    align-self: center;
+    flex: none;
+    width: var(--h-md);
+    height: var(--h-md);
+    padding: 0;
+  }
+  .app-design-system .app-sidebar.is-collapsed .ds-nav-item { justify-content: center; gap: 0; padding-inline: 0; }
+  .app-design-system .app-sidebar.is-collapsed .sidebar-footer { justify-content: center; }
+  .app-design-system .app-sidebar.is-collapsed .ds-sidebar-language { width: var(--h-md); height: var(--h-md); padding: 0; }
+}
+
 .app-design-system .ds-btn-danger {
   color: var(--c-danger);
   background: color-mix(in srgb, var(--c-danger) 8%, var(--c-bg));

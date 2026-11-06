@@ -382,7 +382,7 @@ export const Navigation: React.FC<{ compact?: boolean; compactShell?: boolean; d
           </span>
           <Action
             type="button"
-            className={designSystem ? undefined : 'sidebar-lang-toggle'}
+            className={designSystem ? 'ds-sidebar-language' : 'sidebar-lang-toggle'}
             aria-label={`${languageToggleLabel} ${t('common:language')}`}
             title={t('common:language')}
             onClick={() => {

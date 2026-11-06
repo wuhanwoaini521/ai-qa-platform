@@ -5594,123 +5594,113 @@ button, input, select, textarea {
 .app-frame.is-compact-shell .btn-secondary:not(.ds-btn):hover:not(:disabled) { border-color: var(--graphite-mint); background: var(--surface-active); color: var(--ink); }
 .app-frame.is-compact-shell :is(button, a, input, select, textarea, summary):focus-visible { outline-color: var(--graphite-mint); }
 .app-frame.is-compact-shell ::-webkit-scrollbar-thumb { background: var(--graphite-scrollbar); background-clip: content-box; }
-
-.app-frame.is-compact-shell .dashboard-page { gap: 14px; }
-.app-frame.is-compact-shell .dashboard-heading { align-items: flex-end; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.app-frame.is-compact-shell .dashboard-heading h2 { color: var(--ink); font-size: clamp(24px, 2.2vw, 30px); font-weight: 600; letter-spacing: -0.035em; }
-.app-frame.is-compact-shell .dashboard-heading p { color: var(--ink-muted); font-size: 13px; }
-.app-frame.is-compact-shell .dashboard-project-scope { gap: 16px; padding: 0; border: 0; background: transparent; }
-.app-frame.is-compact-shell .dashboard-scope-metric dt { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-scope-metric dd { color: var(--ink); font-family: var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-continue,
-.app-frame.is-compact-shell .dashboard-project-registry,
-.app-frame.is-compact-shell .dashboard-signals,
-.app-frame.is-compact-shell .dashboard-attention,
-.app-frame.is-compact-shell .dashboard-workflow,
-.app-frame.is-compact-shell .dashboard-recent-runs,
-.app-frame.is-compact-shell .dashboard-trend {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: none;
 }
-.app-frame.is-compact-shell .dashboard-continue { gap: 14px; padding: 16px; }
-.app-frame.is-compact-shell .dashboard-continue-heading { align-items: center; }
-.app-frame.is-compact-shell .dashboard-continue-project > span,
-.app-frame.is-compact-shell .dashboard-journey-heading > div:first-child > span { color: var(--ink-muted); font: 10px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
-.app-frame.is-compact-shell .dashboard-continue-project h3 { color: var(--ink); font-size: 19px; }
-.app-frame.is-compact-shell .dashboard-continue-project small { color: var(--graphite-mint); font: 11px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-continue-project p { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-journey { display: grid; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--graphite-inset); }
-.app-frame.is-compact-shell .dashboard-journey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-.app-frame.is-compact-shell .dashboard-journey-heading > div:first-child { display: grid; gap: 4px; min-width: 0; }
-.app-frame.is-compact-shell .dashboard-journey-heading code { overflow: hidden; color: var(--ink-soft); font: 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.app-frame.is-compact-shell .dashboard-journey-run-meta { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
-.app-frame.is-compact-shell .dashboard-run-provenance { color: var(--ink-muted); font: 9px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-run-provenance.is-fixture { color: var(--graphite-amber); }
-.app-frame.is-compact-shell .dashboard-journey-status { padding: 3px 8px; color: var(--ink-muted); border: 1px solid var(--line-strong); border-radius: 999px; font: 10px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-journey-status.is-failed,
-.app-frame.is-compact-shell .dashboard-journey-status.is-error { color: var(--graphite-red); border-color: color-mix(in srgb, var(--graphite-red) 45%, var(--line)); background: var(--graphite-red-soft); }
-.app-frame.is-compact-shell .dashboard-journey-status.is-passed { color: var(--graphite-mint); border-color: color-mix(in srgb, var(--graphite-mint) 40%, var(--line)); }
-.app-frame.is-compact-shell .dashboard-journey-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.app-frame.is-compact-shell .dashboard-journey-steps li { position: relative; min-width: 0; }
-.app-frame.is-compact-shell .dashboard-journey-steps li:not(:last-child)::after { position: absolute; top: 14px; right: -8px; left: 22px; height: 1px; background: var(--line-strong); content: ''; }
-.app-frame.is-compact-shell .dashboard-journey-steps li.is-failed::after { background: color-mix(in srgb, var(--graphite-red) 70%, var(--line)); }
-.app-frame.is-compact-shell .dashboard-journey-status.is-paused,
-.app-frame.is-compact-shell .dashboard-journey-status.is-pending { color: var(--graphite-amber); border-color: color-mix(in srgb, var(--graphite-amber) 40%, var(--line)); }
-.app-frame.is-compact-shell .dashboard-journey-steps button { position: relative; z-index: 1; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 46px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
-.app-frame.is-compact-shell .dashboard-journey-steps button:hover { border-color: var(--line); background: var(--surface); }
-.app-frame.is-compact-shell .dashboard-journey-steps button:focus-visible { outline: 2px solid var(--graphite-mint); outline-offset: 1px; }
-.app-frame.is-compact-shell .dashboard-journey-marker { display: block; width: 10px; height: 10px; border: 2px solid var(--graphite-mint); border-radius: 50%; background: var(--graphite-surface); }
-.app-frame.is-compact-shell .dashboard-journey-steps li.is-failed .dashboard-journey-marker,
-.app-frame.is-compact-shell .dashboard-journey-steps li.is-error .dashboard-journey-marker { border-color: var(--graphite-red); background: var(--graphite-red); }
-.app-frame.is-compact-shell .dashboard-journey-steps li.is-paused .dashboard-journey-marker,
-.app-frame.is-compact-shell .dashboard-journey-steps li.is-pending .dashboard-journey-marker { border-color: var(--graphite-amber); background: var(--graphite-amber); }
-.app-frame.is-compact-shell .dashboard-journey-copy { display: grid; min-width: 0; gap: 3px; }
-.app-frame.is-compact-shell .dashboard-journey-copy strong,
-.app-frame.is-compact-shell .dashboard-journey-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-frame.is-compact-shell .dashboard-journey-copy strong { font-size: 11px; }
-.app-frame.is-compact-shell .dashboard-journey-copy small { color: var(--ink-muted); font: 9px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-journey-steps code { color: var(--ink-muted); font: 10px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-journey-empty { padding: 8px 0; color: var(--ink-muted); font-size: 12px; }
-.app-frame.is-compact-shell .dashboard-quick-start { gap: 6px; padding-top: 10px; border-color: var(--line); }
-.app-frame.is-compact-shell .dashboard-quick-start-label { margin-right: 4px; color: var(--ink-muted); font: 10px var(--font-mono); text-transform: uppercase; }
-.app-frame.is-compact-shell .dashboard-quick-start button { border-color: var(--line); background: var(--surface-raised); color: var(--ink-soft); }
-.app-frame.is-compact-shell .dashboard-quick-start button:hover { border-color: var(--graphite-mint); background: var(--surface-active); color: var(--ink); }
-.app-frame.is-compact-shell .dashboard-resume-heading { color: var(--ink); }
-.app-frame.is-compact-shell .dashboard-resume-task { border-color: var(--line); background: var(--surface-raised); }
-.app-frame.is-compact-shell .dashboard-project-registry { padding: 14px 16px; }
-.app-frame.is-compact-shell .dashboard-project-registry-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.app-frame.is-compact-shell .dashboard-project-registry-heading > div { display: flex; align-items: baseline; gap: 12px; }
-.app-frame.is-compact-shell .dashboard-project-registry-heading h3 { color: var(--ink); font-size: 15px; }
-.app-frame.is-compact-shell .dashboard-project-registry-heading > div > span { color: var(--ink-muted); font: 10px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-project-registry-list { display: grid; margin: 0; padding: 0; list-style: none; }
-.app-frame.is-compact-shell .dashboard-project-registry-list li { border-bottom: 1px solid var(--line-soft); }
-.app-frame.is-compact-shell .dashboard-project-registry-list li:last-child { border-bottom: 0; }
-.app-frame.is-compact-shell .dashboard-project-registry-list button { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 14px; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 50px; padding: 5px 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
-.app-frame.is-compact-shell .dashboard-project-registry-list button:hover .dashboard-project-copy strong { color: var(--graphite-mint); }
-.app-frame.is-compact-shell .dashboard-project-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 6px; background: var(--surface-active); color: var(--graphite-mint); }
-.app-frame.is-compact-shell .dashboard-project-copy { display: grid; min-width: 0; gap: 3px; }
-.app-frame.is-compact-shell .dashboard-project-copy strong,
-.app-frame.is-compact-shell .dashboard-project-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-frame.is-compact-shell .dashboard-project-copy strong { font-size: 12px; }
-.app-frame.is-compact-shell .dashboard-project-copy small { color: var(--ink-muted); font: 10px var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-project-action { color: var(--ink-muted); font-size: 10px; }
-.app-frame.is-compact-shell .dashboard-project-registry-list li.is-current .dashboard-project-action { color: var(--graphite-mint); }
-.app-frame.is-compact-shell .dashboard-project-registry-list button > svg:last-child { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-project-registry-empty { padding: 14px 0; color: var(--ink-muted); font-size: 12px; }
-.app-frame.is-compact-shell .dashboard-signals { padding: 10px 14px; }
-.app-frame.is-compact-shell .dashboard-signals-heading { padding: 2px 0 8px; }
-.app-frame.is-compact-shell .dashboard-signals-heading h3,
-.app-frame.is-compact-shell .dashboard-attention-heading h3,
-.app-frame.is-compact-shell .dashboard-workflow-heading h3 { color: var(--ink); }
-.app-frame.is-compact-shell .dashboard-signals-heading > span { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-signal { border-color: var(--line); }
-.app-frame.is-compact-shell .dashboard-signal-value { color: var(--ink); font-family: var(--font-mono); }
-.app-frame.is-compact-shell .dashboard-signal-detail strong { color: var(--ink-soft); }
-.app-frame.is-compact-shell .dashboard-attention,
-.app-frame.is-compact-shell .dashboard-workflow { padding: 14px; }
-.app-frame.is-compact-shell .dashboard-attention-item { border-color: var(--line); background: var(--surface-raised); }
-.app-frame.is-compact-shell .dashboard-attention-item:hover,
-.app-frame.is-compact-shell .dashboard-workflow-link:hover { background: var(--surface-hover); }
-.app-frame.is-compact-shell .dashboard-attention-empty { border-color: var(--line); background: var(--graphite-inset); color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-workflow-heading { padding: 0 0 8px; }
-.app-frame.is-compact-shell .dashboard-workflow-groups { padding: 0; }
-.app-frame.is-compact-shell .dashboard-workflow-link { color: var(--ink); }
-.app-frame.is-compact-shell .dashboard-workflow-link .link-row-icon { border-color: var(--line); background: var(--surface-raised); color: var(--graphite-mint); }
-.app-frame.is-compact-shell .dashboard-recent-runs .card-header,
-.app-frame.is-compact-shell .dashboard-trend .card-header { border-color: var(--line); }
-.app-frame.is-compact-shell .dashboard-recent-runs .data-table th { background: var(--surface); color: var(--ink-muted); border-color: var(--line); }
-.app-frame.is-compact-shell .dashboard-recent-runs .data-table td { color: var(--ink-soft); border-color: var(--line-soft); }
-.app-frame.is-compact-shell .dashboard-recent-runs .data-table tbody tr:hover td { background: var(--surface-hover); }
-.app-frame.is-compact-shell .dashboard-run-link { color: var(--graphite-blue); }
-.app-frame.is-compact-shell .dashboard-trend-body { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-trend .chart-insufficient { color: var(--ink-muted); }
-.app-frame.is-compact-shell .dashboard-boundary-note { display: flex; align-items: center; min-height: 36px; padding: 4px 2px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 11px; }
+
+/* Dashboard content layout applies independently of the Workspace compact shell and viewport. */
+.app-frame.is-dashboard-route .dashboard-page { gap: 14px; }
+.app-frame.is-dashboard-route .dashboard-heading { align-items: flex-end; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.app-frame.is-dashboard-route .dashboard-heading h2 { color: var(--ink); font-size: clamp(24px, 2.2vw, 30px); font-weight: 600; letter-spacing: -0.035em; }
+.app-frame.is-dashboard-route .dashboard-heading p { color: var(--ink-muted); font-size: 13px; }
+.app-frame.is-dashboard-route .dashboard-project-scope { gap: 16px; padding: 0; border: 0; background: transparent; }
+.app-frame.is-dashboard-route .dashboard-scope-metric dt { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-scope-metric dd { color: var(--ink); font-family: var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-continue { gap: 14px; padding: 16px; }
+.app-frame.is-dashboard-route .dashboard-continue-heading { align-items: center; }
+.app-frame.is-dashboard-route .dashboard-continue-project > span,
+.app-frame.is-dashboard-route .dashboard-journey-heading > div:first-child > span { color: var(--ink-muted); font: 10px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.app-frame.is-dashboard-route .dashboard-continue-project h3 { color: var(--ink); font-size: 19px; }
+.app-frame.is-dashboard-route .dashboard-continue-project small { color: var(--graphite-mint); font: 11px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-continue-project p { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-journey { display: grid; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--graphite-inset); }
+.app-frame.is-dashboard-route .dashboard-journey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.app-frame.is-dashboard-route .dashboard-journey-heading > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.app-frame.is-dashboard-route .dashboard-journey-heading code { overflow: hidden; color: var(--ink-soft); font: 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.app-frame.is-dashboard-route .dashboard-journey-run-meta { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.app-frame.is-dashboard-route .dashboard-run-provenance { color: var(--ink-muted); font: 9px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-run-provenance.is-fixture { color: var(--graphite-amber); }
+.app-frame.is-dashboard-route .dashboard-journey-status { padding: 3px 8px; color: var(--ink-muted); border: 1px solid var(--line-strong); border-radius: 999px; font: 10px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-journey-status.is-failed,
+.app-frame.is-dashboard-route .dashboard-journey-status.is-error { color: var(--graphite-red); border-color: color-mix(in srgb, var(--graphite-red) 45%, var(--line)); background: var(--graphite-red-soft); }
+.app-frame.is-dashboard-route .dashboard-journey-status.is-passed { color: var(--graphite-mint); border-color: color-mix(in srgb, var(--graphite-mint) 40%, var(--line)); }
+.app-frame.is-dashboard-route .dashboard-journey-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; margin: 0; padding: 0; list-style: none; }
+.app-frame.is-dashboard-route .dashboard-journey-steps li { position: relative; min-width: 0; }
+.app-frame.is-dashboard-route .dashboard-journey-steps li:not(:last-child)::after { position: absolute; top: 50%; bottom: calc(-50% - var(--sp-2)); left: 11px; width: 1px; background: var(--line-strong); content: ''; }
+.app-frame.is-dashboard-route .dashboard-journey-steps li.is-failed::after { background: color-mix(in srgb, var(--graphite-red) 70%, var(--line)); }
+.app-frame.is-dashboard-route .dashboard-journey-status.is-paused,
+.app-frame.is-dashboard-route .dashboard-journey-status.is-pending { color: var(--graphite-amber); border-color: color-mix(in srgb, var(--graphite-amber) 40%, var(--line)); }
+.app-frame.is-dashboard-route .dashboard-journey-steps button { position: relative; z-index: 1; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 46px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.app-frame.is-dashboard-route .dashboard-journey-steps button:hover { border-color: var(--line); background: var(--surface); }
+.app-frame.is-dashboard-route .dashboard-journey-steps button:focus-visible { outline: 2px solid var(--graphite-mint); outline-offset: 1px; }
+.app-frame.is-dashboard-route .dashboard-journey-marker { display: block; width: 10px; height: 10px; border: 2px solid var(--graphite-mint); border-radius: 50%; background: var(--graphite-surface); }
+.app-frame.is-dashboard-route .dashboard-journey-steps li.is-failed .dashboard-journey-marker,
+.app-frame.is-dashboard-route .dashboard-journey-steps li.is-error .dashboard-journey-marker { border-color: var(--graphite-red); background: var(--graphite-red); }
+.app-frame.is-dashboard-route .dashboard-journey-steps li.is-paused .dashboard-journey-marker,
+.app-frame.is-dashboard-route .dashboard-journey-steps li.is-pending .dashboard-journey-marker { border-color: var(--graphite-amber); background: var(--graphite-amber); }
+.app-frame.is-dashboard-route .dashboard-journey-copy { display: grid; min-width: 0; gap: 3px; }
+.app-frame.is-dashboard-route .dashboard-journey-copy strong,
+.app-frame.is-dashboard-route .dashboard-journey-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-frame.is-dashboard-route .dashboard-journey-copy strong { font-size: 11px; }
+.app-frame.is-dashboard-route .dashboard-journey-copy small { color: var(--ink-muted); font: 9px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-journey-steps code { color: var(--ink-muted); font: 10px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-journey-empty { padding: 8px 0; color: var(--ink-muted); font-size: 12px; }
+.app-frame.is-dashboard-route .dashboard-quick-start { gap: 6px; padding-top: 10px; border-color: var(--line); }
+.app-frame.is-dashboard-route .dashboard-quick-start-label { margin-right: 4px; color: var(--ink-muted); font: 10px var(--font-mono); text-transform: uppercase; }
+.app-frame.is-dashboard-route .dashboard-quick-start button { border-color: var(--line); background: var(--surface-raised); color: var(--ink-soft); }
+.app-frame.is-dashboard-route .dashboard-quick-start button:hover { border-color: var(--graphite-mint); background: var(--surface-active); color: var(--ink); }
+.app-frame.is-dashboard-route .dashboard-resume-heading { color: var(--ink); }
+.app-frame.is-dashboard-route .dashboard-resume-task { border-color: var(--line); background: var(--surface-raised); }
+.app-frame.is-dashboard-route .dashboard-project-registry { padding: 14px 16px; }
+.app-frame.is-dashboard-route .dashboard-project-registry-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.app-frame.is-dashboard-route .dashboard-project-registry-heading > div { display: grid; gap: var(--sp-1); min-width: 0; }
+.app-frame.is-dashboard-route .dashboard-project-registry-heading h3 { color: var(--ink); font-size: 15px; }
+.app-frame.is-dashboard-route .dashboard-project-registry-heading > div > span { color: var(--ink-muted); font: 10px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-project-registry-list { display: grid; gap: var(--sp-2); margin: var(--sp-3) 0 0; padding: 0; list-style: none; }
+.app-frame.is-dashboard-route .dashboard-project-registry-list li { border-bottom: 1px solid var(--line-soft); }
+.app-frame.is-dashboard-route .dashboard-project-registry-list li:last-child { border-bottom: 0; }
+.app-frame.is-dashboard-route .dashboard-project-registry-list button { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 14px; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 50px; padding: 5px 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.app-frame.is-dashboard-route .dashboard-project-registry-list button:hover .dashboard-project-copy strong { color: var(--graphite-mint); }
+.app-frame.is-dashboard-route .dashboard-project-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 6px; background: var(--surface-active); color: var(--graphite-mint); }
+.app-frame.is-dashboard-route .dashboard-project-copy { display: grid; min-width: 0; gap: 3px; }
+.app-frame.is-dashboard-route .dashboard-project-copy strong,
+.app-frame.is-dashboard-route .dashboard-project-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-frame.is-dashboard-route .dashboard-project-copy strong { font-size: 12px; }
+.app-frame.is-dashboard-route .dashboard-project-copy small { color: var(--ink-muted); font: 10px var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-project-action { color: var(--ink-muted); font-size: 10px; }
+.app-frame.is-dashboard-route .dashboard-project-registry-list li.is-current .dashboard-project-action { color: var(--graphite-mint); }
+.app-frame.is-dashboard-route .dashboard-project-registry-list button > svg:last-child { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-project-registry-empty { padding: 14px 0; color: var(--ink-muted); font-size: 12px; }
+.app-frame.is-dashboard-route .dashboard-signals { padding: 10px 14px; }
+.app-frame.is-dashboard-route .dashboard-signals-heading { padding: 2px 0 8px; }
+.app-frame.is-dashboard-route .dashboard-signals-heading h3,
+.app-frame.is-dashboard-route .dashboard-attention-heading h3,
+.app-frame.is-dashboard-route .dashboard-workflow-heading h3 { color: var(--ink); }
+.app-frame.is-dashboard-route .dashboard-signals-heading > span { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-signal { border-color: var(--line); }
+.app-frame.is-dashboard-route .dashboard-signal-value { color: var(--ink); font-family: var(--font-mono); }
+.app-frame.is-dashboard-route .dashboard-signal-detail strong { color: var(--ink-soft); }
+.app-frame.is-dashboard-route .dashboard-attention,
+.app-frame.is-dashboard-route .dashboard-workflow { padding: 14px; }
+.app-frame.is-dashboard-route .dashboard-attention-item { border-color: var(--line); background: var(--surface-raised); }
+.app-frame.is-dashboard-route .dashboard-attention-item:hover,
+.app-frame.is-dashboard-route .dashboard-workflow-link:hover { background: var(--surface-hover); }
+.app-frame.is-dashboard-route .dashboard-attention-empty { border-color: var(--line); background: var(--graphite-inset); color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-workflow-heading { padding: 0 0 8px; }
+.app-frame.is-dashboard-route .dashboard-workflow-groups { padding: 0; }
+.app-frame.is-dashboard-route .dashboard-workflow-link { color: var(--ink); }
+.app-frame.is-dashboard-route .dashboard-workflow-link .link-row-icon { border-color: var(--line); background: var(--surface-raised); color: var(--graphite-mint); }
+.app-frame.is-dashboard-route .dashboard-recent-runs .card-header,
+.app-frame.is-dashboard-route .dashboard-trend .card-header { border-color: var(--line); }
+.app-frame.is-dashboard-route .dashboard-recent-runs .data-table th { background: var(--surface); color: var(--ink-muted); border-color: var(--line); }
+.app-frame.is-dashboard-route .dashboard-recent-runs .data-table td { color: var(--ink-soft); border-color: var(--line-soft); }
+.app-frame.is-dashboard-route .dashboard-recent-runs .data-table tbody tr:hover td { background: var(--surface-hover); }
+.app-frame.is-dashboard-route .dashboard-run-link { color: var(--graphite-blue); }
+.app-frame.is-dashboard-route .dashboard-trend-body { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-trend .chart-insufficient { color: var(--ink-muted); }
+.app-frame.is-dashboard-route .dashboard-boundary-note { display: flex; align-items: center; min-height: 36px; padding: 4px 2px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 11px; }
 
 /* Keep the real project/run journey prominent while tightening the first viewport. */
-.app-frame.is-compact-shell .dashboard-page { gap: 12px; }
-.app-frame.is-compact-shell .dashboard-continue {
+.app-frame.is-dashboard-route .dashboard-page { gap: 12px; }
+.app-frame.is-dashboard-route .dashboard-continue {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "project project"
@@ -5719,35 +5709,34 @@ button, input, select, textarea {
   gap: 10px 16px;
   padding: 14px 16px;
 }
-.app-frame.is-compact-shell .dashboard-continue-heading { grid-area: project; }
-.app-frame.is-compact-shell .dashboard-journey { grid-area: journey; gap: 8px; padding: 10px 12px; }
-.app-frame.is-compact-shell .dashboard-quick-start { grid-area: actions; align-content: start; padding-top: 8px; }
-.app-frame.is-compact-shell .dashboard-resume-tasks { grid-area: tasks; align-content: start; }
-.app-frame.is-compact-shell .dashboard-project-registry { padding: 10px 14px; }
-.app-frame.is-compact-shell .dashboard-project-registry-heading { padding-bottom: 7px; }
-.app-frame.is-compact-shell .dashboard-project-registry-list button { min-height: 44px; }
-.app-frame.is-compact-shell .dashboard-signals { padding: 8px 12px; }
-.app-frame.is-compact-shell .dashboard-signals-heading { padding-bottom: 5px; }
-.app-frame.is-compact-shell .dashboard-signal { gap: 4px; padding: 6px 10px; }
-.app-frame.is-compact-shell .dashboard-signal-value { font-size: 20px; }
+.app-frame.is-dashboard-route .dashboard-continue-heading { grid-area: project; }
+.app-frame.is-dashboard-route .dashboard-journey { grid-area: journey; gap: 8px; padding: 10px 12px; }
+.app-frame.is-dashboard-route .dashboard-quick-start { grid-area: actions; align-content: start; padding-top: 8px; }
+.app-frame.is-dashboard-route .dashboard-resume-tasks { grid-area: tasks; align-content: start; }
+.app-frame.is-dashboard-route .dashboard-project-registry { padding: 10px 14px; }
+.app-frame.is-dashboard-route .dashboard-project-registry-heading { padding-bottom: 7px; }
+.app-frame.is-dashboard-route .dashboard-project-registry-list button { min-height: 44px; }
+.app-frame.is-dashboard-route .dashboard-signals { padding: 8px 12px; }
+.app-frame.is-dashboard-route .dashboard-signals-heading { padding-bottom: 5px; }
+.app-frame.is-dashboard-route .dashboard-signal { gap: 4px; padding: 6px 10px; }
+.app-frame.is-dashboard-route .dashboard-signal-value { font-size: 20px; }
 
 @media (max-width: 1439px) {
-  .app-frame.is-compact-shell .dashboard-page { gap: 10px; }
-  .app-frame.is-compact-shell .dashboard-heading { padding-bottom: 7px; }
-  .app-frame.is-compact-shell .dashboard-continue { gap: 8px 12px; padding: 11px 13px; }
-  .app-frame.is-compact-shell .dashboard-continue-project h3 { font-size: 17px; }
-  .app-frame.is-compact-shell .dashboard-journey { gap: 6px; padding: 8px 10px; }
-  .app-frame.is-compact-shell .dashboard-journey-steps button { min-height: 38px; }
-  .app-frame.is-compact-shell .dashboard-journey-steps li:not(:last-child)::after { top: 12px; }
-  .app-frame.is-compact-shell .dashboard-quick-start { gap: 5px; padding-top: 6px; }
-  .app-frame.is-compact-shell .dashboard-quick-start button { min-height: 29px; padding-inline: 7px; }
-  .app-frame.is-compact-shell .dashboard-project-registry { padding: 8px 12px; }
-  .app-frame.is-compact-shell .dashboard-project-registry-list button { min-height: 40px; }
-  .app-frame.is-compact-shell .dashboard-signals { padding: 6px 10px; }
-  .app-frame.is-compact-shell .dashboard-signal { padding: 4px 8px; }
-  .app-frame.is-compact-shell .dashboard-signal-top .stat-icon { flex-basis: 24px; width: 24px; height: 24px; }
-  .app-frame.is-compact-shell .dashboard-signal-value { font-size: 18px; }
-}
+  .app-frame.is-dashboard-route .dashboard-page { gap: 10px; }
+  .app-frame.is-dashboard-route .dashboard-heading { padding-bottom: 7px; }
+  .app-frame.is-dashboard-route .dashboard-continue { gap: 8px 12px; padding: 11px 13px; }
+  .app-frame.is-dashboard-route .dashboard-continue-project h3 { font-size: 17px; }
+  .app-frame.is-dashboard-route .dashboard-journey { gap: 6px; padding: 8px 10px; }
+  .app-frame.is-dashboard-route .dashboard-journey-steps button { min-height: 38px; }
+  .app-frame.is-dashboard-route .dashboard-journey-steps li:not(:last-child)::after { top: 12px; }
+  .app-frame.is-dashboard-route .dashboard-quick-start { gap: 5px; padding-top: 6px; }
+  .app-frame.is-dashboard-route .dashboard-quick-start button { min-height: 29px; padding-inline: 7px; }
+  .app-frame.is-dashboard-route .dashboard-project-registry { padding: 8px 12px; }
+  .app-frame.is-dashboard-route .dashboard-project-registry-list button { min-height: 40px; }
+  .app-frame.is-dashboard-route .dashboard-signals { padding: 6px 10px; }
+  .app-frame.is-dashboard-route .dashboard-signal { padding: 4px 8px; }
+  .app-frame.is-dashboard-route .dashboard-signal-top .stat-icon { flex-basis: 24px; width: 24px; height: 24px; }
+  .app-frame.is-dashboard-route .dashboard-signal-value { font-size: 18px; }
 }
 
 /* AI Repair: preserve the overview first, then pair evidence with the existing review flow. */
@@ -6345,9 +6334,10 @@ button, input, select, textarea {
   color: var(--dashboard-ink);
 }
 .app-frame.is-dashboard-route .dashboard-heading {
-  align-items: flex-start;
-  padding-bottom: var(--sp-2);
-  border-color: var(--dashboard-line);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+  border: 0;
 }
 .app-frame.is-dashboard-route .dashboard-heading h2 {
   color: var(--dashboard-ink);
@@ -6361,25 +6351,18 @@ button, input, select, textarea {
   color: var(--dashboard-ink-muted);
   font-size: var(--dashboard-type-meta);
 }
-.app-frame.is-dashboard-route .dashboard-project-scope { gap: var(--sp-4); padding: 0; border: 0; background: transparent; }
+.app-frame.is-dashboard-route .dashboard-project-scope { flex-wrap: wrap; gap: var(--sp-4); margin: 0; padding: 0; border: 0; background: transparent; }
+.app-frame.is-dashboard-route .dashboard-scope-metric dd { margin: 0; }
 .app-frame.is-dashboard-route .dashboard-scope-metric dt { color: var(--dashboard-ink-muted); font-size: var(--dashboard-type-meta); }
 .app-frame.is-dashboard-route .dashboard-scope-metric dd { color: var(--dashboard-ink); font: 600 var(--fs-body) var(--font-mono); }
-.app-frame.is-dashboard-route .dashboard-project-registry,
-.app-frame.is-dashboard-route .dashboard-signals,
-.app-frame.is-dashboard-route .dashboard-composite {
-  border: 1px solid var(--dashboard-line);
-  border-radius: var(--r-card);
-  background: var(--dashboard-surface);
-  box-shadow: none;
-}
 .app-frame.is-dashboard-route .dashboard-context-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
   min-width: 0;
-  padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--dashboard-line);
+  padding: var(--sp-4) var(--sp-5);
+  border: 0;
 }
 .app-frame.is-dashboard-route .dashboard-context-line .dashboard-continue-project { flex: 1 1 auto; min-width: 0; }
 .app-frame.is-dashboard-route .dashboard-context-line .dashboard-next-step,
@@ -6451,6 +6434,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-resume-heading { color: var(--dashboard-ink); font-size: var(--fs-body); }
 .app-frame.is-dashboard-route .dashboard-resume-heading > span { background: var(--dashboard-inset); color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-resume-task {
+  height: auto;
   min-height: 44px;
   border-color: var(--dashboard-line-soft);
   background: var(--dashboard-raised);
@@ -6470,12 +6454,12 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-resume-empty,
 .app-frame.is-dashboard-route .dashboard-runnable-note { font-size: var(--dashboard-type-body); }
 .app-frame.is-dashboard-route .dashboard-runnable-note { color: var(--dashboard-amber); }
-.app-frame.is-dashboard-route .dashboard-project-registry { padding: var(--sp-2) var(--sp-3); }
+.app-frame.is-dashboard-route .dashboard-project-registry { padding: var(--sp-4) var(--sp-5); }
 .app-frame.is-dashboard-route .dashboard-project-registry-heading { padding-bottom: var(--sp-2); border-color: var(--dashboard-line); }
 .app-frame.is-dashboard-route .dashboard-project-registry-heading h3 { color: var(--dashboard-ink); font-size: var(--dashboard-type-section); }
 .app-frame.is-dashboard-route .dashboard-project-registry-heading > div > span { color: var(--dashboard-ink-muted); font: var(--dashboard-type-meta) var(--font-sans); }
 .app-frame.is-dashboard-route .dashboard-project-registry-list li { border-color: var(--dashboard-line-soft); }
-.app-frame.is-dashboard-route .dashboard-project-registry-list button { min-height: 44px; color: var(--dashboard-ink); }
+.app-frame.is-dashboard-route .dashboard-project-registry-list button { min-height: 64px; padding: var(--sp-2); color: var(--dashboard-ink); }
 .app-frame.is-dashboard-route .dashboard-project-registry-list button:hover .dashboard-project-copy strong { color: var(--dashboard-mint); }
 .app-frame.is-dashboard-route .dashboard-project-mark { background: var(--dashboard-inset); color: var(--dashboard-mint); }
 .app-frame.is-dashboard-route .dashboard-project-copy strong { color: var(--dashboard-ink); font-size: var(--dashboard-type-body); }
@@ -6483,7 +6467,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-project-action { color: var(--dashboard-ink-muted); font-size: var(--dashboard-type-meta); }
 .app-frame.is-dashboard-route .dashboard-project-registry-list li.is-current .dashboard-project-action { color: var(--dashboard-mint); }
 .app-frame.is-dashboard-route .dashboard-project-registry-empty { color: var(--dashboard-ink-muted); font-size: var(--dashboard-type-body); }
-.app-frame.is-dashboard-route .dashboard-signals { padding: var(--sp-2) var(--sp-3); }
+.app-frame.is-dashboard-route .dashboard-signals { padding: var(--sp-4); border: 0; }
 .app-frame.is-dashboard-route .dashboard-signals-heading { padding: var(--sp-1) 0 var(--sp-2); }
 .app-frame.is-dashboard-route .dashboard-signals-heading h3,
 .app-frame.is-dashboard-route .dashboard-attention-heading h3,
@@ -6508,21 +6492,11 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-secondary-grid { grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); }
 .app-frame.is-dashboard-route .dashboard-primary-grid.dashboard-composite,
 .app-frame.is-dashboard-route .dashboard-secondary-grid.dashboard-composite { gap: var(--sp-3); }
-.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-trend,
-.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-attention,
-.app-frame.is-dashboard-route .dashboard-secondary-grid > .dashboard-recent-runs,
-.app-frame.is-dashboard-route .dashboard-secondary-grid > .dashboard-support-lists {
-  border: 1px solid var(--dashboard-line);
-  border-radius: var(--r-card);
-  background: var(--dashboard-surface);
-}
-.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-trend { border-left: 1px solid var(--dashboard-line); }
-.app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-attention { border-left: 1px solid var(--dashboard-line); }
 .app-frame.is-dashboard-route .dashboard-attention,
 .app-frame.is-dashboard-route .dashboard-workflow,
 .app-frame.is-dashboard-route .dashboard-recent-runs,
 .app-frame.is-dashboard-route .dashboard-trend,
-.app-frame.is-dashboard-route .dashboard-support-lists { min-width: 0; background: transparent; box-shadow: none; }
+.app-frame.is-dashboard-route .dashboard-support-lists { min-width: 0; }
 .app-frame.is-dashboard-route .dashboard-support-lists {
   display: flex;
   flex-direction: column;
@@ -6531,7 +6505,7 @@ button, input, select, textarea {
   min-width: 0;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border: 1px solid var(--dashboard-line);
+  border: 0;
 }
 .app-frame.is-dashboard-route .dashboard-support-lists > .dashboard-workflow,
 .app-frame.is-dashboard-route .dashboard-support-lists > .dashboard-quick-start,
@@ -6544,6 +6518,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-attention-count { color: var(--dashboard-ink-soft); background: var(--dashboard-inset); font-size: var(--dashboard-type-meta); }
 .app-frame.is-dashboard-route .dashboard-attention-list { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .app-frame.is-dashboard-route .dashboard-attention-item {
+  height: auto;
   min-height: 44px;
   padding: 8px;
   border: 1px solid var(--dashboard-line-soft);
@@ -6589,7 +6564,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-support-lists .dashboard-workflow-groups { grid-template-columns: minmax(0, 1fr); }
 .app-frame.is-dashboard-route .dashboard-workflow-group h4 { margin-bottom: var(--sp-1); color: var(--dashboard-ink-muted); font-size: var(--dashboard-type-meta); }
 .app-frame.is-dashboard-route .dashboard-workflow-links { gap: 2px; }
-.app-frame.is-dashboard-route .dashboard-workflow-link { min-height: 36px; color: var(--dashboard-ink-soft); }
+.app-frame.is-dashboard-route .dashboard-workflow-link { height: auto; min-height: 36px; padding: var(--sp-2); gap: var(--sp-2); color: var(--dashboard-ink-soft); }
 .app-frame.is-dashboard-route .dashboard-workflow-link:hover { background: var(--dashboard-hover); color: var(--dashboard-ink); }
 .app-frame.is-dashboard-route .dashboard-workflow-link .link-row-icon { border-color: var(--dashboard-line); background: var(--dashboard-raised); color: var(--dashboard-mint); }
 .app-frame.is-dashboard-route .dashboard-workflow-link .link-row-title {
@@ -6622,7 +6597,7 @@ button, input, select, textarea {
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table td { color: var(--dashboard-ink-soft); border-color: var(--dashboard-line-soft); font-size: var(--dashboard-type-body); }
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table tbody tr:hover td { background: var(--dashboard-hover); }
 .app-frame.is-dashboard-route .dashboard-run-link { color: var(--dashboard-blue); }
-.app-frame.is-dashboard-route .dashboard-trend { border-left: 1px solid var(--dashboard-line); }
+.app-frame.is-dashboard-route .dashboard-trend { border: 0; }
 .app-frame.is-dashboard-route .dashboard-trend-body { min-height: 104px; padding: var(--sp-2) var(--sp-4); color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-trend .chart-insufficient { color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-recent-runs.is-ready-empty .async-state {
@@ -6643,28 +6618,22 @@ button, input, select, textarea {
 
 @media (max-width: 1439px) {
   .app-frame.is-dashboard-route .content-viewport:not(.is-workspace) { padding: var(--sp-3) var(--sp-4); }
-  .app-frame.is-dashboard-route .dashboard-page { gap: var(--sp-2); }
-  .app-frame.is-dashboard-route .dashboard-context-line { padding: var(--sp-2) 0; }
-  .app-frame.is-dashboard-route .dashboard-attention { padding: var(--sp-2) var(--sp-3); }
-  .app-frame.is-dashboard-route .dashboard-support-lists { padding: var(--sp-3); }
-  .app-frame.is-dashboard-route .dashboard-project-registry { padding: var(--sp-2) var(--sp-3); }
-  .app-frame.is-dashboard-route .dashboard-signals { padding: var(--sp-2); }
+  .app-frame.is-dashboard-route .dashboard-page { gap: var(--sp-4); }
+  .app-frame.is-dashboard-route .dashboard-attention { padding: var(--sp-4); }
+  .app-frame.is-dashboard-route .dashboard-support-lists { padding: var(--sp-4); }
   .app-frame.is-dashboard-route .dashboard-signal { padding: 4px 8px; }
   .app-frame.is-dashboard-route .dashboard-signal-value { font-size: var(--dashboard-type-large); }
 }
 @container dashboard-content (max-width: 920px) {
   .app-frame.is-dashboard-route .dashboard-secondary-grid { grid-template-columns: minmax(0, 1fr); }
   .app-frame.is-dashboard-route .dashboard-support-lists {
-    padding: var(--sp-3);
-    border-left: 0;
-    border-top: 1px solid var(--dashboard-line);
+    padding: var(--sp-4);
   }
 }
 @container dashboard-content (max-width: 760px) {
   .app-frame.is-dashboard-route .dashboard-primary-grid { grid-template-columns: minmax(0, 1fr); }
   .app-frame.is-dashboard-route .dashboard-primary-grid > .dashboard-attention {
-    border-top: 1px solid var(--dashboard-line);
-    border-left: 0;
+    border: 0;
   }
   .app-frame.is-dashboard-route .dashboard-context-line { flex-wrap: wrap; align-items: flex-start; }
 }

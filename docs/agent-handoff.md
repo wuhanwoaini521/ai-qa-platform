@@ -2,7 +2,30 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
-## Current follow-up: shared desktop shell consistency and after acceptance (2026-11-06)
+## Current follow-up: desktop sidebar collapse and breakpoint repair (2026-11-06)
+
+- 用户在932×1106总览页反馈侧栏头部堆叠；上一轮仅验证展开状态，未覆盖收起/缩放，验收不完整。
+- 已真实复现收起状态实际宽度仍232px。根因是旧窄屏网格规则与组件库宽度变量冲突；进一步补查发现宽窗口Workspace compact-shell还用min-width/flex-basis固定236px。
+- 修复：design-system.css在>=761px范围统一侧栏的宽度、flex-basis、min/max-width和头部/搜索/导航/语言布局；收起态局部 --sidebar-w:72px，展开使用库232px；Navigation.tsx只增加语言按钮布局类。没有新增导航状态或改动路由/存储。
+- 验证：项目Playwright1.62.0最终51项、page_errors=[]。覆盖九种桌面宽度的展开/收起/重开、精确1280×800/1440×900/1920×1080、932×1106、刷新持久化、断点缩放、搜索/键盘/焦点/平台菜单，以及932/1440下Dashboard、Projects、Quality、Workspace Debug两种状态和项目选择。
+- 静态/构建：相关现有测试13/13；typecheck、lint、最终生产构建和diff-check退出0。最终构建3687 modules、约1分钟，保留既有Monaco chunk提示。未在此次侧栏修改后重复全套317项测试，采用相关13项和真实浏览器回归。
+- 证据：output/playwright/sidebar/review.json与after-expanded-932.png、after-collapsed-932.png、after-collapsed-1440.png；复现命令 `mise exec -- uv --cache-dir runtime/uv-cache run --no-sync python output/playwright/sidebar-review.py`；详细记录 `.ai-runs/2026-11-06-dashboard-surface-layout/10-sidebar-followup.md`。
+- 已串行重读最终diff并人工查看截图，本范围验收PASS；未委派独立agent。不是移动端或全部业务验收。旧质量门的Graphite条款与当前AGENTS方向冲突，本次遵循现行self-ui-style方向。
+- 保留此前所有修改与未跟踪目录，没有管理用户开发服务。用户随后于本轮明确授权普通提交和推送main，按组件库升级、Dashboard/侧栏修复两组组织；不包含强制推送或部署。基线为96b4e9b，实际提交与远端状态以Git记录为准。
+
+## Previous follow-up: Dashboard surfaces and layout repair (2026-11-06)
+
+- 用户要求：修复总览页六处批注并继续复查；保留现有业务和数据语义。
+- 分支：main，基于先前拉取的 96b4e9b；保留会话前面已授权的 v0.9.0 依赖升级和所有既有未跟踪目录。
+- 根因：主要卡片被旧规则清除阴影；执行轨迹和项目列表基础布局依赖已停用的 is-compact-shell 并受 min-width:1151px 限制；ds-btn 固定高度压住多行说明；旧 rail 断点挤压 991px 展开的设计系统侧栏。
+- 修改：DashboardPage.tsx 复用官方 ds-card/ghost 类；index.css 用实际 Dashboard 路由标识并移出错误断点，删除清除库表面的覆盖，恢复全宽行/分行元信息/项目区间距，多行行动行 height:auto；design-system.css 仅在 761–1150px 修正非折叠侧栏；版本契约测试同步到用户已确认的 v0.9.0/7ae760f。
+- 验证：前端测试 317/317；最后样式调整后相关模型/契约 12/12；lint、`mise exec -- python scripts/task.py build`、git diff --check 均退出 0。最终构建 3,687 modules、59.18s，保留既有 Monaco 大 chunk 提示。
+- 浏览器：项目 Playwright 1.62.0，真实本地数据。991×1106、1280×800、1440×900、1920×1080 表面/布局/包含关系通过；执行证据键盘入口保留 runId/nodeid，运行/工作流/项目跳转、Quality 后返回、暗色 CSS、空/错误重试/加载，共 13 项，page_errors=[]。状态注入仅拦截浏览器 GET；没有改业务数据或触发执行。
+- 证据/复现：`mise exec -- uv --cache-dir runtime/uv-cache run --no-sync python output/playwright/dashboard-review.py`；截图及 review.json 在 output/playwright/dashboard/，工程记录在 .ai-runs/2026-11-06-dashboard-surface-layout/。已人工复看代表截图并串行重读 diff；本页范围验收 PASS。没有委派独立 agent。
+- 边界：未验证移动端或全部平台功能。上游组件库开发依赖仍声明 @playwright/test ^1.64.1；本次 UI 修复未安装依赖且仅运行项目 1.62.0，上游构建链政策问题仍需单独处理。
+- 未 commit/push/deploy；保留用户已运行的 5173 开发服务。当前任务没有新的发布授权。
+
+## Previous follow-up: shared desktop shell consistency and after acceptance (2026-11-06)
 
 - **User scope:** The accepted Quality surface is the reference for the other desktop routes. Unify the shared shell while preserving route content and interactions. Target viewports are 1280×800, 1440×900, and 1920×1080. User m11894 subsequently authorized categorized commits and a normal push after validation; do not merge, deploy, or clean the worktree.
 - **Root cause:** Shared navigation/header layout rules and generic class names were stored in lazy `QualityPage.css`; before that route loaded, Dashboard rendered without the project selector and with a shorter sidebar header. Other routes also had legacy solid background overrides.

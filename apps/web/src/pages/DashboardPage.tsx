@@ -264,7 +264,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="dashboard-page">
-      <header className="dashboard-heading">
+      <header className="ds-card dashboard-heading">
         <div className="dashboard-heading-copy">
           <h2>{t('overviewTitle')}</h2>
           <p>{t('overviewSubtitle')}</p>
@@ -286,7 +286,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </header>
 
-      <section className="dashboard-context-line" aria-labelledby="dashboard-continue-title">
+      <section className="ds-card dashboard-context-line" aria-labelledby="dashboard-continue-title">
         <div className="dashboard-continue-project">
           <span>{currentProject ? t('currentProject') : focusProject ? t('latestRunProject') : t('currentProject')}</span>
           <h3 id="dashboard-continue-title">
@@ -333,7 +333,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       </section>
 
       <div className="dashboard-primary-grid dashboard-composite">
-        <section className={`dashboard-trend${!loading && !runsUnavailable && trendPoints.length <= 1 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-trend-title">
+        <section className={`ds-card dashboard-trend${!loading && !runsUnavailable && trendPoints.length <= 1 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-trend-title">
           <div className="card-header">
             <div>
               <h3 id="dashboard-trend-title" className="card-title">{t('executionTrend')}</h3>
@@ -352,7 +352,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </section>
 
-        <section className={`dashboard-attention${sourcesUnavailable ? ' is-unavailable' : ''}`} aria-labelledby="dashboard-attention-title">
+        <section className={`ds-card dashboard-attention${sourcesUnavailable ? ' is-unavailable' : ''}`} aria-labelledby="dashboard-attention-title">
           <div className="dashboard-attention-heading">
             <div>
               <h3 id="dashboard-attention-title">{t('needsAttention')}</h3>
@@ -393,7 +393,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       </div>
 
       <div className="dashboard-secondary-grid dashboard-composite">
-        <section className={`dashboard-recent-runs${!loading && !runsUnavailable && recentRuns.length === 0 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-recent-runs-title">
+        <section className={`ds-card dashboard-recent-runs${!loading && !runsUnavailable && recentRuns.length === 0 ? ' is-ready-empty' : ''}`} aria-labelledby="dashboard-recent-runs-title">
           <div className="card-header">
             <div>
               <h3 id="dashboard-recent-runs-title" className="card-title">{t('recentRuns')}</h3>
@@ -409,7 +409,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div className="dashboard-journey-run-meta">
                 {journeyIsFixture && <span className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</span>}
                 <span className={`dashboard-journey-status is-${journeyRun.status.toLowerCase()}`}>{journeyRun.status}</span>
-                <button type="button" className="ds-btn dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
+                <button type="button" className="ds-btn ds-btn-ghost ds-btn-sm dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
                   {journeyRun.passed} / {journeyRun.failed}
                 </button>
               </div>
@@ -418,7 +418,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               {journeyExecutions.map((execution) => {
                 const stepName = execution.nodeid.split('::').pop() || execution.nodeid;
                 return <li key={execution.id} className={`is-${execution.status.toLowerCase()}`}>
-                  <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)} className="ds-btn">
+                  <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)} className="ds-btn ds-btn-ghost">
                     <span className="dashboard-journey-marker" aria-hidden="true" />
                     <span className="dashboard-journey-copy"><strong>{stepName}</strong><small>{execution.nodeid}</small></span>
                     <code>{Math.round(execution.duration_ms)}ms</code>
@@ -450,7 +450,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           {run.status}
                         </span>
                       </td>
-                      <td><button type="button" className="ds-btn dashboard-run-link mono" aria-label={t('openRun', { runId: run.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(run.id) : onNavigate('runs', selectedProjectId)}>#{run.id.slice(0, 8)}</button></td>
+                      <td><button type="button" className="ds-btn ds-btn-ghost ds-btn-sm dashboard-run-link mono" aria-label={t('openRun', { runId: run.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(run.id) : onNavigate('runs', selectedProjectId)}>#{run.id.slice(0, 8)}</button></td>
                       <td className="text-secondary">{run.runner_type || 'LOCAL'}</td>
                       <td>
                         <span className="tone-passed">{run.passed}</span>
@@ -472,7 +472,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           )}
         </section>
 
-        <div className="dashboard-support-lists">
+        <div className="ds-card dashboard-support-lists">
           <section className="dashboard-workflow" aria-labelledby="dashboard-workflow-title">
             <div className="dashboard-workflow-heading">
               <div>
@@ -486,7 +486,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   <h4>{group.title}</h4>
                   <div className="dashboard-workflow-links">
                     {group.items.map((item) => (
-                      <button key={item.tab} type="button" className="ds-btn dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
+                      <button key={item.tab} type="button" className="ds-btn ds-btn-ghost dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
                         <span className="link-row-icon"><item.Icon size={14} strokeWidth={1.7} aria-hidden="true" /></span>
                         <span className="link-row-title">{item.label}</span>
                         <ArrowRight size={13} aria-hidden="true" />
@@ -530,7 +530,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </header>
         {projects.length ? <ul className="dashboard-project-registry-list">
           {projects.slice(0, 5).map((project) => <li key={project.id} className={project.id === selectedProjectId ? 'is-current' : ''}>
-            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)} className="ds-btn">
+            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)} className="ds-btn ds-btn-ghost">
               <span className="dashboard-project-mark"><FolderGit2 size={16} aria-hidden="true" /></span>
               <span className="dashboard-project-copy"><strong>{project.name}</strong><small>{project.framework_type} · {project.default_branch}</small></span>
               <span className="dashboard-project-action">{project.id === selectedProjectId ? t('currentProject') : t('openWorkspace')}</span>
