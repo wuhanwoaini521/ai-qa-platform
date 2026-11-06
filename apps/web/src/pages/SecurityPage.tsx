@@ -212,14 +212,14 @@ export const SecurityPage: React.FC = () => {
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
-        return <span className="status-pill status-pill-error">ADMIN</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-error">ADMIN</span>;
       case 'QA_LEAD':
-        return <span className="status-pill status-pill-warning">QA LEAD</span>;
+        return <span className="ds-tag ds-tag--warn status-pill status-pill-warning">QA LEAD</span>;
       case 'QA_ENGINEER':
-        return <span className="status-pill status-pill-passed">QA ENGINEER</span>;
+        return <span className="ds-tag ds-tag--success status-pill status-pill-passed">QA ENGINEER</span>;
       case 'VIEWER':
       default:
-        return <span className="status-pill status-pill-draft">VIEWER</span>;
+        return <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">VIEWER</span>;
     }
   };
 
@@ -234,7 +234,7 @@ export const SecurityPage: React.FC = () => {
           {t('actionFailed', { message: actionError })}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             style={{ marginTop: '8px' }}
             onClick={() => setActionError(null)}
           >
@@ -250,25 +250,25 @@ export const SecurityPage: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           {activeTab === 'users' && (
-            <button className="btn btn-primary" onClick={() => setShowCreateUserModal(true)}>
+            <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setShowCreateUserModal(true)}>
               <Plus size={14} />
               <span>{t('addUser')}</span>
             </button>
           )}
           {activeTab === 'teams' && (
-            <button className="btn btn-primary" onClick={() => setShowCreateTeamModal(true)}>
+            <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setShowCreateTeamModal(true)}>
               <Plus size={14} />
               <span>{t('createTeam')}</span>
             </button>
           )}
           {activeTab === 'keys' && (
-            <button className="btn btn-primary" onClick={() => setShowCreateKeyModal(true)}>
+            <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setShowCreateKeyModal(true)}>
               <Plus size={14} />
               <span>{t('generateApiKey')}</span>
             </button>
           )}
           <button
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             onClick={() => {
               if (activeTab === 'users') fetchUsers();
               if (activeTab === 'teams') fetchTeams();
@@ -285,28 +285,28 @@ export const SecurityPage: React.FC = () => {
       {/* Tabs */}
       <div className="tabs-container" style={{ marginBottom: '1.5rem' }}>
         <button
-          className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
           <Users size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
           {t('tabs.users', { count: users.length })}
         </button>
         <button
-          className={`tab-btn ${activeTab === 'teams' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'teams' ? 'active' : ''}`}
           onClick={() => setActiveTab('teams')}
         >
           <Shield size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
           {t('tabs.teams', { count: teams.length })}
         </button>
         <button
-          className={`tab-btn ${activeTab === 'keys' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'keys' ? 'active' : ''}`}
           onClick={() => setActiveTab('keys')}
         >
           <Key size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
           {t('tabs.keys', { count: apiKeys.length })}
         </button>
         <button
-          className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
           onClick={() => setActiveTab('audit')}
         >
           <FileCheck size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
@@ -316,13 +316,13 @@ export const SecurityPage: React.FC = () => {
 
       {/* Tab 1: Users */}
       {activeTab === 'users' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('users.title')}</h3>
             <span className="text-secondary text-sm">{t('users.subtitle')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="ds-table data-table">
               <thead>
                 <tr>
                   <th>{t('users.fullName')}</th>
@@ -342,15 +342,15 @@ export const SecurityPage: React.FC = () => {
                       <td>{getRoleBadge(u.role)}</td>
                       <td>
                         {u.is_active ? (
-                          <span className="status-pill status-pill-passed">{t('users.active')}</span>
+                          <span className="ds-tag ds-tag--success status-pill status-pill-passed">{t('users.active')}</span>
                         ) : (
-                          <span className="status-pill status-pill-draft">{t('users.disabled')}</span>
+                          <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{t('users.disabled')}</span>
                         )}
                       </td>
                       <td>{new Date(u.created_at).toLocaleDateString()}</td>
                       <td>
                         <select
-                          className="form-control"
+                          className="ds-select form-control"
                           style={{ padding: '4px 8px', fontSize: '0.85rem', width: 'auto' }}
                           value={u.role}
                           onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
@@ -378,13 +378,13 @@ export const SecurityPage: React.FC = () => {
 
       {/* Tab 2: Teams */}
       {activeTab === 'teams' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('teams.title')}</h3>
             <span className="text-secondary text-sm">{t('teams.subtitle')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="ds-table data-table">
               <thead>
                 <tr>
                   <th>{t('teams.name')}</th>
@@ -400,7 +400,7 @@ export const SecurityPage: React.FC = () => {
                       <td style={{ fontWeight: 600 }}>{team.name}</td>
                       <td>{team.description || '--'}</td>
                       <td>
-                        <span className="status-pill status-pill-passed">
+                        <span className="ds-tag ds-tag--success status-pill status-pill-passed">
                           {t('teams.memberCount', { count: team.member_count })}
                         </span>
                       </td>
@@ -422,13 +422,13 @@ export const SecurityPage: React.FC = () => {
 
       {/* Tab 3: API Keys */}
       {activeTab === 'keys' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('keys.title')}</h3>
             <span className="text-secondary text-sm">{t('keys.subtitle')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="ds-table data-table">
               <thead>
                 <tr>
                   <th>{t('keys.name')}</th>
@@ -450,7 +450,7 @@ export const SecurityPage: React.FC = () => {
                       <td>{new Date(k.created_at).toLocaleDateString()}</td>
                       <td>
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           style={{ color: 'var(--accent-red)' }}
                           onClick={() => handleDeleteApiKey(k.id)}
                         >
@@ -475,13 +475,13 @@ export const SecurityPage: React.FC = () => {
 
       {/* Tab 4: Security Audit Trail */}
       {activeTab === 'audit' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('audit.title')}</h3>
             <span className="text-secondary text-sm">{t('audit.subtitle')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="ds-table data-table">
               <thead>
                 <tr>
                   <th>{t('audit.timestamp')}</th>
@@ -499,7 +499,7 @@ export const SecurityPage: React.FC = () => {
                     <tr key={log.id}>
                       <td style={{ fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleString()}</td>
                       <td>
-                        <span className="status-pill status-pill-draft">{log.action}</span>
+                        <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{log.action}</span>
                       </td>
                       <td>{log.actor_email}</td>
                       <td>
@@ -507,7 +507,7 @@ export const SecurityPage: React.FC = () => {
                       </td>
                       <td>
                         <span
-                          className={`status-pill ${
+                          className={`ds-tag status-pill ${
                             log.status === 'SUCCESS'
                               ? 'status-pill-passed'
                               : log.status === 'DENIED'
@@ -521,7 +521,7 @@ export const SecurityPage: React.FC = () => {
                       <td>{log.ip_address}</td>
                       <td>
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           onClick={() => setSelectedAuditLog(log)}
                         >
                           {t('audit.view')}
@@ -548,7 +548,7 @@ export const SecurityPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h3>{t('users.addTitle')}</h3>
-              <button className="btn-icon" onClick={() => setShowCreateUserModal(false)}>
+              <button className="ds-btn-icon ds-btn btn-icon" onClick={() => setShowCreateUserModal(false)}>
                 &times;
               </button>
             </div>
@@ -558,7 +558,7 @@ export const SecurityPage: React.FC = () => {
                   <label>{t('users.fullNameLabel')}</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     required
                     placeholder={t('users.fullNamePlaceholder')}
                     value={newUserFullName}
@@ -569,7 +569,7 @@ export const SecurityPage: React.FC = () => {
                   <label>{t('users.emailLabel')}</label>
                   <input
                     type="email"
-                    className="form-control"
+                    className="ds-input form-control"
                     required
                     placeholder={t('users.emailPlaceholder')}
                     value={newUserEmail}
@@ -579,7 +579,7 @@ export const SecurityPage: React.FC = () => {
                 <div className="form-group">
                   <label>{t('users.roleLabel')}</label>
                   <select
-                    className="form-control"
+                    className="ds-select form-control"
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                   >
@@ -591,10 +591,10 @@ export const SecurityPage: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateUserModal(false)}>
+                <button type="button" className="ds-btn btn btn-secondary" onClick={() => setShowCreateUserModal(false)}>
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creatingUser}>
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" disabled={creatingUser}>
                   {creatingUser ? t('creating') : t('users.create')}
                 </button>
               </div>
@@ -609,7 +609,7 @@ export const SecurityPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h3>{t('teams.createTitle')}</h3>
-              <button className="btn-icon" onClick={() => setShowCreateTeamModal(false)}>
+              <button className="ds-btn-icon ds-btn btn-icon" onClick={() => setShowCreateTeamModal(false)}>
                 &times;
               </button>
             </div>
@@ -619,7 +619,7 @@ export const SecurityPage: React.FC = () => {
                   <label>{t('teams.nameLabel')}</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     required
                     placeholder={t('teams.namePlaceholder')}
                     value={newTeamName}
@@ -629,7 +629,7 @@ export const SecurityPage: React.FC = () => {
                 <div className="form-group">
                   <label>{t('common:description')}</label>
                   <textarea
-                    className="form-control"
+                    className="ds-textarea form-control"
                     rows={3}
                     placeholder={t('teams.descriptionPlaceholder')}
                     value={newTeamDescription}
@@ -638,10 +638,10 @@ export const SecurityPage: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateTeamModal(false)}>
+                <button type="button" className="ds-btn btn btn-secondary" onClick={() => setShowCreateTeamModal(false)}>
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creatingTeam}>
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" disabled={creatingTeam}>
                   {creatingTeam ? t('creating') : t('createTeam')}
                 </button>
               </div>
@@ -656,7 +656,7 @@ export const SecurityPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h3>{t('keys.generateTitle')}</h3>
-              <button className="btn-icon" onClick={() => setShowCreateKeyModal(false)}>
+              <button className="ds-btn-icon ds-btn btn-icon" onClick={() => setShowCreateKeyModal(false)}>
                 &times;
               </button>
             </div>
@@ -666,7 +666,7 @@ export const SecurityPage: React.FC = () => {
                   <label>{t('keys.nameLabel')}</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     required
                     placeholder={t('keys.namePlaceholder')}
                     value={newKeyName}
@@ -675,10 +675,10 @@ export const SecurityPage: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateKeyModal(false)}>
+                <button type="button" className="ds-btn btn btn-secondary" onClick={() => setShowCreateKeyModal(false)}>
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creatingKey}>
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" disabled={creatingKey}>
                   {creatingKey ? t('generating') : t('keys.generate')}
                 </button>
               </div>
@@ -696,7 +696,7 @@ export const SecurityPage: React.FC = () => {
                 <Key size={18} color="var(--accent-green)" />
                 <h3>{t('keys.generatedTitle')}</h3>
               </div>
-              <button className="btn-icon" onClick={() => setGeneratedKeyResult(null)}>
+              <button className="ds-btn-icon ds-btn btn-icon" onClick={() => setGeneratedKeyResult(null)}>
                 &times;
               </button>
             </div>
@@ -716,14 +716,14 @@ export const SecurityPage: React.FC = () => {
                 <code style={{ fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                   {generatedKeyResult.raw_api_key}
                 </code>
-                <button className="btn btn-secondary btn-sm" onClick={handleCopyKey}>
+                <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={handleCopyKey}>
                   {copiedKey ? <Check size={14} color="var(--accent-green)" /> : <Copy size={14} />}
                   <span>{copiedKey ? t('common:copied') : t('common:copy')}</span>
                 </button>
               </div>
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn btn-primary" onClick={() => setGeneratedKeyResult(null)}>
+              <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setGeneratedKeyResult(null)}>
                 {t('keys.done')}
               </button>
             </div>
@@ -737,7 +737,7 @@ export const SecurityPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '540px' }}>
             <div className="modal-header">
               <h3>{t('audit.detailsTitle')}</h3>
-              <button className="btn-icon" onClick={() => setSelectedAuditLog(null)}>
+              <button className="ds-btn-icon ds-btn btn-icon" onClick={() => setSelectedAuditLog(null)}>
                 &times;
               </button>
             </div>
@@ -774,7 +774,7 @@ export const SecurityPage: React.FC = () => {
               </div>
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn btn-primary" onClick={() => setSelectedAuditLog(null)}>
+              <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setSelectedAuditLog(null)}>
                 {t('common:close')}
               </button>
             </div>

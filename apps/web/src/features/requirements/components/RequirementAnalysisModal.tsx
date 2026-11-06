@@ -37,7 +37,7 @@ export const RequirementAnalysisModal: React.FC<
                 <Sparkles size={18} color="var(--color-primary)" />
                 <h3>{t('analysisTitle')}</h3>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={onClose}>
+              <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
                 {t('common:close')}
               </button>
             </div>
@@ -145,7 +145,7 @@ export const RequirementAnalysisModal: React.FC<
                       {aiAnalysis.suggested_test_dimensions.map((dim, idx) => (
                         <span
                           key={idx}
-                          className="status-pill status-pill-draft"
+                          className="ds-tag ds-tag--neutral status-pill status-pill-draft"
                         >
                           {dim}
                         </span>

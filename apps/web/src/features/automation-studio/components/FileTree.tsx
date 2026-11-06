@@ -133,7 +133,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             <div className="tree-actions" onClick={(e) => e.stopPropagation()}>
               {isDir ? (
                 <button
-                  className="icon-btn"
+                  className="ds-btn-icon ds-btn icon-btn"
                   title={t('fileTree.newFileInside')}
                   onClick={() => onCreateFileInside(node.path)}
                 >
@@ -141,10 +141,10 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 </button>
               ) : (
                 <>
-                  <button className="icon-btn" title={t('fileTree.rename')} onClick={() => onRename(node.path)}>
+                  <button className="ds-btn-icon ds-btn icon-btn" title={t('fileTree.rename')} onClick={() => onRename(node.path)}>
                     <Edit2 size={11} />
                   </button>
-                  <button className="icon-btn" title={t('common:delete')} onClick={() => onDelete(node.path)}>
+                  <button className="ds-btn-icon ds-btn icon-btn" title={t('common:delete')} onClick={() => onDelete(node.path)}>
                     <Trash2 size={11} color="var(--accent-red)" />
                   </button>
                 </>
@@ -161,7 +161,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
     return (
       <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
         <p style={{ marginBottom: '10px' }}>{t('fileTree.uninitialized')}</p>
-        <button className="btn btn-primary btn-sm" onClick={onBootstrapWorkspace}>
+        <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={onBootstrapWorkspace}>
           {t('fileTree.initializeWorkspace')}
         </button>
       </div>

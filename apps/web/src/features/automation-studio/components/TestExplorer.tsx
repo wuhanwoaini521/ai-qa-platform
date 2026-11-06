@@ -32,7 +32,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
     <div style={{ padding: '4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 8px', color: 'var(--ink-muted)', fontSize: '11px' }}>
         <strong>{t('testExplorer.title')}</strong>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onCollect} disabled={loading} aria-label={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')} title={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')}>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onCollect} disabled={loading} aria-label={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')} title={t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')}>
           <RefreshCw size={13} aria-hidden="true" />
           {t(collectionFailed ? 'testExplorer.retry' : hasCollected ? 'testExplorer.refresh' : 'testExplorer.discover')}
         </button>
@@ -75,13 +75,13 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
                   textAlign: 'left',
                   cursor: 'pointer',
                 }}
-                onClick={() => onOpenFile(test.path, test.line)}
+                onClick={() => onOpenFile(test.path, test.line)} className="ds-btn"
               >
                 {test.name}
               </button>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   style={{ padding: '2px 6px', fontSize: '11px' }}
                   disabled={runningTest}
                   onClick={() => onDebugTest(test.nodeid)}
@@ -90,7 +90,7 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
                   <Bug size={10} /> {t('testExplorer.debug')}
                 </button>
                 <button
-                  className="btn btn-primary btn-sm"
+                  className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
                   style={{ padding: '2px 6px', fontSize: '11px' }}
                   disabled={runningTest}
                   onClick={() => onRunTest(test.nodeid)}

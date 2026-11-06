@@ -173,7 +173,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
             <span className="workspace-case-selection-label">{t('currentTestCase')}</span>
             {caseSelection.kind === 'select' ? (
               <select
-                className="form-select workspace-case-selection-control"
+                className="ds-select form-select workspace-case-selection-control"
                 aria-label={t('currentTestCase')}
                 value={caseSelection.selectedId}
                 onChange={(event) => {
@@ -197,7 +197,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           </div>
         )}
         <button
-          className="btn btn-primary btn-sm"
+          className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
           disabled={projects.length === 0}
           onClick={() => form.open(selectedProjectId || projects[0]?.id || '')}
         >
@@ -209,7 +209,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
           <p className="subtitle">{t('pageSubtitle')}</p>
         </div>
         <button
-          className="btn btn-primary"
+          className="ds-btn-primary ds-btn btn btn-primary"
           disabled={projects.length === 0}
           onClick={() => form.open(selectedProjectId || projects[0]?.id || '')}
         >
@@ -218,7 +218,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
       </div>}
 
       {projects.length === 0 ? (
-        <div className="card">
+        <div className="ds-card card">
           <div
             className="card-body"
             style={{
@@ -267,7 +267,7 @@ export const TestCasesPage: React.FC<TestCasesPageProps> = ({
               )}
             </div>
           ) : (
-            <div className="card">
+            <div className="ds-card card">
               <div
                 className="card-body"
                 style={{

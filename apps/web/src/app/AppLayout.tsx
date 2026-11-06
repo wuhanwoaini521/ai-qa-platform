@@ -51,34 +51,36 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
   const fullBleed = location.pathname.includes('/studio');
   const dashboardRoute = location.pathname === '/';
   const workspaceRoute = location.pathname === '/workspace' || location.pathname.startsWith('/workspace/');
+  const qualityRoute = location.pathname === '/quality';
   const workspaceParams = new URLSearchParams(location.search);
   const workspaceStage = workspaceParams.get('stage');
   const workspaceView = workspaceParams.get('view');
   const workspaceResultsRoute = workspaceRoute && (
     workspaceStage === 'result' || (!workspaceStage && workspaceView === 'results')
   );
-  const graphiteWorkspace = workspaceRoute && workspaceStage === 'automation' &&
+  const compactWorkspaceShell = workspaceRoute && workspaceStage === 'automation' &&
     (workspaceView === 'browser' || workspaceView === 'debug');
-  const graphiteRoute = location.pathname === '/' || graphiteWorkspace;
+  const compactShellRoute = compactWorkspaceShell;
   const titleKey = PAGE_TITLES.find((entry) => entry.match(location.pathname))?.titleKey;
   const title = titleKey ? t(titleKey) : t('common:appName');
   const selectedRunContext = readExplicitRunId(location.search)
     ? readWorkspaceContext(location.search, selectedProjectId)
     : null;
 
-  return (
+  const appContent = (
     <div className="app-container">
-      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${graphiteRoute ? ' is-graphite' : ''}${dashboardRoute ? ' is-dashboard-route' : ''}`}>
+      <div className={`app-frame${workspaceRoute ? ' is-workspace-route' : ''}${compactShellRoute ? ' is-compact-shell' : ''}${dashboardRoute ? ' is-dashboard-route' : ''}${qualityRoute ? ' is-quality-route' : ''}`}>
         <a className="skip-to-content" href="#main-content">{t('common:skipToContent')}</a>
         <Header
-          title={title}
+          title={qualityRoute ? t('qualityLocation') : title}
           selectedProjectId={selectedProjectId}
           selectedRunContext={selectedRunContext}
           onSignOut={onSignOut}
+          designSystem={true}
         />
 
         <div className="app-body">
-          <Navigation compact={false} graphite={graphiteRoute} />
+          <Navigation compact={false} compactShell={compactShellRoute} designSystem={true} />
           <div className="app-main">
             <main id="main-content" className={`content-viewport ${fullBleed ? 'full-bleed' : ''} ${workspaceRoute ? 'is-workspace' : ''} ${workspaceResultsRoute ? 'is-workspace-result' : ''}`} tabIndex={-1}>
               <ReadinessNotice />
@@ -93,4 +95,6 @@ export const AppLayout: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) =>
       </div>
     </div>
   );
+
+  return appContent;
 };

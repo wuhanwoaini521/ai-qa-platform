@@ -39,7 +39,7 @@ export function ReadinessNotice() {
         {t('health.title')}
       </Link>
       <button
-        className="icon-btn"
+        className="ds-btn-icon ds-btn icon-btn"
         type="button"
         aria-label={t('health.dismiss')}
         title={t('health.dismiss')}

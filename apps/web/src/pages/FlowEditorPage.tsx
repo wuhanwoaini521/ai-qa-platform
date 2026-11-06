@@ -258,7 +258,7 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
                     <span>{side === 'then' ? t('branchThen') : t('branchElse')}</span>
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                       onClick={() => {
                         const child = emptyNode('click');
                         setFlow(insertNode(flow, node.id, side, child));
@@ -290,16 +290,16 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         </div>
         <nav className="flow-page-actions" aria-label={t('actions')}>
           {requirementId && (
-            <Link className="btn btn-secondary btn-sm" to={`/flows?projectId=${projectId}&requirementId=${requirementId}&scenarioId=${scenarioId}`}>
+            <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/flows?projectId=${projectId}&requirementId=${requirementId}&scenarioId=${scenarioId}`}>
               <ArrowLeft size={14} aria-hidden="true" />
               {t('viewOnly')}
             </Link>
           )}
-          <button className="btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !compile}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !compile}>
             <Save size={14} aria-hidden="true" />
             {saving ? t('saving') : t('save')}
           </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={run} disabled={starting || !compile}>
+          <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" type="button" onClick={run} disabled={starting || !compile}>
             <Play size={14} aria-hidden="true" />
             {starting ? t('starting') : t('run')}
           </button>
@@ -309,22 +309,22 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
 
       {embedded && (
         <div className="flow-page-actions flow-editor-actions" role="toolbar" aria-label={t('actions')}>
-          <button className="btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !compile}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !compile}>
             <Save size={14} aria-hidden="true" />
             {saving ? t('saving') : t('save')}
           </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={run} disabled={starting || !compile}>
+          <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" type="button" onClick={run} disabled={starting || !compile}>
             <Play size={14} aria-hidden="true" />
             {starting ? t('starting') : t('run')}
           </button>
         </div>
       )}
 
-      <section className="card flow-editor-meta">
+      <section className="ds-card card flow-editor-meta">
         <label className="flow-editor-field">
           <span>{t('testName')}</span>
           <input
-            className="form-input"
+            className="ds-input form-input"
             value={flow.test_name}
             onChange={(event) => setFlow({ ...flow, test_name: event.target.value.replace(/[^A-Za-z0-9_]/g, '_') })}
           />
@@ -347,10 +347,10 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
       )}
 
       <div className="flow-editor-layout">
-        <aside className="card flow-editor-palette">
+        <aside className="ds-card card flow-editor-palette">
           <h3>{t('palette')}</h3>
           {PALETTE.map((kind) => (
-            <button key={kind} type="button" className="flow-editor-palette-item" onClick={() => addNode(kind)}>
+            <button key={kind} type="button" className="ds-btn flow-editor-palette-item" onClick={() => addNode(kind)}>
               <Plus size={13} aria-hidden="true" />
               {t(KIND_LABEL[kind])}
             </button>
@@ -358,12 +358,12 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
           <p className="flow-editor-hint">{selected ? t('insertAfterSelected') : t('appendToEnd')}</p>
         </aside>
 
-        <main className="card flow-editor-canvas">
+        <main className="ds-card card flow-editor-canvas">
           <h3>{t('canvasTitle')}</h3>
           {renderList(rootNodes, null, 'then')}
         </main>
 
-        <aside className="card flow-editor-inspector">
+        <aside className="ds-card card flow-editor-inspector">
           <h3>{t('inspector')}</h3>
           {activeNode ? (
             <NodeInspector
@@ -378,7 +378,7 @@ export const FlowEditorPage: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         </aside>
       </div>
 
-      <section className="card flow-editor-preview">
+      <section className="ds-card card flow-editor-preview">
         <header className="flow-editor-preview-head">
           <h3>{t('preview')}</h3>
           {compile && (
@@ -442,13 +442,13 @@ const FlowCard: React.FC<{
         {node.description && summary && <small>{summary}</small>}
       </div>
       <div className="flow-editor-node-actions">
-        <button type="button" className="icon-btn" aria-label={t('moveUp')} onClick={(event) => { event.stopPropagation(); onMoveUp(); }}>
+        <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('moveUp')} onClick={(event) => { event.stopPropagation(); onMoveUp(); }}>
           <ChevronUp size={14} aria-hidden="true" />
         </button>
-        <button type="button" className="icon-btn" aria-label={t('moveDown')} onClick={(event) => { event.stopPropagation(); onMoveDown(); }}>
+        <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('moveDown')} onClick={(event) => { event.stopPropagation(); onMoveDown(); }}>
           <ChevronDown size={14} aria-hidden="true" />
         </button>
-        <button type="button" className="icon-btn" aria-label={t('delete')} onClick={(event) => { event.stopPropagation(); onDelete(); }}>
+        <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('delete')} onClick={(event) => { event.stopPropagation(); onDelete(); }}>
           <Trash2 size={14} aria-hidden="true" />
         </button>
       </div>
@@ -467,19 +467,19 @@ const NodeInspector: React.FC<{
     <div className="flow-editor-inspector-body">
       <label className="flow-editor-field">
         <span>{t('description')}</span>
-        <input className="form-input" value={node.description} onChange={(event) => onChange({ description: event.target.value })} />
+        <input className="ds-input form-input" value={node.description} onChange={(event) => onChange({ description: event.target.value })} />
       </label>
       {node.kind === 'navigate' && (
         <label className="flow-editor-field">
           <span>{t('url')}</span>
-          <input className="form-input" value={node.url} onChange={(event) => onChange({ url: event.target.value })} />
+          <input className="ds-input form-input" value={node.url} onChange={(event) => onChange({ url: event.target.value })} />
         </label>
       )}
       {node.kind === 'condition' && (
         <>
           <label className="flow-editor-field">
             <span>{t('conditionKind')}</span>
-            <select className="form-select" value={node.condition_kind} onChange={(event) => onChange({ condition_kind: event.target.value as FlowNode['condition_kind'] })}>
+            <select className="ds-select form-select" value={node.condition_kind} onChange={(event) => onChange({ condition_kind: event.target.value as FlowNode['condition_kind'] })}>
               <option value="css">CSS</option>
               <option value="text">{t('kindText')}</option>
               <option value="test_id">test id</option>
@@ -487,7 +487,7 @@ const NodeInspector: React.FC<{
           </label>
           <label className="flow-editor-field">
             <span>{t('conditionValue')}</span>
-            <input className="form-input" value={node.condition_value} onChange={(event) => onChange({ condition_value: event.target.value })} />
+            <input className="ds-input form-input" value={node.condition_value} onChange={(event) => onChange({ condition_value: event.target.value })} />
           </label>
         </>
       )}
@@ -495,7 +495,7 @@ const NodeInspector: React.FC<{
         <>
           <label className="flow-editor-field">
             <span>{t('locatorKind')}</span>
-            <select className="form-select" value={node.locator_kind} onChange={(event) => onChange({ locator_kind: event.target.value as LocatorKind })}>
+            <select className="ds-select form-select" value={node.locator_kind} onChange={(event) => onChange({ locator_kind: event.target.value as LocatorKind })}>
               {LOCATOR_KINDS.map((kind) => (
                 <option key={kind} value={kind}>{kind}</option>
               ))}
@@ -503,12 +503,12 @@ const NodeInspector: React.FC<{
           </label>
           <label className="flow-editor-field">
             <span>{t('locatorValue')}</span>
-            <input className="form-input" value={node.locator_value} onChange={(event) => onChange({ locator_value: event.target.value })} />
+            <input className="ds-input form-input" value={node.locator_value} onChange={(event) => onChange({ locator_value: event.target.value })} />
           </label>
           {node.locator_kind === 'role' && (
             <label className="flow-editor-field">
               <span>{t('accessibleName')}</span>
-              <input className="form-input" value={node.locator_name} onChange={(event) => onChange({ locator_name: event.target.value })} />
+              <input className="ds-input form-input" value={node.locator_name} onChange={(event) => onChange({ locator_name: event.target.value })} />
             </label>
           )}
         </>
@@ -516,14 +516,14 @@ const NodeInspector: React.FC<{
       {(node.kind === 'fill' || node.kind === 'assert_text') && !node.env_var && (
         <label className="flow-editor-field">
           <span>{node.kind === 'fill' ? t('value') : t('expectedText')}</span>
-          <input className="form-input" value={node.value} onChange={(event) => onChange({ value: event.target.value })} />
+          <input className="ds-input form-input" value={node.value} onChange={(event) => onChange({ value: event.target.value })} />
         </label>
       )}
       {node.kind === 'fill' && (
         <label className="flow-editor-field">
           <span>{t('envVar')}</span>
           <input
-            className="form-input"
+            className="ds-input form-input"
             placeholder="QA_DATA_EMAIL"
             value={node.env_var}
             onChange={(event) => onChange({ env_var: event.target.value.toUpperCase() })}
@@ -551,7 +551,7 @@ const NodeInspector: React.FC<{
       {node.kind === 'wait' && (
         <label className="flow-editor-field">
           <span>{t('waitMs')}</span>
-          <input className="form-input" type="number" min={0} max={120000} value={node.value} onChange={(event) => onChange({ value: event.target.value })} />
+          <input className="ds-input form-input" type="number" min={0} max={120000} value={node.value} onChange={(event) => onChange({ value: event.target.value })} />
         </label>
       )}
     </div>

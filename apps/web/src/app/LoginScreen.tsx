@@ -32,7 +32,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
   return (
     <div className="login-screen">
       <form
-        className="card login-card"
+        className="ds-card card login-card"
         onSubmit={handleSubmit}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -45,7 +45,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
         </label>
         <input
           id="login-email"
-          className="form-control"
+          className="ds-input form-control"
           style={{ width: '100%', marginBottom: '12px' }}
           value={email}
           autoComplete="username"
@@ -57,7 +57,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
         </label>
         <input
           id="login-password"
-          className="form-control"
+          className="ds-input form-control"
           type="password"
           style={{ width: '100%', marginBottom: '16px' }}
           value={password}
@@ -71,7 +71,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
           </div>
         )}
 
-        <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting}>
+        <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" style={{ width: '100%' }} disabled={submitting}>
           {submitting ? t('submitting') : t('submit')}
         </button>
 

@@ -124,13 +124,13 @@ export function KnowledgeGraph({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("searchGraph")}
-            aria-label={t("searchGraph")}
+            aria-label={t("searchGraph")} className="ds-input"
           />
         </label>
         <select
           aria-label={t("filterKind")}
           value={kind}
-          onChange={(e) => setKind(e.target.value)}
+          onChange={(e) => setKind(e.target.value)} className="ds-select"
         >
           <option value="">{t("allKinds")}</option>
           {KIND_ORDER.filter((k) =>
@@ -143,28 +143,28 @@ export function KnowledgeGraph({
         </select>
         <div className="knowledge-zoom">
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={() => zoom(Math.max(0.01, scale - 0.15))}
             aria-label={t("zoomOut")}
           >
             <Minus size={14} />
           </button>
           <button
-            className="btn btn-secondary btn-sm knowledge-scale"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm knowledge-scale"
             onClick={() => zoom(1)}
             aria-label={t("readableZoom")}
           >
             {Math.round(scale * 100)}%
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={() => zoom(Math.min(2, scale + 0.15))}
             aria-label={t("zoomIn")}
           >
             <Plus size={14} />
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={() => fit(layout.width, layout.height)}
           >
             <Scan size={14} />
@@ -191,7 +191,7 @@ export function KnowledgeGraph({
               );
               if (node) selectNode(node);
               else showAll();
-            }}
+            }} className="ds-select"
           >
             <option value="">{t("allRelationships")}</option>
             {modeGraph.nodes.map((node) => (
@@ -202,7 +202,7 @@ export function KnowledgeGraph({
           </select>
         </label>
         <button
-          className="btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
           onClick={showAll}
           disabled={!selected && !searching && !collapsed.size}
         >
@@ -222,13 +222,13 @@ export function KnowledgeGraph({
               <span className="lc-chip">{selected.status}</span>
             )}
             {selected.href && (
-              <Link className="btn btn-primary btn-sm" to={selected.href}>
+              <Link className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" to={selected.href}>
                 {t("openEntity")}
                 <ArrowRight size={13} />
               </Link>
             )}
             <button
-              className="btn btn-secondary btn-sm"
+              className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
               onClick={showAll}
               aria-label={t("close")}
             >
@@ -249,7 +249,7 @@ export function KnowledgeGraph({
                 return (
                   node && (
                     <button
-                      className="lc-chip"
+                      className="ds-btn lc-chip"
                       key={`${edge.source}:${edge.target}:${edge.relation}`}
                       onClick={() => selectNode(node)}
                     >
@@ -274,7 +274,7 @@ export function KnowledgeGraph({
       {!displayed.nodes.length && (
         <p className="lc-empty">
           {t("noGraphMatches")}{" "}
-          <button className="btn btn-secondary btn-sm" onClick={showAll}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={showAll}>
             {t("clearGraphFilters")}
           </button>
         </p>
@@ -351,7 +351,7 @@ export function KnowledgeGraph({
                 className={`knowledge-node kind-${node.kind} ${selected?.id === node.id ? "selected" : ""}`}
               >
                 <button
-                  className="knowledge-node-select"
+                  className="ds-btn knowledge-node-select"
                   onClick={() => selectNode(node)}
                   aria-pressed={selected?.id === node.id}
                   title={`${node.label} · ${node.summary}`}
@@ -368,7 +368,7 @@ export function KnowledgeGraph({
                       edge.source === node.id && edge.relation === "contains",
                   ) && (
                     <button
-                      className="knowledge-fold"
+                      className="ds-btn knowledge-fold"
                       aria-label={t(
                         collapsed.has(node.id) ? "expand" : "collapse",
                       )}

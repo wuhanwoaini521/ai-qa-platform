@@ -84,8 +84,8 @@ export function TestExecutionResults({
                       {execution.stack_trace?.trim() && <pre>{execution.stack_trace}</pre>}
                     </details>}
                     {failure && (onOpenFailure
-                      ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenFailure(failure.id)}>{t('result.caseExecutionResults.openFailure')}</button>
-                      : <Link className="btn btn-secondary btn-sm" to={`/failures/${encodeURIComponent(failure.id)}`}>{t('result.caseExecutionResults.openFailure')}</Link>)}
+                      ? <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => onOpenFailure(failure.id)}>{t('result.caseExecutionResults.openFailure')}</button>
+                      : <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/failures/${encodeURIComponent(failure.id)}`}>{t('result.caseExecutionResults.openFailure')}</Link>)}
                   </div>
                 )}
               </li>

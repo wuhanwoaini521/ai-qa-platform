@@ -57,7 +57,7 @@ export const CaseAssertionsPanel: React.FC<{ caseId: string }> = ({ caseId }) =>
           <li key={assertion.id} className="case-assertion-row">
             <code>{assertion.criterion_id}</code>
             <span className="case-assertion-statement">{assertion.statement}</span>
-            <small className={`badge badge-run is-${assertion.state.toLowerCase().replace('_', '-')}`}>
+            <small className={`ds-tag badge badge-run is-${assertion.state.toLowerCase().replace('_', '-')}`}>
               {t(STATE_LABEL[assertion.state] ?? 'stateUnbound')}
             </small>
             {assertion.run && (

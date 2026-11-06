@@ -1250,8 +1250,8 @@ export const RecorderPage: React.FC<{
         : step.action === 'scroll' ? t('steps.scrollDirection')
           : step.action === 'assert_count' ? t('steps.count') : t('steps.parameterValue');
     return <>
-      <input className="recorder-step-field recorder-step-locator" aria-label={t('steps.locator')} value={locatorValue} placeholder={locatorRequired ? t('steps.locator') : t('steps.noLocator')} disabled={!recorderSessionWorkAllowed || !locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
-      <input className="recorder-step-field recorder-step-parameter" aria-label={parameterLabel} value={parameter} disabled={!recorderSessionWorkAllowed || step.value_redacted} placeholder={parameterPlaceholder} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
+      <input className="ds-input recorder-step-field recorder-step-locator" aria-label={t('steps.locator')} value={locatorValue} placeholder={locatorRequired ? t('steps.locator') : t('steps.noLocator')} disabled={!recorderSessionWorkAllowed || !locatorRequired} onChange={(e) => updateStep(index, { locator: { ...(step.locator || {kind:'text', exact:true}), value:e.target.value } })} />
+      <input className="ds-input recorder-step-field recorder-step-parameter" aria-label={parameterLabel} value={parameter} disabled={!recorderSessionWorkAllowed || step.value_redacted} placeholder={parameterPlaceholder} onChange={(e) => updateStep(index, step.action==='navigate' ? {url:e.target.value} : step.action==='press' ? {key:e.target.value} : {value:e.target.value})} />
     </>;
   };
 
@@ -1302,13 +1302,13 @@ export const RecorderPage: React.FC<{
         <div className="recorder-page-heading">
           <h2><MousePointer2 size={20} aria-hidden="true" /> {t('header.title')}</h2>
           {projectName && <span className="recorder-project-label">{projectName}</span>}
-          <span className={`status-pill ${isConnected ? 'status-pill-online' : 'status-pill-draft'}`}>
+          <span className={`ds-tag status-pill ${isConnected ? 'status-pill-online' : 'status-pill-draft'}`}>
             {t('connection.session', { state: socketLabel })}
           </span>
           {sessionId && (socketState === 'error' || socketState === 'closed') && (
             <button
               type="button"
-              className="btn btn-secondary btn-icon"
+              className="ds-btn ds-btn-icon btn btn-secondary btn-icon"
               aria-label={t('header.retry')}
               title={t('header.retry')}
               disabled={!recorderSessionWorkAllowed}
@@ -1321,25 +1321,25 @@ export const RecorderPage: React.FC<{
               <RotateCw size={15} />
             </button>
           )}
-          {recording && <span className="status-pill status-pill-warning">{t('header.recording')}</span>}
+          {recording && <span className="ds-tag ds-tag--warn status-pill status-pill-warning">{t('header.recording')}</span>}
         </div>
 
         <div className="recorder-actions" role="group" aria-label={t('header.actions')} tabIndex={embedded ? 0 : undefined}>
           <button
             type="button"
-            className={`btn ${recording ? 'btn-secondary' : 'btn-primary'}`}
+            className={`ds-btn btn ${recording ? 'btn-secondary' : 'ds-btn-primary btn-primary'}`}
             disabled={!recorderSessionWorkAllowed || busy || agentTaskRunning}
             onClick={() => { const next = !recording; setRecording(next); send(recording ? 'pause' : 'start'); }}
           >
             {recording ? <CirclePause size={16} /> : <CirclePlay size={16} />}
             {recording ? t('header.pause') : t('header.start')}
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
+          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
             <Square size={15} /> {t('header.stop')}
           </button>
           <button
             type="button"
-            className={`btn ${selectionMode ? 'btn-primary recorder-select-mode-active' : 'btn-secondary'}`}
+            className={`ds-btn btn ${selectionMode ? 'ds-btn-primary btn-primary recorder-select-mode-active' : 'btn-secondary'}`}
             disabled={!recorderSessionWorkAllowed || !isConnected || agentTaskRunning}
             aria-pressed={selectionMode}
             onClick={() => {
@@ -1358,21 +1358,21 @@ export const RecorderPage: React.FC<{
           >
             <Crosshair size={15} /> {selectionMode ? t('header.cancelSelection') : t('header.selectElement')}
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || agentTaskRunning} onClick={generate}>
+          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || agentTaskRunning} onClick={generate}>
             <Code2 size={16} /> {busy ? t('header.processing') : code ? t('header.regenerateScript') : t('header.generateScript')}
           </button>
-          <button className="btn btn-primary" disabled={!recorderSessionWorkAllowed || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('CREATE_TEST')}>
+          <button className="ds-btn-primary ds-btn btn btn-primary" disabled={!recorderSessionWorkAllowed || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('CREATE_TEST')}>
             <Code2 size={16} /> {t('header.createVerifyTest')}
           </button>
-          <button className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('EXPLORE_PAGE')}>
+          <button className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('EXPLORE_PAGE')}>
             {t('header.explorePage')}
           </button>
-          <button type="button" className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
+          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
             <Save size={16} /> {t('header.saveAndRun')}
           </button>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             disabled={!recorderSessionWorkAllowed || mergeBusy || busy || !!aiTask.busy || agentTaskRunning}
             onClick={() => void saveUiAndApiCases()}
             title={t('header.saveBothHint')}
@@ -1411,7 +1411,7 @@ export const RecorderPage: React.FC<{
           <div className="alert-actions">
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
               disabled={closeRetryBlocked}
               onClick={() => {
                 if (sessionId && errorRecovery === 'close') {
@@ -1430,7 +1430,7 @@ export const RecorderPage: React.FC<{
       )}
 
       {embedded && <nav className="recorder-explore-mobile-nav" aria-label={workspaceT('mobile.explore.navigation')}>
-        {(['browser', 'task'] as const).map((panel) => <button key={panel} type="button" aria-pressed={exploreMobilePanel === panel} className={exploreMobilePanel === panel ? 'is-current' : ''} onClick={() => setExploreMobilePanel(panel)}>{workspaceT(`mobile.explore.${panel}`)}</button>)}
+        {(['browser', 'task'] as const).map((panel) => <button key={panel} type="button" aria-pressed={exploreMobilePanel === panel} className={["ds-btn", (exploreMobilePanel === panel ? 'is-current' : '')].filter(Boolean).join(' ')} onClick={() => setExploreMobilePanel(panel)}>{workspaceT(`mobile.explore.${panel}`)}</button>)}
       </nav>}
       <div className="recorder-explore-layout">
       <section className="recorder-explore-task">
@@ -1444,7 +1444,7 @@ export const RecorderPage: React.FC<{
             value={requirement}
             onChange={(event) => setRequirement(event.target.value)}
             placeholder={t('naturalFlow.placeholder')}
-            rows={3}
+            rows={3} className="ds-textarea"
           />
           <details className="recorder-trusted-domains">
             <summary>{t('naturalFlow.trustedDomains')}</summary>
@@ -1452,7 +1452,7 @@ export const RecorderPage: React.FC<{
               aria-label={t('naturalFlow.trustedDomainsLabel')}
               value={trustedDomainsText}
               onChange={(event) => setTrustedDomainsText(event.target.value)}
-              placeholder={t('naturalFlow.trustedDomainsPlaceholder')}
+              placeholder={t('naturalFlow.trustedDomainsPlaceholder')} className="ds-input"
             />
             <small>{t('naturalFlow.trustedDomainsHelp')}</small>
           </details>
@@ -1462,14 +1462,14 @@ export const RecorderPage: React.FC<{
           <div>
             <label className="recorder-strategy-control">
               <span>{t('naturalFlow.strategy')}</span>
-              <select aria-label={t('naturalFlow.strategyLabel')} value={browserStrategy} disabled={Boolean(pendingAgentGoal || aiTask.busy || agentTaskRunning)} onChange={(event) => setBrowserStrategy(event.target.value as 'fast' | 'agent')}>
+              <select aria-label={t('naturalFlow.strategyLabel')} value={browserStrategy} disabled={Boolean(pendingAgentGoal || aiTask.busy || agentTaskRunning)} onChange={(event) => setBrowserStrategy(event.target.value as 'fast' | 'agent')} className="ds-select">
                 <option value="agent">{t('naturalFlow.agentStrategy')}</option>
                 <option value="fast">{t('naturalFlow.fastStrategy')}</option>
               </select>
             </label>
             <button
               type="button"
-              className="btn btn-primary"
+              className="ds-btn-primary ds-btn btn btn-primary"
               disabled={!projectId || (sessionId ? !recorderSessionWorkAllowed || !isConnected : restoreCheckedProjectId !== projectId) || !requirement.trim() || busy || aiTask.busy || agentTaskRunning || !!pendingAgentGoal}
               onClick={() => void startNaturalLanguageFlow()}
             >
@@ -1479,7 +1479,7 @@ export const RecorderPage: React.FC<{
                 : t(browserStrategy === 'agent' ? 'naturalFlow.agentStart' : 'naturalFlow.fastStart')}
             </button>
             {canGenerateAgentScript && (
-              <button type="button" className="btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy} onClick={() => void generateFromAgent()}>
+              <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy} onClick={() => void generateFromAgent()}>
                 <Code2 size={15} aria-hidden="true" /> {busy ? t('naturalFlow.generatingScript') : t('naturalFlow.generateFromVerified')}
               </button>
             )}
@@ -1499,7 +1499,7 @@ export const RecorderPage: React.FC<{
       <div className="recorder-urlbar">
         <input
           ref={urlInputRef}
-          className="recorder-url-input"
+          className="ds-input recorder-url-input"
           aria-label={t('naturalFlow.browserAddress')}
           value={url}
           disabled={closePending}
@@ -1507,15 +1507,15 @@ export const RecorderPage: React.FC<{
           onKeyDown={(e) => e.key === 'Enter' && navigateBrowser(url)}
           placeholder={t('naturalFlow.addressPlaceholder')}
         />
-        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.back')} title={t('naturalFlow.back')} disabled={!recorderSessionWorkAllowed} onClick={() => send('back')}>←</button>
-        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.forward')} title={t('naturalFlow.forward')} disabled={!recorderSessionWorkAllowed} onClick={() => send('forward')}>→</button>
-        <button type="button" className="btn btn-secondary btn-icon" aria-label={t('naturalFlow.reload')} title={t('naturalFlow.reload')} disabled={!recorderSessionWorkAllowed} onClick={() => send('reload')}><RotateCw size={16} /></button>
+        <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('naturalFlow.back')} title={t('naturalFlow.back')} disabled={!recorderSessionWorkAllowed} onClick={() => send('back')}>←</button>
+        <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('naturalFlow.forward')} title={t('naturalFlow.forward')} disabled={!recorderSessionWorkAllowed} onClick={() => send('forward')}>→</button>
+        <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('naturalFlow.reload')} title={t('naturalFlow.reload')} disabled={!recorderSessionWorkAllowed} onClick={() => send('reload')}><RotateCw size={16} /></button>
         {!sessionId ? (
-          <button type="button" className="btn btn-primary" disabled={busy || restoreCheckedProjectId !== projectId} onClick={createSession}>{t('naturalFlow.startBrowser')}</button>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" disabled={busy || restoreCheckedProjectId !== projectId} onClick={createSession}>{t('naturalFlow.startBrowser')}</button>
         ) : (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             disabled={!closeAllowed}
             aria-busy={closePending}
             title={!closeAllowed && !closePending ? t('naturalFlow.closeBlocked') : undefined}
@@ -1569,7 +1569,7 @@ export const RecorderPage: React.FC<{
                 <button
                   type="button"
                   key={item.index}
-                  className={`recorder-browser-tab ${item.active ? 'active' : ''}`}
+                  className={`ds-btn recorder-browser-tab ${item.active ? 'active' : ''}`}
                   aria-pressed={item.active}
                   title={item.title || item.url}
                   onClick={() => send('tab', { index: item.index })}
@@ -1587,7 +1587,7 @@ export const RecorderPage: React.FC<{
             <div className="recorder-element-evidence" aria-live="polite">
               <div className="recorder-element-evidence-heading">
                 <strong>{t(selectionMode ? 'selection.mode' : 'selection.selected')}</strong>
-                {selectionMode && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { send('cancel_pick'); setSelectionMode(false); }}>{t('selection.cancel')}</button>}
+                {selectionMode && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { send('cancel_pick'); setSelectionMode(false); }}>{t('selection.cancel')}</button>}
               </div>
               {selectionMode && frame?.hovered && <p>{t('selection.current', { element: `${frame.hovered.role || frame.hovered.tag} · ${frame.hovered.name || frame.hovered.text || t('selection.noAccessibleName')}` })}</p>}
               {pickedElement && <>
@@ -1602,7 +1602,7 @@ export const RecorderPage: React.FC<{
               <strong>{t('steps.title')}</strong>
               <span className="recorder-step-count">{steps.length}</span>
             </div>
-            <select aria-label={t('steps.addAssertion')} defaultValue="" disabled={!recorderSessionWorkAllowed} onChange={(e) => { if (e.target.value) addAssertion(e.target.value as StepAction); e.target.value = ''; }}>
+            <select aria-label={t('steps.addAssertion')} defaultValue="" disabled={!recorderSessionWorkAllowed} onChange={(e) => { if (e.target.value) addAssertion(e.target.value as StepAction); e.target.value = ''; }} className="ds-select">
               <option value="">+ {t('steps.addAssertion')}</option>
               <option value="assert_visible">{t('steps.assertVisible')}</option>
               <option value="assert_text">{t('steps.assertText')}</option>
@@ -1642,14 +1642,14 @@ export const RecorderPage: React.FC<{
               return (
                 <div key={step.id} className="recorder-step-item">
                   <div className="recorder-step-row">
-                    <select className="recorder-step-field recorder-step-action" aria-label={t('steps.actionType')} value={step.action} disabled={!recorderSessionWorkAllowed} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
+                    <select className="ds-select recorder-step-field recorder-step-action" aria-label={t('steps.actionType')} value={step.action} disabled={!recorderSessionWorkAllowed} onChange={(e) => updateStep(index, { action: e.target.value as StepAction })}>
                       {actions.map((action) => <option key={action} value={action}>{actionLabel(action)}</option>)}
                     </select>
-                    <input className="recorder-step-field recorder-step-description" aria-label={t('steps.description')} value={step.description} disabled={!recorderSessionWorkAllowed} onChange={(e) => updateStep(index, { description: e.target.value })} />
+                    <input className="ds-input recorder-step-field recorder-step-description" aria-label={t('steps.description')} value={step.description} disabled={!recorderSessionWorkAllowed} onChange={(e) => updateStep(index, { description: e.target.value })} />
                     {actionInputs(step, index)}
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm recorder-step-pick"
+                      className="ds-btn ds-btn-sm btn btn-secondary btn-sm recorder-step-pick"
                       title={t('steps.pickTitle')}
                       disabled={!recorderSessionWorkAllowed || !isConnected || locatorAnalysisBusy}
                       onClick={() => { pickTargetStepRef.current = step.id; setPickTargetStep(step.id); setSelectionMode(true); send('pick_element', { step_action: step.action }); }}
@@ -1657,17 +1657,17 @@ export const RecorderPage: React.FC<{
                       <Crosshair size={14} />{pickTargetStep === step.id ? t('steps.pickPrompt') : t('steps.pick')}
                     </button>
                     <div className="recorder-step-controls">
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.reverify')} title={t('steps.reverify')} disabled={!recorderSessionWorkAllowed || !step.locator || locatorAnalysisBusy} onClick={() => verifyCandidate(step)}><RotateCw size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.moveUp')} title={t('steps.moveUp')} disabled={!recorderSessionWorkAllowed || index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.moveDown')} title={t('steps.moveDown')} disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
-                      <button type="button" className="btn btn-secondary btn-icon" aria-label={t('steps.delete')} title={t('steps.delete')} onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
+                      <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('steps.reverify')} title={t('steps.reverify')} disabled={!recorderSessionWorkAllowed || !step.locator || locatorAnalysisBusy} onClick={() => verifyCandidate(step)}><RotateCw size={14} /></button>
+                      <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('steps.moveUp')} title={t('steps.moveUp')} disabled={!recorderSessionWorkAllowed || index === 0} onClick={() => { const next = [...steps]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowUp size={14} /></button>
+                      <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('steps.moveDown')} title={t('steps.moveDown')} disabled={index === steps.length - 1} onClick={() => { const next = [...steps]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; setSteps(next); send('reorder', { ids: next.map((s) => s.id) }); }}><ArrowDown size={14} /></button>
+                      <button type="button" className="ds-btn ds-btn-icon btn btn-secondary btn-icon" aria-label={t('steps.delete')} title={t('steps.delete')} onClick={() => { setSteps(steps.filter((_, i) => i !== index)); send('delete_step', { id: step.id }); }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                   {evidence && <details className="recorder-step-evidence">
                     <summary>{t('steps.evidenceSummary', { version: evidence.schema_version, count: evidence.locator_candidates.length, status: t(evidence.status === 'available' ? 'steps.evidenceAvailable' : evidence.status === 'stale' ? 'steps.evidenceStale' : 'steps.evidencePartial') })}</summary>
                     <div className="recorder-evidence-actions">
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => void requestAiLocator(step)}>{aiAnalysisStep === step.id ? t('steps.analyzing') : t('steps.requestAiAnalysis')}</button>
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => void requestJevLocator(step)}>{jevDecisionStep === step.id ? t('steps.jevDeciding') : t('steps.requestJevDecision')}</button>
+                      <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => void requestAiLocator(step)}>{aiAnalysisStep === step.id ? t('steps.analyzing') : t('steps.requestAiAnalysis')}</button>
+                      <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => void requestJevLocator(step)}>{jevDecisionStep === step.id ? t('steps.jevDeciding') : t('steps.requestJevDecision')}</button>
                       <span>{evidence.ai_analysis?.status === 'available' ? t('steps.aiAvailable', { provider: String(evidence.ai_analysis.provider), reason: String(evidence.ai_analysis.reason || '') }) : evidence.ai_analysis ? t('steps.aiUnavailable', { reason: String(evidence.ai_analysis.reason) }) : t('steps.aiNotAnalyzed')}</span>
                       <span>{evidence.jev_analysis?.status === 'available' ? t('steps.jevAvailable', { candidate: String(evidence.jev_analysis.candidate_id) }) : evidence.jev_analysis ? t('steps.jevUnavailable', { reason: String(evidence.jev_analysis.reason || evidence.jev_analysis.provider) }) : t('steps.jevNotRequested')}</span>
                     </div>
@@ -1680,9 +1680,9 @@ export const RecorderPage: React.FC<{
                         return <div className="recorder-candidate" key={`${candidate.candidate_id ?? candidateIndex}-${candidate.kind}-${candidate.value}`}>
                           <div><strong>{candidate.kind}</strong><code>{candidate.locator || `${candidate.kind}: ${candidate.value}${candidate.name ? ` · ${candidate.name}` : ''}`}</code><small>{t('steps.candidateMatches', { count: verification?.match_count ?? '—' })} · {verification?.unique ? t('steps.candidateUnique') : verification?.unique === false ? t('steps.candidateAmbiguous') : t('steps.candidateNotVerified')} · {verification?.visible ? t('steps.candidateVisible') : verification?.visible === false ? t('steps.candidateNotVisible') : t('steps.candidateVisibilityUnknown')} · {verification?.verified ? t('steps.candidateVerified') : t('steps.candidateVerificationPending')}</small></div>
                           <div className="recorder-candidate-actions">
-                            <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate)}>{step.locator?.value === candidate.value && step.locator?.kind === candidate.kind ? t('steps.validateCurrent') : t('steps.verifyAndUse')}</button>
-                            {aiRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'ai')}>{t('steps.useAi')}</button>}
-                            {jevRecommended && <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'jev')}>{t('steps.useJev')}</button>}
+                            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate)}>{step.locator?.value === candidate.value && step.locator?.kind === candidate.kind ? t('steps.validateCurrent') : t('steps.verifyAndUse')}</button>
+                            {aiRecommended && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'ai')}>{t('steps.useAi')}</button>}
+                            {jevRecommended && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || locatorAnalysisBusy} onClick={() => verifyCandidate(step, candidate, 'jev')}>{t('steps.useJev')}</button>}
                           </div>
                         </div>;
                       })}
@@ -1705,7 +1705,7 @@ export const RecorderPage: React.FC<{
               <p className="recorder-api-calls-hint">{t('apiCalls.hint')}</p>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                 disabled={!sessionId || apiCallsBusy}
                 onClick={() => {
                   if (!sessionId) return;
@@ -1730,7 +1730,7 @@ export const RecorderPage: React.FC<{
               </label>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                 disabled={!sessionId || apiCalls.length === 0 || apiSavingAll}
                 onClick={() => void saveAllApiCalls()}
               >
@@ -1759,7 +1759,7 @@ export const RecorderPage: React.FC<{
                       <span className="recorder-api-calls-status">{call.status ?? '—'}</span>
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         disabled={!projectId || apiCallSaving === call.id}
                         onClick={() => void saveApiCall(call)}
                       >
@@ -1798,13 +1798,13 @@ export const RecorderPage: React.FC<{
           <details className="recorder-case-settings">
             <summary>{t('settings.title')}</summary>
             <div className="recorder-settings-grid">
-              <label>{t('settings.caseName')}<input aria-label={t('settings.caseName')} value={caseName} onChange={(e) => setCaseName(e.target.value)} /></label>
-              <label>{t('settings.testFunction')}<input aria-label={t('settings.testFunction')} value={testName} onChange={(e) => setTestName(e.target.value)} /></label>
-              <label>{t('settings.projectFile')}<input aria-label={t('settings.projectFile')} value={filePath} onChange={(e) => setFilePath(e.target.value)} /></label>
-              <label>{t('settings.priority')}<select value={priority} onChange={(e) => setPriority(e.target.value as TestCasePriority)}><option value="P1">{t('settings.high')}</option><option value="P2">{t('settings.medium')}</option><option value="P3">{t('settings.low')}</option></select></label>
-              <label>{t('settings.suite')}<input aria-label={t('settings.suite')} value={suiteName} onChange={(e) => setSuiteName(e.target.value)} placeholder={t('settings.suite')} /></label>
-              <label>{t('settings.tags')}<input aria-label={t('settings.tags')} value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder={t('settings.tagsPlaceholder')} /></label>
-              <label>{t('settings.markers')}<input aria-label={t('settings.markers')} value={markersText} onChange={(e) => setMarkersText(e.target.value)} placeholder={t('settings.markersPlaceholder')} /></label>
+              <label>{t('settings.caseName')}<input aria-label={t('settings.caseName')} value={caseName} onChange={(e) => setCaseName(e.target.value)} className="ds-input" /></label>
+              <label>{t('settings.testFunction')}<input aria-label={t('settings.testFunction')} value={testName} onChange={(e) => setTestName(e.target.value)} className="ds-input" /></label>
+              <label>{t('settings.projectFile')}<input aria-label={t('settings.projectFile')} value={filePath} onChange={(e) => setFilePath(e.target.value)} className="ds-input" /></label>
+              <label>{t('settings.priority')}<select value={priority} onChange={(e) => setPriority(e.target.value as TestCasePriority)} className="ds-select"><option value="P1">{t('settings.high')}</option><option value="P2">{t('settings.medium')}</option><option value="P3">{t('settings.low')}</option></select></label>
+              <label>{t('settings.suite')}<input aria-label={t('settings.suite')} value={suiteName} onChange={(e) => setSuiteName(e.target.value)} placeholder={t('settings.suite')} className="ds-input" /></label>
+              <label>{t('settings.tags')}<input aria-label={t('settings.tags')} value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder={t('settings.tagsPlaceholder')} className="ds-input" /></label>
+              <label>{t('settings.markers')}<input aria-label={t('settings.markers')} value={markersText} onChange={(e) => setMarkersText(e.target.value)} placeholder={t('settings.markersPlaceholder')} className="ds-input" /></label>
             </div>
           </details>
 
@@ -1813,20 +1813,20 @@ export const RecorderPage: React.FC<{
               <strong>{t('script.title')}</strong>
               <div className="recorder-editor-actions">
                 <span>Playwright</span>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || !steps.length || busy} onClick={() => void optimize()}>{t('script.optimize')}</button>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!recorderSessionWorkAllowed || !steps.length || busy} onClick={() => void optimize()}>{t('script.optimize')}</button>
                 {code && (
                   <>
-                    <button type="button" className="btn btn-secondary btn-sm" aria-label={t('script.regenerateAria')} title={t('script.regenerateTitle')} disabled={!recorderSessionWorkAllowed || busy} onClick={generate}>
+                    <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-label={t('script.regenerateAria')} title={t('script.regenerateTitle')} disabled={!recorderSessionWorkAllowed || busy} onClick={generate}>
                       <RotateCw size={13} aria-hidden="true" /> {t('script.regenerate')}
                     </button>
-                    <button type="button" className="btn btn-primary btn-sm" disabled={!recorderSessionWorkAllowed || busy} onClick={() => void openRecordedCaseInStudio()}>
+                    <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={!recorderSessionWorkAllowed || busy} onClick={() => void openRecordedCaseInStudio()}>
                       <Code2 size={13} aria-hidden="true" /> {t('script.saveOpen')}
                     </button>
                   </>
                 )}
               </div>
             </div>
-            {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label={t('script.optimizationComparison')}><button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>{t('script.raw', { count: optimization.raw_steps.length })}</button> <button type="button" className="btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>{t('script.optimized', { count: optimization.optimized_steps.length })}</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · {t('script.needsVerification')}</p><details><summary>{t('script.optimizationBasis')}</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
+            {optimization && <div className="recorder-optimization-summary"><div role="group" aria-label={t('script.optimizationComparison')}><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-pressed={previewMode === 'raw'} onClick={() => { switchPreview('raw'); }}>{t('script.raw', { count: optimization.raw_steps.length })}</button> <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-pressed={previewMode === 'optimized'} onClick={() => { switchPreview('optimized'); }}>{t('script.optimized', { count: optimization.optimized_steps.length })}</button></div><p>{optimization.provider} / {optimization.model} · {optimization.prompt_version} · {t('script.needsVerification')}</p><details><summary>{t('script.optimizationBasis')}</summary><ul>{optimization.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details></div>}
             <div className="recorder-editor-surface">
               {variables.length > 0 && (
                 <div className="recorder-variables" aria-label="recorder variables">
@@ -1844,7 +1844,7 @@ export const RecorderPage: React.FC<{
               )}
               <MonacoEditorPane activeTab={tab} loadingFile={false} showDiffView={false} diffResult={blankDiff} editorRef={editorRef} stickyScroll={false} readOnly onEditorReady={() => { setEditorReady(true); setShowCodeFallback(false); }} onChange={(value) => setCode(value || '')} />
               {showCodeFallback && !editorReady && (
-                <textarea aria-label={t('script.textarea')} value={code} readOnly spellCheck={false} />
+                <textarea aria-label={t('script.textarea')} value={code} readOnly spellCheck={false} className="ds-textarea" />
               )}
             </div>
           </div>

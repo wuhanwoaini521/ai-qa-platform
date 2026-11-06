@@ -61,7 +61,7 @@ export function CoveragePanel({ graph, onOpenKnowledge }: { graph: ProjectKnowle
         {graph.coverage.map((item) => (
           <button
             key={item.key}
-            className={`lc-metric ${selected === item.key ? 'selected' : ''}`}
+            className={`ds-btn lc-metric ${selected === item.key ? 'selected' : ''}`}
             onClick={() => setSelected(item.key)}
             aria-pressed={selected === item.key}
           >
@@ -76,11 +76,11 @@ export function CoveragePanel({ graph, onOpenKnowledge }: { graph: ProjectKnowle
       {incomplete && <div className="lc-notice">
         <p>{t('truncated')}</p>
         <p>{t('coverageIncompleteNextStep')}</p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenKnowledge}>{t('openKnowledgeView')}</button>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenKnowledge}>{t('openKnowledgeView')}</button>
       </div>}
 
       <div className="lc-table-scroll">
-        <table className="data-table">
+        <table className="ds-table data-table">
           <thead>
             <tr>
               <th>{t('coverageObject')}</th>

@@ -1,0 +1,299 @@
+/*
+ * Platform semantic bridge: self-ui-style owns component rules and source tokens.
+ * These aliases keep existing business layouts on one shared palette during migration.
+ */
+.app-design-system.ds-theme {
+  min-height: 100vh;
+  width: 100%;
+  color-scheme: light;
+
+  --canvas: var(--c-bg-soft);
+  --surface-frame: var(--c-bg);
+  --surface: var(--c-bg);
+  --surface-raised: var(--c-bg);
+  --surface-toolbar: var(--c-bg);
+  --surface-inset: var(--c-bg-soft);
+  --surface-field: var(--c-bg-soft);
+  --surface-hover: var(--c-bg-soft);
+  --surface-active: var(--c-bg-deep);
+  --line: var(--c-line);
+  --line-soft: var(--c-line);
+  --line-strong: var(--c-stroke);
+  --ink: var(--c-text-strong);
+  --ink-soft: var(--c-text);
+  --ink-muted: var(--c-text-muted);
+  --ink-faint: var(--c-text-faint);
+  --ink-inverse: var(--c-bg);
+  --brand: var(--c-accent);
+  --brand-soft: var(--c-accent-wash);
+  --accent-blue: var(--c-accent-ink);
+  --accent-blue-soft: var(--c-accent-wash);
+  --accent-green: var(--c-success);
+  --accent-green-soft: color-mix(in srgb, var(--c-success) 12%, var(--c-bg));
+  --accent-green-dot: var(--c-success);
+  --accent-amber: var(--c-warn);
+  --accent-amber-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-bg));
+  --accent-amber-dot: var(--c-warn);
+  --accent-red: var(--c-danger);
+  --accent-red-soft: color-mix(in srgb, var(--c-danger) 12%, var(--c-bg));
+  --accent-red-dot: var(--c-danger);
+  --accent-violet: var(--c-accent);
+  --accent-violet-soft: var(--c-accent-wash);
+
+  --bg-app: var(--c-bg-soft);
+  --bg-card: var(--c-bg);
+  --bg-sidebar: var(--c-bg);
+  --text-main: var(--c-text-strong);
+  --text-muted: var(--c-text-muted);
+  --border-color: var(--c-line);
+  --border-subtle: var(--c-line);
+  --primary: var(--c-accent);
+  --primary-hover: var(--c-accent-hover);
+  --primary-light: var(--c-accent-wash);
+  --success: var(--c-success);
+  --success-light: color-mix(in srgb, var(--c-success) 12%, var(--c-bg));
+  --warning: var(--c-warn);
+  --warning-light: color-mix(in srgb, var(--c-warn) 12%, var(--c-bg));
+  --danger: var(--c-danger);
+  --danger-light: color-mix(in srgb, var(--c-danger) 12%, var(--c-bg));
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-xl);
+  --r-card: var(--r-xl);
+
+  /* Temporary compatibility aliases for legacy route selectors; use semantic tokens in new code and delete after migration. */
+  --graphite-canvas: var(--c-bg-soft);
+  --graphite-rail: var(--c-bg);
+  --graphite-surface: var(--c-bg);
+  --graphite-raised: var(--c-bg);
+  --graphite-inset: var(--c-bg-soft);
+  --graphite-line: var(--c-line);
+  --graphite-line-soft: var(--c-line);
+  --graphite-line-strong: var(--c-stroke);
+  --graphite-ink: var(--c-text-strong);
+  --graphite-ink-soft: var(--c-text);
+  --graphite-ink-muted: var(--c-text-muted);
+  --graphite-ink-faint: var(--c-text-faint);
+  --graphite-mint: var(--c-accent);
+  --graphite-mint-soft: var(--c-accent-wash);
+  --graphite-amber: var(--c-warn);
+  --graphite-amber-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-bg));
+  --graphite-red: var(--c-danger);
+  --graphite-red-soft: color-mix(in srgb, var(--c-danger) 12%, var(--c-bg));
+  --graphite-blue: var(--c-accent-ink);
+  --graphite-blue-soft: var(--c-accent-wash);
+  --graphite-violet: var(--c-accent);
+  --graphite-violet-soft: var(--c-accent-wash);
+  --graphite-hover: var(--c-bg-soft);
+  --graphite-scrollbar: var(--c-text-faint);
+  --graphite-focus: var(--c-stroke-accent);
+
+  --ui-primary: var(--c-accent);
+  --ui-primary-strong: var(--c-accent-ink);
+  --ui-brand: var(--c-text-strong);
+  --ui-focus: var(--c-stroke-accent);
+  --ui-primary-soft: var(--c-accent-wash);
+  --ui-primary-tint: var(--c-accent-wash);
+  --ui-indigo: var(--c-accent);
+  --ui-indigo-strong: var(--c-accent-ink);
+  --ui-indigo-soft: var(--c-accent-wash);
+  --ui-mint: var(--c-success);
+  --ui-mint-strong: var(--c-success);
+  --ui-mint-soft: color-mix(in srgb, var(--c-success) 12%, var(--c-bg));
+  --ui-amber: var(--c-warn);
+  --ui-rose: var(--c-danger);
+  --ui-violet: var(--c-accent);
+  --ui-success-strong: var(--c-success);
+  --ui-warning-strong: var(--c-warn);
+  --success-text: var(--c-success);
+  --danger-text: var(--c-danger);
+  --accent-orange: var(--c-warn);
+  --accent: var(--c-accent);
+  --ui-ink: var(--c-text-strong);
+  --ui-ink-soft: var(--c-text);
+  --ui-ink-muted: var(--c-text-muted);
+  --ui-line: var(--c-line);
+  --ui-line-strong: var(--c-stroke);
+  --ui-surface: var(--c-bg);
+  --ui-surface-raised: var(--c-bg);
+  --ui-surface-solid: var(--c-bg);
+  --ui-surface-sunken: var(--c-bg-soft);
+  --ui-blur: none;
+  --ui-canvas: var(--c-bg-soft);
+  --ui-canvas-studio: var(--c-bg-soft);
+  --ui-r-xs: var(--r-xs);
+  --ui-r-sm: var(--r-sm);
+  --ui-r-md: var(--r-md);
+  --ui-r-lg: var(--r-xl);
+  --ui-r-pill: var(--r-pill);
+  --shadow-xs: var(--sh-raised-xs);
+  --shadow-sm: var(--sh-raised);
+  --shadow-md: var(--sh-raised-hover);
+  --shadow-lg: var(--sh-raised-hover);
+  --shadow-frame: var(--sh-raised-xs);
+  --ui-shadow-xs: var(--sh-raised-xs);
+  --ui-shadow-sm: var(--sh-raised);
+  --ui-shadow-md: var(--sh-raised-hover);
+  --ui-shadow-lg: var(--sh-raised-hover);
+  --ui-shadow-dock: var(--sh-raised-xs);
+  --ui-shadow-pixel: var(--sh-raised-xs);
+  --ui-shadow-pixel-mint: var(--sh-raised-xs);
+  --accent-primary: var(--c-accent);
+  --text-primary: var(--c-text-strong);
+  --text-secondary: var(--c-text);
+  --surface-primary: var(--c-bg);
+  --surface-secondary: var(--c-bg-soft);
+  --surface-muted: var(--c-bg-soft);
+  --surface-subtle: var(--c-bg-soft);
+  --bg-base: var(--c-bg-soft);
+  --bg-subtle: var(--c-bg-soft);
+  --bg-surface: var(--c-bg);
+  --color-primary: var(--c-accent);
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warn);
+  --color-error: var(--c-danger);
+  --danger-color: var(--c-danger);
+  --success-color: var(--c-success);
+  --warning-color: var(--c-warn);
+  --fs-xs: var(--fs-12);
+  --fs-sm: var(--fs-13);
+  --fs-label: var(--fs-13);
+  --fs-body: var(--fs-14);
+  --fs-title: var(--fs-16);
+  --fs-title-lg: var(--fs-20);
+  --fs-display: var(--fs-26);
+}
+
+:root[data-theme='dark'] .app-design-system.ds-theme {
+  color-scheme: dark;
+  --c-bg: #11151b;
+  --c-bg-soft: #1a2029;
+  --c-bg-deep: #151a21;
+  --c-shadow-dark: #0b0f14;
+  --c-shadow-light: #252d37;
+  --c-accent: #9585ff;
+  --c-accent-hover: #aa9eff;
+  --c-accent-active: #8272f1;
+  --c-accent-ink: #c8bfff;
+  --c-accent-wash: rgba(149, 133, 255, .18);
+  --c-text: #d2d8e2;
+  --c-text-strong: #f0f3f7;
+  --c-text-muted: #a6b0be;
+  --c-text-faint: #8996a6;
+  --c-success: #81d4a0;
+  --c-warn: #e8bd70;
+  --c-danger: #f08c86;
+  --c-line: #343e4a;
+  --c-stroke: rgba(160, 176, 196, .3);
+  --c-stroke-accent: rgba(149, 133, 255, .55);
+  --c-dot: rgba(183, 197, 220, .42);
+  --bg-dots: radial-gradient(circle, var(--c-dot) .5px, rgba(183, 197, 220, 0) 2.4px);
+  --bg-ambient-light: radial-gradient(ellipse 78% 72% at 26% 18%, rgba(149, 133, 255, .08), rgba(149, 133, 255, 0) 72%);
+  --bg-ambient-shade: radial-gradient(ellipse 72% 70% at 78% 82%, rgba(0, 0, 0, .2), rgba(0, 0, 0, 0) 74%);
+  --sh-raised: 0 6px 16px rgba(0, 0, 0, .24), 0 -2px 12px rgba(255, 255, 255, .025);
+  --sh-raised-xs: 0 3px 9px rgba(0, 0, 0, .2), 0 -1px 7px rgba(255, 255, 255, .025);
+  --sh-raised-hover: 0 4px 12px rgba(0, 0, 0, .22), 0 -1px 9px rgba(255, 255, 255, .03);
+  --sh-raised-hover-xs: 0 2px 7px rgba(0, 0, 0, .2), 0 -1px 6px rgba(255, 255, 255, .03);
+  --sh-inset: inset 0 4px 10px rgba(0, 0, 0, .28), inset 0 -2px 8px rgba(255, 255, 255, .035);
+  --sh-inset-sm: inset 0 3px 8px rgba(0, 0, 0, .24), inset 0 -1px 7px rgba(255, 255, 255, .035);
+  --sh-inset-xs: inset 0 1px 4px rgba(0, 0, 0, .22), inset 0 -1px 4px rgba(255, 255, 255, .03);
+  --sh-input: inset 0 3px 9px rgba(0, 0, 0, .26), inset 0 -2px 8px rgba(255, 255, 255, .035);
+  --sh-input-focus: inset 0 1px 4px rgba(0, 0, 0, .18), inset 0 -1px 4px rgba(255, 255, 255, .03);
+  --sh-accent: 0 6px 16px rgba(0, 0, 0, .3), 0 -2px 12px rgba(255, 255, 255, .03);
+  --sh-accent-hover: 0 4px 12px rgba(0, 0, 0, .32), 0 -1px 9px rgba(255, 255, 255, .035);
+  --sh-accent-active: inset 0 3px 8px rgba(0, 0, 0, .3), inset 0 -2px 8px rgba(255, 255, 255, .06);
+  --sh-track: inset 1px 1px 3px var(--c-shadow-dark), inset -2px -2px 4px var(--c-shadow-light);
+  --sh-selected: 0 1px 3px rgba(0, 0, 0, .55);
+}
+
+.app-design-system .app-container,
+.app-design-system .app-frame,
+.app-design-system .app-body,
+.app-design-system .app-main,
+.app-design-system .app-content,
+.app-design-system .content-viewport {
+  background: transparent;
+}
+
+.app-design-system .app-frame.is-dashboard-route {
+  color-scheme: light;
+  --dashboard-canvas: var(--c-bg-soft);
+  --dashboard-rail: var(--c-bg);
+  --dashboard-surface: var(--c-bg);
+  --dashboard-raised: var(--c-bg);
+  --dashboard-inset: var(--c-bg-soft);
+  --dashboard-hover: var(--c-bg-soft);
+  --dashboard-line: var(--c-line);
+  --dashboard-line-soft: var(--c-line);
+  --dashboard-line-strong: var(--c-stroke);
+  --dashboard-scrollbar: var(--c-text-faint);
+  --dashboard-ink: var(--c-text-strong);
+  --dashboard-ink-soft: var(--c-text);
+  --dashboard-ink-muted: var(--c-text-muted);
+  --dashboard-ink-faint: var(--c-text-faint);
+  --dashboard-mint: var(--c-accent);
+  --dashboard-mint-soft: var(--c-accent-wash);
+  --dashboard-blue: var(--c-accent-ink);
+  --dashboard-blue-soft: var(--c-accent-wash);
+  --dashboard-amber: var(--c-warn);
+  --dashboard-amber-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-bg));
+  --dashboard-red: var(--c-danger);
+  --dashboard-red-soft: color-mix(in srgb, var(--c-danger) 12%, var(--c-bg));
+  --dashboard-violet: var(--c-accent);
+  --dashboard-violet-soft: var(--c-accent-wash);
+  --dashboard-focus: var(--c-stroke-accent);
+}
+
+:root[data-theme='dark'] .app-design-system .app-frame.is-dashboard-route {
+  color-scheme: dark;
+}
+
+.app-design-system .app-frame.is-dashboard-route .dashboard-journey-status.is-passed {
+  color: var(--c-success);
+  border-color: color-mix(in srgb, var(--c-success) 40%, var(--c-line));
+}
+
+.app-design-system .app-topbar,
+.app-design-system .app-sidebar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.app-design-system .app-frame { color: var(--c-text); }
+.app-design-system .app-topbar { z-index: 10; }
+.app-design-system .app-sidebar { padding-inline: var(--sp-3); }
+.app-design-system .sidebar-header { flex-wrap: wrap; }
+.app-design-system .sidebar-project-context { order: 3; flex-basis: 100%; height: auto; }
+.app-design-system .sidebar-nav { gap: var(--sp-2); }
+.app-design-system .app-sidebar .ds-nav-item { width: 100%; }
+.app-design-system .app-sidebar .ds-nav-item > svg { flex: none; }
+.app-design-system .ds-sidebar-project-select { display: flex; align-items: center; width: 100%; min-width: 0; text-align: left; }
+.app-design-system .ds-sidebar-project-select > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-design-system .ds-sidebar-collapse { margin-left: auto; flex: none; }
+.app-design-system .ds-sidebar-search { position: relative; width: 100%; min-width: 0; }
+.app-design-system .ds-sidebar-search input { padding-right: 60px; }
+.app-design-system .ds-sidebar-search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.app-design-system .app-sidebar.is-collapsed .ds-sidebar-search,
+.app-design-system .app-sidebar.is-collapsed .sidebar-project-context,
+.app-design-system .app-sidebar.is-collapsed .ds-nav-item .nav-item-label { display: none; }
+.app-design-system .app-sidebar.is-collapsed .ds-nav-item { justify-content: center; }
+.app-design-system .app-sidebar.is-collapsed .ds-sidebar-collapse { margin: var(--sp-2) auto 0; }
+.app-design-system .ds-system-panel { width: min(360px, calc(100vw - 32px)); }
+.app-design-system .navigation-palette { background: var(--c-bg); border-radius: var(--r-xl); box-shadow: var(--sh-raised); }
+.app-design-system .ds-palette-input { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4); }
+.app-design-system .ds-palette-input .ds-search { flex: 1; }
+.app-design-system .navigation-palette-results .ds-nav-item { width: 100%; min-height: 42px; justify-content: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; }
+.app-design-system .navigation-palette-results .ds-nav-item .nav-item-label { display: inline; max-width: none; overflow: visible; text-overflow: clip; white-space: normal; font-size: 13px; }
+.app-design-system .navigation-palette-results .ds-nav-item::after { display: none; }
+
+.app-design-system .ds-btn-danger {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 8%, var(--c-bg));
+  border-color: color-mix(in srgb, var(--c-danger) 38%, var(--c-line));
+}
+
+.app-design-system .ds-btn-danger:hover:not(:disabled) {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-bg));
+}

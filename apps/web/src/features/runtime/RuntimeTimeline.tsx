@@ -13,12 +13,12 @@ const TimelineRow = memo(function TimelineRow({ span, origin, domain, now, selec
   const short = isShortSpan(span, now);
   return (
     <div className={`rt-timeline-row${selected ? ' is-selected' : ''}`}>
-      <button disabled={!span.step_id} className="rt-timeline-name" onClick={() => span.step_id && onSelect(span.step_id)} title={span.title}>
+      <button disabled={!span.step_id} className="ds-btn rt-timeline-name" onClick={() => span.step_id && onSelect(span.step_id)} title={span.title}>
         <span className={`rt-timeline-icon status-${span.status.toLowerCase()}`}>{span.status === 'COMPLETED' ? '✓' : span.status === 'FAILED' ? '✕' : span.status === 'RUNNING' ? '●' : '○'}</span>
         <span className="rt-timeline-label">{step ? <><code>{step.key}</code><small>{span.title}</small></> : <><small>{span.title}</small><code>{span.kind}</code></>}</span>
       </button>
       <div className="rt-timeline-lane">
-        {bounds ? <button aria-label={t('spanLabel', { title: span.title, status: t(span.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : span.status.toLowerCase()) })} title={`${span.title} · ${span.status} · ${short ? '<100ms' : durationLabel(spanDuration(span, now))}`} disabled={!span.step_id} onClick={() => span.step_id && onSelect(span.step_id)} className={`rt-span status-${span.status.toLowerCase()}${short ? ' is-marker' : ''}`} style={{ left: `${((bounds.start - origin) / domain) * 100}%`, width: short ? '2px' : `${Math.max(0.4, ((bounds.end - bounds.start) / domain) * 100)}%` }} /> : <span className="rt-timeline-unknown">—</span>}
+        {bounds ? <button aria-label={t('spanLabel', { title: span.title, status: t(span.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : span.status.toLowerCase()) })} title={`${span.title} · ${span.status} · ${short ? '<100ms' : durationLabel(spanDuration(span, now))}`} disabled={!span.step_id} onClick={() => span.step_id && onSelect(span.step_id)} className={`ds-btn rt-span status-${span.status.toLowerCase()}${short ? ' is-marker' : ''}`} style={{ left: `${((bounds.start - origin) / domain) * 100}%`, width: short ? '2px' : `${Math.max(0.4, ((bounds.end - bounds.start) / domain) * 100)}%` }} /> : <span className="rt-timeline-unknown">—</span>}
       </div>
       <time title={span.timestamp_source === 'derived' ? t('derived') : t('recorded')}>{durationLabel(spanDuration(span, now))}{span.timestamp_source === 'derived' && <small>{t('derived')}</small>}</time>
     </div>
@@ -49,10 +49,10 @@ export function RuntimeTimeline({ snapshot, selectedStepId, onSelect }: {
   return <section className="rt-timeline" aria-label={t('timelineLabel')}>
       <div className="rt-timeline-toolbar">
       <div className="rt-control-group">
-        <button onClick={() => { setZoom(1); setFitAt(Date.now()); }}>{t('fit')}</button>
-        <button aria-label={t('zoomOut')} title={t('zoomOut')} onClick={() => setZoom((value) => Math.max(0.25, value / 1.5))}>−</button>
+        <button onClick={() => { setZoom(1); setFitAt(Date.now()); }} className="ds-btn">{t('fit')}</button>
+        <button aria-label={t('zoomOut')} title={t('zoomOut')} onClick={() => setZoom((value) => Math.max(0.25, value / 1.5))} className="ds-btn">−</button>
         <code>{Math.round(zoom * 100)}%</code>
-        <button aria-label={t('zoomIn')} title={t('zoomIn')} onClick={() => setZoom((value) => Math.min(8, value * 1.5))}>+</button>
+        <button aria-label={t('zoomIn')} title={t('zoomIn')} onClick={() => setZoom((value) => Math.min(8, value * 1.5))} className="ds-btn">+</button>
       </div>
       <span className={`rt-recorded-badge${active ? ' is-live' : ''}`}>{active ? t('live') : t('recorded')}</span>
     </div>

@@ -16,12 +16,14 @@ import { SUPPORTED_LANGUAGES } from '../i18n';
 import { usePreferences } from '../app/Preferences';
 import type { WorkspaceContext } from '../app/workspaceContext';
 import { RunStatusIsland } from './RunStatusIsland';
+import { Button, IconButton, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@self/ui-style/react';
 
 interface HeaderProps {
   title: string;
   selectedProjectId: string | null;
   selectedRunContext?: WorkspaceContext | null;
   onSignOut: () => void;
+  designSystem?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedProjectId,
   selectedRunContext,
   onSignOut,
+  designSystem = false,
 }) => {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
@@ -59,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!panelOpen) return;
+    if (!panelOpen || designSystem) return;
     const onPointerDown = (event: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
         setPanelOpen(false);
@@ -74,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [panelOpen]);
+  }, [panelOpen, designSystem]);
 
   const aiState =
     aiStatus?.operational_state === 'READY'
@@ -85,54 +88,35 @@ export const Header: React.FC<HeaderProps> = ({
         ? 'bad'
         : 'warn';
 
-  return (
-    <header className="app-topbar">
-      <div className="topbar-title-section">
-        <div className="topbar-nav">
-          <button type="button" onClick={() => navigate(-1)} aria-label={t('back')} title={t('back')}>
-            <ChevronLeft size={17} strokeWidth={1.6} />
-          </button>
-          <button type="button" onClick={() => navigate(1)} aria-label={t('next')} title={t('next')}>
-            <ChevronRight size={17} strokeWidth={1.6} />
-          </button>
-        </div>
+  const Action = designSystem ? Button : 'button';
+  const IconAction = designSystem ? IconButton : 'button';
 
-        <span className="topbar-separator" aria-hidden="true" />
+  const statusTrigger = (
+    <Action
+      type="button"
+      className={designSystem ? undefined : 'topbar-status-trigger'}
+      aria-haspopup="dialog"
+      aria-expanded={panelOpen}
+      onClick={designSystem ? undefined : () => setPanelOpen((open) => !open)}
+    >
+      <span className={`status-dot is-${aiState === 'ok' ? 'online' : aiState === 'bad' ? 'failed' : 'queued'}`} />
+      <span className="topbar-status-text">{t('systemStatus')}</span>
+    </Action>
+  );
 
-        <h1 className="topbar-page-title">{title}</h1>
-      </div>
+  const statusContent = (
+    <>
 
-      {selectedRunContext?.runId && (
-        <div className="topbar-run-island-slot">
-          <RunStatusIsland context={selectedRunContext} />
-        </div>
-      )}
-
-      <div className="topbar-utility-section">
-        <div className="topbar-status" ref={panelRef}>
-          <button
-            type="button"
-            className="topbar-status-trigger"
-            aria-haspopup="dialog"
-            aria-expanded={panelOpen}
-            onClick={() => setPanelOpen((open) => !open)}
-          >
-            <span className={`status-dot is-${aiState === 'ok' ? 'online' : aiState === 'bad' ? 'failed' : 'queued'}`} />
-            <span className="topbar-status-text">{t('systemStatus')}</span>
-          </button>
-
-          {panelOpen && (
-            <div className="topbar-status-panel" role="dialog" aria-label={t('systemStatus')}>
               <div className="topbar-status-head">
                 <span>{t('systemStatus')}</span>
-                <button
+                <IconAction
                   type="button"
-                  className="icon-btn"
+                  className={designSystem ? 'ds-btn ds-btn-icon' : 'icon-btn'}
                   aria-label={t('close')}
                   onClick={() => setPanelOpen(false)}
                 >
                   <X size={14} strokeWidth={1.6} />
-                </button>
+                </IconAction>
               </div>
 
               <dl className="topbar-status-list">
@@ -158,8 +142,13 @@ export const Header: React.FC<HeaderProps> = ({
                     {t('language')}
                   </dt>
                   <dd>
-                    <select
-                      className="topbar-status-select"
+                    {designSystem ? <Select value={language} onValueChange={(value) => setLanguage(value as (typeof SUPPORTED_LANGUAGES)[number]['code'])}>
+                      <SelectTrigger aria-label={t('language')}><SelectValue>{SUPPORTED_LANGUAGES.find((entry) => entry.code === language)?.label}</SelectValue></SelectTrigger>
+                      <SelectContent position="popper" container={designSystem ? undefined : document.body}>
+                        {SUPPORTED_LANGUAGES.map((entry) => <SelectItem className="ds-menu-item" key={entry.code} value={entry.code}>{entry.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select> : <select
+                      className="ds-select topbar-status-select"
                       aria-label={t('language')}
                       value={language}
                       onChange={(e) =>
@@ -173,17 +162,48 @@ export const Header: React.FC<HeaderProps> = ({
                           {entry.label}
                         </option>
                       ))}
-                    </select>
+                    </select>}
                   </dd>
                 </div>
               </dl>
 
-              <button type="button" className="topbar-signout" onClick={onSignOut}>
+              <Action type="button" className={designSystem ? undefined : 'topbar-signout'} onClick={onSignOut}>
                 <LogOut size={14} strokeWidth={1.7} />
                 {t('signOut')}
-              </button>
-            </div>
-          )}
+              </Action>
+    </>
+  );
+
+  return (
+    <header className="app-topbar">
+      <div className="topbar-title-section">
+        <div className={designSystem ? 'ds-inline' : 'topbar-nav'}>
+          <IconAction type="button" onClick={() => navigate(-1)} aria-label={t('back')} title={t('back')}>
+            <ChevronLeft size={17} strokeWidth={1.6} />
+          </IconAction>
+          <IconAction type="button" onClick={() => navigate(1)} aria-label={t('next')} title={t('next')}>
+            <ChevronRight size={17} strokeWidth={1.6} />
+          </IconAction>
+        </div>
+        <span className="topbar-separator" aria-hidden="true" />
+        <h1 className="topbar-page-title">{title}</h1>
+      </div>
+      {selectedRunContext?.runId && (
+        <div className="topbar-run-island-slot"><RunStatusIsland context={selectedRunContext} /></div>
+      )}
+      <div className="topbar-utility-section">
+        <div className="topbar-status" ref={panelRef}>
+          {designSystem ? (
+            <Popover open={panelOpen} onOpenChange={setPanelOpen}>
+              <PopoverTrigger asChild>{statusTrigger}</PopoverTrigger>
+              <PopoverContent className="ds-system-panel" align="end" aria-label={t('systemStatus')}>
+                {statusContent}
+              </PopoverContent>
+            </Popover>
+          ) : <>
+            {statusTrigger}
+            {panelOpen && <div className="topbar-status-panel" role="dialog" aria-label={t('systemStatus')}>{statusContent}</div>}
+          </>}
         </div>
       </div>
     </header>

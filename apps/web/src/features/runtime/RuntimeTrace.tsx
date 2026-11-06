@@ -26,11 +26,11 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
     <section className="rt-trace" aria-label={t('traceLabel')}>
       <div className="rt-trace-toolbar">
         <div className="rt-segmented" role="group" aria-label={t('traceMode')}>
-          <button aria-pressed={mode === 'Summary'} onClick={() => setMode('Summary')}>{t('summary')}</button>
-          <button aria-pressed={mode === 'Raw'} onClick={() => setMode('Raw')}>{t('raw')}</button>
+          <button aria-pressed={mode === 'Summary'} onClick={() => setMode('Summary')} className="ds-btn">{t('summary')}</button>
+          <button aria-pressed={mode === 'Raw'} onClick={() => setMode('Raw')} className="ds-btn">{t('raw')}</button>
         </div>
         <div className="rt-segmented" role="group" aria-label={t('traceFilter')}>
-          {TRACE_FILTERS.map((key) => <button key={key} aria-pressed={filter === key} onClick={() => setFilter(key)}>{key === 'All' ? t('all') : t(`category_${key.toLowerCase()}`)}</button>)}
+          {TRACE_FILTERS.map((key) => <button key={key} aria-pressed={filter === key} onClick={() => setFilter(key)} className="ds-btn">{key === 'All' ? t('all') : t(`category_${key.toLowerCase()}`)}</button>)}
         </div>
         <label className="rt-errors-filter"><input type="checkbox" checked={errors} onChange={(event) => setErrors(event.target.checked)} />{t('onlyErrors')}</label>
       </div>
@@ -47,7 +47,7 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
             return <li key={group.id} className={`rt-trace-group status-${status.toLowerCase()}${group.stepId === selectedStepId ? ' is-selected' : ''}`}>
               <div className="rt-trace-group-main">
                 <time>{timestamp}</time>
-                {step ? <button className="rt-trace-select" onClick={() => onSelect(step.id)}><span>{status === 'FAILED' ? '✕' : status === 'COMPLETED' ? '✓' : '•'}</span><strong>{step.key}</strong><span>{title}</span></button> : <div className="rt-trace-select"><strong>{title}</strong></div>}
+                {step ? <button className="ds-btn rt-trace-select" onClick={() => onSelect(step.id)}><span>{status === 'FAILED' ? '✕' : status === 'COMPLETED' ? '✓' : '•'}</span><strong>{step.key}</strong><span>{title}</span></button> : <div className="rt-trace-select"><strong>{title}</strong></div>}
                 <span className={`rt-trace-status status-${status.toLowerCase()}`}>{status ? t(status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : status.toLowerCase(), { defaultValue: status }) : '—'}</span>
                 <code>{group.durationMs == null ? '—' : durationLabel(group.durationMs)}</code>
               </div>
@@ -60,7 +60,7 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
             </li>;
           })}
           {invocations.map((call) => <li key={`ai:${call.id}`} className={`rt-trace-group status-${call.status.toLowerCase()}${call.step_id === selectedStepId ? ' is-selected' : ''}`}>
-            <div className="rt-trace-group-main"><time>{call.started_at ? new Date(call.started_at).toLocaleTimeString() : '—'}</time>{call.step_id ? <button className="rt-trace-select" onClick={() => onSelect(call.step_id!)}><strong>AI</strong><span>{call.title}</span></button> : <div className="rt-trace-select"><strong>AI</strong><span>{call.title}</span></div>}<span className={`rt-trace-status status-${call.status.toLowerCase()}`}>{t(call.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : call.status.toLowerCase(), { defaultValue: call.status })}</span><code>{durationLabel(call.duration_ms)}</code></div>
+            <div className="rt-trace-group-main"><time>{call.started_at ? new Date(call.started_at).toLocaleTimeString() : '—'}</time>{call.step_id ? <button className="ds-btn rt-trace-select" onClick={() => onSelect(call.step_id!)}><strong>AI</strong><span>{call.title}</span></button> : <div className="rt-trace-select"><strong>AI</strong><span>{call.title}</span></div>}<span className={`rt-trace-status status-${call.status.toLowerCase()}`}>{t(call.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : call.status.toLowerCase(), { defaultValue: call.status })}</span><code>{durationLabel(call.duration_ms)}</code></div>
           </li>)}
         </ol>
       ) : <p className="rt-empty">{t('noData')}</p>}

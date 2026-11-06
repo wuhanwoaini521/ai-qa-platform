@@ -992,7 +992,7 @@ export function WorkspacePage() {
       type="button"
       aria-current={view !== 'canvas' && activeMode === mode ? 'page' : undefined}
       aria-label={mode === 'debug' && resultFailed ? `${t(`modes.${mode}`)} · ${t('modes.latestRunFailed')}` : t(`modes.${mode}`)}
-      className={`workspace-mode-tab${view !== 'canvas' && activeMode === mode ? ' is-current' : ''}${mode === 'debug' && resultFailed ? ' has-failure' : ''}`}
+      className={`ds-btn workspace-mode-tab${view !== 'canvas' && activeMode === mode ? ' is-current' : ''}${mode === 'debug' && resultFailed ? ' has-failure' : ''}`}
       onClick={() => {
         if (mode === 'repair') {
           const failure = currentFailure ?? failures[0];
@@ -1030,13 +1030,13 @@ export function WorkspacePage() {
         </div>
         <div className="workspace-heading-actions">
           {projectId && <div className="workspace-header-tools" role="group" aria-label={t('tools.label')}>
-            <button type="button" className={`btn btn-secondary btn-sm workspace-canvas-entry${view === 'canvas' ? ' is-current' : ''}`} aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}><Workflow size={14} aria-hidden="true" />{t('canvas.title')}</button>
-            {stage !== 'result' && <button type="button" className="btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
+            <button type="button" className={`ds-btn ds-btn ds-btn-sm btn btn-secondary btn-sm workspace-canvas-entry${view === 'canvas' ? ' is-current' : ''}`} aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}><Workflow size={14} aria-hidden="true" />{t('canvas.title')}</button>
+            {stage !== 'result' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm workspace-context-toggle" aria-label={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')} aria-expanded={showWorkspaceContext} aria-controls="workspace-context-panel" onClick={() => setShowWorkspaceContext((visible) => !visible)} title={t(showWorkspaceContext ? 'context.hidePanel' : 'context.showPanel')}>
               {showWorkspaceContext ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
               <span>{t('tools.context')}</span>
             </button>}
-            <button ref={inspectorTriggerRef} type="button" className="btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>
-            {(progressTaskId || activeRunId) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails({}, 'Flow')}><History size={14} aria-hidden="true" />{t('openWorkflow')}</button>}
+            <button ref={inspectorTriggerRef} type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-expanded={showInspector} aria-controls="workspace-inspector-drawer" onClick={() => setShowInspector(true)}><PanelRightOpen size={14} aria-hidden="true" />{t('inspector.title')}</button>
+            {(progressTaskId || activeRunId) && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => openRunDetails({}, 'Flow')}><History size={14} aria-hidden="true" />{t('openWorkflow')}</button>}
           </div>}
         </div>
       </header>
@@ -1048,7 +1048,7 @@ export function WorkspacePage() {
           aria-current={navStage === item.stage ? 'step' : undefined}
           aria-label={`${t(`journey.${item.stage}`)} · ${journeyFacts[item.stage]}`}
           title={journeyFacts[item.stage]}
-          className={`workspace-view-tab${navStage === item.stage ? ' is-current' : ''}${item.stage === 'result' && resultFailed ? ' has-failure' : ''}`}
+          className={`ds-btn workspace-view-tab${navStage === item.stage ? ' is-current' : ''}${item.stage === 'result' && resultFailed ? ' has-failure' : ''}`}
           onClick={() => {
             if (item.stage === 'result' && !activeRunId && runs[0]) {
               updateContext({ runId: runs[0].id, stage: 'result', view: 'results' });
@@ -1070,7 +1070,7 @@ export function WorkspacePage() {
         <section className="workspace-empty">
           <h2>{t('noProjectTitle')}</h2>
           <p>{t('noProjectDescription')}</p>
-          <Link className="btn btn-primary" to="/projects">{t('openProjects')}</Link>
+          <Link className="ds-btn-primary ds-btn btn btn-primary" to="/projects">{t('openProjects')}</Link>
         </section>
       ) : (
         <>
@@ -1080,8 +1080,8 @@ export function WorkspacePage() {
               <div className="workspace-mode-group">{renderModeNavigation(true)}</div>
             </div>
             <div className="workspace-toolbar-actions">
-              {completedGoalResult && <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateContext({ taskId: undefined, runId: undefined, stage: 'requirement', view: 'requirement' })}>{t('goal.new')}</button>}
-              {failureAvailability === 'available' && <button type="button" className={`btn btn-secondary btn-sm workspace-failure-action${stage === 'failure' ? ' is-current' : ''}`} aria-pressed={stage === 'failure'} onClick={() => void diagnoseCurrentRun()}><Bug size={14} aria-hidden="true" />{t('failureStatus.handle')}</button>}
+              {completedGoalResult && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => updateContext({ taskId: undefined, runId: undefined, stage: 'requirement', view: 'requirement' })}>{t('goal.new')}</button>}
+              {failureAvailability === 'available' && <button type="button" className={`ds-btn ds-btn ds-btn-sm btn btn-secondary btn-sm workspace-failure-action${stage === 'failure' ? ' is-current' : ''}`} aria-pressed={stage === 'failure'} onClick={() => void diagnoseCurrentRun()}><Bug size={14} aria-hidden="true" />{t('failureStatus.handle')}</button>}
               {failureAvailability === 'checking' && <span className="workspace-failure-status" role="status" aria-live="polite">{t('failureStatus.checking')}</span>}
               {failureAvailability === 'unknown' && <span className="workspace-failure-status" role="status" aria-live="polite" title={loadError || t('failureStatus.unknown')}>{t('failureStatus.unknown')}</span>}
               <WorkspaceRunDock
@@ -1117,11 +1117,11 @@ export function WorkspacePage() {
               />
             </div>
           </div>
-          {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
+          {loadError && <div className="workspace-error" role="alert"><span>{loadError}</span><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
         </div>
         <div ref={workspaceGridRef} style={{ '--workspace-context-width': `${contextWidth}px`, '--workspace-inspector-width': `${visibleInspectorWidth}px`, '--workspace-debug-editor-ratio': `${debugSplitRatio}fr`, '--workspace-debug-browser-ratio': `${1 - debugSplitRatio}fr` } as CSSProperties} className={`workspace-grid${stage === 'failure' ? ' is-failure-stage' : ''}${stage === 'result' ? ' is-result-view' : ''}${view === 'debug' ? ' is-debug-view' : ''}${view === 'browser' ? ' is-explore-view' : ''}${showWorkspaceContext ? '' : ' is-context-collapsed'}${isContextStacked ? ' is-context-stacked' : ''}${showInspector ? ' has-inspector' : ''}${isInspectorModal ? ' is-inspector-modal' : ''}`}>
           <aside id="workspace-context-panel" className="workspace-context-panel" aria-label={t('context.title')}>
-            <div className="workspace-panel-heading"><div><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div><button type="button" className="btn btn-icon btn-sm workspace-context-close" aria-label={t('context.hidePanel')} onClick={() => setShowWorkspaceContext(() => false)}><X size={15} aria-hidden="true" /></button></div>
+            <div className="workspace-panel-heading"><div><h2>{t('context.title')}</h2><small>{projectDisplayNames.get(projectId) ?? project?.name ?? projectId}</small></div><button type="button" className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm workspace-context-close" aria-label={t('context.hidePanel')} onClick={() => setShowWorkspaceContext(() => false)}><X size={15} aria-hidden="true" /></button></div>
             {['requirement', 'discover'].includes(stage) && <section className="workspace-context-group">
               <div className="workspace-group-heading"><h3>{t('context.requirements')}</h3></div>
               {!contextDataLoaded
@@ -1130,10 +1130,10 @@ export function WorkspacePage() {
                   items={requirements}
                   limit={12}
                   filterText={(item) => `${item.qa_model?.display_id ?? ''} ${item.title}`}
-                  renderItem={(item) => <button key={item.id} type="button" className={item.id === context.requirementId ? 'is-selected' : ''} aria-pressed={item.id === context.requirementId} onClick={() => selectRequirement(item.id)}>
+                  renderItem={(item) => <button key={item.id} type="button" className={["ds-btn", (item.id === context.requirementId ? 'is-selected' : '')].filter(Boolean).join(' ')} aria-pressed={item.id === context.requirementId} onClick={() => selectRequirement(item.id)}>
                     <span>{item.qa_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong>
                   </button>}
-                  emptyState={<><p className="workspace-muted">{t('context.noRequirements')}</p>{projects.length > 1 && <Link className="btn btn-secondary btn-sm" to="/projects">{t('context.chooseProject')}</Link>}</>}
+                  emptyState={<><p className="workspace-muted">{t('context.noRequirements')}</p>{projects.length > 1 && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to="/projects">{t('context.chooseProject')}</Link>}</>}
                 />}
             </section>}
             {['cases', 'automation'].includes(stage) && <section className="workspace-context-group">
@@ -1144,7 +1144,7 @@ export function WorkspacePage() {
                   items={relatedCases}
                   limit={10}
                   filterText={(item) => `${item.test_model?.display_id ?? ''} ${item.title}`}
-                  renderItem={(item) => <button key={item.id} type="button" className={item.id === context.testCaseId ? 'is-selected' : ''} aria-pressed={item.id === context.testCaseId} onClick={() => selectCase(item)}>
+                  renderItem={(item) => <button key={item.id} type="button" className={["ds-btn", (item.id === context.testCaseId ? 'is-selected' : '')].filter(Boolean).join(' ')} aria-pressed={item.id === context.testCaseId} onClick={() => selectCase(item)}>
                     <span>{item.test_model?.display_id ?? item.id.slice(-6)}</span><strong>{item.title}</strong><small>{item.automation_status}</small>
                   </button>}
                   emptyState={<p className="workspace-muted">{t('context.noCases')}</p>}
@@ -1156,7 +1156,7 @@ export function WorkspacePage() {
                 items={runs}
                 limit={8}
                 filterText={(item) => `${item.id} ${item.status} ${item.requested_by ?? ''}`}
-                renderItem={(item) => <button key={item.id} type="button" className={item.id === context.runId ? 'is-selected' : ''} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'automation', view: 'debug' })}>
+                renderItem={(item) => <button key={item.id} type="button" className={["ds-btn", (item.id === context.runId ? 'is-selected' : '')].filter(Boolean).join(' ')} aria-pressed={item.id === context.runId} onClick={() => updateContext({ runId: item.id, taskId: undefined, parentRunId: undefined, failureId: undefined, stage: 'automation', view: 'debug' })}>
                   <span className="workspace-run-status">{localizeStatus(item.status, 'testRunStatus')}</span><strong>{item.requested_by || item.id.slice(0, 8)}</strong><small>{item.id.slice(0, 8)} · {item.failed} {t('dock.failed')}</small>
                 </button>}
                 emptyState={<p className="workspace-muted">{t('context.noRuns')}</p>}
@@ -1185,7 +1185,7 @@ export function WorkspacePage() {
             </section>}
             {stage === 'automation' && binding && <section className="workspace-context-group workspace-binding-card">
               <div className="workspace-group-heading"><h3>{t('context.automation')}</h3><span className={`workspace-binding-status is-${binding.status.toLowerCase()}`}>{binding.status}</span></div>
-              <button type="button" onClick={() => openStudio(binding.file_path)}><FileCode2 size={14} aria-hidden="true" /><span>{binding.file_path}</span></button>
+              <button type="button" onClick={() => openStudio(binding.file_path)} className="ds-btn"><FileCode2 size={14} aria-hidden="true" /><span>{binding.file_path}</span></button>
             </section>}
           </aside>
           {showWorkspaceContext && stage !== 'result' && <div
@@ -1213,7 +1213,7 @@ export function WorkspacePage() {
               {aiRunOpen && <section className="workspace-ai-run-panel" aria-label={t('aiRun.title')}>
                 <div className="workspace-ai-run-heading">
                   <div><Sparkles size={16} aria-hidden="true" /><div><strong>{t('aiRun.title')}</strong><small>{goalTarget === 'requirement' ? selectedRequirement?.title ?? t('dock.chooseRequirement') : selectedCase?.test_model?.display_id ?? selectedCase?.title ?? t('dock.chooseCase')}</small></div></div>
-                  <button type="button" className="btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setAiRunOpen(false)}><X size={14} /></button>
+                  <button type="button" className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={t('aiRun.close')} onClick={() => setAiRunOpen(false)}><X size={14} /></button>
                 </div>
                 <p>{t('aiRun.description')}</p>
                 <ul className="workspace-ai-capabilities">
@@ -1231,10 +1231,10 @@ export function WorkspacePage() {
                   </li>)}</ol>
                   {goalPreview.effects.length > 0 && <p><b>{t('goal.effects')}</b> {goalPreview.effects.join(' · ')}</p>}
                   {goalPreview.constraints.length > 0 && <p><b>{t('goal.constraints')}</b> {goalPreview.constraints.join(' · ')}</p>}
-                  <button type="button" className="btn btn-primary btn-sm" disabled={goalBusy} onClick={() => void startGoal()}>
+                  <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={goalBusy} onClick={() => void startGoal()}>
                     {goalBusy ? t('goal.starting') : t('goal.start')} <ArrowRight size={14} aria-hidden="true" />
                   </button>
-                </div> : <button type="button" className="btn btn-secondary btn-sm" disabled={!contextDataLoaded || goalBusy} onClick={() => void previewGoal()}>
+                </div> : <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!contextDataLoaded || goalBusy} onClick={() => void previewGoal()}>
                   {goalBusy ? t('goal.planning') : t('aiRun.reviewPlan')} <ArrowRight size={14} aria-hidden="true" />
                 </button>}
                 {goalError && <p className="workspace-goal-error" role="alert">{goalError}</p>}
@@ -1349,7 +1349,7 @@ export function WorkspacePage() {
                   <div className="workspace-debug-runtime-content">
                     {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert">
                       <strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button>
+                      <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button>
                     </div> : runtime.snapshot ? <>
                       <RuntimeBrowser snapshot={runtime.snapshot} projectId={projectId} onOpenSource={(path, line) => openStudio(path, line)} />
                       {viewportWidth > 820 && <details className="workspace-debug-timeline">
@@ -1360,15 +1360,15 @@ export function WorkspacePage() {
                       <MonitorPlay size={24} aria-hidden="true" />
                       <strong>{t('debugBrowser.emptyTitle')}</strong>
                       <p>{t('debugBrowser.emptyDescription')}</p>
-                      <Link className="btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link>
+                      <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link>
                     </div>}
                   </div>
                 </details>}
                 {view === 'debug' && isMobileWorkspace && <section className="workspace-debug-mobile-steps" role="region" aria-label={t('mobile.debug.steps')}>
-                  {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert"><strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p><button type="button" className="btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button></div>
+                  {runtime.error ? <div className="workspace-debug-runtime-empty" role="alert"><strong>{t('debugBrowser.loadError')}</strong><p>{runtime.error}</p><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => runtime.refresh()}>{t('retry')}</button></div>
                     : runtime.snapshot ? <RuntimeTimeline snapshot={runtime.snapshot} selectedStepId={context.stepId ?? null} onSelect={(stepId) => updateContext({ stepId })} />
                       : runtimeId ? <p className="workspace-debug-runtime-loading" role="status">{t('debugBrowser.loading')}</p>
-                        : <div className="workspace-debug-runtime-empty"><MonitorPlay size={24} aria-hidden="true" /><strong>{t('debugBrowser.emptyTitle')}</strong><p>{t('debugBrowser.emptyDescription')}</p><Link className="btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link></div>}
+                        : <div className="workspace-debug-runtime-empty"><MonitorPlay size={24} aria-hidden="true" /><strong>{t('debugBrowser.emptyTitle')}</strong><p>{t('debugBrowser.emptyDescription')}</p><Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/runs?projectId=${encodeURIComponent(projectId)}`}><History size={14} aria-hidden="true" />{t('debugBrowser.openRuns')}</Link></div>}
                 </section>}
               </div>}
               {view === 'browser' && <Suspense fallback={<div className="workspace-surface-loading" role="status">{t('main.loadingBrowser')}</div>}><RecorderPage
@@ -1434,7 +1434,7 @@ export function WorkspacePage() {
               />}
             </div>
             {view === 'debug' && isMobileWorkspace && <nav className="workspace-debug-mobile-nav" aria-label={t('mobile.debug.navigation')}>
-              {(['code', 'browser', 'steps', 'logs'] as const).map((panel) => <button key={panel} type="button" aria-pressed={debugMobilePanel === panel} className={debugMobilePanel === panel ? 'is-current' : ''} onClick={() => setDebugMobilePanel(panel)}>{t(`mobile.debug.${panel}`)}</button>)}
+              {(['code', 'browser', 'steps', 'logs'] as const).map((panel) => <button key={panel} type="button" aria-pressed={debugMobilePanel === panel} className={["ds-btn", (debugMobilePanel === panel ? 'is-current' : '')].filter(Boolean).join(' ')} onClick={() => setDebugMobilePanel(panel)}>{t(`mobile.debug.${panel}`)}</button>)}
             </nav>}
           </section>
 
@@ -1460,7 +1460,7 @@ export function WorkspacePage() {
                 if (event.key === 'ArrowRight') { event.preventDefault(); resizeInspector(visibleInspectorWidth - 16); }
               }}
             />
-            <div className="workspace-panel-heading"><div><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div><button ref={inspectorCloseRef} type="button" className="btn btn-icon btn-sm" aria-label={t('inspector.close')} onClick={() => setShowInspector(false)}><X size={15} /></button></div>
+            <div className="workspace-panel-heading"><div><h2>{t('inspector.title')}</h2><span className="workspace-live-label"><i aria-hidden="true" />{t('inspector.liveContext')}</span></div><button ref={inspectorCloseRef} type="button" className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={t('inspector.close')} onClick={() => setShowInspector(false)}><X size={15} /></button></div>
             <div className="workspace-inspector-tabs" role="tablist" aria-label={t('inspector.title')}>
               {(['context', 'ai', 'run'] as const).map((item, index, items) => <button
               key={item}
@@ -1470,7 +1470,7 @@ export function WorkspacePage() {
               aria-controls="workspace-inspector-tabpanel"
               aria-selected={inspectorTab === item}
                 tabIndex={inspectorTab === item ? 0 : -1}
-                className={inspectorTab === item ? 'is-selected' : ''}
+                className={["ds-btn", (inspectorTab === item ? 'is-selected' : '')].filter(Boolean).join(' ')}
                 onClick={() => setInspectorTab(item)}
                 onKeyDown={(event) => {
                   const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -1493,7 +1493,7 @@ export function WorkspacePage() {
                 <span>{t('inspector.case')}</span><strong>{selectedCase.test_model?.display_id ?? selectedCase.title}</strong>
                 <p>{selectedCase.expected_result || t('inspector.noExpectedResult')}</p>
                 <div className="workspace-inspector-fact"><span>{t('inspector.automation')}</span><strong>{binding?.status ?? t('inspector.unbound')}</strong></div>
-                {binding && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openStudio(binding.file_path)}><FileCode2 size={13} aria-hidden="true" />{t('inspector.openStudio')}</button>}
+                {binding && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => openStudio(binding.file_path)}><FileCode2 size={13} aria-hidden="true" />{t('inspector.openStudio')}</button>}
               </section>}
               <section className="workspace-inspector-section">
                 <span>{t('inspector.runConfig')}</span>
@@ -1508,7 +1508,7 @@ export function WorkspacePage() {
                 <span>{t('inspector.task')}</span><strong>{localizeStatus(runtime.snapshot?.id === task.id ? runtime.snapshot.status : task.status, 'taskStatus')}</strong><p>{task.goal}</p>
                 {(runtime.snapshot?.steps ?? task.steps ?? task.plan).slice(0, 5).map((step) => <div className="workspace-inspector-fact" key={step.id}><span>{localizeStatus(step.status, 'taskStatus')}</span><strong>{'title' in step ? step.title : step.name}</strong></div>)}
                 {!!runtime.snapshot?.decisions.length && <details className="workspace-decision-trace"><summary>{t('inspector.decisionTrace')}</summary>{runtime.snapshot.decisions.map((decision) => <p key={decision.id}><strong>{decision.selected}</strong> · {decision.name}</p>)}</details>}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRunDetails({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('inspector.advancedTrace')}</button>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => openRunDetails({ taskId: task.id })}><Workflow size={13} aria-hidden="true" />{t('inspector.advancedTrace')}</button>
               </section> : <p className="workspace-muted">{t('inspector.aiIdle')}</p>}
               {goalError && <p className="workspace-goal-error" role="alert">{goalError}</p>}
             </div>}
@@ -1519,7 +1519,7 @@ export function WorkspacePage() {
                 <div className="workspace-inspector-fact"><span>{t('inspector.browser')}</span><strong>{currentRun.browser}</strong></div>
                 {currentRun.log_output && <pre className="workspace-inspector-log">{currentRun.log_output.slice(-900)}</pre>}
                 {!!currentRun.external_artifacts?.length && <details><summary>{t('inspector.artifacts', { count: currentRun.external_artifacts.length })}</summary>{currentRun.external_artifacts.map((item) => <p key={item.id}>{item.name}</p>)}</details>}
-                {currentFailure && <button type="button" className="btn btn-primary btn-sm" onClick={() => updateContext({ failureId: currentFailure.id, stage: 'failure', view: 'results' })}>{t('inspector.resolveFailure')}</button>}
+                {currentFailure && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={() => updateContext({ failureId: currentFailure.id, stage: 'failure', view: 'results' })}>{t('inspector.resolveFailure')}</button>}
               </section> : <p className="workspace-muted">{t('inspector.noRun')}</p>}
             </div>}
           </div>
@@ -1530,7 +1530,7 @@ export function WorkspacePage() {
 
       {showRunPanel && runtimePanelId && <div className="workspace-run-panel-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRunPanel(false); }}>
         <section className="workspace-run-panel" role="dialog" aria-modal="true" aria-label={runtimePanelTitle}>
-          <header><div><span className="workspace-eyebrow">{runtimePanelTitle}</span><strong>{runtimePanelHeading}</strong></div><button type="button" className="btn btn-icon btn-sm" aria-label={t('main.closeRunDetails')} onClick={() => setShowRunPanel(false)}><X size={15} /></button></header>
+          <header><div><span className="workspace-eyebrow">{runtimePanelTitle}</span><strong>{runtimePanelHeading}</strong></div><button type="button" className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={t('main.closeRunDetails')} onClick={() => setShowRunPanel(false)}><X size={15} /></button></header>
           <div className="workspace-run-panel-body"><RuntimeDetail kind={runtimePanelKind} id={runtimePanelId} initialTab={runtimePanelInitialTab} projectId={projectId} onOpenStudio={() => openStudio(binding?.file_path)} /></div>
         </section>
       </div>}
@@ -1569,7 +1569,7 @@ function WorkspaceContextList<T>({
           value={query}
           aria-label={t('context.filterPlaceholder')}
           placeholder={t('context.filterPlaceholder')}
-          onChange={(event) => { setQuery(event.target.value); setShowAll(false); }}
+          onChange={(event) => { setQuery(event.target.value); setShowAll(false); }} className="ds-input"
         />
       </div>
       <div className="workspace-context-list">
@@ -1578,8 +1578,8 @@ function WorkspaceContextList<T>({
           ? <p className="workspace-muted">{t('context.noMatches')}</p>
           : emptyState)}
       </div>
-      {hiddenCount > 0 && <button type="button" className="workspace-context-more" onClick={() => setShowAll(true)}>{t('context.showMore', { count: hiddenCount })}</button>}
-      {showAll && filtered.length > limit && <button type="button" className="workspace-context-more" onClick={() => setShowAll(false)}>{t('context.showLess')}</button>}
+      {hiddenCount > 0 && <button type="button" className="ds-btn workspace-context-more" onClick={() => setShowAll(true)}>{t('context.showMore', { count: hiddenCount })}</button>}
+      {showAll && filtered.length > limit && <button type="button" className="ds-btn workspace-context-more" onClick={() => setShowAll(false)}>{t('context.showLess')}</button>}
     </>
   );
 }
@@ -1653,13 +1653,13 @@ function RunResultSurface({
       ? value
       : String(value.description ?? value.root_cause ?? value.message ?? value.reason ?? JSON.stringify(value));
     if (goalSummary) return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.workflowStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.workflowStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t('result.executionStatus', { status: t(`result.workflowStatus.${task.status}`, { defaultValue: task.status }) })}</span><span className={`workspace-status-badge is-${(goalSummary.status ?? task.status).toLowerCase()}`}>{t(`result.status.${goalSummary.status ?? task.status}`, { defaultValue: t(`result.workflowStatus.${goalSummary.status ?? task.status}`, { defaultValue: goalSummary.status ?? task.status }) })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <div className="workspace-goal-result">
         {goalSummary.tests && goalSummary.runs?.length ? <dl className="workspace-result-metrics"><div><dt>{t('result.total')}</dt><dd>{goalSummary.tests.total ?? 0}</dd></div><div><dt>{t('result.passed')}</dt><dd>{goalSummary.tests.passed ?? 0}</dd></div><div><dt>{t('result.failed')}</dt><dd>{goalSummary.tests.failed ?? 0}</dd></div><div><dt>{t('result.skipped')}</dt><dd>{goalSummary.tests.skipped ?? 0}</dd></div></dl> : <p className="workspace-muted">{t('result.testsNotRun')}</p>}
         {goalSummary.work_completed?.length ? <section><h4>{t('result.workCompleted')}</h4><ul>{goalSummary.work_completed.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section> : null}
         {goalSummary.findings?.length ? <section><h4>{t('result.findings')}</h4><ul>{goalSummary.findings.map((item, index) => <li key={index}>{summaryText(item)}</li>)}</ul></section> : null}
         {goalSummary.changes?.length ? <section><h4>{t('result.changes')}</h4><div className="workspace-goal-links">{goalSummary.changes.map((item, index) => item.file_path
-          ? <button type="button" key={`${item.file_path}-${index}`} onClick={() => onOpenCode(item.file_path!)}>{item.file_path}</button>
+          ? <button type="button" key={`${item.file_path}-${index}`} onClick={() => onOpenCode(item.file_path!)} className="ds-btn">{item.file_path}</button>
           : <span key={index}>{item.kind}</span>)}</div></section> : null}
         <section><h4>{t('result.evidence')}</h4><div className="workspace-goal-links">
           {(goalSummary.runs ?? []).map((id) => <Link key={id} to={buildWorkspaceHref({ ...context, projectId, taskId: undefined, runId: id, stage: 'result', view: 'results' })}>{t('result.viewRun')} · {id.slice(0, 8)}</Link>)}
@@ -1668,7 +1668,7 @@ function RunResultSurface({
             const failureId = typeof item === 'object' && item ? item.failure_id : undefined;
             return typeof failureId === 'string' ? [<Link key={`${failureId}-${index}`} to={buildWorkspaceHref({ ...context, projectId, failureId, stage: 'failure' })}>{t('result.viewFailure')} · {failureId.slice(0, 8)}</Link>] : [];
           })}
-          {goalSummary.artifacts?.map((item) => <button type="button" key={item.id} onClick={() => void downloadArtifact(item.id, item.name)}>{t('result.downloadArtifact')} · {item.name}</button>)}
+          {goalSummary.artifacts?.map((item) => <button type="button" key={item.id} onClick={() => void downloadArtifact(item.id, item.name)} className="ds-btn">{t('result.downloadArtifact')} · {item.name}</button>)}
         </div></section>
         {goalSummary.unresolved?.length ? <section><h4>{t('result.unresolved')}</h4><ul>{goalSummary.unresolved.map((item, index) => <li key={index}>{summaryText(item)}</li>)}</ul></section> : null}
         {goalSummary.constraints?.length ? <section><h4>{t('goal.constraints')}</h4><ul>{goalSummary.constraints.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section> : null}
@@ -1677,17 +1677,17 @@ function RunResultSurface({
       </div>
     </section>;
     if (task.type === 'QA_GOAL') return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3><code>{task.id}</code></div><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       {task.failure_reason && <p role="status">{task.failure_reason}</p>}
       <details className="workspace-goal-activity" open><summary>{t('result.stepActivity')} · {steps.length}</summary><ol className="workspace-step-list">{steps.map((item) => <li key={item.id}><span>{item.status}</span><strong>{item.name}</strong>{item.error && <small>{item.error}</small>}</li>)}</ol></details>
     </section>;
     return <section className="workspace-result-card">
-      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
+      <div className="workspace-result-heading"><div><span className={`workspace-status-badge is-${task.status.toLowerCase()}`}>{t(`result.workflowStatus.${task.status}`, { defaultValue: task.status })}</span><h3>{task.goal}</h3></div><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenDetails}><Workflow size={14} aria-hidden="true" />{t('openWorkflow')}</button></div>
       <p>{t('result.taskSummary', { completed: steps.filter((item) => item.status === 'COMPLETED').length, total: steps.length })}</p>
       <ol className="workspace-step-list">{steps.map((item) => <li key={item.id} className={`is-${item.status.toLowerCase()}`}><span>{item.status}</span><strong>{item.name}</strong><small>{item.error ?? (Object.keys(item.outputs).length ? JSON.stringify(item.outputs) : '')}</small></li>)}</ol>
     </section>;
   }
-  if (!run) return <section className="workspace-result-card workspace-empty"><Play size={20} aria-hidden="true" /><h3>{t('result.noRun')}</h3><p>{t('result.noRunDescription')}</p><div className="workspace-empty-actions"><button type="button" className="btn btn-primary" onClick={onRerun} disabled={!canStartRun}><Play size={14} aria-hidden="true" />{t('result.startRun')}</button><button type="button" className="btn btn-secondary" onClick={() => onOpenCode(context.file ?? '')}>{t('result.configureAutomation')}</button><button type="button" className="btn btn-secondary" onClick={onManualAnalysis}>{t('result.viewExecutionPlan')}</button></div>{!canStartRun && <p className="workspace-muted">{t('result.runRequiresBinding')}</p>}</section>;
+  if (!run) return <section className="workspace-result-card workspace-empty"><Play size={20} aria-hidden="true" /><h3>{t('result.noRun')}</h3><p>{t('result.noRunDescription')}</p><div className="workspace-empty-actions"><button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={onRerun} disabled={!canStartRun}><Play size={14} aria-hidden="true" />{t('result.startRun')}</button><button type="button" className="ds-btn btn btn-secondary" onClick={() => onOpenCode(context.file ?? '')}>{t('result.configureAutomation')}</button><button type="button" className="ds-btn btn btn-secondary" onClick={onManualAnalysis}>{t('result.viewExecutionPlan')}</button></div>{!canStartRun && <p className="workspace-muted">{t('result.runRequiresBinding')}</p>}</section>;
 
   return <WorkspaceRunResult
     key={`${projectId}:${run.id}`}

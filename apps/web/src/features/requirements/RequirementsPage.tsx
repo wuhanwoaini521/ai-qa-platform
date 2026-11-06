@@ -86,10 +86,10 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
       <h2 id="requirement-start-title">{t('emptyStartTitle')}</h2>
       <p>{t('emptyStartDescription')}</p>
       <div className="workspace-empty-actions">
-        <button type="button" className="btn btn-primary" onClick={() => reqForm.open(selectedProjectId || projects[0]?.id || '')}>
+        <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => reqForm.open(selectedProjectId || projects[0]?.id || '')}>
           <Plus size={14} aria-hidden="true" />{t('toolbarNewRequirement')}
         </button>
-        <button type="button" className="btn btn-secondary" onClick={jira.handleOpenJiraModal}>
+        <button type="button" className="ds-btn btn btn-secondary" onClick={jira.handleOpenJiraModal}>
           <Download size={14} aria-hidden="true" />{t('toolbarImportFromJira')}
         </button>
       </div>
@@ -98,7 +98,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
   const requirementLoadError = (
     <div className="workspace-error requirement-load-error" role="alert">
       <span>{t(reqs.loadError === 'forbidden' ? 'listLoadForbidden' : 'listLoadFailed')}</span>
-      <button type="button" className="btn btn-secondary btn-sm" onClick={reqs.refresh}>{t('listRetry')}</button>
+      <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={reqs.refresh}>{t('listRetry')}</button>
     </div>
   );
 
@@ -160,7 +160,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
             <span className="workspace-requirement-selection-label">{t('currentRequirement')}</span>
             {requirementSelection.kind === 'multiple' ? (
               <select
-                className="form-select workspace-requirement-selection-control"
+                className="ds-select form-select workspace-requirement-selection-control"
                 aria-label={t('currentRequirement')}
                 value={requirementSelection.selectedId}
                 onChange={(event) => {
@@ -194,7 +194,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
       {analysisStartError && <div className="workspace-error" role="alert">{analysisStartError}</div>}
 
       {projects.length === 0 ? (
-        <div className="card">
+        <div className="ds-card card">
           <div
             className="card-body"
             style={{
@@ -238,7 +238,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
           />
 
           {reqs.loading ? (
-            <div className="card"><div className="card-body requirement-detail-state" role="status">{t('listLoading')}</div></div>
+            <div className="ds-card card"><div className="card-body requirement-detail-state" role="status">{t('listLoading')}</div></div>
           ) : reqs.loadError ? requirementLoadError
             : noRequirements ? emptyRequirementsState
               : selectedReq ? (
@@ -251,7 +251,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                   />
                   {!selectedReq.qa_model && (
                     <>
-                      <button className="btn btn-secondary" onClick={() => void ai.handleAnalyzeRequirementAI()}>
+                      <button className="ds-btn btn btn-secondary" onClick={() => void ai.handleAnalyzeRequirementAI()}>
                         {t('analysisTitle')}
                       </button>
                       <TestDesignPanel
@@ -264,7 +264,7 @@ export const RequirementsPage: React.FC<RequirementsPageProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="card">
+                <div className="ds-card card">
                   <div className="card-body requirement-detail-state">{t('pageSelectRequirement')}</div>
                 </div>
               )}

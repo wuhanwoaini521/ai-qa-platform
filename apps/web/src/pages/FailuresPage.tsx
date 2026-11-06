@@ -917,7 +917,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
   return (
     <div>
       {projects.length === 0 ? (
-        <div className="card">
+        <div className="ds-card card">
           <div
             className="card-body"
             style={{
@@ -995,7 +995,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               {repairError && <div className="alert alert-error" role="alert">{repairError}</div>}
 
               {aiDiagnosis && (
-                <section className="card failure-diagnosis-card" aria-labelledby="failure-diagnosis-heading">
+                <section className="ds-card card failure-diagnosis-card" aria-labelledby="failure-diagnosis-heading">
                   <div className="card-header">
                     <span className="card-title" id="failure-diagnosis-heading">{t('diagnosisTitle', { classification: displayedFailureClassification(selectedFailure.failure_kind ?? selectedFailure.classification) })}</span>
                     <span className="failure-diagnosis-confidence">{t('confidence', { value: (aiDiagnosis.confidence * 100).toFixed(0) })}</span>
@@ -1016,7 +1016,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
 
               {/* Locator Repair Proposal Card */}
               {repairWorkflow?.repair_proposal && repairProposal && (
-                <div id="failure-repair-proposal" className="card failure-repair-proposal">
+                <div id="failure-repair-proposal" className="ds-card card failure-repair-proposal">
                   <div
                     className="card-header"
                     style={{ background: 'var(--accent-green-soft)' }}
@@ -1040,7 +1040,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         disabled={reviewingSemantic}
                         onClick={handleSemanticReview}
                       >
@@ -1050,16 +1050,16 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           : t('semanticReview')}
                       </button>
                       {repairRejected ? (
-                        <span className="badge badge-failed" role="status">
+                        <span className="ds-tag ds-tag--danger badge badge-failed" role="status">
                           {t('proposalRejected')}
                         </span>
                       ) : repairApplied ? (
-                        <span className="badge badge-ready">
+                        <span className="ds-tag ds-tag--success badge badge-ready">
                           {t('repairApplied')}
                         </span>
                       ) : repairWorkflow?.allowed_actions.includes('APPLY') ? (
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           disabled={applyingRepair || rejectingRepair || rerunning || !repairProposal.source_locator || !repairProposal.code_diff}
                           onClick={handleApplyRepair}
                         >
@@ -1069,7 +1069,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       ) : null}
                       {repairWorkflow?.allowed_actions.includes('VERIFY') && (
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           disabled={rerunning}
                           onClick={() => void handleVerifyRepair()}
                         >
@@ -1078,7 +1078,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       )}
                       {repairWorkflow?.allowed_actions.includes('ROLLBACK') && (
                           <button
-                            className="btn btn-secondary btn-sm"
+                            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                             disabled={rollingBackRepair}
                             onClick={() => void handleRollbackRepair()}
                           >
@@ -1087,7 +1087,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       )}
                       {repairWorkflow?.allowed_actions.includes('REJECT') && (
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           disabled={rejectingRepair || applyingRepair}
                           onClick={() => void handleRejectRepair()}
                         >
@@ -1313,7 +1313,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               )}
 
               {!repairProposal && (
-                <section className="card failure-repair-unavailable" aria-label={t('repairEligibility')}>
+                <section className="ds-card card failure-repair-unavailable" aria-label={t('repairEligibility')}>
                   <div className="card-header"><span className="card-title">{t('repairEligibility')}</span></div>
                   <div className="card-body">
                     <strong>{repairEligibilityMessage}</strong>
@@ -1358,7 +1358,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </div>
 
               {/* Similar Past Failures / Recurrence History */}
-              <div className="card failure-recurrence-workspace">
+              <div className="ds-card card failure-recurrence-workspace">
                 <div className="card-header">
                   <div
                     style={{
@@ -1404,7 +1404,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       {t('recurrenceEmpty')}
                     </div>
                   ) : (
-                    <table className="data-table" style={{ fontSize: '11px' }}>
+                    <table className="ds-table data-table" style={{ fontSize: '11px' }}>
                       <thead>
                         <tr>
                           <th style={{ padding: '6px 8px' }}>
@@ -1424,7 +1424,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                           <tr key={rec.failure_id}>
                             <td style={{ padding: '6px 8px' }}>
                               <span
-                                className="badge badge-draft"
+                                className="ds-tag ds-tag--neutral badge badge-draft"
                                 style={{ fontSize: '10px' }}
                               >
                                 {rec.classification}
@@ -1465,7 +1465,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </div>
             </div>
           ) : (
-            <div className="card failure-select-prompt">
+            <div className="ds-card card failure-select-prompt">
               {loadError ? (
                 <ErrorState
                   message={t('loadFailed', { message: loadError })}
@@ -1478,7 +1478,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                   <Bug size={22} aria-hidden="true" />
                   <h2>{t('emptyQueueTitle')}</h2>
                   <p>{t('emptyQueueDescription')}</p>
-                  <Link className="btn btn-secondary btn-sm" to={currentProjectId ? `/runs?projectId=${encodeURIComponent(currentProjectId)}` : '/runs'}>
+                  <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={currentProjectId ? `/runs?projectId=${encodeURIComponent(currentProjectId)}` : '/runs'}>
                     <History size={14} aria-hidden="true" />{t('openRunHistory')}
                   </Link>
                 </div>
@@ -1502,7 +1502,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                 <h3 className="modal-title">{t('jiraModalTitle')}</h3>
               </div>
               <button
-                className="btn btn-icon"
+                className="ds-btn-icon ds-btn btn btn-icon"
                 onClick={() => setIsJiraBugModalOpen(false)}
                 style={{ padding: '4px' }}
               >
@@ -1580,7 +1580,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         )}
                       </div>
                       <span
-                        className="badge badge-draft"
+                        className="ds-tag ds-tag--neutral badge badge-draft"
                         style={{ fontSize: '11px' }}
                       >
                         {jiraBugResult.status}
@@ -1592,7 +1592,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     <label className="form-label">{t('issueSummary')}</label>
                     <input
                       type="text"
-                      className="form-input"
+                      className="ds-input form-input"
                       value={jiraBugDraft.summary}
                       onChange={(e) =>
                         setJiraBugDraft({
@@ -1614,7 +1614,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       <label className="form-label">{t('projectKey')}</label>
                       <input
                         type="text"
-                        className="form-input"
+                        className="ds-input form-input"
                         value={jiraBugDraft.project_key}
                         onChange={(e) =>
                           setJiraBugDraft({
@@ -1628,7 +1628,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                       <label className="form-label">{t('issueType')}</label>
                       <input
                         type="text"
-                        className="form-input"
+                        className="ds-input form-input"
                         value={jiraBugDraft.issue_type}
                         onChange={(e) =>
                           setJiraBugDraft({
@@ -1643,7 +1643,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         {t('common:priority')}
                       </label>
                       <select
-                        className="form-select"
+                        className="ds-select form-select"
                         value={jiraBugDraft.priority}
                         onChange={(e) =>
                           setJiraBugDraft({
@@ -1668,7 +1668,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </label>
                     <textarea
                       rows={5}
-                      className="form-textarea"
+                      className="ds-textarea form-textarea"
                       value={jiraBugDraft.description}
                       onChange={(e) =>
                         setJiraBugDraft({
@@ -1722,14 +1722,14 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="ds-btn btn btn-secondary"
                 onClick={() => setIsJiraBugModalOpen(false)}
               >
                 {t('common:close')}
               </button>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="ds-btn btn btn-secondary"
                 disabled={!jiraBugDraft || creatingJiraBug}
                 onClick={() => handleConfirmCreateJiraBug(false)}
               >
@@ -1737,7 +1737,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="ds-btn-primary ds-btn btn btn-primary"
                 disabled={!jiraBugDraft || creatingJiraBug}
                 onClick={() => handleConfirmCreateJiraBug(true)}
               >

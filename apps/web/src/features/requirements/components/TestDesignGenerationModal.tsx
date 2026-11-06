@@ -39,7 +39,7 @@ export const TestDesignGenerationModal: React.FC<
                 <Sparkles size={18} color="var(--color-primary)" />
                 <h3>{t('designModalTitle')}</h3>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={onClose}>
+              <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
                 {t('common:close')}
               </button>
             </div>
@@ -78,7 +78,7 @@ export const TestDesignGenerationModal: React.FC<
                             gap: '6px',
                           }}
                         >
-                          <span className="status-pill status-pill-draft">
+                          <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">
                             {sug.category}
                           </span>
                           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>
@@ -104,7 +104,7 @@ export const TestDesignGenerationModal: React.FC<
                         </p>
                       </div>
                       <button
-                        className="btn btn-primary btn-sm"
+                        className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
                         onClick={() => handleAdoptDesign(sug)}
                       >
                         {t('designModalAdopt')}

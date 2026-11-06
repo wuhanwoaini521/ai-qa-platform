@@ -319,7 +319,7 @@ export function RuntimeFailureWorkspace({
           {record?.failing_locator && <code className="rt-failure-workspace-old-locator">{record.failing_locator}</code>}
         </div>
         <div className="rt-failure-workspace-actions">
-          <Link className="btn btn-primary btn-sm" to={`/failures/${encodeURIComponent(failure.id)}`}>
+          <Link className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" to={`/failures/${encodeURIComponent(failure.id)}`}>
             <Sparkles size={14} aria-hidden="true" />
             {diagnosis ? t('failureWorkspace.reanalyze') : t('failureWorkspace.analyze')}
           </Link>
@@ -363,9 +363,9 @@ export function RuntimeFailureWorkspace({
         <div className="rt-failure-picker-heading">
           <div><strong><Globe size={15} aria-hidden="true" />{t('failureWorkspace.browserPicker')}</strong><span>{targetUrl || t('failureWorkspace.noPageUrl')}</span></div>
           {pickerSessionId ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerSessionId(null)}><X size={14} aria-hidden="true" />{t('failureWorkspace.closePicker')}</button>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setPickerSessionId(null)}><X size={14} aria-hidden="true" />{t('failureWorkspace.closePicker')}</button>
           ) : (
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!targetUrl || !resolvedProjectId} onClick={() => void startPicker()}><Globe size={14} aria-hidden="true" />{t('failureWorkspace.openPicker')}</button>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!targetUrl || !resolvedProjectId} onClick={() => void startPicker()}><Globe size={14} aria-hidden="true" />{t('failureWorkspace.openPicker')}</button>
           )}
         </div>
         {pickerError && <p className="rt-notice" role="alert">{pickerError}</p>}
@@ -373,7 +373,7 @@ export function RuntimeFailureWorkspace({
           <>
             <div className="rt-failure-picker-controls">
               <span role="status">{t(`failureWorkspace.pickerStatus.${pickerStatus}`)}</span>
-              <button type="button" className="btn btn-primary btn-sm" disabled={pickerStatus !== 'connected'} aria-pressed={waitingForPick} onClick={pickElement}><Crosshair size={14} aria-hidden="true" />{waitingForPick ? t('failureWorkspace.pickNow') : t('failureWorkspace.pickElement')}</button>
+              <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={pickerStatus !== 'connected'} aria-pressed={waitingForPick} onClick={pickElement}><Crosshair size={14} aria-hidden="true" />{waitingForPick ? t('failureWorkspace.pickNow') : t('failureWorkspace.pickElement')}</button>
             </div>
             <div className="rt-failure-picker-viewport" role="region" tabIndex={0} aria-label={t('failureWorkspace.browserView')} onClick={clickBrowser} onKeyDown={handleBrowserKeyDown} onWheel={handleBrowserWheel}>
               {pickerFrame?.image ? <img src={`data:image/jpeg;base64,${pickerFrame.image}`} alt={t('failureWorkspace.browserView')} draggable={false} /> : <span>{t('failureWorkspace.waitingForFrame')}</span>}
@@ -389,7 +389,7 @@ export function RuntimeFailureWorkspace({
                       const jevSelected = candidateId === (pickedElement.selection?.selected_candidate ? getCandidateKey(pickedElement.selection.selected_candidate) : pickedElement.selection?.summary?.candidate_id);
                       const selected = candidateId === selectedCandidateId;
                       return <li key={candidateId}>
-                        <button type="button" className={selected ? 'is-selected' : ''} aria-pressed={selected} onClick={() => { setSelectedCandidateId(candidateId); setCopied(false); }}>
+                        <button type="button" className={["ds-btn", (selected ? 'is-selected' : '')].filter(Boolean).join(' ')} aria-pressed={selected} onClick={() => { setSelectedCandidateId(candidateId); setCopied(false); }}>
                           <span>{locatorExpression(candidate, pickedElement.frame_path)}</span>
                           <small>{candidate.strategy || candidate.kind || t('unknown')}{typeof candidate.static_score === 'number' ? ` · ${Math.round(candidate.static_score * 100)}%` : ''}{jevSelected ? ` · ${t('failureWorkspace.jevRecommendation')}` : ''}</small>
                         </button>
@@ -397,7 +397,7 @@ export function RuntimeFailureWorkspace({
                     })}
                   </ol>
                 ) : <p className="rt-muted">{t('failureWorkspace.noCandidates')}</p>}
-                {selectedPickedCandidate && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void copyAndOpenSource()}><Code2 size={14} aria-hidden="true" />{copied ? <><Check size={13} aria-hidden="true" />{t('failureWorkspace.copiedAndOpen')}</> : <><Clipboard size={13} aria-hidden="true" />{t('failureWorkspace.copyAndOpen')}</>}</button>}
+                {selectedPickedCandidate && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void copyAndOpenSource()}><Code2 size={14} aria-hidden="true" />{copied ? <><Check size={13} aria-hidden="true" />{t('failureWorkspace.copiedAndOpen')}</> : <><Clipboard size={13} aria-hidden="true" />{t('failureWorkspace.copyAndOpen')}</>}</button>}
               </div>
             )}
           </>

@@ -96,7 +96,7 @@ export const FlowCanvasPage: React.FC = () => {
           <p className="subtitle">{mode === 'edit' ? t('subtitleEdit') : t('subtitle')}</p>
         </div>
         <nav className="flow-page-actions" aria-label={t('actions')}>
-          <Link className="btn btn-secondary btn-sm" to={backHref}>
+          <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={backHref}>
             <ArrowLeft size={14} aria-hidden="true" />
             {t('backToRequirement')}
           </Link>
@@ -105,7 +105,7 @@ export const FlowCanvasPage: React.FC = () => {
               type="button"
               role="tab"
               aria-selected={mode === 'view'}
-              className={`flow-view-tab${mode === 'view' ? ' is-active' : ''}`}
+              className={`ds-btn flow-view-tab${mode === 'view' ? ' is-active' : ''}`}
               onClick={() => switchMode('view')}
             >
               <LayoutDashboard size={13} aria-hidden="true" />
@@ -115,7 +115,7 @@ export const FlowCanvasPage: React.FC = () => {
               type="button"
               role="tab"
               aria-selected={mode === 'edit'}
-              className={`flow-view-tab${mode === 'edit' ? ' is-active' : ''}`}
+              className={`ds-btn flow-view-tab${mode === 'edit' ? ' is-active' : ''}`}
               onClick={() => switchMode('edit')}
               disabled={!requirement}
             >
@@ -126,10 +126,10 @@ export const FlowCanvasPage: React.FC = () => {
         </nav>
       </header>
 
-      {loading && <div className="card page-empty-state" role="status">{t('loading')}</div>}
-      {!loading && error && <div className="card page-empty-state" role="alert">{t('loadFailed')}</div>}
+      {loading && <div className="ds-card card page-empty-state" role="status">{t('loading')}</div>}
+      {!loading && error && <div className="ds-card card page-empty-state" role="alert">{t('loadFailed')}</div>}
       {!loading && !error && (!document || scenarios.length === 0) && (
-        <div className="card page-empty-state">
+        <div className="ds-card card page-empty-state">
           <Workflow size={28} aria-hidden="true" />
           <h4>{t('emptyTitle')}</h4>
           <p>{t('emptyHint')}</p>
@@ -142,7 +142,7 @@ export const FlowCanvasPage: React.FC = () => {
 
       {!loading && !error && document && activeScenario && mode === 'view' && (
         <>
-          <section className="card flow-page-toolbar">
+          <section className="ds-card card flow-page-toolbar">
             <div className="flow-page-title">
               <strong>{requirement?.title ?? ''}</strong>
               <small>{t('requirementMeta', { count: scenarios.length })}</small>
@@ -150,7 +150,7 @@ export const FlowCanvasPage: React.FC = () => {
             <label className="flow-page-select">
               <span>{t('scenarioLabel')}</span>
               <select
-                className="form-select"
+                className="ds-select form-select"
                 value={activeScenario.id}
                 onChange={(event) => selectScenario(event.target.value)}
               >

@@ -83,23 +83,23 @@ export function RuntimeTaskActions({
           {summary.preview_truncated === true && <p className="rt-notice">{t('previewTruncated')}</p>}
           {diffArtifact && <RuntimeArtifactActions artifact={diffArtifact} />}
           {detail && !reviewable && <p className="rt-notice">{t('approvalPreviewMissing')}</p>}
-          <label className="rt-action-comment">{t('comment')}<input value={comment} onChange={(event) => setComment(event.target.value)} /></label>
+          <label className="rt-action-comment">{t('comment')}<input value={comment} onChange={(event) => setComment(event.target.value)} className="ds-input" /></label>
           <div className="rt-action-buttons">
-            <button className="btn btn-primary btn-sm" disabled={busy || !detail || !reviewable} onClick={() => void command(() => api.decideTaskApproval(taskId, true, comment))}>{t(snapshot.task?.type === 'FIX_FAILURE' ? 'approveRepair' : 'approve')}</button>
-            <button className="btn btn-secondary btn-sm" disabled={busy || !detail} onClick={() => void command(() => api.decideTaskApproval(taskId, false, comment))}>{t('reject')}</button>
+            <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={busy || !detail || !reviewable} onClick={() => void command(() => api.decideTaskApproval(taskId, true, comment))}>{t(snapshot.task?.type === 'FIX_FAILURE' ? 'approveRepair' : 'approve')}</button>
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy || !detail} onClick={() => void command(() => api.decideTaskApproval(taskId, false, comment))}>{t('reject')}</button>
           </div>
         </div>
       )}
       {failed && actions.length > 0 && (
         <div className="rt-action-buttons">
           {actions.includes('retry_step') && (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={retry}>{t(retryLabel)}</button>
+            <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={busy} onClick={retry}>{t(retryLabel)}</button>
           )}
           {actions.includes('replan') && (
-            <button className="btn btn-secondary btn-sm" disabled={busy} aria-expanded={replanOpen} onClick={() => setReplanOpen((open) => !open)}>{t('replan')}</button>
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy} aria-expanded={replanOpen} onClick={() => setReplanOpen((open) => !open)}>{t('replan')}</button>
           )}
           {actions.includes('inspect_ai_output') && snapshot.blocking?.step_id && (
-            <button className="btn btn-secondary btn-sm" onClick={() => onInspect(snapshot.blocking!.step_id!)}>{t('inspectOutput')}</button>
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => onInspect(snapshot.blocking!.step_id!)}>{t('inspectOutput')}</button>
           )}
           <span className="rt-recovery-state">{snapshot.blocking?.recoverable ? t('recoverable') : t('notRecoverable')}</span>
         </div>
@@ -107,25 +107,25 @@ export function RuntimeTaskActions({
       {failed && !actions.length && <p className="rt-recovery-state">{t('noRecovery')}</p>}
       {replanOpen && (
         <div className="rt-replan-panel">
-          <label>{t('replanReason')}<input value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-          <label>{t('instructions')}<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={3} /></label>
+          <label>{t('replanReason')}<input value={reason} onChange={(event) => setReason(event.target.value)} className="ds-input" /></label>
+          <label>{t('instructions')}<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={3} className="ds-textarea" /></label>
           <div className="rt-replan-preview"><strong>{t('replanPreview')}</strong><p>{t('replanPreviewText')}</p></div>
           <div className="rt-action-buttons">
-            <button className="btn btn-primary btn-sm" disabled={busy || !instructions.trim()} onClick={submitReplan}>{t('confirm')}</button>
-            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setReplanOpen(false)}>{t('cancel')}</button>
+            <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={busy || !instructions.trim()} onClick={submitReplan}>{t('confirm')}</button>
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy} onClick={() => setReplanOpen(false)}>{t('cancel')}</button>
           </div>
         </div>
       )}
       {paused && (
         <div className="rt-action-buttons">
-          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void command(() => api.resumeTask(taskId))}>{t('resumeTask')}</button>
-          {onOpenStudio && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={onOpenStudio}>{t('openInStudio')}</button>}
+          <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={busy} onClick={() => void command(() => api.resumeTask(taskId))}>{t('resumeTask')}</button>
+          {onOpenStudio && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy} onClick={onOpenStudio}>{t('openInStudio')}</button>}
         </div>
       )}
-      {pausable && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void command(() => api.pauseTask(taskId))}>{t('pauseTask')}</button>}
+      {pausable && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy} onClick={() => void command(() => api.pauseTask(taskId))}>{t('pauseTask')}</button>}
       {pausing && <p className="rt-notice" role="status">{t('pauseAfterStep')}</p>}
       {cancelRequested && <p className="rt-notice" role="status">{t('cancelRequested')}</p>}
-      {runtimeActive(snapshot.status) && <button className="btn btn-secondary btn-sm" disabled={busy || cancelRequested} onClick={() => void command(() => api.cancelTask(taskId))}>{t('cancelTask')}</button>}
+      {runtimeActive(snapshot.status) && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={busy || cancelRequested} onClick={() => void command(() => api.cancelTask(taskId))}>{t('cancelTask')}</button>}
       {error && <p className="rt-notice" role="alert">{error}</p>}
     </section>
   );

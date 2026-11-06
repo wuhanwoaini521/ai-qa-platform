@@ -46,7 +46,7 @@ export function RuntimeRunResults({ snapshot, fallbackRunId }: { snapshot: Runti
       <div className="rt-toolbar">
         <h3>{t('testResultsAndLogs')}</h3>
         {snapshot.runs.length > 1 && (
-          <label>{t('testRun')} <select value={runId} onChange={(event) => setSelected(event.target.value)}>
+          <label>{t('testRun')} <select value={runId} onChange={(event) => setSelected(event.target.value)} className="ds-select">
             {snapshot.runs.map((run) => <option key={run.id} value={run.id}>{run.id} · {t(run.status.toLowerCase(), { defaultValue: run.status })}</option>)}
           </select></label>
         )}
@@ -62,13 +62,13 @@ export function RuntimeRunResults({ snapshot, fallbackRunId }: { snapshot: Runti
         caseMappingUnavailable={caseMappingUnavailable}
       />
       {lastPage > 0 && <div className="rt-toolbar">
-        <button className="btn btn-secondary btn-sm" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>{t('previousPage')}</button>
+        <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>{t('previousPage')}</button>
         <span>{currentPage + 1} / {lastPage + 1} · {t('testsCount', { count: executions.length })}</span>
-        <button className="btn btn-secondary btn-sm" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>{t('nextPage')}</button>
+        <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>{t('nextPage')}</button>
       </div>}
       <details className="rt-console">
         <summary>{t('runLogs')} · {t('recentCharacters', { count: 20000 })}</summary>
-        <button className="btn btn-secondary btn-sm" aria-pressed={following} onClick={() => setFollowing((value) => !value)}>{following ? t('pauseFollowing') : t('resumeFollowing')}</button>
+        <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-pressed={following} onClick={() => setFollowing((value) => !value)}>{following ? t('pauseFollowing') : t('resumeFollowing')}</button>
         <pre ref={output} onScroll={(event) => {
           const element = event.currentTarget;
           if (element.scrollHeight - element.scrollTop - element.clientHeight > 32) setFollowing(false);

@@ -78,7 +78,7 @@
 .project-branch code { color: var(--ink-soft); font-family: var(--font-mono); }
 .project-created-date { color: var(--ink-muted); font-size: var(--fs-sm); white-space: nowrap; }
 .project-actions-heading, .project-actions-cell { text-align: right; }
-.project-row-actions { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.project-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--sp-2); max-width: 100%; }
 .project-row-actions button:first-child { width: 32px; min-width: 32px; padding: 0; }
 .project-registry .project-row-actions button:focus-visible,
 .projects-page-actions .btn:focus-visible {

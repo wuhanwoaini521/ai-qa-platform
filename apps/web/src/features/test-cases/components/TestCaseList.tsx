@@ -18,7 +18,7 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
 }) => {
   const { t } = useTranslation('testCases');
   return (
-    <div className="card">
+    <div className="ds-card card">
       <div className="card-header">
         <span className="card-title">{t('listTitle', { total: testCases.length })}</span>
       </div>
@@ -46,8 +46,8 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
                       {tc.title}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-                      <span className={`badge badge-${tc.priority.toLowerCase()}`}>{tc.priority}</span>
-                      <span className={`badge badge-${tc.automation_status.toLowerCase()}`}>
+                      <span className={`ds-tag badge badge-${tc.priority.toLowerCase()}`}>{tc.priority}</span>
+                      <span className={`ds-tag badge badge-${tc.automation_status.toLowerCase()}`}>
                         {tc.automation_status}
                       </span>
                       {tc.external_case_id && (
@@ -56,7 +56,7 @@ export const TestCaseList: React.FC<TestCaseListProps> = ({
                         </span>
                       )}
                       {tc.tags && tc.tags.slice(0, 2).map((tag, idx) => (
-                        <span key={idx} className="badge badge-draft" style={{ fontSize: '10px' }}>
+                        <span key={idx} className="ds-tag ds-tag--neutral badge badge-draft" style={{ fontSize: '10px' }}>
                           #{tag}
                         </span>
                       ))}

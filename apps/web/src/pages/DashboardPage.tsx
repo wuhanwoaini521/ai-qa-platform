@@ -298,22 +298,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {nextStep ? (
           <div className="dashboard-next-step">
             <span>{t('nextStep')}</span>
-            <button type="button" className="btn btn-primary" onClick={nextStep.onClick}>
+            <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={nextStep.onClick}>
               <ArrowRight size={15} aria-hidden="true" />{nextStep.label}
             </button>
           </div>
         ) : focusProject ? (
-          <button type="button" className="btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
             <FolderGit2 size={15} aria-hidden="true" />{t('openWorkspace')}
           </button>
         ) : (
-          <button type="button" className="btn btn-primary" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
             <FolderGit2 size={15} aria-hidden="true" />{canCreateFirstProject ? t('createFirstProject') : t('goToProjects')}
           </button>
         )}
       </section>
 
-      <section className="dashboard-signals card" aria-label={t('executionSignals')}>
+      <section className="ds-card dashboard-signals card" aria-label={t('executionSignals')}>
         <div className="dashboard-signals-heading">
           <h3>{t('executionSignals')}</h3>
           <span>{t('executionSignalsSubtitle')}</span>
@@ -365,7 +365,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {attentionItems.length > 0 ? (
             <div className="dashboard-attention-list">
               {attentionItems.map(({ key, title, detail, status, Icon, onClick }) => (
-                <button type="button" className="dashboard-attention-item" key={key} onClick={onClick}>
+                <button type="button" className="ds-btn dashboard-attention-item" key={key} onClick={onClick}>
                   <span className="dashboard-attention-icon"><Icon size={15} aria-hidden="true" /></span>
                   <span className="dashboard-attention-copy"><strong>{title}</strong><small>{detail}</small></span>
                   <span className={`dashboard-attention-status is-${status.toLowerCase()}`}>
@@ -384,7 +384,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {sourcesUnavailable && (
             <div className="dashboard-attention-warning" role="status">
               <span>{t('attentionPartialWarning')}</span>
-              <button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={() => setReloadVersion((version) => version + 1)}>
+              <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={loading} onClick={() => setReloadVersion((version) => version + 1)}>
                 <RotateCcw size={12} aria-hidden="true" />{loading ? t('attentionRetrying') : t('attentionRetry')}
               </button>
             </div>
@@ -399,7 +399,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <h3 id="dashboard-recent-runs-title" className="card-title">{t('recentRuns')}</h3>
               <p className="card-subtitle">{t(currentProject ? 'recentRunsProjectSubtitle' : 'recentRunsPlatformSubtitle', { project: currentProject?.name })}</p>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate('runs', selectedProjectId)}>
+            <button type="button" className="ds-btn-ghost ds-btn-sm ds-btn btn btn-ghost btn-sm" onClick={() => onNavigate('runs', selectedProjectId)}>
               {t('viewAll')} <ArrowRight size={14} strokeWidth={1.7} />
             </button>
           </div>
@@ -409,7 +409,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div className="dashboard-journey-run-meta">
                 {journeyIsFixture && <span className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</span>}
                 <span className={`dashboard-journey-status is-${journeyRun.status.toLowerCase()}`}>{journeyRun.status}</span>
-                <button type="button" className="dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
+                <button type="button" className="ds-btn dashboard-run-link mono" aria-label={t('openRun', { runId: journeyRun.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(journeyRun.id) : onNavigate('runs', journeyRun.project_id)}>
                   {journeyRun.passed} / {journeyRun.failed}
                 </button>
               </div>
@@ -418,7 +418,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               {journeyExecutions.map((execution) => {
                 const stepName = execution.nodeid.split('::').pop() || execution.nodeid;
                 return <li key={execution.id} className={`is-${execution.status.toLowerCase()}`}>
-                  <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)}>
+                  <button type="button" aria-label={t('openExecutionEvidence', { runId: journeyRun.id, nodeId: stepName })} onClick={() => onOpenExecution ? onOpenExecution(journeyRun, execution) : onOpenRun?.(journeyRun.id)} className="ds-btn">
                     <span className="dashboard-journey-marker" aria-hidden="true" />
                     <span className="dashboard-journey-copy"><strong>{stepName}</strong><small>{execution.nodeid}</small></span>
                     <code>{Math.round(execution.duration_ms)}ms</code>
@@ -431,7 +431,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="chart-insufficient dashboard-loading-evidence" role="status"><Activity size={16} aria-hidden="true" />{t('loadingRuns')}</div>
           ) : recentRuns.length > 0 ? (
             <div className="table-responsive">
-              <table className="data-table">
+              <table className="ds-table data-table">
                 <thead>
                   <tr>
                     <th>{commonT('status')}</th>
@@ -445,12 +445,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   {recentRuns.slice(0, 5).map((run) => (
                     <tr key={run.id}>
                       <td>
-                        <span className="status-pill status-pill-plain">
+                        <span className="ds-tag ds-tag--neutral status-pill status-pill-plain">
                           <span className={`status-dot ${RUN_STATUS_TONE[run.status] ?? ''}`} />
                           {run.status}
                         </span>
                       </td>
-                      <td><button type="button" className="dashboard-run-link mono" aria-label={t('openRun', { runId: run.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(run.id) : onNavigate('runs', selectedProjectId)}>#{run.id.slice(0, 8)}</button></td>
+                      <td><button type="button" className="ds-btn dashboard-run-link mono" aria-label={t('openRun', { runId: run.id.slice(0, 8) })} onClick={() => onOpenRun ? onOpenRun(run.id) : onNavigate('runs', selectedProjectId)}>#{run.id.slice(0, 8)}</button></td>
                       <td className="text-secondary">{run.runner_type || 'LOCAL'}</td>
                       <td>
                         <span className="tone-passed">{run.passed}</span>
@@ -486,7 +486,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   <h4>{group.title}</h4>
                   <div className="dashboard-workflow-links">
                     {group.items.map((item) => (
-                      <button key={item.tab} type="button" className="dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
+                      <button key={item.tab} type="button" className="ds-btn dashboard-workflow-link" onClick={() => onNavigate(item.tab, selectedProjectId)}>
                         <span className="link-row-icon"><item.Icon size={14} strokeWidth={1.7} aria-hidden="true" /></span>
                         <span className="link-row-title">{item.label}</span>
                         <ArrowRight size={13} aria-hidden="true" />
@@ -500,8 +500,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {currentProject && <>
             <div className="dashboard-quick-start" aria-label={t('quickStart')}>
               <span className="dashboard-quick-start-label">{t('quickStart')}</span>
-              <button type="button" onClick={() => onNavigate('discovery', currentProject.id)}><Sparkles size={14} aria-hidden="true" />{t('quickExplore')}</button>
-              {runnableCaseId && <button type="button" onClick={() => onOpenRunnableTest ? onOpenRunnableTest(runnableCaseId) : onNavigate('workspace', currentProject.id)}><PlayCircle size={14} aria-hidden="true" />{t('quickRunnableTest')}</button>}
+              <button type="button" onClick={() => onNavigate('discovery', currentProject.id)} className="ds-btn"><Sparkles size={14} aria-hidden="true" />{t('quickExplore')}</button>
+              {runnableCaseId && <button type="button" onClick={() => onOpenRunnableTest ? onOpenRunnableTest(runnableCaseId) : onNavigate('workspace', currentProject.id)} className="ds-btn"><PlayCircle size={14} aria-hidden="true" />{t('quickRunnableTest')}</button>}
             </div>
             <div className="dashboard-resume-tasks">
               <div className="dashboard-resume-heading">
@@ -511,7 +511,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               {tasksUnavailable ? <p className="dashboard-resume-empty">{t('recentTasksUnavailableMessage')}</p>
                 : loading ? <p className="dashboard-resume-empty" role="status">{t('resumeTasksLoading')}</p>
                   : visibleRecentTasks.length > 0 ? <div className="dashboard-resume-list">
-                    {visibleRecentTasks.map((task) => <button key={task.id} type="button" className="dashboard-resume-task" onClick={() => onOpenTask?.(task)}>
+                    {visibleRecentTasks.map((task) => <button key={task.id} type="button" className="ds-btn dashboard-resume-task" onClick={() => onOpenTask?.(task)}>
                       <span><strong>{taskT(`type_${task.type}`)}</strong><small>{task.goal}</small>{task.id.toLowerCase().includes('fixture') && <small className="dashboard-run-provenance is-fixture">{t('fixtureNotLive')}</small>}</span>
                       <span className={`dashboard-attention-status is-${task.status.toLowerCase()}`}>{task.status}</span>
                       <ArrowRight size={13} aria-hidden="true" />
@@ -523,14 +523,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
-      <section className="card dashboard-project-registry" aria-labelledby="dashboard-project-registry-title">
+      <section className="ds-card card dashboard-project-registry" aria-labelledby="dashboard-project-registry-title">
         <header className="dashboard-project-registry-heading">
           <div><h3 id="dashboard-project-registry-title">{t('projectRegistry')}</h3><span>{t('projectCount', { count: projects.length })}</span></div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate('projects')}>{t('viewAll')} <ArrowRight size={14} aria-hidden="true" /></button>
+          <button type="button" className="ds-btn-ghost ds-btn-sm ds-btn btn btn-ghost btn-sm" onClick={() => onNavigate('projects')}>{t('viewAll')} <ArrowRight size={14} aria-hidden="true" /></button>
         </header>
         {projects.length ? <ul className="dashboard-project-registry-list">
           {projects.slice(0, 5).map((project) => <li key={project.id} className={project.id === selectedProjectId ? 'is-current' : ''}>
-            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)}>
+            <button type="button" aria-label={t('openProjectWorkspace', { project: project.name })} onClick={() => onNavigate('workspace', project.id)} className="ds-btn">
               <span className="dashboard-project-mark"><FolderGit2 size={16} aria-hidden="true" /></span>
               <span className="dashboard-project-copy"><strong>{project.name}</strong><small>{project.framework_type} · {project.default_branch}</small></span>
               <span className="dashboard-project-action">{project.id === selectedProjectId ? t('currentProject') : t('openWorkspace')}</span>

@@ -40,22 +40,22 @@ export const SidebarActionHeader: React.FC<SidebarActionHeaderProps> = ({
       <div style={{ display: 'flex', gap: '2px' }}>
         {sidebarTab === 'files' && (
           <>
-            <button className="icon-btn" title={t('sidebarHeader.newFile')} onClick={onNewFile}>
+            <button className="ds-btn-icon ds-btn icon-btn" title={t('sidebarHeader.newFile')} onClick={onNewFile}>
               <FilePlus size={14} />
             </button>
-            <button className="icon-btn" title={t('sidebarHeader.newFolder')} onClick={onNewFolder}>
+            <button className="ds-btn-icon ds-btn icon-btn" title={t('sidebarHeader.newFolder')} onClick={onNewFolder}>
               <FolderPlus size={14} />
             </button>
           </>
         )}
         {sidebarTab === 'git' && (
-          <button className="icon-btn" title={t('sidebarHeader.newBranch')} onClick={onNewBranch}>
+          <button className="ds-btn-icon ds-btn icon-btn" title={t('sidebarHeader.newBranch')} onClick={onNewBranch}>
             <Plus size={14} />
           </button>
         )}
         {sidebarTab === 'pr' && activePRNumber !== null && (
           <button
-            className="icon-btn"
+            className="ds-btn-icon ds-btn icon-btn"
             title={t('sidebarHeader.refreshChecks')}
             disabled={loadingChecks}
             onClick={onRefreshChecks}
@@ -63,7 +63,7 @@ export const SidebarActionHeader: React.FC<SidebarActionHeaderProps> = ({
             <RefreshCw size={14} className={loadingChecks ? 'spin' : ''} />
           </button>
         )}
-        <button className="icon-btn" title={t('common:refresh')} onClick={onRefreshAll}>
+        <button className="ds-btn-icon ds-btn icon-btn" title={t('common:refresh')} onClick={onRefreshAll}>
           <RefreshCw size={14} />
         </button>
       </div>

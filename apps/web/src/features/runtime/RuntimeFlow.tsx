@@ -61,7 +61,7 @@ const StepNode = memo(function StepNode({
   const status = step.status === 'PENDING' ? t('pending') : step.status === 'WAITING_FOR_APPROVAL' ? t('waitingApproval') : t(step.status.toLowerCase());
   return (
     <button
-      className={`rt-node status-${step.status.toLowerCase()}${selected ? ' is-selected' : ''}${blocked ? ' is-blocker' : ''}${downstreamBlocked ? ' is-downstream-blocked' : ''}`}
+      className={`ds-btn rt-node status-${step.status.toLowerCase()}${selected ? ' is-selected' : ''}${blocked ? ' is-blocker' : ''}${downstreamBlocked ? ' is-downstream-blocked' : ''}`}
       aria-pressed={selected}
       aria-label={`${step.key}: ${step.title}, ${t(step.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : step.status.toLowerCase())}${blocked ? `, ${t('blockedHere')}` : ''}`}
       title={`${step.key} · ${step.title} · ${step.tool}`}
@@ -196,7 +196,7 @@ export function RuntimeFlow({
       <div className="rt-toolbar rt-flow-controls">
         <div className="rt-control-group">
           <label className="rt-direction-control">{t('direction')}
-            <select aria-label={t('direction')} value={direction} onChange={(event) => setDirection(event.target.value as FlowDirection)}>
+            <select aria-label={t('direction')} value={direction} onChange={(event) => setDirection(event.target.value as FlowDirection)} className="ds-select">
               <option value="vertical">{t('vertical')}</option><option value="horizontal">{t('horizontal')}</option>
             </select>
           </label>
@@ -204,7 +204,7 @@ export function RuntimeFlow({
             onClick={() => {
               setFollow(false);
               view.fit();
-            }}
+            }} className="ds-btn"
           >
             <Scan size={14} aria-hidden="true" />
             {t('fit')}
@@ -215,7 +215,7 @@ export function RuntimeFlow({
             onClick={() => {
               setFollow(false);
               view.zoom(view.scale - 0.15);
-            }}
+            }} className="ds-btn"
           >
             <Minus size={14} aria-hidden="true" />
           </button>
@@ -226,7 +226,7 @@ export function RuntimeFlow({
             onClick={() => {
               setFollow(false);
               view.zoom(view.scale + 0.15);
-            }}
+            }} className="ds-btn"
           >
             <Plus size={14} aria-hidden="true" />
           </button>
@@ -235,11 +235,11 @@ export function RuntimeFlow({
           <button
             aria-pressed={follow && !!activeId}
             disabled={!activeId}
-            onClick={() => setFollow((value) => !value)}
+            onClick={() => setFollow((value) => !value)} className="ds-btn"
           >
             {t('followActive')}
           </button>
-          <button className="rt-flow-focus" aria-label={t(focus ? 'exitFocus' : 'focusMode')} title={t(focus ? 'exitFocus' : 'focusMode')} aria-pressed={focus} onClick={onFocus}>
+          <button className="ds-btn rt-flow-focus" aria-label={t(focus ? 'exitFocus' : 'focusMode')} title={t(focus ? 'exitFocus' : 'focusMode')} aria-pressed={focus} onClick={onFocus}>
             <Maximize2 size={14} aria-hidden="true" />
             <span>{focus ? t('exitFocus') : t('focusMode')}</span>
           </button>
@@ -250,14 +250,14 @@ export function RuntimeFlow({
           <button
             aria-label={t('previousStep')}
             disabled={currentIndex <= 0}
-            onClick={() => select(layout.order[currentIndex - 1])}
+            onClick={() => select(layout.order[currentIndex - 1])} className="ds-btn"
           >
             <ChevronLeft size={14} aria-hidden="true" />
           </button>
           <select
             aria-label={t('jumpToStep')}
             value={currentId ?? ''}
-            onChange={(event) => select(event.target.value)}
+            onChange={(event) => select(event.target.value)} className="ds-select"
           >
             <option value="" disabled>
               {t('jumpToStep')} · {layout.order.length} {t('step')}
@@ -271,14 +271,14 @@ export function RuntimeFlow({
           <button
             aria-label={t('nextStep')}
             disabled={currentIndex >= layout.order.length - 1}
-            onClick={() => select(layout.order[currentIndex + 1])}
+            onClick={() => select(layout.order[currentIndex + 1])} className="ds-btn"
           >
             <ChevronRight size={14} aria-hidden="true" />
           </button>
           <code>
             {currentIndex >= 0 ? currentIndex + 1 : '—'} / {layout.order.length}
           </code>
-          {selectedStepId && <button className="rt-flow-clear-selection" aria-label={t('clearStepFilter')} title={t('clearStepFilter')} onClick={() => { setFollow(false); onClearSelection(); }}><X size={14} aria-hidden="true" /></button>}
+          {selectedStepId && <button className="ds-btn rt-flow-clear-selection" aria-label={t('clearStepFilter')} title={t('clearStepFilter')} onClick={() => { setFollow(false); onClearSelection(); }}><X size={14} aria-hidden="true" /></button>}
         </div>
         <span id="rt-flow-help">
           {t('flowHelp')}

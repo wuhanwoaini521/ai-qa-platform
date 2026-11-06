@@ -74,9 +74,9 @@ export function WorkflowPage() {
           <p>{t('subtitle')}</p>
         </div>
         <nav aria-label={t('contextActions')}>
-          {workspaceContext.projectId && <Link className="btn btn-secondary btn-sm" to={buildWorkspaceHref(workspaceContext)}><ArrowLeft size={14} aria-hidden="true" />{t('backToWorkspace')}</Link>}
-          {workspaceContext.projectId && workspaceContext.file && <Link className="btn btn-secondary btn-sm" to={buildStudioHref(workspaceContext)}><Code2 size={14} aria-hidden="true" />{t('openStudio')}</Link>}
-          {entity.kind === 'task' && <Link className="btn btn-secondary btn-sm" to={`/workflow${workspaceContext.projectId ? `?projectId=${encodeURIComponent(workspaceContext.projectId)}` : ''}`}>{t('allTasks')}</Link>}
+          {workspaceContext.projectId && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={buildWorkspaceHref(workspaceContext)}><ArrowLeft size={14} aria-hidden="true" />{t('backToWorkspace')}</Link>}
+          {workspaceContext.projectId && workspaceContext.file && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={buildStudioHref(workspaceContext)}><Code2 size={14} aria-hidden="true" />{t('openStudio')}</Link>}
+          {entity.kind === 'task' && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/workflow${workspaceContext.projectId ? `?projectId=${encodeURIComponent(workspaceContext.projectId)}` : ''}`}>{t('allTasks')}</Link>}
         </nav>
       </header>
       <section className="workflow-canvas-surface">

@@ -96,10 +96,10 @@ export function RuntimeMiniBar({
             : <><span>{t('miniBar.noRuntime')}</span><small>{t('miniBar.noCurrentStep')}</small></>}
       </div>
       <div className="rt-mini-actions">
-        {reason && <Link className="btn btn-secondary btn-sm" to={inspectHref}>{t('miniBar.inspect')}</Link>}
-        {hasRetry && <button className="btn btn-secondary btn-sm" disabled={retrying} onClick={() => void retry()}><RotateCcw size={13} aria-hidden="true" />{retrying ? t('miniBar.retrying') : t(retryActionLabel(snapshot?.task?.type))}</button>}
-        {onOpenDetails && <button className="btn btn-secondary btn-sm" onClick={onOpenDetails}>{t('miniBar.viewRun')}</button>}
-        {snapshot && <Link className="btn btn-secondary btn-sm" to={workflowHref}><Workflow size={13} aria-hidden="true" />{t('miniBar.openWorkflow')}</Link>}
+        {reason && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={inspectHref}>{t('miniBar.inspect')}</Link>}
+        {hasRetry && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={retrying} onClick={() => void retry()}><RotateCcw size={13} aria-hidden="true" />{retrying ? t('miniBar.retrying') : t(retryActionLabel(snapshot?.task?.type))}</button>}
+        {onOpenDetails && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenDetails}>{t('miniBar.viewRun')}</button>}
+        {snapshot && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={workflowHref}><Workflow size={13} aria-hidden="true" />{t('miniBar.openWorkflow')}</Link>}
       </div>
       {error && <p className="rt-mini-error" role="alert">{t('miniBar.retryFailed', { error })}</p>}
     </section>

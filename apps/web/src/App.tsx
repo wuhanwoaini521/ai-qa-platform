@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BrowserRouter } from 'react-router-dom';
+import { DesignSystemProvider } from '@self/ui-style/react';
 import { setAuthToken, setUnauthorizedHandler, hasAuthToken } from './api/client';
 import { AppRoutes } from './app/routes';
 import { LoginScreen } from './app/LoginScreen';
@@ -8,6 +10,7 @@ import { ProjectScopeProvider } from './app/ProjectScope';
 
 export const App: React.FC = () => {
   const [authenticated, setAuthenticated] = useState<boolean>(() => hasAuthToken());
+  const { i18n } = useTranslation();
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthenticated(false));
@@ -19,17 +22,25 @@ export const App: React.FC = () => {
     setAuthenticated(false);
   }, []);
 
-  if (!authenticated) {
-    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
-  }
+  const appContent = authenticated ? (
+    <BrowserRouter>
+      <ProjectScopeProvider>
+        <AppRoutes onSignOut={handleSignOut} />
+      </ProjectScopeProvider>
+    </BrowserRouter>
+  ) : (
+    <LoginScreen onAuthenticated={() => setAuthenticated(true)} />
+  );
 
   return (
-    <BrowserRouter>
-      <PreferencesProvider>
-        <ProjectScopeProvider>
-          <AppRoutes onSignOut={handleSignOut} />
-        </ProjectScopeProvider>
-      </PreferencesProvider>
-    </BrowserRouter>
+    <PreferencesProvider>
+      <DesignSystemProvider
+        className="app-design-system"
+        locale={i18n.resolvedLanguage ?? i18n.language}
+        dotted
+      >
+        {appContent}
+      </DesignSystemProvider>
+    </PreferencesProvider>
   );
 };

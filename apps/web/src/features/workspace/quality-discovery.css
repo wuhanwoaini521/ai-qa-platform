@@ -95,6 +95,7 @@
 .qd-evidence-viewer pre { max-height: 420px; margin: 0; padding: 10px; overflow: auto; color: var(--ink-soft); background: var(--surface-raised); border-radius: 6px; font: 9px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .qd-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 .qd-coverage-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 10px; }
+.qd-coverage-table.ds-table { min-width: 760px; table-layout: auto; }
 .qd-coverage-table th, .qd-coverage-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .qd-coverage-table th { color: var(--ink-muted); background: var(--surface-inset); font-weight: 700; white-space: nowrap; }
 .qd-coverage-table td { color: var(--ink-soft); }

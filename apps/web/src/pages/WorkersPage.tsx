@@ -128,32 +128,32 @@ export const WorkersPage: React.FC = () => {
   const getWorkerStatusBadge = (status: WorkerStatus) => {
     switch (status) {
       case 'ONLINE':
-        return <span className="status-pill status-pill-passed">ONLINE</span>;
+        return <span className="ds-tag ds-tag--success status-pill status-pill-passed">ONLINE</span>;
       case 'BUSY':
-        return <span className="status-pill status-pill-warning">BUSY</span>;
+        return <span className="ds-tag ds-tag--warn status-pill status-pill-warning">BUSY</span>;
       case 'LOST':
-        return <span className="status-pill status-pill-error">LOST</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-error">LOST</span>;
       case 'OFFLINE':
       default:
-        return <span className="status-pill status-pill-draft">OFFLINE</span>;
+        return <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">OFFLINE</span>;
     }
   };
 
   const getJobStatusBadge = (status: string) => {
     switch (status) {
       case 'COMPLETED':
-        return <span className="status-pill status-pill-passed">COMPLETED</span>;
+        return <span className="ds-tag ds-tag--success status-pill status-pill-passed">COMPLETED</span>;
       case 'RUNNING':
-        return <span className="status-pill status-pill-warning">RUNNING</span>;
+        return <span className="ds-tag ds-tag--warn status-pill status-pill-warning">RUNNING</span>;
       case 'ASSIGNED':
-        return <span className="status-pill status-pill-draft">ASSIGNED</span>;
+        return <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">ASSIGNED</span>;
       case 'QUEUED':
-        return <span className="status-pill status-pill-draft">QUEUED</span>;
+        return <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">QUEUED</span>;
       case 'FAILED':
-        return <span className="status-pill status-pill-failed">FAILED</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-failed">FAILED</span>;
       case 'CANCELLED':
       default:
-        return <span className="status-pill status-pill-error">{status}</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-error">{status}</span>;
     }
   };
 
@@ -166,12 +166,12 @@ export const WorkersPage: React.FC = () => {
           <p className="subtitle">{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary" onClick={() => setShowRegisterModal(true)}>
+          <button className="ds-btn-primary ds-btn btn btn-primary" onClick={() => setShowRegisterModal(true)}>
             <Plus size={14} />
             <span>{t('registerWorker')}</span>
           </button>
           <button
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             onClick={() => {
               fetchClusterAndWorkers();
               if (activeTab === 'jobs') fetchJobs();
@@ -271,14 +271,14 @@ export const WorkersPage: React.FC = () => {
       {/* Tabs */}
       <div className="tabs-container" style={{ margin: '1.5rem 0 1rem' }}>
         <button
-          className={`tab-btn ${activeTab === 'workers' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'workers' ? 'active' : ''}`}
           onClick={() => setActiveTab('workers')}
         >
           <Server size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
           {t('tabWorkers', { total: workers.length })}
         </button>
         <button
-          className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`}
+          className={`ds-btn tab-btn ${activeTab === 'jobs' ? 'active' : ''}`}
           onClick={() => setActiveTab('jobs')}
         >
           <Layers size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
@@ -288,13 +288,13 @@ export const WorkersPage: React.FC = () => {
 
       {/* Tab 1: Workers Grid & Table */}
       {activeTab === 'workers' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('workersTitle')}</h3>
             <span className="text-secondary text-sm">{t('workersHint')}</span>
           </div>
           <div className="table-responsive" role="region" aria-label={t('workersTitle')} aria-description={t('tableScrollHint')} tabIndex={0}>
-            <table className="data-table worker-table">
+            <table className="ds-table data-table worker-table">
               <thead>
                 <tr>
                   <th>{t('colHostname')}</th>
@@ -327,15 +327,15 @@ export const WorkersPage: React.FC = () => {
                       </td>
                       <td>
                         <div className="worker-capabilities">
-                          {w.browsers.length > 0 && <span className="status-pill status-pill-runtime">Playwright</span>}
+                          {w.browsers.length > 0 && <span className="ds-tag ds-tag--info status-pill status-pill-runtime">Playwright</span>}
                           {w.browsers.map((b) => (
-                            <span key={b} className="status-pill status-pill-draft">
+                            <span key={b} className="ds-tag ds-tag--neutral status-pill status-pill-draft">
                               {b}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td><span className="status-pill status-pill-draft worker-os">{w.os}</span></td>
+                      <td><span className="ds-tag ds-tag--neutral status-pill status-pill-draft worker-os">{w.os}</span></td>
                       <td style={{ fontSize: '0.85rem' }}>
                         <div className="worker-heartbeat">
                           <Radio size={12} aria-hidden="true" />
@@ -344,7 +344,7 @@ export const WorkersPage: React.FC = () => {
                       </td>
                       <td>
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                           style={{ color: 'var(--accent-red)' }}
                           onClick={() => handleDeleteWorker(w.id)}
                         >
@@ -369,13 +369,13 @@ export const WorkersPage: React.FC = () => {
 
       {/* Tab 2: Distributed Job Queue */}
       {activeTab === 'jobs' && (
-        <div className="card">
+        <div className="ds-card card">
           <div className="card-header">
             <h3>{t('jobsTitle')}</h3>
             <span className="text-secondary text-sm">{t('jobsHint')}</span>
           </div>
           <div className="table-responsive" role="region" aria-label={t('jobsTitle')} aria-description={t('tableScrollHint')} tabIndex={0}>
-            <table className="data-table">
+            <table className="ds-table data-table">
               <thead>
                 <tr>
                   <th>{t('colJobId')}</th>
@@ -396,7 +396,7 @@ export const WorkersPage: React.FC = () => {
                       <td><code>{job.id.substring(0, 8)}...</code></td>
                       <td><code>{job.run_id.substring(0, 8)}...</code></td>
                       <td>
-                        <span className="status-pill status-pill-draft">P{job.priority}</span>
+                        <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">P{job.priority}</span>
                       </td>
                       <td>{job.browser}</td>
                       <td>{getJobStatusBadge(job.status)}</td>
@@ -415,7 +415,7 @@ export const WorkersPage: React.FC = () => {
                       <td>
                         {job.status === 'QUEUED' || job.status === 'RUNNING' ? (
                           <button
-                            className="btn btn-secondary btn-sm"
+                            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                             style={{ color: 'var(--accent-red)' }}
                             onClick={() => handleCancelJob(job.id)}
                           >
@@ -447,7 +447,7 @@ export const WorkersPage: React.FC = () => {
           <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="register-worker-title" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h3 id="register-worker-title">{t('registerTitle')}</h3>
-              <button type="button" className="btn-icon" aria-label={t('common:close')} onClick={() => { setShowRegisterModal(false); setActionError(''); }}>
+              <button type="button" className="ds-btn-icon ds-btn btn-icon" aria-label={t('common:close')} onClick={() => { setShowRegisterModal(false); setActionError(''); }}>
                 &times;
               </button>
             </div>
@@ -459,7 +459,7 @@ export const WorkersPage: React.FC = () => {
                   <input
                     id="worker-hostname"
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     required
                     placeholder="worker-node-01.local"
                     value={newHostname}
@@ -471,7 +471,7 @@ export const WorkersPage: React.FC = () => {
                   <input
                     id="worker-ip-address"
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder="10.0.1.25"
                     value={newIpAddress}
                     onChange={(e) => setNewIpAddress(e.target.value)}
@@ -484,17 +484,17 @@ export const WorkersPage: React.FC = () => {
                     type="number"
                     min="1"
                     max="64"
-                    className="form-control"
+                    className="ds-input form-control"
                     value={newConcurrency}
                     onChange={(e) => setNewConcurrency(parseInt(e.target.value, 10))}
                   />
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowRegisterModal(false)}>
+                <button type="button" className="ds-btn btn btn-secondary" onClick={() => setShowRegisterModal(false)}>
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={registering}>
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" disabled={registering}>
                   {registering ? t('registering') : t('registerWorker')}
                 </button>
               </div>

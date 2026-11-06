@@ -26,7 +26,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
 }) => {
   const { t } = useTranslation('testCases');
   return (
-    <div className="card test-case-detail">
+    <div className="ds-card card test-case-detail">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <CheckSquare size={16} color="var(--accent-green)" />
@@ -44,15 +44,15 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
         </div>
         <div className="test-case-detail-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <div className="test-case-ai-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {onCopilot && <button className="btn btn-secondary btn-sm" type="button" disabled={copilotDisabled} title={t('tasks:caseCopilot')} aria-label={t('tasks:caseCopilot')} onClick={onCopilot}><Sparkles size={13} /> {t('tasks:caseCopilotShort')}</button>}
-            <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onOptimize}><Sparkles size={13} /> {t('tasks:optimizeAction')}</button>
-            <button className="btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onReview}><Sparkles size={13} /> {t('tasks:reviewAction')}</button>
+            {onCopilot && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" disabled={copilotDisabled} title={t('tasks:caseCopilot')} aria-label={t('tasks:caseCopilot')} onClick={onCopilot}><Sparkles size={13} /> {t('tasks:caseCopilotShort')}</button>}
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onOptimize}><Sparkles size={13} /> {t('tasks:optimizeAction')}</button>
+            <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" disabled={aiDisabled} title={aiDisabled ? t('tasks:bindingRequired') : undefined} onClick={onReview}><Sparkles size={13} /> {t('tasks:reviewAction')}</button>
           </div>
-          <span className={`badge badge-${selectedCase.priority.toLowerCase()}`}>
+          <span className={`ds-tag badge badge-${selectedCase.priority.toLowerCase()}`}>
             {selectedCase.priority}
           </span>
           <select
-            className="form-control"
+            className="ds-select form-control"
             aria-label={t('formAutomationStatus')}
             style={{ padding: '3px 8px', fontSize: '12px', width: '130px' }}
             value={selectedCase.automation_status}
@@ -101,7 +101,7 @@ export const TestCaseDetail: React.FC<TestCaseDetailProps> = ({
             </div>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {selectedCase.tags.map((tag, idx) => (
-                <span key={idx} className="badge badge-draft">
+                <span key={idx} className="ds-tag ds-tag--neutral badge badge-draft">
                   <Tag size={10} style={{ marginRight: '4px' }} /> {tag}
                 </span>
               ))}

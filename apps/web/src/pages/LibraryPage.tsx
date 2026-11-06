@@ -57,7 +57,7 @@ export function LibraryPage() {
   return (
     <div className="library-page">
       <header className="library-heading"><span className="workspace-eyebrow">{t('eyebrow')}</span><h1>{t('title')}</h1><p>{t('subtitle')}</p></header>
-      {error && <div className="library-error" role="alert"><span>{error}</span><button className="btn btn-secondary btn-sm" type="button" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
+      {error && <div className="library-error" role="alert"><span>{error}</span><button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={() => setLoadAttempt((value) => value + 1)}>{t('retry')}</button></div>}
       {loading && <p className="library-loading" role="status">{t('loading')}</p>}
       {!loading && !error && <>
       <section className="library-grid" aria-label={t('collections')}>

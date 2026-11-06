@@ -33,7 +33,7 @@ export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
       <div className="requirement-toolbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {showEntryActions && <>
         <button
-          className={`btn btn-secondary${onAnalyze ? ' btn-sm' : ''}`}
+          className={`ds-btn btn btn-secondary${onAnalyze ? ' ds-btn-sm btn-sm' : ''}`}
           disabled={projects.length === 0}
           onClick={onOpenJira}
           title={t('toolbarImportFromJiraHint')}
@@ -41,14 +41,14 @@ export const RequirementToolbar: React.FC<RequirementToolbarProps> = ({
           <Download size={15} /> {t('toolbarImportFromJira')}
         </button>
         <button
-          className={`btn ${onAnalyze ? 'btn-secondary btn-sm' : 'btn-primary'}`}
+          className={`ds-btn btn ${onAnalyze ? 'btn-secondary ds-btn-sm btn-sm' : 'ds-btn-primary btn-primary'}`}
           disabled={projects.length === 0}
           onClick={onNewRequirement}
         >
           <Plus size={16} /> {t('toolbarNewRequirement')}
         </button>
         </>}
-        {onAnalyze && <button type="button" className="btn btn-primary btn-sm" disabled={analysisRunning} onClick={onAnalyze}>
+        {onAnalyze && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={analysisRunning} onClick={onAnalyze}>
           <Sparkles size={14} aria-hidden="true" /> {lifecycleT(analysisRunning ? 'analyzing' : 'analyze')}
         </button>}
       </div>

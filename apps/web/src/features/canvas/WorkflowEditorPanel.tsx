@@ -435,7 +435,7 @@ export function WorkflowEditorPanel({
           <select
             aria-label={t('workflowEditor.definition')}
             value={detail?.id ?? ''}
-            onChange={(event) => void run(async () => load(event.target.value))}
+            onChange={(event) => void run(async () => load(event.target.value))} className="ds-select"
           >
             <option value="">{t('workflowEditor.none')}</option>
             {(list?.definitions ?? []).map((definition) => (
@@ -449,36 +449,36 @@ export function WorkflowEditorPanel({
             placeholder={t('workflowEditor.newName')}
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
-            className="wfe-name"
+            className="ds-input wfe-name"
           />
-          <button type="button" onClick={() => void createWorkflow()} disabled={busy}>
+          <button type="button" onClick={() => void createWorkflow()} disabled={busy} className="ds-btn">
             {t('workflowEditor.create')}
           </button>
         </div>
         <div className="wfe-edit-actions">
-          <button type="button" onClick={() => setHistory(undo)} disabled={!history.past.length}>
+          <button type="button" onClick={() => setHistory(undo)} disabled={!history.past.length} className="ds-btn">
             {t('workflowEditor.undo')}
           </button>
-          <button type="button" onClick={() => setHistory(redo)} disabled={!history.future.length}>
+          <button type="button" onClick={() => setHistory(redo)} disabled={!history.future.length} className="ds-btn">
             {t('workflowEditor.redo')}
           </button>
-          <button type="button" onClick={() => edit(autoLayout(history.present))} disabled={!detail}>
+          <button type="button" onClick={() => edit(autoLayout(history.present))} disabled={!detail} className="ds-btn">
             {t('workflowEditor.autoLayout')}
           </button>
-          <button type="button" onClick={() => void validate()} disabled={!detail || busy}>
+          <button type="button" onClick={() => void validate()} disabled={!detail || busy} className="ds-btn">
             {t('workflowEditor.validate')}
           </button>
         </div>
         <div className="wfe-release-actions">
           <span className={`wfe-save-state${dirty ? ' is-dirty' : ''}`}>{dirty ? t('workflowEditor.unsaved') : t('workflowEditor.saved')}</span>
-          <button type="button" onClick={() => void save()} disabled={!detail || busy || !dirty} className="wfe-primary">
+          <button type="button" onClick={() => void save()} disabled={!detail || busy || !dirty} className="ds-btn ds-btn-primary wfe-primary">
             {t('workflowEditor.saveDraft')}
           </button>
           <button
             type="button"
             onClick={() => void publish()}
             disabled={!detail || busy || dirty || !canPublish || issues.length > 0}
-            title={canPublish ? undefined : t('workflowEditor.needLead')}
+            title={canPublish ? undefined : t('workflowEditor.needLead')} className="ds-btn"
           >
             {t('workflowEditor.publish')}
           </button>
@@ -513,12 +513,12 @@ export function WorkflowEditorPanel({
                     value={failureId}
                     onChange={(event) => setFailureId(event.target.value)}
                     maxLength={2000}
-                    autoComplete="off"
+                    autoComplete="off" className="ds-input"
                   />
                 </label>
                 <button
                   type="button"
-                  className="wfe-launch-button"
+                  className="ds-btn ds-btn-primary wfe-launch-button"
                   onClick={() => void executePublished()}
                   disabled={!failureId.trim() || busy || launching || dirty}
                 >
@@ -537,7 +537,7 @@ export function WorkflowEditorPanel({
             <select
               aria-label={t('workflowEditor.task')}
               value={diffTaskId}
-              onChange={(event) => setDiffTaskId(event.target.value)}
+              onChange={(event) => setDiffTaskId(event.target.value)} className="ds-select"
             >
               <option value="">{t('workflowEditor.pickTask')}</option>
               {(tasks ?? []).map((task) => (
@@ -546,7 +546,7 @@ export function WorkflowEditorPanel({
                 </option>
               ))}
             </select>
-            <button type="button" onClick={() => void loadDiff()} disabled={!diffTaskId || busy}>
+            <button type="button" onClick={() => void loadDiff()} disabled={!diffTaskId || busy} className="ds-btn">
               {t('workflowEditor.compareWithRun')}
             </button>
             {diff && (
@@ -594,9 +594,9 @@ export function WorkflowEditorPanel({
               placeholder={t('workflowEditor.planPlaceholder')}
               rows={2}
               maxLength={2000}
-              onChange={(event) => setPlanPrompt(event.target.value)}
+              onChange={(event) => setPlanPrompt(event.target.value)} className="ds-textarea"
             />
-            <button type="button" onClick={() => void askForPlan()} disabled={planning || !planPrompt.trim()}>
+            <button type="button" onClick={() => void askForPlan()} disabled={planning || !planPrompt.trim()} className="ds-btn">
               {planning ? t('workflowEditor.planGenerating') : t('workflowEditor.planGenerate')}
             </button>
             {planError && (
@@ -627,7 +627,7 @@ export function WorkflowEditorPanel({
                     ))}
                   </ul>
                 )}
-                <button type="button" onClick={applyPlan} disabled={plan.graph.nodes.length === 0}>
+                <button type="button" onClick={applyPlan} disabled={plan.graph.nodes.length === 0} className="ds-btn">
                   {t('workflowEditor.planApply')}
                 </button>
               </div>
@@ -648,7 +648,7 @@ export function WorkflowEditorPanel({
             <button
               key={panel}
               type="button"
-              className={mobilePanel === panel ? 'is-active' : ''}
+              className={["ds-btn", (mobilePanel === panel ? 'is-active' : '')].filter(Boolean).join(' ')}
               aria-pressed={mobilePanel === panel}
               onClick={() => setMobilePanel(panel)}
             >
@@ -663,7 +663,7 @@ export function WorkflowEditorPanel({
                 <span className="wfe-canvas-empty-icon" aria-hidden="true">＋</span>
                 <strong>{t('workflowEditor.canvasEmptyTitle')}</strong>
                 <p>{t('workflowEditor.canvasEmptyHint')}</p>
-                <button type="button" onClick={() => setMobilePanel('nodes')}>
+                <button type="button" onClick={() => setMobilePanel('nodes')} className="ds-btn">
                   {t('workflowEditor.openNodeLibrary')}
                 </button>
               </div>
@@ -709,7 +709,7 @@ export function WorkflowEditorPanel({
               <button
                 key={entry.kind}
                 type="button"
-                className={`wfe-palette-item is-${riskLabel(entry.risk)}`}
+                className={`ds-btn wfe-palette-item is-${riskLabel(entry.risk)}`}
                 onClick={() => {
                   const result = addNode(history.present, catalogue, entry.kind);
                   if ('error' in result) {
@@ -737,7 +737,7 @@ export function WorkflowEditorPanel({
                     <small>{version.node_count} {t('workflowEditor.nodes')}</small>
                     <span className="wfe-version-actions">
                       {version.state === 'PUBLISHED' && (
-                        <button type="button" onClick={() => void restore(version.version)} disabled={busy}>
+                        <button type="button" onClick={() => void restore(version.version)} disabled={busy} className="ds-btn">
                           {t('workflowEditor.restore')}
                         </button>
                       )}
@@ -745,7 +745,7 @@ export function WorkflowEditorPanel({
                         <button
                           type="button"
                           onClick={() => void compareVersions(version.version, detail.draft.version as number)}
-                          disabled={busy}
+                          disabled={busy} className="ds-btn"
                         >
                           {t('workflowEditor.compare')}
                         </button>
@@ -766,7 +766,7 @@ export function WorkflowEditorPanel({
                   {t('workflowEditor.title')}
                   <input
                     value={selected.title ?? ''}
-                    onChange={(event) => edit(updateNode(history.present, selected.key, { title: event.target.value }))}
+                    onChange={(event) => edit(updateNode(history.present, selected.key, { title: event.target.value }))} className="ds-input"
                   />
                 </label>
                 {selectedSpec.inputs.map((input) => (
@@ -778,7 +778,7 @@ export function WorkflowEditorPanel({
                       placeholder={input.kind === 'list' ? 'a, b' : '$input.name'}
                       onChange={(event) =>
                         edit(setInput(history.present, selected.key, input.name, parseInput(event.target.value, input.kind)))
-                      }
+                      } className="ds-input"
                     />
                     <small>{input.description}</small>
                   </label>
@@ -786,7 +786,7 @@ export function WorkflowEditorPanel({
                 {selectedSpec.inputs.length === 0 && <p className="wfe-muted">{t('workflowEditor.noInputs')}</p>}
                 <button
                   type="button"
-                  className="wfe-danger"
+                  className="ds-btn ds-btn-danger wfe-danger"
                   onClick={() => {
                     edit(removeNode(history.present, selected.key));
                     setSelectedKey(null);
@@ -812,7 +812,7 @@ export function WorkflowEditorPanel({
                         if (!issue.node_key) return;
                         setSelectedKey(issue.node_key);
                         if (smallViewport) setMobilePanel('settings');
-                      }}
+                      }} className="ds-btn"
                     >
                       <strong>{issue.code}</strong>
                       <span>{issue.message}</span>
@@ -837,7 +837,7 @@ export function WorkflowEditorPanel({
             <h4>
               {t('workflowEditor.compareTitle')} v{compare.base.version} → v{compare.head.version}
             </h4>
-            <button type="button" onClick={() => setCompare(null)}>
+            <button type="button" onClick={() => setCompare(null)} className="ds-btn">
               {t('workflowEditor.close')}
             </button>
           </header>

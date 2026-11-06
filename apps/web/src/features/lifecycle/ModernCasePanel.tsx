@@ -33,7 +33,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
           <p>{model.intent}</p>
         </div>
         <button
-          className="btn btn-secondary"
+          className="ds-btn btn btn-secondary"
           type="button"
           onClick={() => setShowKnowledge(true)}
         >
@@ -55,7 +55,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
 
       <div className="lc-tabs">
         <button
-          className={view === 'flow' ? 'selected' : ''}
+          className={["ds-btn", (view === 'flow' ? 'selected' : '')].filter(Boolean).join(' ')}
           type="button"
           aria-pressed={view === 'flow'}
           onClick={() => setView('flow')}
@@ -63,7 +63,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
           {t('flow')}
         </button>
         <button
-          className={view === 'table' ? 'selected' : ''}
+          className={["ds-btn", (view === 'table' ? 'selected' : '')].filter(Boolean).join(' ')}
           type="button"
           aria-pressed={view === 'table'}
           onClick={() => setView('table')}
@@ -71,7 +71,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
           {t('table')}
         </button>
         <button
-          className={view === 'data' ? 'selected' : ''}
+          className={["ds-btn", (view === 'data' ? 'selected' : '')].filter(Boolean).join(' ')}
           type="button"
           aria-pressed={view === 'data'}
           onClick={() => setView('data')}
@@ -102,7 +102,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
 
       {view === 'table' && (
         <div className="lc-table-scroll lc-case-table-scroll">
-          <table className="data-table lc-case-table" aria-label={t('table')}>
+          <table className="ds-table data-table lc-case-table" aria-label={t('table')}>
             <colgroup>
               <col className="lc-case-action-column" />
               <col />
@@ -154,7 +154,7 @@ export function ModernCasePanel({ item }: { item: TestCase }) {
           <p className="lc-caption">{t('evidence')} · {model.evidence.join(' · ')}</p>
           {item.binding && (
             <Link
-              className="btn btn-primary"
+              className="ds-btn-primary ds-btn btn btn-primary"
               to={`/projects/${item.project_id}/studio/file/${item.binding.file_path}?caseId=${item.id}&target=${encodeURIComponent(item.binding.nodeid)}`}
             >
               {t('openAutomation')}

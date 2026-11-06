@@ -84,13 +84,13 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
 
   if (!ordered.length) {
     return (
-      <section className="card" aria-label={t('liveBrowsers')}>
+      <section className="ds-card card" aria-label={t('liveBrowsers')}>
         <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span className="card-title">{t('liveBrowsers')}</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-            {runId && <span className="badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
-            <span role="status" aria-live="polite" className="badge badge-draft">{executionStatusText}</span>
-            <span role="status" aria-live="polite" className="badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
+            {runId && <span className="ds-tag ds-tag--neutral badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
+            <span role="status" aria-live="polite" className="ds-tag ds-tag--neutral badge badge-draft">{executionStatusText}</span>
+            <span role="status" aria-live="polite" className="ds-tag ds-tag--neutral badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
           </div>
         </div>
         <div className="card-body" role={streamError ? 'alert' : 'status'} style={{ padding: 20, color: streamError ? 'var(--accent-red)' : 'var(--text-muted)', textAlign: 'center' }}>
@@ -113,22 +113,22 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
     : '';
 
   return (
-    <section className="card" aria-label={t('liveBrowsers')} style={{ overflow: 'hidden' }}>
+    <section className="ds-card card" aria-label={t('liveBrowsers')} style={{ overflow: 'hidden' }}>
       <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           <MonitorPlay size={16} color="var(--accent-blue)" />
           <span className="card-title">{t('liveBrowsers')}</span>
-          <span className="badge badge-draft">{ordered.length}</span>
-          {runId && <span className="badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
-          <span role="status" aria-live="polite" className="badge badge-draft">{executionStatusText}</span>
-          <span role="status" aria-live="polite" className="badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
-          {framePresentation && <span className="badge badge-draft">{t(`browserFrameState.${framePresentation}`)}</span>}
+          <span className="ds-tag ds-tag--neutral badge badge-draft">{ordered.length}</span>
+          {runId && <span className="ds-tag ds-tag--neutral badge badge-draft" title={runId}>{t('browserTestRun', { id: runId })}</span>}
+          <span role="status" aria-live="polite" className="ds-tag ds-tag--neutral badge badge-draft">{executionStatusText}</span>
+          <span role="status" aria-live="polite" className="ds-tag ds-tag--neutral badge badge-draft">{t('browserStreamStatus', { status: t(`browserStream.${streamStatus}`) })}</span>
+          {framePresentation && <span className="ds-tag ds-tag--neutral badge badge-draft">{t(`browserFrameState.${framePresentation}`)}</span>}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button className="btn btn-icon btn-sm" aria-label={minimized ? t('expandBrowserPanel') : t('minimizeBrowserPanel')} onClick={() => setMinimized((value) => !value)}>
+          <button className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={minimized ? t('expandBrowserPanel') : t('minimizeBrowserPanel')} onClick={() => setMinimized((value) => !value)}>
             {minimized ? <PanelTopOpen size={14} /> : <PanelTopClose size={14} />}
           </button>
-          <button className="btn btn-icon btn-sm" aria-label={expanded ? t('restoreBrowserPanel') : t('maximizeBrowserPanel')} onClick={() => setExpanded((value) => !value)}>
+          <button className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={expanded ? t('restoreBrowserPanel') : t('maximizeBrowserPanel')} onClick={() => setExpanded((value) => !value)}>
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
@@ -152,7 +152,7 @@ export const LiveBrowserPanel: React.FC<LiveBrowserPanelProps> = ({ sessions, fr
                   border: selected?.browser_session_id === session.browser_session_id ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
                   background: selected?.browser_session_id === session.browser_session_id ? 'var(--accent-blue-soft)' : 'var(--surface-raised)',
                   color: 'var(--ink)', textAlign: 'left', cursor: 'pointer',
-                }}
+                }} className="ds-btn"
                 >
                 <strong>{session.worker_id}</strong> · {session.case_name || session.nodeid.split('::').pop()}
                 {session.case_execution_id && (

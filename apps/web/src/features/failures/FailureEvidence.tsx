@@ -268,7 +268,7 @@ export const FailureEvidence: React.FC<{
   };
 
   return (
-    <section className="card failure-evidence-card" aria-labelledby="failure-evidence-heading">
+    <section className="ds-card card failure-evidence-card" aria-labelledby="failure-evidence-heading">
       <div className="card-header">
         <span className="card-title" id="failure-evidence-heading">{t('evidenceWorkspace')}</span>
       </div>
@@ -283,7 +283,7 @@ export const FailureEvidence: React.FC<{
               aria-selected={visibleTab === tab}
               aria-controls="failure-evidence-panel"
               tabIndex={visibleTab === tab ? 0 : -1}
-              className={`failure-evidence-tab${visibleTab === tab ? ' is-active' : ''}`}
+              className={`ds-btn failure-evidence-tab${visibleTab === tab ? ' is-active' : ''}`}
               onClick={() => setActiveTab(tab)}
               onKeyDown={handleTabKeyDown}
             >

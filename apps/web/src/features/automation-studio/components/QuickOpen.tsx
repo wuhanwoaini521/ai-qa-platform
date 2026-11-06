@@ -39,7 +39,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
           <input
             autoFocus
             type="text"
-            className="form-control"
+            className="ds-input form-control"
             style={{ border: 'none', boxShadow: 'none', padding: '4px', fontSize: '14px' }}
             placeholder={t('quickOpen.placeholder')}
             value={query}

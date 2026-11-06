@@ -74,11 +74,11 @@ export const ContextTaskProgress: React.FC<{ task: AgentTask | null; error?: str
   if (!task && !error) return null;
   const steps = task?.steps ?? task?.plan ?? [];
   const registeredCaseId = steps.find((step) => step.key === 'register')?.outputs?.test_case_id;
-  return <section className="card" style={{ marginTop: 12 }}>
+  return <section className="ds-card card" style={{ marginTop: 12 }}>
     <div className="card-body" style={{ display: 'grid', gap: 8 }}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {task && <>
-        <Link className="btn btn-secondary btn-sm" to={`/runs/tasks?taskId=${encodeURIComponent(task.id)}`}>Open Full Runtime</Link>
+        <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={`/runs/tasks?taskId=${encodeURIComponent(task.id)}`}>Open Full Runtime</Link>
         <RuntimeDetail key={task.id} kind="task" id={task.id} />
         {typeof registeredCaseId === 'string' && <Link to={`/test-cases/${encodeURIComponent(registeredCaseId)}`}>{t('viewGeneratedCase')}</Link>}
       </>}

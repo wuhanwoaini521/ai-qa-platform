@@ -20,7 +20,7 @@ function Fields({ value }: { value: Record<string, unknown> }) {
       {Object.entries(value).map(([key, item]) => (
         <div key={key}>
           <dt>{t(`fieldLabels.${key}`, { defaultValue: key.replaceAll('_', ' ') })}</dt>
-          <dd><span>{display(key, item)}</span><button className="rt-copy-button" aria-label={`${t('copy')} ${t(`fieldLabels.${key}`, { defaultValue: key.replaceAll('_', ' ') })}`} title={t('copy')} onClick={() => void copy(item)}><ClipboardCopy size={12} aria-hidden="true" /></button></dd>
+          <dd><span>{display(key, item)}</span><button className="ds-btn rt-copy-button" aria-label={`${t('copy')} ${t(`fieldLabels.${key}`, { defaultValue: key.replaceAll('_', ' ') })}`} title={t('copy')} onClick={() => void copy(item)}><ClipboardCopy size={12} aria-hidden="true" /></button></dd>
         </div>
       ))}
     </dl>
@@ -91,7 +91,7 @@ export function RuntimeInspector({
       <div className="rt-toolbar">
         <span className="rt-eyebrow">{t('inspector')}</span>
         <button
-          className="btn btn-icon btn-sm"
+          className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm"
           aria-label={t('closeInspector')}
           title={t('closeInspector')}
           onClick={onClose}
@@ -121,7 +121,7 @@ export function RuntimeInspector({
       )}
       {sourcePath && onOpenSource && <button
         type="button"
-        className="btn btn-secondary btn-sm rt-inspector-open-studio"
+        className="ds-btn ds-btn-sm btn btn-secondary btn-sm rt-inspector-open-studio"
         onClick={() => onOpenSource(sourcePath, sourceLine > 0 ? sourceLine : 1, {
           nodeId,
           testCaseId,

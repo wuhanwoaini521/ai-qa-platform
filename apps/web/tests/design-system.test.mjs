@@ -11,11 +11,21 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const srcDir = path.join(root, 'src');
+const designSystemStyleEntry = createRequire(path.join(root, 'package.json')).resolve('@self/ui-style/react/style.css');
+const designSystemPackageRoot = path.resolve(path.dirname(designSystemStyleEntry), '../..');
+const designSystemStyleSources = [
+  designSystemStyleEntry,
+  ...[...readFileSync(designSystemStyleEntry, 'utf8').matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g)]
+    .map(([, source]) => path.resolve(path.dirname(designSystemStyleEntry), source)),
+  path.join(designSystemPackageRoot, 'src/tokens/tokens.css'),
+  path.join(designSystemPackageRoot, 'src/theme/background.css'),
+];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((entry) => {
@@ -34,46 +44,39 @@ test('index.html does not load resources from an external host', () => {
   assert.deepEqual(external, [], `external resources are not allowed (found ${external.join(', ')})`);
 });
 
-test('the core design tokens are declared once, in index.css', () => {
-  const css = read(path.join(srcDir, 'index.css'));
+test('app semantic aliases map to package tokens', () => {
+  const bridge = read(path.join(srcDir, 'design-system.css'));
   const required = [
-    '--surface',
-    '--surface-raised',
-    '--surface-inset',
-    '--line',
-    '--line-strong',
-    '--ink',
-    '--ink-soft',
-    '--ink-muted',
-    '--accent-blue',
-    '--accent-green',
-    '--accent-amber',
-    '--accent-red',
-    '--accent-violet',
-    '--font-sans',
-    '--font-mono',
-    '--r-card',
-    '--r-lg',
-    '--sp-1',
-    '--sp-7',
-    '--sidebar-w',
-    '--toolbar-h',
-    '--ease',
-    '--dur',
+    '--canvas: var(--c-bg-soft)',
+    '--surface-raised: var(--c-bg)',
+    '--surface-inset: var(--c-bg-soft)',
+    '--line: var(--c-line)',
+    '--ink: var(--c-text-strong)',
+    '--brand: var(--c-accent)',
+    '--accent-green: var(--c-success)',
+    '--primary: var(--c-accent)',
+    '--r-card: var(--r-xl)',
   ];
-  const missing = required.filter((token) => !new RegExp(`^\\s*${token}:`, 'm').test(css));
-  assert.deepEqual(missing, [], `missing tokens: ${missing.join(', ')}`);
+  const missing = required.filter((token) => !bridge.includes(token));
+  assert.deepEqual(missing, [], `missing package mappings: ${missing.join(', ')}`);
+  assert.ok(bridge.includes(":root[data-theme='dark'] .app-design-system.ds-theme"));
+  assert.ok(bridge.includes('--bg-dots: radial-gradient'));
+  assert.match(read(path.join(srcDir, 'index.css')), /--toolbar-h:/);
 });
 
-test('graphite route styles do not create cycles through compatibility aliases', () => {
+test('compact shell markers keep layout separate from the shared palette', () => {
   const css = read(path.join(srcDir, 'index.css'));
-  const graphiteBlock = css.match(/\.app-frame\.is-graphite\s*\{([^}]*)\}/)?.[1] ?? '';
-  assert.doesNotMatch(graphiteBlock, /--(?:canvas|surface|ink|line|accent-[a-z-]+)\s*:\s*var\(--graphite-/);
+  const bridge = read(path.join(srcDir, 'design-system.css'));
+  assert.ok(!css.includes('.app-frame.is-graphite'));
+  assert.ok(css.includes('.app-frame.is-compact-shell'));
+  assert.ok(!css.includes('--dashboard-canvas: #'));
+  assert.ok(bridge.includes('--graphite-mint: var(--c-accent)'));
+  assert.ok(!bridge.includes('var(--graphite-mint)'));
 });
 
 test('every referenced CSS custom property is declared', () => {
   const declared = new Set();
-  for (const file of sources) {
+  for (const file of [...sources, ...designSystemStyleSources]) {
     const text = read(file);
     for (const match of text.matchAll(/(?:^|[\s;{(])(--[a-z][a-z0-9-]*)\s*:/g)) declared.add(match[1]);
     // Tokens set from JSX (style={{ '--workspace-context-width': ... }}) or via setProperty().
@@ -91,6 +94,83 @@ test('every referenced CSS custom property is declared', () => {
   }
   const report = [...unknown.entries()].map(([token, files]) => `${token} (${[...new Set(files)].join(', ')})`);
   assert.deepEqual(report, [], `undeclared custom properties: ${report.join('; ')}`);
+});
+
+test('quality pilot preserves native library palette, shadows and control styling', () => {
+  const css = read(path.join(srcDir, 'pages/QualityPage.css'));
+  assert.doesNotMatch(css, /--(?:c-|sh-)[\w-]+\s*:/, 'consumer must not replace library tokens');
+  assert.doesNotMatch(css, /#[\da-f]{3,8}\b|\brgba?\(/i, 'use native library tokens instead of a local palette');
+  assert.doesNotMatch(css, /(?:^|\n)\.ds-(?:btn|input|select|checkbox|card)[^{]*\{[^}]*(?:background|box-shadow|border-radius)\s*:/s, 'do not fork native control surfaces globally');
+});
+
+test('quality filters use raised library shadows and localize requirement statuses', () => {
+  const css = read(path.join(srcDir, 'pages/QualityPage.css'));
+  assert.match(css, /\.quality-coverage-search \.ds-input,\s*\.quality-coverage-control \.ds-select\s*\{\s*box-shadow:\s*var\(--sh-raised-xs\)/);
+  assert.match(css, /\.quality-coverage-search \.ds-input:focus,[\s\S]*?var\(--sh-input-focus\)/);
+  assert.doesNotMatch(css, /!important/);
+  const page = read(path.join(srcDir, 'pages/QualityPage.tsx'));
+  assert.match(page, /getCoverageStatusLabel\(item\.status\)/);
+  assert.match(page, /value=\{status\}.*getCoverageStatusLabel\(status\)/);
+  const navigation = read(path.join(srcDir, 'components/Navigation.tsx'));
+  assert.match(navigation, /<span className="nav-item-mobile-label"/);
+  assert.doesNotMatch(navigation, /!designSystem && <span className="nav-item-mobile-label"/);
+  const en = JSON.parse(read(path.join(srcDir, 'i18n/locales/en/quality.json')));
+  const zh = JSON.parse(read(path.join(srcDir, 'i18n/locales/zh-CN/quality.json')));
+  assert.equal(en.coverageStatusReady, 'Ready');
+  assert.equal(en.coverageStatusDraft, 'Draft');
+  assert.equal(zh.coverageStatusReady, '就绪');
+  assert.equal(zh.coverageStatusDraft, '草稿');
+});
+
+test('quality uses the pinned official default surface and package stylesheet', () => {
+  const pin = '690a35f47e8354707f914687fb748bdf74be410f';
+  const manifest = JSON.parse(read(path.join(root, 'package.json')));
+  assert.equal(manifest.dependencies['@self/ui-style'], 'github:wuhanwoaini521/self-ui-style#v0.8.1');
+  assert.ok(read(path.join(root, '..', '..', 'pnpm-lock.yaml')).includes(pin), 'lockfile must resolve the pinned latest component commit');
+  assert.match(read(path.join(srcDir, 'main.tsx')), /@self\/ui-style\/react\/style\.css/);
+
+  const app = read(path.join(srcDir, 'App.tsx'));
+  assert.match(app, /<DesignSystemProvider[\s\S]*className="app-design-system"[\s\S]*locale=\{i18n\.resolvedLanguage \?\? i18n\.language\}[\s\S]*dotted/);
+  assert.match(app, /const appContent = authenticated \?/);
+  const layout = read(path.join(srcDir, 'app/AppLayout.tsx'));
+  assert.doesNotMatch(layout, /DesignSystemProvider/);
+  assert.match(layout, /designSystem=\{true\}/);
+  assert.match(layout, /compactShell=\{compactShellRoute\}/);
+  assert.match(layout, /title=\{qualityRoute \? t\('qualityLocation'\) : title\}/);
+  const main = read(path.join(srcDir, 'main.tsx'));
+  assert.ok(main.indexOf("@self/ui-style/react/style.css") < main.indexOf("'./index.css'"), 'package primitives load before app fallback and semantic rules');
+  assert.ok(main.indexOf("'./index.css'") < main.indexOf("'./design-system.css'"), 'semantic adapter loads after package and app CSS');
+  const header = read(path.join(srcDir, 'components/Header.tsx'));
+  assert.equal((header.match(/container=\{designSystem \? undefined : document\.body\}/g) ?? []).length, 1, 'only the shared language Select needs conditional portal targeting');
+  assert.match(header, /<PopoverContent className="ds-system-panel" align="end"/, 'shared system popover must inherit the provider portal');
+  const navigation = read(path.join(srcDir, 'components/Navigation.tsx'));
+  assert.match(navigation, /className=\{designSystem \? 'sidebar-nav ds-nav' : 'sidebar-nav'\}/, 'package navigation styling follows the global provider mode');
+  assert.match(navigation, /className="ds-sidebar-project-select"/);
+  assert.match(navigation, /className=\{designSystem \? 'ds-search ds-sidebar-search' : 'sidebar-search'\}/);
+  assert.match(navigation, /className=\{designSystem \? 'ds-palette-input' : 'navigation-palette-input'\}/);
+  assert.match(navigation, /container=\{designSystem \? undefined : document\.body\}/);
+  const qualityCss = read(path.join(srcDir, 'pages/QualityPage.css'));
+  assert.doesNotMatch(qualityCss, /data-surface="workbench"/, 'Quality keeps the official default raised component rules');
+  assert.doesNotMatch(qualityCss, /quality-(?:project-select|sidebar-collapse|nav-search|palette-input|system-panel)/, 'shared shell styles must not depend on the lazy Quality stylesheet');
+  const designSystemCss = read(path.join(srcDir, 'design-system.css'));
+  for (const selector of ['.app-design-system .app-sidebar {', '.app-design-system .sidebar-header {', '.app-design-system .sidebar-nav {', '.app-design-system .navigation-palette {']) {
+    assert.ok(designSystemCss.includes(selector), `shared shell selector ${selector} must load globally`);
+  }
+  const page = read(path.join(srcDir, 'pages/QualityPage.tsx'));
+  assert.doesNotMatch(page, /container=\{document\.body\}/, 'quality portals must inherit the provider scope');
+});
+
+test('quality uses native tabs, search, progress and status components', () => {
+  const page = read(path.join(srcDir, 'pages/QualityPage.tsx'));
+  for (const component of ['Tabs', 'TabsList', 'TabsTrigger', 'TabsContent', 'SearchInput', 'Progress', 'Badge']) {
+    assert.match(page, new RegExp(`<${component}\\b`));
+  }
+  assert.doesNotMatch(page, /className="quality-(?:posture|coverage)-progress"/);
+  assert.doesNotMatch(page, /status-pill|quality-tab-button|handleQualityTabKeyDown/);
+  const app = read(path.join(srcDir, 'App.tsx'));
+  assert.match(app, /<DesignSystemProvider[^>]*className="app-design-system"/);
+  const layout = read(path.join(srcDir, 'app/AppLayout.tsx'));
+  assert.doesNotMatch(layout, /return qualityRoute\s*\?\s*<DesignSystemProvider/);
 });
 
 test('typography uses the font tokens instead of ad-hoc stacks', () => {

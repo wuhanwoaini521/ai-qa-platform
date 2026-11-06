@@ -112,7 +112,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   type="button"
                   aria-label={t('common:close')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-                  onClick={onClose}
+                  onClick={onClose} className="ds-btn"
                 >
                   ✕
                 </button>
@@ -122,7 +122,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   <label className="form-label" htmlFor="test-case-project">{t('formProject')}</label>
                   <select
                     id="test-case-project"
-                    className="form-control"
+                    className="ds-select form-control"
                     disabled={workspaceMode}
                     value={formData.project_id}
                     onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
@@ -141,7 +141,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                     id="test-case-title"
                     type="text"
                     required
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('formCaseTitlePlaceholder')}
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -153,7 +153,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                     <label className="form-label" htmlFor="test-case-priority">{t('common:priority')}</label>
                     <select
                       id="test-case-priority"
-                      className="form-control"
+                      className="ds-select form-control"
                       value={formData.priority}
                       onChange={(e) =>
                         setFormData({ ...formData, priority: e.target.value as TestCasePriority })
@@ -170,7 +170,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                     <label className="form-label" htmlFor="test-case-automation-status">{t('formAutomationStatus')}</label>
                     <select
                       id="test-case-automation-status"
-                      className="form-control"
+                      className="ds-select form-control"
                       value={formData.automation_status}
                       onChange={(e) =>
                         setFormData({
@@ -191,7 +191,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   <input
                     id="test-case-preconditions"
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('formPreconditionsPlaceholder')}
                     value={formData.preconditions}
                     onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
@@ -203,7 +203,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   <textarea
                     id="test-case-steps"
                     rows={4}
-                    className="form-control"
+                    className="ds-textarea form-control"
                     placeholder={t('formStepsPlaceholder')}
                     value={stepsText}
                     onChange={(e) => setStepsText(e.target.value)}
@@ -215,7 +215,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   <textarea
                     id="test-case-expected-result"
                     rows={2}
-                    className="form-control"
+                    className="ds-textarea form-control"
                     placeholder={t('formExpectedResultPlaceholder')}
                     value={formData.expected_result}
                     onChange={(e) => setFormData({ ...formData, expected_result: e.target.value })}
@@ -227,7 +227,7 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
                   <input
                     id="test-case-tags"
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('formTagsPlaceholder')}
                     value={tagsText}
                     onChange={(e) => setTagsText(e.target.value)}
@@ -238,12 +238,12 @@ export const TestCaseFormModal: React.FC<TestCaseFormModalProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={onClose}
                 >
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary">
                   {t('formSave')}
                 </button>
               </div>

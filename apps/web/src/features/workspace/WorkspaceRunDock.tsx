@@ -120,7 +120,7 @@ export function WorkspaceRunDock({
       <button
         ref={triggerRef}
         type="button"
-        className={`workspace-run-launcher is-${status}`}
+        className={`ds-btn workspace-run-launcher is-${status}`}
         aria-label={`${t('dock.openControls')} · ${t(`dock.status.${status}`)}${caseLabel ? ` · ${caseLabel}` : ''}`}
         aria-expanded={dockOpen}
         onClick={() => {
@@ -163,7 +163,7 @@ export function WorkspaceRunDock({
                 <small>{caseLabel || t('dock.noCase')}</small>
               </div>
             </div>
-            <button type="button" className="btn btn-icon btn-sm" aria-label={t('dock.closeControls')} onClick={() => { setDockOpen(false); triggerRef.current?.focus(); }}><X size={15} aria-hidden="true" /></button>
+            <button type="button" className="ds-btn-icon ds-btn-sm ds-btn btn btn-icon btn-sm" aria-label={t('dock.closeControls')} onClick={() => { setDockOpen(false); triggerRef.current?.focus(); }}><X size={15} aria-hidden="true" /></button>
           </header>
 
           <div className="workspace-run-dock-context">
@@ -205,48 +205,48 @@ export function WorkspaceRunDock({
           <div className="workspace-run-dock-actions">
             {!active && !failed && (
               <>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfigOpen((open) => !open)} aria-expanded={configOpen}>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setConfigOpen((open) => !open)} aria-expanded={configOpen}>
                   {t('dock.config')} <ChevronDown size={13} aria-hidden="true" />
                 </button>
-                <button type="button" className="btn btn-secondary btn-sm workspace-ai-run-button" onClick={() => { setDockOpen(false); onAiRun(); }} disabled={busy}>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm workspace-ai-run-button" onClick={() => { setDockOpen(false); onAiRun(); }} disabled={busy}>
                   <Sparkles size={14} aria-hidden="true" /> {aiRunLabel ?? t('dock.aiRun')}
                 </button>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onRun(); }} disabled={!hasAutomation || busy}>
+                <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onRun(); }} disabled={!hasAutomation || busy}>
                   <Play size={14} aria-hidden="true" /> {busy ? t('dock.starting') : t('dock.run')}
                 </button>
               </>
             )}
             {active && (
               <>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.open')}</button>
-                <button type="button" className="btn btn-danger btn-sm" onClick={() => { setDockOpen(false); onStop(); }}><Square size={13} aria-hidden="true" /> {t('dock.stop')}</button>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.open')}</button>
+                <button type="button" className="ds-btn-danger ds-btn ds-btn-sm btn btn-danger btn-sm" onClick={() => { setDockOpen(false); onStop(); }}><Square size={13} aria-hidden="true" /> {t('dock.stop')}</button>
               </>
             )}
             {failed && run && (
               <>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onViewFailure(); }}><Sparkles size={14} aria-hidden="true" /> {t('dock.viewFailure')}</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onDebug(); }}><Bug size={14} aria-hidden="true" /> {t('dock.debug')}</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onRerun(); }}><RotateCcw size={13} aria-hidden="true" /> {t('dock.rerun')}</button>
+                <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onViewFailure(); }}><Sparkles size={14} aria-hidden="true" /> {t('dock.viewFailure')}</button>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onDebug(); }}><Bug size={14} aria-hidden="true" /> {t('dock.debug')}</button>
+                <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onRerun(); }}><RotateCcw size={13} aria-hidden="true" /> {t('dock.rerun')}</button>
               </>
             )}
-            {taskTerminal && !run && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.viewTask')}</button>}
-            {passed && run && <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onViewResult(); }}>{t('dock.viewResult')}</button>}
+            {taskTerminal && !run && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpen(); }}>{t('dock.viewTask')}</button>}
+            {passed && run && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={() => { setDockOpen(false); onViewResult(); }}>{t('dock.viewResult')}</button>}
             {!hasAutomation && !active && !failed && (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpenCode(); }}><Workflow size={13} aria-hidden="true" /> {t('dock.addAutomation')}</button>
+              <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setDockOpen(false); onOpenCode(); }}><Workflow size={13} aria-hidden="true" /> {t('dock.addAutomation')}</button>
             )}
           </div>
 
           {configOpen && !active && (
             <div className="workspace-run-config" role="group" aria-label={t('dock.config')}>
               <label>{t('dock.environment')}
-                <select value={config.environment} onChange={(event) => update({ environment: event.target.value })}>
+                <select value={config.environment} onChange={(event) => update({ environment: event.target.value })} className="ds-select">
                   <option value="development">Development</option>
                   <option value="staging">Staging</option>
                   <option value="production">Production</option>
                 </select>
               </label>
               <label>{t('dock.region')}
-                <select value={config.region} onChange={(event) => update({ region: event.target.value })}>
+                <select value={config.region} onChange={(event) => update({ region: event.target.value })} className="ds-select">
                   <option value="JP">JP</option>
                   <option value="US">US</option>
                   <option value="EU">EU</option>
@@ -254,14 +254,14 @@ export function WorkspaceRunDock({
                 </select>
               </label>
               <label>{t('dock.browser')}
-                <select value={config.browser} onChange={(event) => update({ browser: event.target.value })}>
+                <select value={config.browser} onChange={(event) => update({ browser: event.target.value })} className="ds-select">
                   <option value="chromium">Chrome</option>
                   <option value="firefox">Firefox</option>
                   <option value="webkit">WebKit</option>
                 </select>
               </label>
               <label>{t('dock.workersLabel')}
-                <select value={config.workers} onChange={(event) => update({ workers: Number(event.target.value) })}>
+                <select value={config.workers} onChange={(event) => update({ workers: Number(event.target.value) })} className="ds-select">
                   {[1, 2, 4, 8].map((count) => <option key={count} value={count}>{count}</option>)}
                 </select>
               </label>

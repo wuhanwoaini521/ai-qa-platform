@@ -28,7 +28,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({
           <button
             type="button"
             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            onClick={onClose}
+            onClick={onClose} className="ds-btn"
           >
             ✕
           </button>
@@ -42,7 +42,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({
             <input
               autoFocus
               type="text"
-              className="form-control"
+              className="ds-input form-control"
               value={branchName}
               onChange={(e) => onBranchNameChange(e.target.value)}
               onKeyDown={(e) => {
@@ -56,11 +56,11 @@ export const BranchModal: React.FC<BranchModalProps> = ({
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
             {t('common:cancel')}
           </button>
           <button
-            className="btn btn-primary btn-sm"
+            className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
             disabled={!branchName.trim()}
             onClick={onConfirm}
           >

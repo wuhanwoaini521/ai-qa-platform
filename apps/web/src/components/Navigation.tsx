@@ -33,6 +33,7 @@ import {
 } from '../app/workspaceContext';
 import { clearProjectBoundContext, rewriteProjectScope, withProjectId } from '../app/projectPaths';
 import { Tooltip } from './Tooltip';
+import { Button, IconButton, Kbd, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@self/ui-style/react';
 
 export type NavTab =
   | 'dashboard'
@@ -81,7 +82,7 @@ const ICON_STROKE = 1.6;
 const SIDEBAR_COLLAPSED_KEY = 'ai-qa.sidebar-collapsed';
 
 /** Project context and searchable destinations in an expandable navigation rail. */
-export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = ({ compact = false, graphite = false }) => {
+export const Navigation: React.FC<{ compact?: boolean; compactShell?: boolean; designSystem?: boolean }> = ({ compact = false, compactShell = false, designSystem = false }) => {
   const { t } = useTranslation('nav');
   const { t: workspaceT } = useTranslation('workspace');
   const navigate = useNavigate();
@@ -229,6 +230,12 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     return { primary: filter([...navItems, settingsItem]), platform: filter(platformItems), workspace };
   }, [query, t, navItems, settingsItem, platformItems, quickDestinations]);
 
+  const IconAction = designSystem ? IconButton : 'button';
+  const Action = designSystem ? Button : 'button';
+  const SearchControl = designSystem ? SearchInput : 'input';
+  const Key = designSystem ? Kbd : 'kbd';
+  const navClassName = ({ isActive }: { isActive: boolean }) => designSystem ? 'ds-nav-item' : `nav-item ${isActive ? 'active' : ''}`;
+
   const renderItem = (item: NavItem) => {
     const Icon = item.icon;
     const label = t(item.labelKey);
@@ -240,7 +247,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
           end={item.end}
           aria-label={label}
           onClick={() => { setQuery(''); setSearchOpen(false); }}
-          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+          className={navClassName}
         >
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
           <span className="nav-item-label">{label}</span>
@@ -254,7 +261,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
     const Icon = item.icon;
     return (
       <Tooltip key={item.id} label={item.label} enabled={isCollapsed}>
-        <NavLink to={item.to} aria-label={item.label} onClick={() => { setQuery(''); setSearchOpen(false); }} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+        <NavLink to={item.to} aria-label={item.label} onClick={() => { setQuery(''); setSearchOpen(false); }} className={navClassName}>
           <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
           <span>{item.label}</span>
         </NavLink>
@@ -263,16 +270,24 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
   };
 
   return (
-    <aside className={`app-sidebar${isCollapsed ? ' is-collapsed' : ''}${compact ? ' is-workspace-compact' : ''}${graphite ? ' is-graphite-rail' : ''}`}>
+    <aside className={`app-sidebar${isCollapsed ? ' is-collapsed' : ''}${compact ? ' is-workspace-compact' : ''}${compactShell ? ' is-compact-rail' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo-icon" title={t('common:appName')} aria-hidden="true">
+        <div className={designSystem ? 'ds-avatar' : 'sidebar-logo-icon'} title={t('common:appName')} aria-hidden="true">
           QA
         </div>
         {projects.length > 0 && (
           <div className="sidebar-project-context" title={projectDisplayNames.get(selectedProjectId ?? '') ?? t('common:allProjects')}>
             <FolderGit2 className="sidebar-project-icon" size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
-            <select
-              className="sidebar-project-select"
+            {designSystem ? <Select value={selectedProjectId || 'all'} onValueChange={(value) => handleProjectChange(value === 'all' ? '' : value)}>
+              <SelectTrigger className="ds-sidebar-project-select" aria-label={t('common:project')}>
+                <SelectValue>{projectDisplayNames.get(selectedProjectId ?? '') ?? t('common:allProjects')}</SelectValue>
+              </SelectTrigger>
+              <SelectContent position="popper" container={designSystem ? undefined : document.body}>
+                {!projectScopedRoute && <SelectItem className="ds-menu-item" value="all">{t('common:allProjects')}</SelectItem>}
+                {projects.map((project) => <SelectItem className="ds-menu-item" key={project.id} value={project.id}>{projectDisplayNames.get(project.id) ?? project.name}</SelectItem>)}
+              </SelectContent>
+            </Select> : <select
+              className="ds-select sidebar-project-select"
               value={selectedProjectId || ''}
               aria-label={t('common:project')}
               onChange={(event) => handleProjectChange(event.target.value)}
@@ -281,12 +296,12 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{projectDisplayNames.get(project.id) ?? project.name}</option>
               ))}
-            </select>
+            </select>}
           </div>
         )}
-        <button
+        <IconAction
           type="button"
-          className="sidebar-collapse-toggle"
+          className={designSystem ? 'ds-sidebar-collapse' : 'sidebar-collapse-toggle'}
           aria-label={t(collapsed ? 'expandSidebar' : 'collapseSidebar')}
           aria-expanded={!collapsed}
           aria-controls="primary-sidebar-navigation"
@@ -294,16 +309,16 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
           onClick={() => setCollapsed((value) => !value)}
         >
           {collapsed ? <PanelLeftOpen size={17} strokeWidth={ICON_STROKE} aria-hidden="true" /> : <PanelLeftClose size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />}
-        </button>
+        </IconAction>
       </div>
 
-      <button className="sidebar-mobile-search" type="button" aria-label={t('common:search')} title={t('common:search')} onClick={() => setSearchOpen(true)}>
+      <button className="ds-btn sidebar-mobile-search" type="button" aria-label={t('common:search')} title={t('common:search')} onClick={() => setSearchOpen(true)}>
         <Search size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
       </button>
 
-      <div className="sidebar-search">
-        <Search size={15} strokeWidth={ICON_STROKE} />
-        <input
+      <div className={designSystem ? 'ds-search ds-sidebar-search' : 'sidebar-search'}>
+        {!designSystem && <Search size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />}
+        <SearchControl
           ref={searchInputRef}
           type="search"
           value={query}
@@ -323,12 +338,13 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
             }
           }}
         />
-        {!query && <kbd>{/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘ K' : 'Ctrl K'}</kbd>}
+        {designSystem && <Search className="ds-ico" size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />}
+        {!query && <Key>{/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘ K' : 'Ctrl K'}</Key>}
       </div>
 
       <div className="sidebar-divider" />
 
-      <nav className="sidebar-nav" id="primary-sidebar-navigation" aria-label={t('primaryNavigation')}>
+      <nav className={designSystem ? 'sidebar-nav ds-nav' : 'sidebar-nav'} id="primary-sidebar-navigation" aria-label={t('primaryNavigation')}>
         {matches ? (
           <>
             {matches.primary.map(renderItem)}
@@ -364,9 +380,9 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
                 : 'English'}
             </span>
           </span>
-          <button
+          <Action
             type="button"
-            className="sidebar-lang-toggle"
+            className={designSystem ? undefined : 'sidebar-lang-toggle'}
             aria-label={`${languageToggleLabel} ${t('common:language')}`}
             title={t('common:language')}
             onClick={() => {
@@ -376,7 +392,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
             }}
           >
             {languageToggleLabel}
-          </button>
+          </Action>
         </div>
       </div>
 
@@ -404,9 +420,9 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
             }
           }}
         >
-          <div className="navigation-palette-input">
-            <Search size={17} aria-hidden="true" />
-            <input
+          <div className={designSystem ? 'ds-palette-input' : 'navigation-palette-input'}>
+            {!designSystem && <Search size={17} aria-hidden="true" />}
+            <SearchControl
               ref={paletteInputRef}
               type="search"
               value={query}
@@ -420,7 +436,7 @@ export const Navigation: React.FC<{ compact?: boolean; graphite?: boolean }> = (
                 if (destination) navigateTo(destination);
               }}
             />
-            <kbd>Esc</kbd>
+            <Key>Esc</Key>
           </div>
           <nav className="navigation-palette-results" aria-label={workspaceT('quick.destinations')}>
             {matches ? <>

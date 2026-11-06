@@ -89,7 +89,7 @@ export function RuntimeArtifactActions({
         <>
           <button
             disabled={loading}
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={() => void fetchArtifact(true)}
           >
             {t('download')}
@@ -97,7 +97,7 @@ export function RuntimeArtifactActions({
           {kind && kind !== 'trace' && (
             <button
               disabled={loading || (artifact.size_bytes ?? 0) > 5 * 1024 * 1024}
-              className="btn btn-secondary btn-sm"
+              className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
               onClick={() =>
                 preview ? setOpen((value) => !value) : void fetchArtifact(false)
               }
@@ -110,7 +110,7 @@ export function RuntimeArtifactActions({
       {kind === 'trace' && (
         <>
           <a
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             href="https://trace.playwright.dev/"
             target="_blank"
             rel="noopener noreferrer"
@@ -122,7 +122,7 @@ export function RuntimeArtifactActions({
       )}
       {external && (
         <a
-          className="btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
           href={external}
           target="_blank"
           rel="noopener noreferrer"
@@ -135,14 +135,14 @@ export function RuntimeArtifactActions({
       {open && preview && (
         <div className="rt-artifact-preview">
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={() => setOpen(false)}
           >
             {t('closePreview')}
           </button>
           {kind === 'image' ? (
             <>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setZoomOpen(true)}>{t('zoomPreview')}</button>
+              <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setZoomOpen(true)}>{t('zoomPreview')}</button>
               <img src={preview.url} alt={artifact.name} onClick={() => setZoomOpen(true)} />
             </>
           ) : kind === 'report' ? (
@@ -160,7 +160,7 @@ export function RuntimeArtifactActions({
       {zoomOpen && preview && kind === 'image' && (
         <div className="rt-artifact-zoom-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setZoomOpen(false); }}>
           <section role="dialog" aria-modal="true" aria-label={artifact.name}>
-            <button type="button" className="btn btn-secondary btn-sm" autoFocus onClick={() => setZoomOpen(false)}>{t('closePreview')}</button>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" autoFocus onClick={() => setZoomOpen(false)}>{t('closePreview')}</button>
             <img src={preview.url} alt={artifact.name} />
           </section>
         </div>

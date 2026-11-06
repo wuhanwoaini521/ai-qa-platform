@@ -220,7 +220,7 @@ export const FailureOverview: React.FC<{
       : t('notStarted');
 
   return (
-    <section className="card failure-overview" aria-labelledby="failure-overview-heading">
+    <section className="ds-card card failure-overview" aria-labelledby="failure-overview-heading">
       <div className="card-header failure-overview-heading">
         <div className="failure-overview-title">
           <AlertTriangle size={17} aria-hidden="true" />
@@ -276,7 +276,7 @@ export const FailureOverview: React.FC<{
             </div>
             {workflowLoadError && <div className="failure-manual-next-step" role="status">
               <p>{t('workflow.statusUnavailableDetail')}</p>
-              {onRetryWorkflowLoad && <button type="button" className="btn btn-secondary btn-sm" onClick={onRetryWorkflowLoad}>{t('workflow.retryStatus')}</button>}
+              {onRetryWorkflowLoad && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onRetryWorkflowLoad}>{t('workflow.retryStatus')}</button>}
             </div>}
             {showPrimaryAction && (
               <>
@@ -290,7 +290,7 @@ export const FailureOverview: React.FC<{
                   <>
                     <button
                       type="button"
-                      className="btn btn-primary failure-primary-action"
+                      className="ds-btn-primary ds-btn btn btn-primary failure-primary-action"
                       onClick={onPrimaryAction}
                       disabled={primaryDisabled}
                     >
@@ -306,7 +306,7 @@ export const FailureOverview: React.FC<{
             {showReanalysis && (
               <button
                 type="button"
-                className="btn btn-secondary failure-reanalyze-action"
+                className="ds-btn btn btn-secondary failure-reanalyze-action"
                 onClick={onReanalysis}
                 disabled={reanalysisPending}
               >
@@ -371,8 +371,8 @@ export const FailureOverview: React.FC<{
             <details>
               <summary>{t('developerActions')}</summary>
               <div className="failure-secondary-buttons">
-                {onOpenStudio && <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openInStudio')}</button>}
-                {onDebug && <button type="button" className="btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
+                {onOpenStudio && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openInStudio')}</button>}
+                {onDebug && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
               </div>
             </details>
           )}
@@ -381,11 +381,11 @@ export const FailureOverview: React.FC<{
               <summary>{t('externalActions')}</summary>
               <div className="failure-secondary-buttons">
                 {canRetry && primaryAction !== 'RETRY' && primaryAction !== 'VERIFY_FIX' && (
-                  <button type="button" className="btn btn-secondary btn-sm" disabled={rerunning} onClick={onRetry}><Play size={14} />{rerunning ? t('rerunning') : t('rerun')}</button>
+                  <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={rerunning} onClick={onRetry}><Play size={14} />{rerunning ? t('rerunning') : t('rerun')}</button>
                 )}
                 {canCreateJiraDraft && (
                   primaryAction !== 'CREATE_ISSUE_DRAFT' &&
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={onCreateJiraDraft}><ExternalLink size={14} />{t('createJiraDraft')}</button>
+                  <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onCreateJiraDraft}><ExternalLink size={14} />{t('createJiraDraft')}</button>
                 )}
               </div>
             </details>

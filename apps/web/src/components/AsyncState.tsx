@@ -37,7 +37,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({ title, message, onRetry 
       <div className="async-state-title">{title ?? t('errorTitle')}</div>
       <div className="async-state-message">{message}</div>
       {onRetry && (
-        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+        <button type="button" className="ds-btn btn btn-secondary" onClick={onRetry}>
           {t('retry')}
         </button>
       )}
@@ -67,7 +67,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {title && <div className="async-state-title">{title}</div>}
     <div className="async-state-message">{title ? (description ?? message) : message}</div>
     {actionLabel && onAction && (
-      <button type="button" className="btn btn-secondary" onClick={onAction}>
+      <button type="button" className="ds-btn btn btn-secondary" onClick={onAction}>
         {actionLabel}
       </button>
     )}

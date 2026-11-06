@@ -110,7 +110,7 @@ export function DiscoveryLiveView({
                   <button
                     type="button"
                     key={box.key}
-                    className={`qd-live-box is-${box.tone}${box.index === selected ? ' is-selected' : ''}`}
+                    className={`ds-btn qd-live-box is-${box.tone}${box.index === selected ? ' is-selected' : ''}`}
                     style={{ left: `${box.left}%`, top: `${box.top}%`, width: `${box.width}%`, height: `${box.height}%` }}
                     onClick={() => setSelected(box.index)}
                     title={box.label}
@@ -179,7 +179,7 @@ export function DiscoveryLiveView({
                   <li key={String(element.index)}>
                     <button
                       type="button"
-                      className={element.index === selected ? 'is-selected' : undefined}
+                      className={["ds-btn", (element.index === selected ? 'is-selected' : undefined)].filter(Boolean).join(' ')}
                       onClick={() => setSelected(element.index ?? null)}
                     >
                       <span>{element.role || element.tag || '—'}</span>
@@ -210,7 +210,7 @@ export function DiscoveryLiveView({
             <span className="qd-live-event-type">{event.type}</span>
             <span className="qd-live-event-message">{event.message || ''}</span>
             {onOpenEvidence && evidenceId(event) && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpenEvidence(evidenceId(event)!)}>
+              <button type="button" className="ds-btn-ghost ds-btn-sm ds-btn btn btn-ghost btn-sm" onClick={() => onOpenEvidence(evidenceId(event)!)}>
                 {t('openEvidence')}
               </button>
             )}

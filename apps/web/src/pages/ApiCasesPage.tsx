@@ -257,11 +257,11 @@ export const ApiCasesPage: React.FC = () => {
           <p className="subtitle">{t('subtitle')}</p>
         </div>
         <nav className="flow-page-actions" aria-label={t('actions')}>
-          <button className="btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !code || !selectedProjectId}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={save} disabled={saving || !code || !selectedProjectId}>
             <Save size={14} aria-hidden="true" />
             {saving ? t('saving') : t('save')}
           </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={run} disabled={running || !code || !selectedProjectId}>
+          <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" type="button" onClick={run} disabled={running || !code || !selectedProjectId}>
             <Play size={14} aria-hidden="true" />
             {running ? t('starting') : t('run')}
           </button>
@@ -280,12 +280,12 @@ export const ApiCasesPage: React.FC = () => {
       )}
 
       <div className="api-case-layout">
-        <section className="card api-case-request">
+        <section className="ds-card card api-case-request">
           <h3>{t('request')}</h3>
           <label className="flow-editor-field">
             <span>{t('testName')}</span>
             <input
-              className="form-input"
+              className="ds-input form-input"
               value={draft.test_name}
               onChange={(event) => patch({ test_name: event.target.value.replace(/[^A-Za-z0-9_]/g, '_') })}
             />
@@ -293,7 +293,7 @@ export const ApiCasesPage: React.FC = () => {
           <div className="api-case-bind-row">
             <label className="flow-editor-field">
               <span>{t('requirement')}</span>
-              <select className="form-select" value={requirementId} onChange={(event) => setRequirementId(event.target.value)}>
+              <select className="ds-select form-select" value={requirementId} onChange={(event) => setRequirementId(event.target.value)}>
                 <option value="">{t('noRequirement')}</option>
                 {requirements.map((item) => (
                   <option key={item.id} value={item.id}>{item.title}</option>
@@ -325,7 +325,7 @@ export const ApiCasesPage: React.FC = () => {
           <div className="api-case-variables">
             <div className="api-case-variables-head">
               <span>{t('variables')}</span>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setVariables((current) => [...current, newVariable()])}>
+              <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setVariables((current) => [...current, newVariable()])}>
                 <Plus size={12} aria-hidden="true" />
                 {t('addVariable')}
               </button>
@@ -333,18 +333,18 @@ export const ApiCasesPage: React.FC = () => {
             {variables.map((variable) => (
               <div key={variable.id} className="api-case-row">
                 <input
-                  className="form-input"
+                  className="ds-input form-input"
                   placeholder="BASE_URL"
                   value={variable.name}
                   onChange={(event) => setVariables((current) => current.map((item) => (item.id === variable.id ? { ...item, name: event.target.value } : item)))}
                 />
                 <input
-                  className="form-input"
+                  className="ds-input form-input"
                   placeholder="http://127.0.0.1:8099"
                   value={variable.value}
                   onChange={(event) => setVariables((current) => current.map((item) => (item.id === variable.id ? { ...item, value: event.target.value } : item)))}
                 />
-                <button type="button" className="icon-btn" aria-label={t('remove')} onClick={() => setVariables((current) => current.filter((item) => item.id !== variable.id))}>
+                <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('remove')} onClick={() => setVariables((current) => current.filter((item) => item.id !== variable.id))}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               </div>
@@ -354,13 +354,13 @@ export const ApiCasesPage: React.FC = () => {
             )}
           </div>
           <div className="api-case-url-row">
-            <select className="form-select" value={draft.method} onChange={(event) => patch({ method: event.target.value as ApiCaseDraft['method'] })}>
+            <select className="ds-select form-select" value={draft.method} onChange={(event) => patch({ method: event.target.value as ApiCaseDraft['method'] })}>
               {METHODS.map((method) => (
                 <option key={method} value={method}>{method}</option>
               ))}
             </select>
             <input
-              className="form-input"
+              className="ds-input form-input"
               placeholder="/api/health or https://host/api/..."
               value={draft.url}
               onChange={(event) => {
@@ -379,15 +379,15 @@ export const ApiCasesPage: React.FC = () => {
           <div className="api-case-rows">
             {draft.headers.map((header) => (
               <div key={header.id} className="api-case-row">
-                <input className="form-input" placeholder="name" value={header.name} onChange={(event) => patchHeader(header.id, { name: event.target.value })} />
-                <input className="form-input" placeholder="value" value={header.value} onChange={(event) => patchHeader(header.id, { value: event.target.value })} />
-                <button type="button" className="icon-btn" aria-label={t('remove')} onClick={() => patch({ headers: draft.headers.filter((row) => row.id !== header.id) })}>
+                <input className="ds-input form-input" placeholder="name" value={header.name} onChange={(event) => patchHeader(header.id, { name: event.target.value })} />
+                <input className="ds-input form-input" placeholder="value" value={header.value} onChange={(event) => patchHeader(header.id, { value: event.target.value })} />
+                <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('remove')} onClick={() => patch({ headers: draft.headers.filter((row) => row.id !== header.id) })}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               </div>
             ))}
           </div>
-          <button className="btn btn-secondary btn-sm" type="button" onClick={() => patch({ headers: [...draft.headers, newHeader()] })}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={() => patch({ headers: [...draft.headers, newHeader()] })}>
             <Plus size={13} aria-hidden="true" />
             {t('addHeader')}
           </button>
@@ -398,7 +398,7 @@ export const ApiCasesPage: React.FC = () => {
             {t('jsonBody')}
           </label>
           <textarea
-            className="form-input api-case-body"
+            className="ds-textarea form-input api-case-body"
             rows={5}
             placeholder={draft.useJsonBody ? '{"sku": "tee", "qty": 2}' : t('bodyPlaceholder')}
             value={draft.body}
@@ -409,18 +409,18 @@ export const ApiCasesPage: React.FC = () => {
           <div className="api-case-rows">
             {draft.assertions.map((assertion) => (
               <div key={assertion.id} className="api-case-row">
-                <select className="form-select" value={assertion.kind} onChange={(event) => patchAssertion(assertion.id, { kind: event.target.value as ApiAssertion['kind'] })}>
+                <select className="ds-select form-select" value={assertion.kind} onChange={(event) => patchAssertion(assertion.id, { kind: event.target.value as ApiAssertion['kind'] })}>
                   <option value="status">{t('assertStatus')}</option>
                   <option value="json_path">{t('assertJsonPath')}</option>
                   <option value="body_contains">{t('assertBody')}</option>
                   <option value="json_contract">{t('assertContract')}</option>
                 </select>
                 {assertion.kind === 'json_path' && (
-                  <input className="form-input" placeholder="data.items[0].id" value={assertion.path} onChange={(event) => patchAssertion(assertion.id, { path: event.target.value })} />
+                  <input className="ds-input form-input" placeholder="data.items[0].id" value={assertion.path} onChange={(event) => patchAssertion(assertion.id, { path: event.target.value })} />
                 )}
                 {assertion.kind === 'json_contract' ? (
                   <textarea
-                    className="form-input api-case-contract"
+                    className="ds-textarea form-input api-case-contract"
                     rows={3}
                     title={t('contractHint')}
                     value={assertion.expected}
@@ -428,25 +428,25 @@ export const ApiCasesPage: React.FC = () => {
                   />
                 ) : (
                   <input
-                    className="form-input"
+                    className="ds-input form-input"
                     placeholder={assertion.kind === 'status' ? '200' : t('expected')}
                     value={assertion.expected}
                     onChange={(event) => patchAssertion(assertion.id, { expected: event.target.value })}
                   />
                 )}
-                <button type="button" className="icon-btn" aria-label={t('remove')} onClick={() => patch({ assertions: draft.assertions.filter((row) => row.id !== assertion.id) })}>
+                <button type="button" className="ds-btn-icon ds-btn icon-btn" aria-label={t('remove')} onClick={() => patch({ assertions: draft.assertions.filter((row) => row.id !== assertion.id) })}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               </div>
             ))}
           </div>
-          <button className="btn btn-secondary btn-sm" type="button" onClick={() => patch({ assertions: [...draft.assertions, newAssertion('status')] })}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={() => patch({ assertions: [...draft.assertions, newAssertion('status')] })}>
             <Plus size={13} aria-hidden="true" />
             {t('addAssertion')}
           </button>
         </section>
 
-        <section className="card api-case-preview">
+        <section className="ds-card card api-case-preview">
           <header className="flow-editor-preview-head">
             <h3>{t('preview')}</h3>
             <span className="flow-canvas-chip">{filePath}</span>
@@ -467,17 +467,17 @@ export const ApiCasesPage: React.FC = () => {
         </section>
       </div>
 
-      <section className="card api-case-import">
+      <section className="ds-card card api-case-import">
         <h3>{t('fromRecording')}</h3>
         <p className="flow-editor-hint">{t('fromRecordingHint')}</p>
         <div className="api-case-row">
           <input
-            className="form-input"
+            className="ds-input form-input"
             placeholder={t('sessionId')}
             value={sessionId}
             onChange={(event) => setSessionId(event.target.value)}
           />
-          <button className="btn btn-secondary btn-sm" type="button" onClick={importCalls} disabled={!sessionId.trim()}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={importCalls} disabled={!sessionId.trim()}>
             <Download size={13} aria-hidden="true" />
             {t('loadCalls')}
           </button>
@@ -485,18 +485,18 @@ export const ApiCasesPage: React.FC = () => {
         {importError && <p className="flow-editor-error">{importError}</p>}
         <div className="api-case-curl">
           <textarea
-            className="form-input api-case-body"
+            className="ds-textarea form-input api-case-body"
             rows={3}
             placeholder={t('curlPlaceholder')}
             value={curlText}
             onChange={(event) => setCurlText(event.target.value)}
           />
-          <button type="button" className="btn btn-secondary btn-sm" onClick={importCurl} disabled={!curlText.trim()}>
+          <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={importCurl} disabled={!curlText.trim()}>
             {t('curlImport')}
           </button>
         </div>
         <div className="api-case-file-row">
-          <label className="btn btn-secondary btn-sm">
+          <label className="ds-btn ds-btn-sm btn btn-secondary btn-sm">
             {t('importHar')}
             <input
               type="file"
@@ -505,7 +505,7 @@ export const ApiCasesPage: React.FC = () => {
               onChange={(event) => void readFile(event.target.files?.[0], 'har')}
             />
           </label>
-          <label className="btn btn-secondary btn-sm">
+          <label className="ds-btn ds-btn-sm btn btn-secondary btn-sm">
             {t('importOpenapi')}
             <input
               type="file"
@@ -522,7 +522,7 @@ export const ApiCasesPage: React.FC = () => {
                 <span className={`api-case-method is-${operation.method.toLowerCase()}`}>{operation.method}</span>
                 <code title={operation.summary}>{operation.path}</code>
                 <span className="flow-canvas-chip">{operation.expectedStatus}</span>
-                <button className="btn btn-secondary btn-sm" type="button" onClick={() => applyOperation(operation)}>
+                <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={() => applyOperation(operation)}>
                   {t('useOperation')}
                 </button>
               </li>
@@ -536,7 +536,7 @@ export const ApiCasesPage: React.FC = () => {
                 <span className={`api-case-method is-${call.method.toLowerCase()}`}>{call.method}</span>
                 <code>{call.url}</code>
                 <span className="flow-canvas-chip">{call.status ?? '-'}</span>
-                <button className="btn btn-secondary btn-sm" type="button" onClick={() => setDraft(fromRecorderCall(call))}>
+                <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" type="button" onClick={() => setDraft(fromRecorderCall(call))}>
                   {t('useCall')}
                 </button>
               </li>

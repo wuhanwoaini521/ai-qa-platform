@@ -25,14 +25,14 @@ export function StudioRunPanel({ runId, projectId, context, onStep, onClose }: {
   });
   const toolbar = <div className="lc-toolbar lc-studio-run-toolbar">
     {runId && <>
-      <Link className="btn btn-secondary btn-sm" to={workflowHref}>Open Workflow</Link>
+      <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={workflowHref}>Open Workflow</Link>
       {live.run && ['RUNNING', 'QUEUED'].includes(live.run.status) && <button
-        className="btn btn-secondary btn-sm"
+        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
         onClick={() => void api.cancelTestRun(runId).catch((reason) => setError(String(reason)))}
       >取消运行</button>}
     </>}
     <button
-      className="btn btn-secondary btn-sm lc-studio-run-close"
+      className="ds-btn ds-btn-sm btn btn-secondary btn-sm lc-studio-run-close"
       onClick={onClose}
       aria-label={t('closeRunDrawer')}
       title={t('closeRunDrawer')}

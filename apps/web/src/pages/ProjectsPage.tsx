@@ -127,8 +127,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
           <p>{t('subtitle')}</p>
         </div>
         <div className="projects-page-actions">
-          <Link className="btn btn-secondary" to="/library">{t('assetIndex')}</Link>
-          <button className="btn btn-ghost" disabled={demoBusy} onClick={async () => {
+          <Link className="ds-btn btn btn-secondary" to="/library">{t('assetIndex')}</Link>
+          <button className="ds-btn-ghost ds-btn btn btn-ghost" disabled={demoBusy} onClick={async () => {
             setDemoBusy(true);
             setDemoError('');
             try {
@@ -142,35 +142,35 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               setDemoBusy(false);
             }
           }}>{demoBusy ? lc('loading') : lc('openGoldenDemo')}</button>
-          <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
+          <button ref={createProjectTriggerRef} className="ds-btn-primary ds-btn btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
             <Plus size={16} /> {t('createProject')}
           </button>
         </div>
       </header>
       {demoError && <p role="alert" className="lc-notice lc-error">{demoError}</p>}
       {error && projects.length > 0 && <div className="async-state async-state-warning projects-load-warning" role="status">
-        <span>{t('projectLoadFailed')}</span><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={onRefresh}>{t('common:refresh')}</button>
+        <span>{t('projectLoadFailed')}</span><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={loading} onClick={onRefresh}>{t('common:refresh')}</button>
       </div>}
 
-      {!loading && currentProject && <section className="card project-current-workspace" aria-labelledby="current-project-workspace-title">
+      {!loading && currentProject && <section className="ds-card card project-current-workspace" aria-labelledby="current-project-workspace-title">
         <div className="project-current-copy">
           <span>{t('currentProject')}</span>
           <h3 id="current-project-workspace-title">{projectDisplayNames.get(currentProject.id) ?? currentProject.name}</h3>
           <p>{currentProject.repository_url || t('localWorkspace')} · {currentProject.framework_type} · {t('columnBranch')}: <code>{currentProject.default_branch}</code></p>
         </div>
         <div className="project-current-actions">
-          <Link className="btn btn-secondary" to={`/projects/${encodeURIComponent(currentProject.id)}/management`} onClick={() => onSelectProject(currentProject.id)}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</Link>
-          <button type="button" className="btn btn-primary" onClick={() => { onSelectProject(currentProject.id); onNavigate('workspace', currentProject.id); }}><Code2 size={14} aria-hidden="true" />{t('openWorkspace')}</button>
+          <Link className="ds-btn btn btn-secondary" to={`/projects/${encodeURIComponent(currentProject.id)}/management`} onClick={() => onSelectProject(currentProject.id)}><FileText size={14} aria-hidden="true" />{t('viewRequirements')}</Link>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => { onSelectProject(currentProject.id); onNavigate('workspace', currentProject.id); }}><Code2 size={14} aria-hidden="true" />{t('openWorkspace')}</button>
         </div>
       </section>}
 
-      <section className="card project-registry" aria-label={t('titles:projects')}>
+      <section className="ds-card card project-registry" aria-label={t('titles:projects')}>
         <div className="project-registry-heading">
           <strong>{t('projectCount', { count: projects.length })}</strong>
           {projects.length > 1 && <label className="project-search">
             <Search size={14} aria-hidden="true" />
             <span className="project-search-visually-hidden">{t('searchProjects')}</span>
-            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('searchProjects')} />
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('searchProjects')} className="ds-input" />
           </label>}
           <span>{t('registryHint')}</span>
         </div>
@@ -181,7 +181,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             <div className="projects-empty-state" role="alert">
               <FolderGit2 size={32} aria-hidden="true" />
               <strong>{t('projectLoadFailed')}</strong>
-              <button type="button" className="btn btn-secondary" onClick={onRefresh}>{t('common:refresh')}</button>
+              <button type="button" className="ds-btn btn btn-secondary" onClick={onRefresh}>{t('common:refresh')}</button>
             </div>
           ) : projects.length === 0 ? (
             <div className="projects-empty-state">
@@ -192,7 +192,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <p className="projects-empty-copy">
                 {t('emptyDescription')}
               </p>
-              <button ref={createProjectTriggerRef} className="btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
+              <button ref={createProjectTriggerRef} className="ds-btn-primary ds-btn btn btn-primary" onClick={() => { setCreateError(''); setIsModalOpen(true); }}>
                 <Plus size={16} /> {t('createProject')}
               </button>
             </div>
@@ -200,7 +200,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             <div className="projects-empty-state" role="status">
               <Search size={28} aria-hidden="true" />
               <strong>{t('noProjectsMatch')}</strong>
-              <button type="button" className="btn btn-secondary" onClick={() => setSearchQuery('')}>{t('clearSearch')}</button>
+              <button type="button" className="ds-btn btn btn-secondary" onClick={() => setSearchQuery('')}>{t('clearSearch')}</button>
             </div>
           ) : (
             <div
@@ -222,7 +222,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               }}
             >
               <p className="projects-table-scroll-hint">{t('tableSwipeHint')}</p>
-              <table className="data-table project-registry-table">
+              <table className="ds-table data-table project-registry-table">
                 <thead>
                   <tr>
                     <th>{t('columnName')}</th>
@@ -241,9 +241,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                         </Link>
                         {p.description && <div className="project-description">{p.description}</div>}
                         {p.sut_base_url && <div className="project-description"><code>{p.sut_base_url}</code></div>}
-                        {p.hidden_from_overview && <span className="badge badge-draft">{t('hiddenFromOverview')}</span>}
+                        {p.hidden_from_overview && <span className="ds-tag ds-tag--neutral badge badge-draft">{t('hiddenFromOverview')}</span>}
                       </td>
-                      <td><span className="badge badge-draft">{p.framework_type}</span></td>
+                      <td><span className="ds-tag ds-tag--neutral badge badge-draft">{p.framework_type}</span></td>
                       <td>
                         <div className="project-workspace-cell">
                           <span className="project-repository" title={p.repository_url || t('localWorkspace')}>
@@ -256,7 +256,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                       <td className="project-actions-cell">
                         <div className="project-row-actions">
                           <Link
-                            className="btn btn-secondary btn-sm"
+                            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                             title={t('viewRequirements')}
                             aria-label={t('viewRequirements')}
                             to={`/projects/${encodeURIComponent(p.id)}/management`}
@@ -266,7 +266,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           </Link>
                           <button
                             type="button"
-                            className="btn btn-ghost btn-sm"
+                            className="ds-btn-ghost ds-btn-sm ds-btn btn btn-ghost btn-sm"
                             title={p.hidden_from_overview ? t('showFromOverview') : t('hideFromOverview')}
                             onClick={async () => {
                               await api.updateProject(p.id, { hidden_from_overview: !p.hidden_from_overview });
@@ -277,7 +277,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
+                            className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
                             title={t('openWorkspace')}
                             onClick={() => {
                               onSelectProject(p.id);
@@ -308,7 +308,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   type="button"
                   aria-label={t('common:close')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-                  onClick={closeProjectDialog}
+                  onClick={closeProjectDialog} className="ds-btn"
                 >
                   ✕
                 </button>
@@ -321,7 +321,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                     id="project-name"
                     type="text"
                     required
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('modalNamePlaceholder')}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -333,7 +333,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   <textarea
                     id="project-description"
                     rows={2}
-                    className="form-control"
+                    className="ds-textarea form-control"
                     placeholder={t('modalDescriptionPlaceholder')}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -345,7 +345,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   <input
                     id="project-repository-url"
                     type="url"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('modalRepositoryUrlPlaceholder')}
                     value={formData.repository_url || ''}
                     onChange={(e) => setFormData({ ...formData, repository_url: e.target.value || null })}
@@ -357,7 +357,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                   <input
                     id="project-sut-url"
                     type="url"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('modalSutUrlPlaceholder')}
                     value={formData.sut_base_url || ''}
                     onChange={(e) => setFormData({ ...formData, sut_base_url: e.target.value || null })}
@@ -380,7 +380,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                     <label className="form-label" htmlFor="project-framework-type">{t('modalFrameworkTypeLabel')}</label>
                     <select
                       id="project-framework-type"
-                      className="form-control"
+                      className="ds-select form-control"
                       value={formData.framework_type}
                       onChange={(e) =>
                         setFormData({ ...formData, framework_type: e.target.value as FrameworkType })
@@ -397,7 +397,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                     <input
                       id="project-default-branch"
                       type="text"
-                      className="form-control"
+                      className="ds-input form-control"
                       value={formData.default_branch}
                       onChange={(e) => setFormData({ ...formData, default_branch: e.target.value })}
                     />
@@ -427,12 +427,12 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={closeProjectDialog}
                 >
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary" disabled={submitting}>
                   {submitting ? t('creating') : t('createProject')}
                 </button>
               </div>

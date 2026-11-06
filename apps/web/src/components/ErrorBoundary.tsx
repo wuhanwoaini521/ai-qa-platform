@@ -47,7 +47,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           >
             {this.state.error.message}
           </pre>
-          <button type="button" className="btn btn-primary" onClick={() => this.setState({ error: null })}>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => this.setState({ error: null })}>
             {i18n.t('tryAgain', { ns: 'errors' })}
           </button>
         </div>

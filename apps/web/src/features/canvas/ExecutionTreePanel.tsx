@@ -60,7 +60,7 @@ function TraceNodeCard({ data, selected }: NodeProps<Node<TreeCardData>>) {
       {data.hasChildren && (
         <button
           type="button"
-          className="let-node-fold"
+          className="ds-btn let-node-fold"
           aria-label={data.collapsed ? '展开子树' : '收起子树'}
           onClick={(event) => {
             event.stopPropagation();
@@ -96,7 +96,7 @@ function NodeDetail({ node, onClose }: { node: TraceNode; onClose: () => void })
           <h3>{node.label}</h3>
           {node.subtitle && <p className="let-detail-subtitle">{node.subtitle}</p>}
         </div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
           {t('executionTree.detail.close')}
         </button>
       </header>
@@ -208,7 +208,7 @@ function NodeDetail({ node, onClose }: { node: TraceNode; onClose: () => void })
           <h4>{t('executionTree.detail.open')}</h4>
           <div className="let-detail-actions">
             {navigation.map(([key, href]) => (
-              <Link key={key} className="btn btn-secondary btn-sm" to={href}>
+              <Link key={key} className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={href}>
                 {t(`executionTree.links.${key}`)}
               </Link>
             ))}
@@ -368,7 +368,7 @@ function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialT
       <section className="let-panel let-state" role="alert">
         <h2>{t('executionTree.errorTitle')}</h2>
         <p>{error}</p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void load()}>
           {t('executionTree.retry')}
         </button>
       </section>
@@ -383,7 +383,7 @@ function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialT
           <select
             aria-label={t('executionTree.task')}
             value={taskId ?? ''}
-            onChange={(event) => setTaskId(event.target.value || null)}
+            onChange={(event) => setTaskId(event.target.value || null)} className="ds-select"
           >
             <option value="">{t('executionTree.allTasks')}</option>
             {tasks.map((task) => (
@@ -408,11 +408,11 @@ function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialT
             </span>
           )}
           {focusId && (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFocusId(null)}>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setFocusId(null)}>
               {t('executionTree.clearFocus')}
             </button>
           )}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>
+          <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void load()}>
             {t('executionTree.refresh')}
           </button>
         </div>

@@ -43,7 +43,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
 }) => {
   const { t } = useTranslation('testCases');
   return (
-    <div className="card">
+    <div className="ds-card card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Code2 size={16} color="var(--accent-blue)" />
@@ -51,7 +51,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={onOpenBindingModal}
           >
             <Edit3 size={13} />{' '}
@@ -129,7 +129,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button
-                className="btn btn-secondary btn-sm"
+                className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                 onClick={() =>
                   onNavigateToStudio &&
                   onNavigateToStudio(selectedBinding.file_path)
@@ -137,11 +137,11 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
               >
                 <ExternalLink size={13} /> {t('common:openInStudio')}
               </button>
-              {onStartRecording && <button className="btn btn-secondary btn-sm" onClick={onStartRecording}>
+              {onStartRecording && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onStartRecording}>
                 <CircleDot size={13} /> {t('bindingRecord')}
               </button>}
               {!hideRunAction && <button
-                className="btn btn-primary btn-sm"
+                className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
                 disabled={runningCase}
                 onClick={onRunTestCase}
               >
@@ -149,7 +149,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
                 {runningCase ? t('bindingRunning') : t('bindingRunNow')}
               </button>}
               <button
-                className="btn btn-secondary btn-sm"
+                className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                 disabled={generating}
                 onClick={onGenerateAutomation}
               >
@@ -187,7 +187,7 @@ export const AutomationBindingPanel: React.FC<AutomationBindingPanelProps> = ({
               style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}
             >
               <button
-                className="btn btn-primary"
+                className="ds-btn-primary ds-btn btn btn-primary"
                 disabled={generating}
                 onClick={onGenerateAutomation}
               >

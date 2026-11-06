@@ -77,14 +77,14 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
   const getClassificationBadge = (cls: string) => {
     switch (cls) {
       case 'LIKELY_FLAKY':
-        return <span className="status-pill status-pill-failed">{t('classificationLikelyFlaky')}</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-failed">{t('classificationLikelyFlaky')}</span>;
       case 'PERSISTENT_FAILURE':
-        return <span className="status-pill status-pill-error">{t('classificationPersistentFailure')}</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-error">{t('classificationPersistentFailure')}</span>;
       case 'STABLE':
-        return <span className="status-pill status-pill-passed">{t('classificationStable')}</span>;
+        return <span className="ds-tag ds-tag--success status-pill status-pill-passed">{t('classificationStable')}</span>;
       case 'INSUFFICIENT_DATA':
       default:
-        return <span className="status-pill status-pill-draft">{t('classificationInsufficientData')}</span>;
+        return <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{t('classificationInsufficientData')}</span>;
     }
   };
 
@@ -96,7 +96,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
           <h2>{t('titles:flaky')}</h2>
           <p className="subtitle">{t('subtitle')}</p>
         </div>
-        <button className="btn btn-secondary" onClick={fetchFlakyTests} disabled={loading}>
+        <button className="ds-btn btn btn-secondary" onClick={fetchFlakyTests} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'spinning' : ''} />
           <span>{t('refreshAnalytics')}</span>
         </button>
@@ -152,12 +152,12 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="card page-toolbar">
+      <div className="ds-card card page-toolbar">
           <div className="page-toolbar-search">
             <Search size={16} color="var(--text-muted)" />
             <input
               type="text"
-              className="form-input"
+              className="ds-input form-input"
               placeholder={t('filterPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -168,7 +168,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <Filter size={14} color="var(--text-muted)" />
             <span className="page-toolbar-label">{t('classificationLabel')}</span>
             <select
-              className="form-select"
+              className="ds-select form-select"
               value={selectedClassification}
               onChange={(e) => setSelectedClassification(e.target.value)}
             >
@@ -183,7 +183,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
           <div className="page-toolbar-group">
             <span className="page-toolbar-label">{t('minScoreLabel')}</span>
             <select
-              className="form-select"
+              className="ds-select form-select"
               value={minScore}
               onChange={(e) => setMinScore(parseFloat(e.target.value))}
             >
@@ -196,7 +196,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       </div>
 
       {/* Flaky Intelligence Table */}
-      <div className="card">
+      <div className="ds-card card">
         {loading ? (
           <div className="page-empty-state">
             <RefreshCw size={24} className="spinning" />
@@ -209,7 +209,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <p>{t('emptyDescription')}</p>
           </div>
         ) : (
-          <table className="data-table">
+          <table className="ds-table data-table">
             <thead>
               <tr>
                 <th>{t('columnTestIdentifier')}</th>
@@ -293,7 +293,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                     </td>
                     <td>
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         onClick={() => handleOpenHistory(item.nodeid, item.project_id)}
                       >
                         {t('history')}
@@ -318,7 +318,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                   {selectedTestNodeId}
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setSelectedTestNodeId(null)}>
+              <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setSelectedTestNodeId(null)}>
                 {t('common:close')}
               </button>
             </div>
@@ -381,7 +381,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       {t('noExecutions')}
                     </div>
                   ) : (
-                    <table className="data-table">
+                    <table className="ds-table data-table">
                       <thead>
                         <tr>
                           <th>{t('common:status')}</th>
@@ -397,11 +397,11 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                           <tr key={e.id}>
                             <td>
                               {e.status === 'PASSED' ? (
-                                <span className="status-pill status-pill-passed">PASS</span>
+                                <span className="ds-tag ds-tag--success status-pill status-pill-passed">PASS</span>
                               ) : e.status === 'FAILED' ? (
-                                <span className="status-pill status-pill-failed">FAIL</span>
+                                <span className="ds-tag ds-tag--danger status-pill status-pill-failed">FAIL</span>
                               ) : (
-                                <span className="status-pill status-pill-draft">{e.status}</span>
+                                <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{e.status}</span>
                               )}
                             </td>
                             <td>

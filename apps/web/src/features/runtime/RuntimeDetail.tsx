@@ -153,7 +153,7 @@ export function RuntimeDetail({
       <RuntimeTaskActions snapshot={snapshot} onChanged={refresh} onInspect={(stepId) => { selectStep(stepId); setTab('Flow'); }} onOpenStudio={onOpenStudio} />
       {focus && (
         <button
-          className="rt-focus-exit btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm rt-focus-exit btn btn-secondary btn-sm"
           onClick={() => setFocus(false)}
         >
           {t('exitFocus')} · Esc
@@ -162,7 +162,7 @@ export function RuntimeDetail({
       {error && (
         <div className="rt-notice" role="alert">
           {error}
-          <button className="btn btn-secondary btn-sm" onClick={refresh}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={refresh}>
             {t('reconnect')}
           </button>
         </div>
@@ -172,18 +172,18 @@ export function RuntimeDetail({
           <button
             key={key}
             aria-current={key === tab ? 'page' : undefined}
-            onClick={() => setTab(key)}
+            onClick={() => setTab(key)} className="ds-btn"
           >
             {t(key)}
           </button>
         ))}
-        <button aria-label={t('forceRefresh')} title={t('forceRefresh')} onClick={refresh}>
+        <button aria-label={t('forceRefresh')} title={t('forceRefresh')} onClick={refresh} className="ds-btn">
           <RefreshCw size={15} />
         </button>
       </nav>
       {selectedStepId && !inspectorOpen && (
         <button
-          className="btn btn-secondary btn-sm rt-reopen"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm rt-reopen"
           onClick={() => setInspectorOpen(true)}
         >
           {t('openInspector')}
@@ -197,7 +197,7 @@ export function RuntimeDetail({
               selectedStepId}
           </code>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={clearStepSelection}
           >
             {t('clearStepFilter')}

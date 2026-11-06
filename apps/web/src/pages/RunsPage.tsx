@@ -266,26 +266,26 @@ export const RunsPage: React.FC<RunsPageProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PASSED':
-        return <span className="badge badge-ready">PASSED</span>;
+        return <span className="ds-tag ds-tag--success badge badge-ready">PASSED</span>;
       case 'FAILED':
-        return <span className="badge badge-p0">FAILED</span>;
+        return <span className="ds-tag ds-tag--danger badge badge-p0">FAILED</span>;
       case 'RUNNING':
         return (
           <span
-            className="badge badge-draft"
+            className="ds-tag ds-tag--neutral badge badge-draft"
             style={{ background: 'var(--accent-blue-soft)', color: 'var(--accent-blue)' }}
           >
             ● RUNNING
           </span>
         );
       case 'QUEUED':
-        return <span className="badge badge-p2">QUEUED</span>;
+        return <span className="ds-tag ds-tag--warn badge badge-p2">QUEUED</span>;
       case 'ERROR':
-        return <span className="status-pill status-pill-error">{status}</span>;
+        return <span className="ds-tag ds-tag--danger status-pill status-pill-error">{status}</span>;
       case 'CANCELLED':
-        return <span className="badge badge-p3">CANCELLED</span>;
+        return <span className="ds-tag ds-tag--neutral badge badge-p3">CANCELLED</span>;
       default:
-        return <span className="badge badge-draft">{status}</span>;
+        return <span className="ds-tag ds-tag--neutral badge badge-draft">{status}</span>;
     }
   };
 
@@ -305,7 +305,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
           style={{ display: 'flex', gap: '8px' }}
         >
           <button
-            className="btn btn-secondary"
+            className="ds-btn btn btn-secondary"
             disabled={!currentProjectId || regressionTask.busy}
             onClick={handleAiRegression}
           >
@@ -315,14 +315,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               : t('aiRegression')}
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={fetchRuns}
             title={t('refreshRuns')}
           >
             <RefreshCw size={14} /> {t('common:refresh')}
           </button>
           <button
-            className="btn btn-primary"
+            className="ds-btn-primary ds-btn btn btn-primary"
             disabled={projects.length === 0}
             onClick={() => {
               const targetProjectId = currentProjectId || projects[0]?.id || '';
@@ -349,7 +349,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       />
 
       {projects.length === 0 ? (
-        <div className="card">
+        <div className="ds-card card">
           <div
             className="card-body"
             style={{
@@ -364,7 +364,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
       ) : (
         <div className="runs-layout-grid">
           {/* Left: Execution Runs List */}
-          <div className="card runs-list-card">
+          <div className="ds-card card runs-list-card">
             <div className="card-header">
               <span className="card-title">
                 {t('listTitle', { count: runs.length })}
@@ -396,7 +396,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     {t('listLoadFailed', { message: loadError })}
                   </p>
                   <button
-                    className="btn btn-secondary btn-sm"
+                    className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                     style={{ marginTop: '8px' }}
                     onClick={() => {
                       void fetchRuns();
@@ -419,7 +419,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   />
                   <p style={{ fontSize: '13px' }}>{t('listEmpty')}</p>
                   <button
-                    className="btn btn-primary btn-sm"
+                    className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
                     style={{ marginTop: '10px' }}
                     onClick={() => setIsModalOpen(true)}
                   >
@@ -435,7 +435,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         type="button"
                         key={r.id}
                         onClick={() => handleSelectRun(r)}
-                        className={`select-row ${isSelected ? 'is-selected' : ''}`}
+                        className={`ds-btn select-row ${isSelected ? 'is-selected' : ''}`}
                         aria-pressed={isSelected}
                       >
                         <div
@@ -460,7 +460,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                               #{r.id.slice(0, 8)}
                             </span>
                             <span
-                              className="badge badge-draft"
+                              className="ds-tag ds-tag--neutral badge badge-draft"
                               style={{ fontSize: '10px' }}
                             >
                               {r.runner_type || 'LOCAL'}
@@ -535,7 +535,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 initialTab="Results"
               />
               {/* Summary Header */}
-              <div className="card">
+              <div className="ds-card card">
                 <div className="card-header runs-selected-header">
                   <div
                     className="runs-selected-meta"
@@ -553,7 +553,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       {t('runTitle', { id: selectedRun.id })}
                     </span>
                     <span
-                      className="badge badge-draft"
+                      className="ds-tag ds-tag--neutral badge badge-draft"
                       style={{ fontSize: '11px' }}
                     >
                       {t('runnerLabel', {
@@ -572,7 +572,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     {selectedRun.status === 'RUNNING' ||
                     selectedRun.status === 'QUEUED' ? (
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         style={{ color: 'var(--accent-red)' }}
                         onClick={() => handleCancelRun(selectedRun.id)}
                       >
@@ -580,7 +580,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       </button>
                     ) : (
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         onClick={handleOpenTestRailModal}
                         title={t('publishTooltip')}
                       >
@@ -636,7 +636,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         href={selectedRun.external_build_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -653,7 +653,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
             </div>
           ) : (
-            <div className="card">
+            <div className="ds-card card">
               <div
                 className="card-body"
                 style={{
@@ -685,7 +685,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     border: 'none',
                     cursor: 'pointer',
                   }}
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsModalOpen(false)} className="ds-btn"
                 >
                   ✕
                 </button>
@@ -695,7 +695,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <label className="form-label" htmlFor="run-project">{t('projectRequired')}</label>
                   <select
                     id="run-project"
-                    className="form-control"
+                    className="ds-select form-control"
                     value={runFormData.project_id}
                     onChange={(e) =>
                       setRunFormData({
@@ -723,7 +723,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     <label className="form-label" htmlFor="run-runner-backend">{t('runnerBackend')}</label>
                     <select
                       id="run-runner-backend"
-                      className="form-control"
+                      className="ds-select form-control"
                       value={runFormData.runner_type}
                       onChange={(e) =>
                         setRunFormData({
@@ -745,7 +745,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                       </label>
                       <select
                         id="run-jenkins-profile"
-                        className="form-control"
+                        className="ds-select form-control"
                         value={runFormData.runner_profile_id || ''}
                         onChange={(e) =>
                           setRunFormData({
@@ -769,7 +769,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <label className="form-label">{t('triggeredBy')}</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder={t('triggeredByPlaceholder')}
                     value={runFormData.requested_by}
                     onChange={(e) =>
@@ -788,7 +788,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                     </label>
                     <input
                       id="parallel-workers"
-                      className="form-control"
+                      className="ds-input form-control"
                       type="number"
                       min={1}
                       max={16}
@@ -811,7 +811,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   <label className="form-label">{t('targetNodeIds')}</label>
                   <textarea
                     rows={4}
-                    className="form-control"
+                    className="ds-textarea form-control"
                     placeholder="tests/test_cart.py&#10;tests/test_checkout.py::test_coupon_calculation"
                     value={targetNodeidsText}
                     onChange={(e) => setTargetNodeidsText(e.target.value)}
@@ -821,14 +821,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={() => setIsModalOpen(false)}
                 >
                   {t('common:cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="ds-btn-primary ds-btn btn btn-primary"
                   disabled={triggering}
                 >
                   <PlayCircle size={15} />{' '}
@@ -852,7 +852,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                 <h3 className="modal-title">{t('testrailTitle')}</h3>
               </div>
               <button
-                className="btn btn-icon"
+                className="ds-btn-icon ds-btn btn btn-icon"
                 onClick={() => setIsTestRailModalOpen(false)}
                 style={{ padding: '4px' }}
               >
@@ -926,7 +926,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         )}
                       </div>
                       <span
-                        className="badge badge-ready"
+                        className="ds-tag ds-tag--success badge badge-ready"
                         style={{ fontSize: '11px' }}
                       >
                         {testRailPublishResult.published
@@ -1030,7 +1030,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                   >
                     <div className="table-responsive">
                       <table
-                        className="data-table"
+                        className="ds-table data-table"
                         style={{ fontSize: '12px' }}
                       >
                         <thead>
@@ -1079,7 +1079,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                               </td>
                               <td>
                                 <span
-                                  className={`badge badge-${item.pytest_status.toLowerCase() === 'passed' ? 'ready' : item.pytest_status.toLowerCase() === 'failed' ? 'p0' : 'draft'}`}
+                                  className={`ds-tag badge badge-${item.pytest_status.toLowerCase() === 'passed' ? 'ready' : item.pytest_status.toLowerCase() === 'failed' ? 'p0' : 'draft'}`}
                                   style={{ fontSize: '10px' }}
                                 >
                                   {item.pytest_status}
@@ -1124,14 +1124,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="ds-btn btn btn-secondary"
                 onClick={() => setIsTestRailModalOpen(false)}
               >
                 {t('common:close')}
               </button>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="ds-btn btn btn-secondary"
                 disabled={!testRailPreview || publishingTestRail}
                 onClick={() => handlePublishTestRail(false)}
               >
@@ -1139,7 +1139,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="ds-btn-primary ds-btn btn btn-primary"
                 disabled={!testRailPreview || publishingTestRail}
                 onClick={() => handlePublishTestRail(true)}
               >

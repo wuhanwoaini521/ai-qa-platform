@@ -40,7 +40,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                 <h3 className="modal-title">{t('jiraTitle')}</h3>
               </div>
               <button
-                className="btn btn-icon"
+                className="ds-btn-icon ds-btn btn btn-icon"
                 onClick={onClose}
                 style={{ padding: '4px' }}
               >
@@ -53,7 +53,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                 <div style={{ position: 'relative', flex: 1 }}>
                   <input
                     type="text"
-                    className="form-input"
+                    className="ds-input form-input"
                     placeholder={t('jiraSearchPlaceholder')}
                     value={jiraSearchQuery}
                     onChange={(e) => handleSearchJira(e.target.value)}
@@ -62,7 +62,7 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
                   <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--ink-faint)' }} />
                 </div>
                 <button
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={() => handleSearchJira(jiraSearchQuery)}
                   disabled={loadingJira}
                 >
@@ -144,14 +144,14 @@ export const JiraImportModal: React.FC<JiraImportModalProps> = ({
               </span>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="ds-btn btn btn-secondary"
                 onClick={onClose}
               >
                 {t('common:cancel')}
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="ds-btn-primary ds-btn btn btn-primary"
                 disabled={selectedJiraKeys.length === 0 || importingJira}
                 onClick={handleImportJira}
               >

@@ -13,6 +13,7 @@
   "flaky": "Flaky Intelligence & Stability",
   "failures": "Failure Intelligence & Healing",
   "quality": "Quality Intelligence & Release Gate",
+  "qualityLocation": "Quality",
   "security": "Enterprise Security & RBAC",
   "workers": "Distributed Workers & Cluster",
   "settings": "Settings"

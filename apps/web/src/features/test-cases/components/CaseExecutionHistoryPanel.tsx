@@ -13,13 +13,13 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
 }) => {
   const { t } = useTranslation('testCases');
   return (
-    <div className="card">
+    <div className="ds-card card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="card-title">{t('historyTitle')}</span>
         </div>
         {caseHistory && (
-          <span className="badge badge-ready" style={{ fontSize: '11px' }}>
+          <span className="ds-tag ds-tag--success badge badge-ready" style={{ fontSize: '11px' }}>
             {t('historyStability', {
               classification: caseHistory.flaky_score.classification,
               score: caseHistory.flaky_score.score.toFixed(2),
@@ -66,7 +66,7 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
               {t('historyRecentExecutions')}
             </div>
             <div className="table-responsive">
-            <table className="data-table" style={{ fontSize: '11px' }}>
+            <table className="ds-table data-table" style={{ fontSize: '11px' }}>
               <thead>
                 <tr>
                   <th style={{ padding: '6px 8px' }}>{t('common:status')}</th>
@@ -80,7 +80,7 @@ export const CaseExecutionHistoryPanel: React.FC<CaseExecutionHistoryPanelProps>
                 {caseHistory.executions.slice(0, 5).map((e) => (
                   <tr key={e.id}>
                     <td style={{ padding: '6px 8px' }}>
-                      <span className={`badge badge-${e.status === 'PASSED' ? 'ready' : 'p0'}`}>
+                      <span className={`ds-tag badge badge-${e.status === 'PASSED' ? 'ready' : 'p0'}`}>
                         {e.status}
                       </span>
                     </td>

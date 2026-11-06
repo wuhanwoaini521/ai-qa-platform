@@ -26,11 +26,11 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
         const isActive = tab.path === activeTabPath && !showDiffView;
         return (
           <div key={tab.path} className={`studio-tab ${isActive ? 'is-active' : ''}`}>
-            <button type="button" className="studio-tab-select" aria-pressed={isActive} onClick={() => onSelectTab(tab.path)}>
+            <button type="button" className="ds-btn studio-tab-select" aria-pressed={isActive} onClick={() => onSelectTab(tab.path)}>
               {tab.isDirty && <span className="tab-dot" aria-hidden="true" />}
               <span className="studio-tab-name">{tab.name}</span>
             </button>
-            <button type="button" className="studio-tab-close" aria-label={t('tabs.closeFile', { fileName: tab.name })} onClick={(e) => onCloseTab(tab.path, e)}>
+            <button type="button" className="ds-btn studio-tab-close" aria-label={t('tabs.closeFile', { fileName: tab.name })} onClick={(e) => onCloseTab(tab.path, e)}>
               <X size={12} />
             </button>
           </div>

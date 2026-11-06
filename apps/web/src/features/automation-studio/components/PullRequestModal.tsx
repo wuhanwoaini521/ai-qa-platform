@@ -38,7 +38,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
           <button
             type="button"
             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            onClick={onClose}
+            onClick={onClose} className="ds-btn"
           >
             ✕
           </button>
@@ -49,7 +49,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
               {t('prModal.branchPrefix')} <code>{currentBranch}</code> → <code>main</code>
             </span>
             <button
-              className="btn btn-secondary btn-sm"
+              className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
               style={{ padding: '2px 8px', fontSize: '11px', gap: '4px' }}
               disabled={suggesting}
               onClick={onRegenerate}
@@ -62,7 +62,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
             <label className="form-label">{t('prModal.titleLabel')}</label>
             <input
               type="text"
-              className="form-control"
+              className="ds-input form-control"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
             />
@@ -72,7 +72,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
             <label className="form-label">{t('prModal.bodyLabel')}</label>
             <textarea
               rows={8}
-              className="form-control"
+              className="ds-textarea form-control"
               style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
               value={body}
               onChange={(e) => onBodyChange(e.target.value)}
@@ -80,11 +80,11 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
             {t('common:cancel')}
           </button>
           <button
-            className="btn btn-primary btn-sm"
+            className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
             style={{ background: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
             disabled={!title.trim() || creating}
             onClick={onCreate}

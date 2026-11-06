@@ -195,7 +195,7 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
         {running && onCancel && (
           <button
             type="button"
-            className="btn btn-secondary btn-sm ai-cancel"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm ai-cancel"
             onClick={onCancel}
           >
             <StopCircle size={13} aria-hidden="true" /> {t('assistant.cancel')}
@@ -264,7 +264,7 @@ export const AIExecutionTimeline: React.FC<AIExecutionTimelineProps> = ({
                   )}
                   {runtime && event.step_id && onSelectStep ? (
                     <button
-                      className="rt-trace-select"
+                      className="ds-btn rt-trace-select"
                       onClick={() => onSelectStep(event.step_id!)}
                     >
                       {event.title}

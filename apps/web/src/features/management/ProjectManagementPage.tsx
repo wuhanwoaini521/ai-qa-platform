@@ -170,7 +170,7 @@ export function ProjectManagementPage() {
             ? <span className="management-relation-unknown">{t('unavailableRequirement')}</span>
             : <span className="is-independent">{t('independentCase')}</span>}
         <label className="project-management-association-control"><span className="project-management-visually-hidden">{t('changeRequirementForCase', { case: item.title })}</span>
-          <select value={linkedRequirement?.id ?? ''} disabled={!canChangeRequirement || associationSavingId !== null} onChange={(event) => void saveCaseRequirement(item.id, event.target.value)} aria-describedby={!canChangeRequirement ? `case-requirement-locked-${item.id}` : undefined}>
+          <select value={linkedRequirement?.id ?? ''} disabled={!canChangeRequirement || associationSavingId !== null} onChange={(event) => void saveCaseRequirement(item.id, event.target.value)} aria-describedby={!canChangeRequirement ? `case-requirement-locked-${item.id}` : undefined} className="ds-select">
             <option value="">{t('independentCase')}</option>{requirements.map((requirement) => <option key={requirement.id} value={requirement.id}>{getRequirementDisplayId(requirement)} · {requirement.title}</option>)}
           </select>
         </label>
@@ -181,7 +181,7 @@ export function ProjectManagementPage() {
       <td><span className="project-management-priority">{item.priority}</span></td>
       <td><span className="project-management-status">{t(`automationStatus.${item.automation_status}`, { defaultValue: item.automation_status })}</span></td>
       <td>{formatDate(item.updated_at)}</td>
-      <td><Link className="btn btn-secondary btn-sm" to={workspaceHref(item)}>{t('openWorkspace')}</Link></td>
+      <td><Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={workspaceHref(item)}>{t('openWorkspace')}</Link></td>
     </tr>;
   });
 
@@ -194,7 +194,7 @@ export function ProjectManagementPage() {
     <header className="page-header project-management-header">
       <div><p className="project-management-eyebrow">{t('projectScope', { project: project.name })}</p>
         <h2>{t('title')}</h2><p className="subtitle">{t('subtitle')}</p></div>
-      <button type="button" className="btn btn-secondary" disabled={loading} onClick={() => setReloadVersion((value) => value + 1)}>
+      <button type="button" className="ds-btn btn btn-secondary" disabled={loading} onClick={() => setReloadVersion((value) => value + 1)}>
         <RefreshCw size={15} aria-hidden="true" />{t('refresh')}
       </button>
     </header>
@@ -211,47 +211,47 @@ export function ProjectManagementPage() {
     </div>
 
     <nav className="project-management-tabs management-matrix-tabs" role="tablist" aria-label={t('lists')}>
-      <button id="management-tab-requirements" type="button" role="tab" aria-selected={tab === 'requirements'} aria-controls="management-panel" className={tab === 'requirements' ? 'selected' : ''}
+      <button id="management-tab-requirements" type="button" role="tab" aria-selected={tab === 'requirements'} aria-controls="management-panel" className={["ds-btn", (tab === 'requirements' ? 'selected' : '')].filter(Boolean).join(' ')}
         onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const nextTab = tab === 'requirements' ? 'cases' : tab === 'cases' ? 'traceability' : 'requirements'; switchTab(nextTab); document.getElementById(`management-tab-${nextTab}`)?.focus(); } }} onClick={() => switchTab('requirements')}>
         <FileText size={16} aria-hidden="true" />{t('requirementsTab')}<span>{getProjectScopedCount(requirements.length, loadedProjectId, projectId) ?? '—'}</span>
       </button>
-      <button id="management-tab-cases" type="button" role="tab" aria-selected={tab === 'cases'} aria-controls="management-panel" className={tab === 'cases' ? 'selected' : ''}
+      <button id="management-tab-cases" type="button" role="tab" aria-selected={tab === 'cases'} aria-controls="management-panel" className={["ds-btn", (tab === 'cases' ? 'selected' : '')].filter(Boolean).join(' ')}
         onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const nextTab = tab === 'requirements' ? 'cases' : tab === 'cases' ? 'traceability' : 'requirements'; switchTab(nextTab); document.getElementById(`management-tab-${nextTab}`)?.focus(); } }} onClick={() => switchTab('cases')}>
         <ListChecks size={16} aria-hidden="true" />{t('casesTab')}<span>{getProjectScopedCount(testCases.length, loadedProjectId, projectId) ?? '—'}</span>
       </button>
-      <button id="management-tab-traceability" type="button" role="tab" aria-selected={tab === 'traceability'} aria-controls="management-panel" className={tab === 'traceability' ? 'selected' : ''}
+      <button id="management-tab-traceability" type="button" role="tab" aria-selected={tab === 'traceability'} aria-controls="management-panel" className={["ds-btn", (tab === 'traceability' ? 'selected' : '')].filter(Boolean).join(' ')}
         onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const nextTab = tab === 'requirements' ? 'cases' : tab === 'cases' ? 'traceability' : 'requirements'; switchTab(nextTab); document.getElementById(`management-tab-${nextTab}`)?.focus(); } }} onClick={() => switchTab('traceability')}>
         <Network size={16} aria-hidden="true" />{t('traceabilityTab')}
       </button>
     </nav>
 
-    <section id="management-panel" role="tabpanel" aria-labelledby={`management-tab-${tab}`} className="card project-management-panel" aria-busy={loading}>
+    <section id="management-panel" role="tabpanel" aria-labelledby={`management-tab-${tab}`} className="ds-card card project-management-panel" aria-busy={loading}>
       <div className="project-management-toolbar">
         <label className="project-management-search">
           <Search size={16} aria-hidden="true" /><span className="project-management-visually-hidden">{t('searchLabel')}</span>
-          <input type="search" value={query} onChange={(event) => updateQuery({ q: event.target.value })} placeholder={t('searchPlaceholder')} />
+          <input type="search" value={query} onChange={(event) => updateQuery({ q: event.target.value })} placeholder={t('searchPlaceholder')} className="ds-input" />
         </label>
         {tab === 'cases' ? <>
-          <label className="project-management-filter"><span>{common('status')}</span><select value={automationStatus} onChange={(event) => updateQuery({ status: event.target.value })}>
+          <label className="project-management-filter"><span>{common('status')}</span><select value={automationStatus} onChange={(event) => updateQuery({ status: event.target.value })} className="ds-select">
             <option value="">{t('allStatuses')}</option>{AUTOMATION_STATUSES.map((value) => <option key={value} value={value}>{t(`automationStatus.${value}`)}</option>)}
           </select></label>
-          <label className="project-management-filter"><span>{common('priority')}</span><select value={casePriority} onChange={(event) => updateQuery({ priority: event.target.value })}>
+          <label className="project-management-filter"><span>{common('priority')}</span><select value={casePriority} onChange={(event) => updateQuery({ priority: event.target.value })} className="ds-select">
             <option value="">{t('allPriorities')}</option>{PRIORITIES.map((value) => <option key={value} value={value}>{value}</option>)}
           </select></label>
-          <label className="project-management-filter"><span>{t('requirementColumn')}</span><select value={selectedRequirementFilter} onChange={(event) => updateQuery({ requirement: event.target.value })}>
+          <label className="project-management-filter"><span>{t('requirementColumn')}</span><select value={selectedRequirementFilter} onChange={(event) => updateQuery({ requirement: event.target.value })} className="ds-select">
             <option value="">{t('allRequirements')}</option><option value={INDEPENDENT_CASES_FILTER}>{t('independentCases')}</option>{requirements.map((item) => <option key={item.id} value={item.id}>{getRequirementDisplayId(item)} · {item.title}</option>)}
           </select></label>
-          <label className="project-management-filter"><span>{t('sortBy')}</span><select value={['updated', 'title', 'priority'].includes(sort) ? sort : 'updated'} onChange={(event) => updateQuery({ sort: event.target.value })}>
+          <label className="project-management-filter"><span>{t('sortBy')}</span><select value={['updated', 'title', 'priority'].includes(sort) ? sort : 'updated'} onChange={(event) => updateQuery({ sort: event.target.value })} className="ds-select">
             <option value="updated">{t('sortUpdated')}</option><option value="title">{t('sortTitle')}</option><option value="priority">{t('sortPriority')}</option>
           </select></label>
         </> : <>
-          <label className="project-management-filter"><span>{common('status')}</span><select value={requirementStatus} onChange={(event) => updateQuery({ status: event.target.value })}>
+          <label className="project-management-filter"><span>{common('status')}</span><select value={requirementStatus} onChange={(event) => updateQuery({ status: event.target.value })} className="ds-select">
             <option value="">{t('allStatuses')}</option>{REQUIREMENT_STATUSES.map((value) => <option key={value} value={value}>{t(`requirementStatus.${value}`)}</option>)}
           </select></label>
-          <label className="project-management-filter"><span>{t('relationshipFilter')}</span><select value={gapFilter} onChange={(event) => updateQuery({ gap: event.target.value, trace: '' })}>
+          <label className="project-management-filter"><span>{t('relationshipFilter')}</span><select value={gapFilter} onChange={(event) => updateQuery({ gap: event.target.value, trace: '' })} className="ds-select">
             <option value="">{t('allRequirements')}</option><option value="unlinked">{t('requirementsWithoutCases')}</option><option value="linked">{t('requirementsWithCases')}</option>
           </select></label>
-          <label className="project-management-filter"><span>{t('sortBy')}</span><select value={['updated', 'title', 'status'].includes(sort) ? sort : 'updated'} onChange={(event) => updateQuery({ sort: event.target.value })}>
+          <label className="project-management-filter"><span>{t('sortBy')}</span><select value={['updated', 'title', 'status'].includes(sort) ? sort : 'updated'} onChange={(event) => updateQuery({ sort: event.target.value })} className="ds-select">
             <option value="updated">{t('sortUpdated')}</option><option value="title">{t('sortTitle')}</option><option value="status">{t('sortStatus')}</option>
           </select></label>
         </>}
@@ -261,30 +261,30 @@ export function ProjectManagementPage() {
       {loading && <div className="project-management-state" role="status" aria-busy="true">{t('loading')}</div>}
       {!loading && error && <div className="project-management-state async-state-error" role="alert">
         <span>{t(error === 'forbidden' ? 'forbidden' : 'loadFailed')}</span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setReloadVersion((value) => value + 1)}>{t('retry')}</button>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setReloadVersion((value) => value + 1)}>{t('retry')}</button>
       </div>}
       {dataReady && tab !== 'cases' && (requirements.length === 0
         ? <div className="project-management-state"><strong>{t('emptyRequirements')}</strong><p>{t('emptyRequirementsHint')}</p></div>
         : visibleRequirements.length === 0
-          ? <div className="project-management-state" role="status">{t('noMatches')} <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateQuery({ q: '', status: '', gap: '' })}>{t('clearFilters')}</button></div>
+          ? <div className="project-management-state" role="status">{t('noMatches')} <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => updateQuery({ q: '', status: '', gap: '' })}>{t('clearFilters')}</button></div>
           : tab === 'requirements'
-            ? <div className="table-responsive project-management-table-wrap"><table className="data-table project-management-table management-matrix-table">
+            ? <div className="table-responsive project-management-table-wrap"><table className="ds-table data-table project-management-table management-matrix-table">
               <thead><tr><th>{t('idColumn')}</th><th>{t('nameColumn')}</th><th>{common('status')}</th><th>{t('linkedCasesColumn')}</th><th>{t('updatedColumn')}</th><th>{common('actions')}</th></tr></thead>
               <tbody>{visibleRequirements.map((item) => {
                 const linkedCaseCount = caseCounts.get(item.id) ?? 0;
                 return <tr key={item.id}>
                   <td><code className="management-matrix-id">{getRequirementDisplayId(item)}</code></td>
-                  <td><Link className="project-management-item-link" to={workspaceHref(item)}>{item.title}<ArrowUpRight size={14} aria-hidden="true" /></Link>{item.external_id && <small>{item.external_id}</small>}</td>
+                  <td><Link className="project-management-item-link project-management-requirement-link" to={workspaceHref(item)}><span className="project-management-requirement-title">{item.title}</span><ArrowUpRight size={14} aria-hidden="true" /></Link>{item.external_id && <small>{item.external_id}</small>}</td>
                   <td><span className="project-management-status">{t(`requirementStatus.${item.status}`, { defaultValue: item.status })}</span></td>
                   <td className="project-management-relation-cell"><span className={linkedCaseCount === 0 ? 'management-gap-label' : ''}>{linkedCaseCount === 0 ? t('noLinkedCases') : t('linkedCaseCount', { count: linkedCaseCount })}</span>
                     <Link className="project-management-inline-action" to={managementHref('cases', { requirement: item.id })}>{t('manageCases')}</Link>
                   </td>
                   <td>{formatDate(item.updated_at)}</td>
-                  <td><Link className="btn btn-secondary btn-sm" to={workspaceHref(item)}>{t('openWorkspace')}</Link></td>
+                  <td><Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={workspaceHref(item)}>{t('openWorkspace')}</Link></td>
                 </tr>;
               })}</tbody>
             </table></div>
-            : <div className="table-responsive project-management-table-wrap"><table className="data-table project-management-table management-matrix-table management-trace-table">
+            : <div className="table-responsive project-management-table-wrap"><table className="ds-table data-table project-management-table management-matrix-table management-trace-table">
               <thead><tr><th>{t('traceColumn')}</th><th>{t('idColumn')}</th><th>{t('nameColumn')}</th><th>{common('status')}</th><th>{t('linkedCasesColumn')}</th></tr></thead>
               <tbody>{visibleRequirements.map((item) => {
                 const linkedCaseCount = caseCounts.get(item.id) ?? 0;
@@ -292,16 +292,16 @@ export function ProjectManagementPage() {
                 const linkedCases = testCases.filter((testCase) => testCase.requirement_id === item.id);
                 return <Fragment key={item.id}>
                   <tr>
-                    <td><button type="button" className="management-trace-toggle" aria-expanded={expanded} aria-label={t(expanded ? 'collapseRequirement' : 'expandRequirement', { requirement: getRequirementDisplayId(item) })} onClick={() => updateQuery({ trace: expanded ? '' : item.id }, false)}>{expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}</button></td>
+                    <td><button type="button" className="ds-btn management-trace-toggle" aria-expanded={expanded} aria-label={t(expanded ? 'collapseRequirement' : 'expandRequirement', { requirement: getRequirementDisplayId(item) })} onClick={() => updateQuery({ trace: expanded ? '' : item.id }, false)}>{expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}</button></td>
                     <td><code className="management-matrix-id">{getRequirementDisplayId(item)}</code></td>
-                    <td><Link className="project-management-item-link" to={workspaceHref(item)}>{item.title}<ArrowUpRight size={14} aria-hidden="true" /></Link></td>
+                    <td><Link className="project-management-item-link project-management-requirement-link" to={workspaceHref(item)}><span className="project-management-requirement-title">{item.title}</span><ArrowUpRight size={14} aria-hidden="true" /></Link></td>
                     <td><span className="project-management-status">{t(`requirementStatus.${item.status}`, { defaultValue: item.status })}</span></td>
                     <td className="project-management-relation-cell"><span className={linkedCaseCount === 0 ? 'management-gap-label' : ''}>{linkedCaseCount === 0 ? t('noLinkedCases') : t('linkedCaseCount', { count: linkedCaseCount })}</span><Link className="project-management-inline-action" to={managementHref('cases', { requirement: item.id })}>{t('openCases')}</Link></td>
                   </tr>
                   {expanded && <tr key={`${item.id}-expanded`} className="management-trace-expanded-row"><td colSpan={5}>
                     {linkedCases.length > 0
                       ? <ul className="management-trace-case-list">{linkedCases.map((testCase) => <li key={testCase.id}><Link to={workspaceHref(testCase)}><code>{getCaseDisplayId(testCase)}</code><strong>{testCase.title}</strong></Link><span className="project-management-status">{t(`automationStatus.${testCase.automation_status}`, { defaultValue: testCase.automation_status })}</span>{testCase.test_design_id && <span className="management-design-lock">{t('designLinked')}</span>}</li>)}</ul>
-                      : <div className="management-trace-empty"><span>{t('noLinkedCases')}</span><Link className="btn btn-secondary btn-sm" to={managementHref('cases', { requirement: item.id })}>{t('linkCases')}</Link></div>}
+                      : <div className="management-trace-empty"><span>{t('noLinkedCases')}</span><Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={managementHref('cases', { requirement: item.id })}>{t('linkCases')}</Link></div>}
                   </td></tr>}
                 </Fragment>;
               })}</tbody>
@@ -309,8 +309,8 @@ export function ProjectManagementPage() {
       {dataReady && tab === 'cases' && (testCases.length === 0
         ? <div className="project-management-state"><strong>{t('emptyCases')}</strong><p>{t('emptyCasesHint')}</p></div>
         : visibleCases.length === 0
-          ? <div className="project-management-state" role="status">{t('noMatches')} <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateQuery({ q: '', status: '', priority: '', requirement: '' })}>{t('clearFilters')}</button></div>
-          : <div className="table-responsive project-management-table-wrap"><table className="data-table project-management-table management-matrix-table">
+          ? <div className="project-management-state" role="status">{t('noMatches')} <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => updateQuery({ q: '', status: '', priority: '', requirement: '' })}>{t('clearFilters')}</button></div>
+          : <div className="table-responsive project-management-table-wrap"><table className="ds-table data-table project-management-table management-matrix-table">
             <thead><tr><th>{t('idColumn')}</th><th>{t('nameColumn')}</th><th>{t('requirementColumn')}</th><th>{common('priority')}</th><th>{t('automationColumn')}</th><th>{t('updatedColumn')}</th><th>{common('actions')}</th></tr></thead>
             <tbody>{renderCaseRows(visibleCases)}</tbody>
           </table></div>)}

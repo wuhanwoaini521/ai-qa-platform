@@ -18,19 +18,19 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
 }) => {
   const { t } = useTranslation('requirements');
   return (
-    <div className="card">
+    <div className="ds-card card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Layers size={16} color="var(--accent-green)" />
           <span className="card-title">{t('designsTitle', { total: testDesigns.length })}</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary btn-sm" onClick={onGenerateDesigns}>
+          <button className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={onGenerateDesigns}>
             <Sparkles size={13} />
             <span>{t('designsGenerateDesigns')}</span>
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={onAddManualDesign}
           >
             <Plus size={13} /> {t('designsAddManual')}
@@ -43,7 +43,7 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
             {t('designsEmptyBefore')}<strong>{t('designsEmptyAction')}</strong>{t('designsEmptyAfter')}
           </div>
         ) : (
-          <table className="data-table">
+          <table className="ds-table data-table">
             <thead>
               <tr>
                 <th>{t('designsColumnTitle')}</th>
@@ -58,15 +58,15 @@ export const TestDesignPanel: React.FC<TestDesignPanelProps> = ({
                 <tr key={td.id}>
                   <td style={{ fontWeight: 500 }}>{td.title}</td>
                   <td>
-                    <span className="status-pill status-pill-draft">{td.category}</span>
+                    <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{td.category}</span>
                   </td>
                   <td>{td.risk}</td>
                   <td>
-                    <span className="status-pill status-pill-passed">{td.status}</span>
+                    <span className="ds-tag ds-tag--success status-pill status-pill-passed">{td.status}</span>
                   </td>
                   <td>
                     <button
-                      className="btn btn-secondary btn-sm"
+                      className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                       onClick={() => onGenerateCases(td)}
                     >
                       <ListChecks size={12} />

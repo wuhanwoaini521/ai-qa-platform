@@ -59,7 +59,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                 <h3>{t('designFormTitle')}</h3>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   onClick={onClose}
                 >
                   ✕
@@ -71,7 +71,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   <input
                     type="text"
                     required
-                    className="form-input"
+                    className="ds-input form-input"
                     placeholder={t('designFormTitlePlaceholder')}
                     value={designFormData.title}
                     onChange={(e) => setDesignFormData({ ...designFormData, title: e.target.value })}
@@ -82,7 +82,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   <div className="form-group">
                     <label className="form-label">{t('designFormCategoryLabel')}</label>
                     <select
-                      className="form-select"
+                      className="ds-select form-select"
                       value={designFormData.category}
                       onChange={(e) =>
                         setDesignFormData({
@@ -103,7 +103,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   <div className="form-group">
                     <label className="form-label">{t('designFormRiskLabel')}</label>
                     <select
-                      className="form-select"
+                      className="ds-select form-select"
                       value={designFormData.risk}
                       onChange={(e) => setDesignFormData({ ...designFormData, risk: e.target.value })}
                     >
@@ -119,7 +119,7 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
                   <label className="form-label">{t('designFormDetailsLabel')}</label>
                   <textarea
                     rows={3}
-                    className="form-textarea"
+                    className="ds-textarea form-textarea"
                     placeholder={t('designFormDetailsPlaceholder')}
                     value={designFormData.description}
                     onChange={(e) =>
@@ -132,12 +132,12 @@ export const TestDesignFormModal: React.FC<TestDesignFormModalProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={onClose}
                 >
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary">
                   {t('designFormSubmit')}
                 </button>
               </div>

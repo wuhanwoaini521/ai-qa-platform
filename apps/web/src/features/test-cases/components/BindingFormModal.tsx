@@ -30,7 +30,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={onClose}
+                  onClick={onClose} className="ds-btn"
                 >
                   ✕
                 </button>
@@ -41,7 +41,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                   <input
                     type="text"
                     required
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder="e.g. tests/test_checkout.py"
                     value={bindingFormData.file_path}
                     onChange={(e) =>
@@ -54,7 +54,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                   <input
                     type="text"
                     required
-                    className="form-control"
+                    className="ds-input form-control"
                     placeholder="e.g. tests/test_checkout.py::test_coupon_calculation"
                     value={bindingFormData.nodeid}
                     onChange={(e) =>
@@ -65,7 +65,7 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
                 <div className="form-group">
                   <label className="form-label">{t('bindingModalStatus')}</label>
                   <select
-                    className="form-control"
+                    className="ds-select form-control"
                     value={bindingFormData.status}
                     onChange={(e) =>
                       setBindingFormData({
@@ -84,12 +84,12 @@ export const BindingFormModal: React.FC<BindingFormModalProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={onClose}
                 >
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary">
                   {t('bindingModalSave')}
                 </button>
               </div>

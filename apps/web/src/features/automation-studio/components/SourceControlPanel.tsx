@@ -61,7 +61,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
         <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('sourceControl.branch')}</span>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             style={{ padding: '2px 6px', fontSize: '10px' }}
             onClick={onNewBranch}
           >
@@ -69,7 +69,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
           </button>
         </div>
         <select
-          className="form-control"
+          className="ds-select form-control"
           aria-label={t('sourceControl.branch')}
           style={{ fontSize: '12px', padding: '4px' }}
           value={currentBranch}
@@ -94,7 +94,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
           <span>{t('sourceControl.changes', { count: diffResult.changed_files.length })}</span>
           <button
             style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '10px' }}
-            onClick={onToggleDiffView}
+            onClick={onToggleDiffView} className="ds-btn"
           >
             {showDiffView ? t('sourceControl.hideDiff') : t('sourceControl.viewDiff')}
           </button>
@@ -136,7 +136,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
           <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-muted)' }}>{t('sourceControl.commit')}</span>
           <button
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             style={{ padding: '2px 6px', fontSize: '10px', gap: '3px' }}
             disabled={suggestingCommit}
             onClick={onSuggestCommit}
@@ -147,14 +147,14 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
         </div>
         <textarea
           rows={2}
-          className="form-control"
+          className="ds-textarea form-control"
           style={{ fontSize: '11px', padding: '4px', resize: 'none', marginBottom: '4px' }}
           placeholder={t('sourceControl.commitPlaceholder')}
           value={commitMessage}
           onChange={(e) => onCommitMessageChange(e.target.value)}
         />
         <button
-          className="btn btn-primary btn-sm"
+          className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
           style={{ width: '100%', padding: '4px', fontSize: '11px' }}
           disabled={!commitMessage.trim() || isCommitting}
           onClick={onCommit}
@@ -166,7 +166,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
       {/* Push Branch */}
       <div style={{ marginBottom: '12px' }}>
         <button
-          className="btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
           style={{ width: '100%', padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           disabled={isPushing}
           onClick={onPush}
@@ -183,7 +183,7 @@ export const SourceControlPanel: React.FC<SourceControlPanelProps> = ({
       {/* Create PR Shortcut */}
       <div style={{ marginBottom: '12px', borderTop: '1px solid var(--line-strong)', paddingTop: '8px' }}>
         <button
-          className="btn btn-primary btn-sm"
+          className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
           style={{ width: '100%', padding: '5px', fontSize: '11px', background: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
           onClick={onOpenPRModal}
         >

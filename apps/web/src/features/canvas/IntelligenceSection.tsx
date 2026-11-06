@@ -115,13 +115,13 @@ export function IntelligenceSection({
       <div className="lw-evidence-kinds">
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
           disabled={pending === 'request'}
           onClick={() => void request('analyze')}
         >
           {t('canvas.intelligence.request')}
         </button>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void load()}>
           {t('canvas.intelligence.refresh')}
         </button>
       </div>
@@ -147,7 +147,7 @@ export function IntelligenceSection({
               <div className="lw-detail-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   disabled={pending === 'evidence'}
                   onClick={() => void openEvidence(suggestion.suggestion_id)}
                 >
@@ -155,7 +155,7 @@ export function IntelligenceSection({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   disabled={pending === 'ACCEPT'}
                   onClick={() => void review(suggestion.suggestion_id, 'ACCEPT')}
                 >
@@ -163,7 +163,7 @@ export function IntelligenceSection({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   disabled={pending === 'REJECT'}
                   onClick={() => void review(suggestion.suggestion_id, 'REJECT')}
                 >
@@ -171,7 +171,7 @@ export function IntelligenceSection({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   disabled={pending === 'APPROVE_CREATE_CASE' || !suggestion.suggested_title}
                   onClick={() => void review(suggestion.suggestion_id, 'APPROVE_CREATE_CASE')}
                 >
@@ -179,7 +179,7 @@ export function IntelligenceSection({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   disabled={pending === 'request'}
                   onClick={() => void request('reanalyze', [suggestion.scenario_id])}
                 >
@@ -196,7 +196,7 @@ export function IntelligenceSection({
           type="text"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          aria-label={t('canvas.intelligence.reason')}
+          aria-label={t('canvas.intelligence.reason')} className="ds-input"
         />
       </label>
       {detail && (
@@ -221,7 +221,7 @@ export function IntelligenceSection({
                   {entry.file_path && <code>{entry.file_path}</code>}
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
+                    className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                     onClick={() => void review(detail.suggestion_id, 'LINK', detail.related_cases.map((item) => item.id))}
                   >
                     {t('canvas.intelligence.linkCases')}

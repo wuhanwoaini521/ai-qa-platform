@@ -61,7 +61,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                 <h3 id="requirement-form-title">{t('requirementFormTitle')}</h3>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                   aria-label={t('common:close')}
                   onClick={onClose}
                 >
@@ -73,7 +73,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   <label className="form-label" htmlFor="requirement-project">{t('requirementFormProjectLabel')}</label>
                   <select
                     id="requirement-project"
-                    className="form-select"
+                    className="ds-select form-select"
                     value={reqFormData.project_id}
                     onChange={(e) => setReqFormData({ ...reqFormData, project_id: e.target.value })}
                   >
@@ -91,7 +91,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                     id="requirement-title"
                     type="text"
                     required
-                    className="form-input"
+                    className="ds-input form-input"
                     placeholder={t('requirementFormTitlePlaceholder')}
                     value={reqFormData.title}
                     onChange={(e) => setReqFormData({ ...reqFormData, title: e.target.value })}
@@ -103,7 +103,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   <textarea
                     id="requirement-description"
                     rows={3}
-                    className="form-textarea"
+                    className="ds-textarea form-textarea"
                     placeholder={t('requirementFormDescriptionPlaceholder')}
                     value={reqFormData.description}
                     onChange={(e) => setReqFormData({ ...reqFormData, description: e.target.value })}
@@ -115,7 +115,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   <textarea
                     id="requirement-acceptance-criteria"
                     rows={3}
-                    className="form-textarea"
+                    className="ds-textarea form-textarea"
                     placeholder={t('requirementFormAcceptanceCriteriaPlaceholder')}
                     value={reqFormData.acceptance_criteria}
                     onChange={(e) =>
@@ -128,7 +128,7 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
                   <label className="form-label" htmlFor="requirement-status">{t('requirementFormInitialStatusLabel')}</label>
                   <select
                     id="requirement-status"
-                    className="form-select"
+                    className="ds-select form-select"
                     value={reqFormData.status}
                     onChange={(e) =>
                       setReqFormData({ ...reqFormData, status: e.target.value as RequirementStatus })
@@ -144,12 +144,12 @@ export const RequirementFormModal: React.FC<RequirementFormModalProps> = ({
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="ds-btn btn btn-secondary"
                   onClick={onClose}
                 >
                   {t('common:cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="ds-btn-primary ds-btn btn btn-primary">
                   {t('requirementFormSubmit')}
                 </button>
               </div>

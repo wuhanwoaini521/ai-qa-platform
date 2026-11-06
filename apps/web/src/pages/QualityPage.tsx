@@ -3,6 +3,35 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+  FormField,
+  IconButton,
+  Input,
+  Heading,
+  Inline,
+  Progress,
+  SearchInput,
+  Stack,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  Textarea,
+} from '@self/ui-style/react';
+import {
   ShieldCheck,
   Target,
   Activity,
@@ -44,6 +73,11 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   onNavigateToRuns,
 }) => {
   const { t } = useTranslation('quality');
+  const getCoverageStatusLabel = (status: string) => {
+    if (status === 'READY') return t('coverageStatusReady');
+    if (status === 'DRAFT') return t('coverageStatusDraft');
+    return status;
+  };
   const [activeTab, setActiveTab] = useState<'coverage' | 'risks' | 'impact' | 'releases'>('coverage');
   const [impactError, setImpactError] = useState('');
 
@@ -69,6 +103,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   // Releases state
   const [releases, setReleases] = useState<Release[]>([]);
   const [showCreateReleaseModal, setShowCreateReleaseModal] = useState<boolean>(false);
+  const createReleaseTriggerRef = useRef<HTMLButtonElement>(null);
   const [newReleaseVersion, setNewReleaseVersion] = useState<string>('');
   const [newReleaseName, setNewReleaseName] = useState<string>('');
   const [newReleaseTargetDate, setNewReleaseTargetDate] = useState<string>('');
@@ -80,6 +115,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
 
   // Gate Report state
   const [selectedGateReport, setSelectedGateReport] = useState<ReleaseGateReport | null>(null);
+  const gateEvaluateTriggerRef = useRef<HTMLButtonElement>(null);
   const [evaluatingGateId, setEvaluatingGateId] = useState<string | null>(null);
   const riskCount = riskMatrix?.risks.length ?? t('notAvailable');
   const releaseCount = !selectedProjectId || loadingMetrics || qualityLoadError ? t('notAvailable') : releases.length;
@@ -89,15 +125,6 @@ export const QualityPage: React.FC<QualityPageProps> = ({
     { id: 'impact' as const, label: t('tabImpact') },
     { id: 'releases' as const, label: t('tabReleases', { value: releaseCount }) },
   ];
-  const handleQualityTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? qualityTabs.length - 1 : (index + offset + qualityTabs.length) % qualityTabs.length;
-    if (!offset && event.key !== 'Home' && event.key !== 'End') return;
-    event.preventDefault();
-    const next = qualityTabs[nextIndex].id;
-    setActiveTab(next);
-    document.getElementById(`quality-tab-${next}`)?.focus();
-  };
 
   const fetchQualityData = useCallback(async () => {
     const requestVersion = ++qualityRequestVersion.current;
@@ -305,56 +332,55 @@ export const QualityPage: React.FC<QualityPageProps> = ({
   const getRiskBadge = (level: QualityRiskLevel, translate: TFunction) => {
     switch (level) {
       case 'LOW':
-        return <span className="status-pill status-pill-passed">{translate('riskLevelLow')}</span>;
+        return <Badge tone="success"><CheckCircle2 size={12} aria-hidden="true" />{translate('riskLevelLow')}</Badge>;
       case 'MEDIUM':
-        return <span className="status-pill status-pill-warning">{translate('riskLevelMedium')}</span>;
+        return <Badge tone="warn"><ShieldCheck size={12} aria-hidden="true" />{translate('riskLevelMedium')}</Badge>;
       case 'HIGH':
-        return <span className="status-pill status-pill-failed">{translate('riskLevelHigh')}</span>;
+        return <Badge tone="danger"><XCircle size={12} aria-hidden="true" />{translate('riskLevelHigh')}</Badge>;
       case 'CRITICAL':
-        return <span className="status-pill status-pill-error">{translate('riskLevelCritical')}</span>;
+        return <Badge tone="danger"><XCircle size={12} aria-hidden="true" />{translate('riskLevelCritical')}</Badge>;
       default:
-        return <span className="status-pill">{level}</span>;
+        return <Badge>{level}</Badge>;
     }
   };
 
   return (
-    <div className="page-container quality-page">
-      {/* Page Header */}
-      <div className="page-header quality-page-header">
+    <Stack className="quality-page" gap={5}>
+      <header className="quality-page-header">
         <div>
-          <h2>{t('titles:quality')}</h2>
-          <p className="subtitle">{t('subtitle')}</p>
+          <Heading>{t('titles:quality')}</Heading>
+          <p className="quality-subtitle">{t('subtitle')}</p>
           {currentProject && <p className="quality-project-context">{t('currentProject', { project: currentProject.name })}</p>}
         </div>
-        <div className="quality-page-actions">
-          <button className="btn btn-secondary" onClick={() => void fetchQualityData()} disabled={loadingMetrics || !selectedProjectId}>
+        <Inline className="quality-page-actions">
+          <Button variant="secondary" onClick={() => void fetchQualityData()} disabled={loadingMetrics || !selectedProjectId}>
             <RefreshCw size={14} className={loadingMetrics ? 'spinning' : ''} />
             <span>{t('common:refresh')}</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowCreateReleaseModal(true)} disabled={!selectedProjectId}>
+          </Button>
+          <Button ref={createReleaseTriggerRef} variant="primary" onClick={() => setShowCreateReleaseModal(true)} disabled={!selectedProjectId}>
             <Plus size={14} />
             <span>{t('newRelease')}</span>
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Inline>
+      </header>
 
-      {!selectedProjectId && <div className="quality-context-notice" role="status">
-        <span>{t('noProjectSelected')}</span><Link to="/projects">{t('goToProjects')}</Link>
-      </div>}
-      {qualityLoadError && <div className="quality-data-error" role="alert">
+      {!selectedProjectId && <Alert className="quality-context-notice">
+        <span>{t('noProjectSelected')}</span><Link className="ds-link" to="/projects">{t('goToProjects')}</Link>
+      </Alert>}
+      {qualityLoadError && <Alert className="quality-data-error" role="alert">
         <span>{t(qualityLoadError === 'forbidden' ? 'qualityLoadForbidden' : 'qualityLoadFailed')}</span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void fetchQualityData()} disabled={loadingMetrics}>{t('common:refresh')}</button>
-      </div>}
+        <Button type="button" variant="secondary" size="sm" onClick={() => void fetchQualityData()} disabled={loadingMetrics}>{t('common:refresh')}</Button>
+      </Alert>}
 
-      <section className="quality-overview" aria-label={t('overviewTitle')} aria-busy={loadingMetrics}>
-        <div className="quality-posture">
+      <section className="ds-metrics quality-overview" aria-label={t('overviewTitle')} aria-busy={loadingMetrics}>
+        <Card className="quality-posture">
           <div className="quality-posture-main">
-            <span className="stat-icon quality-posture-icon is-blue" aria-hidden="true">
+            <span className="ds-metric-icon" aria-hidden="true">
               <ShieldCheck size={20} />
             </span>
             <div>
-              <h3 className="quality-posture-label">{t('metricQualityHealth')}</h3>
-              <div className="quality-posture-score">
+              <h3 className="ds-metric-label">{t('metricQualityHealth')}</h3>
+              <div className="ds-metric-value">
                 {riskMatrix ? <><strong>{riskMatrix.overall_quality_score}</strong><span>/100</span></> : '--'}
               </div>
             </div>
@@ -362,33 +388,45 @@ export const QualityPage: React.FC<QualityPageProps> = ({
           <div className="quality-posture-footer">
             <div className="quality-posture-risk">
               {riskMatrix
-                ? evidenceIncomplete ? <span className="quality-evidence-badge">{t('evidenceIncompleteShort')}</span> : getRiskBadge(riskMatrix.overall_risk_level, t)
+                ? evidenceIncomplete ? <Badge tone="warn">{t('evidenceIncompleteShort')}</Badge> : getRiskBadge(riskMatrix.overall_risk_level, t)
                 : <span className="quality-risk-unavailable">{loadingMetrics ? t('coverageLoading') : t('notAvailable')}</span>}
               {riskMatrix && (
-                <span className="quality-posture-p0">{t('p0Unautomated', { value: riskMatrix.unautomated_p0_count })}</span>
+                <span className="quality-posture-p0">
+                  <span aria-hidden="true">{t('p0UnautomatedShort', { value: riskMatrix.unautomated_p0_count })}</span>
+                  <span className="quality-coverage-visually-hidden">{t('p0Unautomated', { value: riskMatrix.unautomated_p0_count })}</span>
+                </span>
               )}
             </div>
             <div className="quality-posture-high-risk">
-              <span>{t('metricHighRiskAreas')}</span>
-              <strong>{riskMatrix ? riskMatrix.high_risk_count : '--'}</strong>
+              <Badge tone={riskMatrix?.high_risk_count ? 'danger' : 'neutral'}>
+                {t('metricHighRiskAreas')} {riskMatrix ? riskMatrix.high_risk_count : '--'}
+              </Badge>
             </div>
+          </div>
+          <div className="quality-posture-actions">
+            {riskMatrix?.high_risk_count ? <Button
+              className="quality-posture-risk-link"
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveTab('risks')}
+            >{t('viewRiskDetails')}<ArrowRight size={13} aria-hidden="true" /></Button> : null}
+            {riskMatrix && (
+              <details className="quality-score-method">
+                <summary>{t('qualityScoreMethod')}</summary>
+                <p>{t('metricQualityHealthFormula')}</p>
+              </details>
+            )}
           </div>
           {riskMatrix && coverage && evidenceIncomplete && <p className="quality-evidence-note" role="note">
             {t('riskEvidenceIncomplete', { requirements: coverage.total_requirements, executed: coverage.executed_cases_recent })}
           </p>}
-          {riskMatrix && (
-            <details className="quality-score-method">
-              <summary>{t('qualityScoreMethod')}</summary>
-              <p>{t('metricQualityHealthFormula')}</p>
-            </details>
-          )}
-        </div>
+        </Card>
 
         <div className="quality-coverage-signals">
           {[
             {
               icon: Target,
-              tone: 'is-green',
               label: t('metricRequirementCoverage'),
               value: coverage ? requirementCoverage === null ? t('notAvailable') : `${requirementCoverage}%` : '--',
               detail: coverage
@@ -399,7 +437,6 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             },
             {
               icon: Zap,
-              tone: 'is-amber',
               label: t('metricAutomationCoverage'),
               value: coverage ? automationCoverage === null ? t('notAvailable') : `${automationCoverage}%` : '--',
               detail: coverage
@@ -410,7 +447,6 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             },
             {
               icon: Activity,
-              tone: 'is-blue',
               label: t('metricExecutionCoverage'),
               value: coverage ? executionCoverage === null ? t('notAvailable') : `${executionCoverage}%` : '--',
               detail: coverage
@@ -419,78 +455,84 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   : t('casesCoverageUnavailable')
                 : qualityLoadError ? t('qualityLoadFailed') : loadingMetrics ? t('coverageLoading') : t('noProjectSelected'),
             },
-          ].map(({ icon: Icon, tone, label, value, detail }) => (
-            <div className="quality-coverage-signal" key={label}>
-              <div className="quality-signal-heading">
-                <span className={`stat-icon quality-signal-icon ${tone}`} aria-hidden="true"><Icon size={16} /></span>
-                <span>{label}</span>
-              </div>
-              <strong className="quality-signal-value">{value}</strong>
-              <span className="quality-signal-detail">{detail}</span>
-            </div>
+          ].map(({ icon: Icon, label, value, detail }) => (
+            <article className="ds-metric quality-coverage-signal" key={label}>
+              <span className="ds-metric-icon" aria-hidden="true"><Icon size={18} /></span>
+              <span className="ds-metric-label">{label}</span>
+              <strong className="ds-metric-value">{value}</strong>
+              <span className="ds-metric-note">{detail}</span>
+            </article>
           ))}
         </div>
       </section>
 
       {/* Tabs */}
-      <div className="tabs-container quality-tabs" role="tablist" aria-label={t('tabsLabel')}>
-        {qualityTabs.map((tab, index) => <button
-          key={tab.id}
-          id={`quality-tab-${tab.id}`}
-          type="button"
-          role="tab"
-          aria-controls="quality-tabpanel"
-          aria-selected={activeTab === tab.id}
-          tabIndex={activeTab === tab.id ? 0 : -1}
-          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-          onClick={() => setActiveTab(tab.id)}
-          onKeyDown={(event) => handleQualityTabKeyDown(event, index)}
-        >{tab.label}</button>)}
-      </div>
-      <div id="quality-tabpanel" role="tabpanel" aria-labelledby={`quality-tab-${activeTab}`} tabIndex={0}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
+        <TabsList className="quality-tabs" aria-label={t('tabsLabel')}>
+          {qualityTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>)}
+        </TabsList>
+        <TabsContent value={activeTab} className="quality-tabpanel">
 
       {/* Tab 1: Coverage Details */}
       {activeTab === 'coverage' && (
-        <div className="card">
-          <div className="card-header">
+        <Card className="quality-card">
+          <div className="ds-card-head quality-card-heading quality-coverage-heading">
             <h3>{t('coverageTitle')}</h3>
-            <span className="text-secondary text-sm">{t('coverageHint')}</span>
+            <div className="quality-coverage-heading-meta">
+              <span className="quality-coverage-count" role="status">
+                {coverage
+                  ? t('coverageResultCount', { visible: filteredCoverage.length, total: coverage.requirement_details.length })
+                  : loadingMetrics ? t('coverageLoading') : qualityLoadError ? t('qualityLoadFailed') : t('noProjectSelected')}
+              </span>
+              <details className="quality-coverage-method">
+                <summary>{t('coverageScoreMethod')}</summary>
+                <p>{t('coverageHint')}</p>
+              </details>
+            </div>
           </div>
           {testCasesSourceError && (
-            <p className="text-secondary text-sm" role="status" style={{ padding: '0 16px 12px' }}>
+            <p className="quality-source-status" role="status">
               {t('testCasesSourceUnavailable')}
             </p>
           )}
           <div className="quality-coverage-toolbar" role="search">
-            <label className="quality-coverage-search">
-              <Search size={15} aria-hidden="true" />
-              <span className="quality-coverage-visually-hidden">{t('coverageSearchLabel')}</span>
-              <input type="search" value={coverageQuery} onChange={(event) => setCoverageQuery(event.target.value)} placeholder={t('coverageSearchPlaceholder')} />
-            </label>
+            <div className="ds-search quality-coverage-search">
+              <SearchInput aria-label={t('coverageSearchLabel')} value={coverageQuery} onChange={(event) => setCoverageQuery(event.target.value)} placeholder={t('coverageSearchPlaceholder')} />
+              <Search className="ds-ico" size={15} aria-hidden="true" />
+            </div>
             <label className="quality-coverage-control">
               <span>{t('coverageStatusLabel')}</span>
-              <select value={coverageStatus} onChange={(event) => setCoverageStatus(event.target.value)}>
-                <option value="ALL">{t('coverageAllStatuses')}</option>
-                {coverageStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
+              <Select value={coverageStatus} onValueChange={setCoverageStatus}>
+                <SelectTrigger aria-label={t('coverageStatusLabel')}>
+                  <SelectValue>{coverageStatus === 'ALL' ? t('coverageAllStatuses') : getCoverageStatusLabel(coverageStatus)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent className="quality-coverage-menu" position="popper">
+                  <SelectItem className="ds-menu-item" value="ALL">{t('coverageAllStatuses')}</SelectItem>
+                  {coverageStatuses.map((status) => <SelectItem className="ds-menu-item" key={status} value={status}>{getCoverageStatusLabel(status)}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </label>
-            <label className="quality-coverage-control">
+            <label className="quality-coverage-control quality-coverage-sort">
               <span>{t('coverageSortLabel')}</span>
-              <select value={coverageSort} onChange={(event) => setCoverageSort(event.target.value as typeof coverageSort)}>
-                <option value="coverage-desc">{t('coverageSortHighest')}</option>
-                <option value="coverage-asc">{t('coverageSortLowest')}</option>
-                <option value="title">{t('coverageSortTitle')}</option>
-              </select>
+              <Select value={coverageSort} onValueChange={(value) => setCoverageSort(value as typeof coverageSort)}>
+                <SelectTrigger aria-label={t('coverageSortLabel')}>
+                  <SelectValue>
+                    {coverageSort === 'coverage-desc'
+                      ? t('coverageSortHighest')
+                      : coverageSort === 'coverage-asc' ? t('coverageSortLowest') : t('coverageSortTitle')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="quality-coverage-menu" position="popper">
+                  <SelectItem className="ds-menu-item" value="coverage-desc">{t('coverageSortHighest')}</SelectItem>
+                  <SelectItem className="ds-menu-item" value="coverage-asc">{t('coverageSortLowest')}</SelectItem>
+                  <SelectItem className="ds-menu-item" value="title">{t('coverageSortTitle')}</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label className="quality-coverage-group-toggle">
-              <input type="checkbox" checked={groupCoverageByStatus} onChange={(event) => setGroupCoverageByStatus(event.target.checked)} />
+              <Checkbox checked={groupCoverageByStatus} aria-label={t('coverageGroupByStatus')} onCheckedChange={(checked) => setGroupCoverageByStatus(checked === true)} />
               <span>{t('coverageGroupByStatus')}</span>
             </label>
-          </div>
-          <div className="quality-coverage-count" role="status">
-            {coverage
-              ? t('coverageResultCount', { visible: filteredCoverage.length, total: coverage.requirement_details.length })
-              : loadingMetrics ? t('coverageLoading') : qualityLoadError ? t('qualityLoadFailed') : t('noProjectSelected')}
           </div>
           <p className="quality-coverage-scroll-hint">{t('coverageScrollHint')}</p>
           <div
@@ -500,7 +542,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             aria-description={t('coverageScrollHint')}
             tabIndex={0}
           >
-            <table className="data-table quality-coverage-table">
+          <Table className="quality-coverage-table">
               <thead>
                 <tr>
                   <th>{t('colRequirementTitle')}</th>
@@ -525,7 +567,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 </td></tr></tbody>
               ) : coverageGroups.map(({ status, items }) => (
                 <tbody key={status || 'all'}>
-                  {status && <tr className="quality-coverage-group-row"><th colSpan={7}>{status}</th></tr>}
+                  {status && <tr className="quality-coverage-group-row"><th colSpan={7}>{getCoverageStatusLabel(status)}</th></tr>}
                   {items.map((item) => {
                     const requirementCoverage = coveragePercentageByRequirement.get(item.requirement_id) ?? 0;
                     const linkedCases = testCasesByRequirement.get(item.requirement_id) ?? [];
@@ -541,8 +583,9 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       <React.Fragment key={item.requirement_id}>
                         <tr>
                           <td className="quality-coverage-title-cell">
-                            <button
+                            <IconButton
                               className="quality-coverage-expand"
+                              variant="ghost"
                               type="button"
                               aria-label={t(expanded ? 'coverageCollapseDetails' : 'coverageExpandDetails', { title: item.title })}
                               aria-expanded={expanded}
@@ -550,45 +593,33 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                               onClick={() => setExpandedCoverageId(expanded ? null : item.requirement_id)}
                             >
                               <ChevronDown size={15} aria-hidden="true" />
-                            </button>
+                            </IconButton>
                             <div>
                               <Link className="quality-coverage-link" to={requirementHref}>{item.title}</Link>
                               <small>{item.requirement_id}</small>
                             </div>
                           </td>
-                          <td><span className={`status-pill status-pill-${item.status.toLowerCase()}`}>{item.status}</span></td>
+                          <td><Badge>{getCoverageStatusLabel(item.status)}</Badge></td>
                           <td>{item.test_design_count}</td>
                           <td>{coverage ? item.test_case_count : '--'}</td>
                           <td>{coverage ? item.automated_case_count : '--'}</td>
                           <td>
                             <div className="quality-coverage-meter">
-                              <div className="quality-coverage-meter-track">
-                                <div
-                                  className="quality-coverage-meter-value"
-                                  style={{
-                                    width: `${coverage ? requirementCoverage : 0}%`,
-                                    backgroundColor: requirementCoverage >= 70
-                                      ? 'var(--accent-green)'
-                                      : requirementCoverage >= 40
-                                        ? 'var(--accent-amber)'
-                                        : 'var(--accent-red)',
-                                  }}
-                                />
-                              </div>
-                              <span>{coverage ? `${requirementCoverage}%` : '--'}</span>
+                              <Progress value={coverage ? requirementCoverage : 0} label={`${item.title}: ${t('colCoveragePct')}`} />
+                              <span>{coverage ? t('coverageScoreValue', { value: requirementCoverage }) : '--'}</span>
                             </div>
                           </td>
                           <td>{coverage
                             ? item.has_automation
-                              ? <span className="status-pill status-pill-passed">{t('common:yes')}</span>
-                              : <span className="status-pill status-pill-failed">{t('common:no')}</span>
+                              ? <Badge tone="success"><CheckCircle2 size={12} aria-hidden="true" />{t('common:yes')}</Badge>
+                              : <Badge tone="danger"><XCircle size={12} aria-hidden="true" />{t('common:no')}</Badge>
                             : '--'}</td>
                         </tr>
                         {expanded && <tr className="quality-coverage-detail-row"><td colSpan={7}>
                           <section id={detailId} className="quality-coverage-detail">
                             <div className="quality-coverage-detail-summary">
                               <div><span>{t('coverageRequirement')}</span><Link to={requirementHref}>{item.title}</Link></div>
-                              <div><span>{t('coverageStatusLabel')}</span><strong>{item.status}</strong></div>
+                              <div><span>{t('coverageStatusLabel')}</span><strong>{getCoverageStatusLabel(item.status)}</strong></div>
                               <div><span>{t('coverageLinkedTests', { count: linkedCases.length })}</span><strong>{item.test_case_count}</strong></div>
                             </div>
                             <div className="quality-coverage-linked-tests">
@@ -615,15 +646,15 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   })}
                 </tbody>
               ))}
-            </table>
+            </Table>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Tab 2: Quality Risk List */}
       {activeTab === 'risks' && (
-        <div className="card">
-          <div className="card-header">
+        <Card className="quality-card">
+          <div className="ds-card-head quality-card-heading">
             <h3>{t('risksTitle')}</h3>
             <span className="text-secondary text-sm">{t('risksHint')}</span>
           </div>
@@ -635,7 +666,7 @@ export const QualityPage: React.FC<QualityPageProps> = ({
               riskMatrix.risks.map((risk) => {
                 const riskHref = riskWorkspaceHref(risk);
                 return (
-                <article key={risk.id} className="quality-risk-card">
+                <Card key={risk.id} className="quality-risk-card">
                   <div className="quality-risk-heading">
                     <div className="quality-risk-title">
                       {riskHref
@@ -669,19 +700,19 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       </ul>
                     </div>
                   )}
-                </article>
+                </Card>
                 );
               })
             ) : (
               <div className="text-center text-secondary py-4">{t('risksEmpty')}</div>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Tab 3: Git Impact & Regression Selector */}
       {activeTab === 'impact' && (
-        <div className="card quality-impact-card">
+        <Card className="quality-impact-card">
           <div style={{ marginBottom: '1.5rem' }}>
             <h3>{t('impactTitle')}</h3>
             <p className="text-secondary text-sm">{t('impactHint')}</p>
@@ -691,42 +722,35 @@ export const QualityPage: React.FC<QualityPageProps> = ({
             <label className="quality-impact-label" htmlFor="quality-changed-files">
               {t('impactChangedFilesLabel')}
             </label>
-            <textarea
+            <Textarea
               id="quality-changed-files"
-              className="form-control quality-impact-input"
+              className="quality-impact-input"
               rows={4}
               placeholder={t('impactChangedFilesPlaceholder')}
               value={changedFilesText}
               onChange={(e) => setChangedFilesText(e.target.value)}
             />
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button
+              <Button
                 type="button"
-                className="btn btn-primary"
+                variant="primary"
                 onClick={handleRunImpactAnalysis}
                 disabled={loadingImpact}
               >
                 <Zap size={14} className={loadingImpact ? 'spinning' : ''} />
                 <span>{loadingImpact ? t('impactAnalyzing') : t('impactAnalyze')}</span>
-              </button>
+              </Button>
             </div>
           </div>
-          {impactError && <div className="async-state async-state-error quality-action-error" role="alert">{t('impactActionFailed', { message: impactError })}</div>}
+          {impactError && <Alert className="quality-action-error" role="alert">{t('impactActionFailed', { message: impactError })}</Alert>}
 
           {impactResult && (
-            <div
-              style={{
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--r-sm)',
-                padding: '1.25rem',
-                backgroundColor: 'var(--bg-subtle)',
-              }}
-            >
+            <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h4>{t('impactResultsTitle')}</h4>
-                <span className="status-pill status-pill-passed">
+                <Badge tone="info">
                   {t('impactConfidence', { value: Math.round(impactResult.confidence_score * 100) })}
-                </span>
+                </Badge>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
@@ -766,13 +790,14 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     })}
                   </div>
                   {onNavigateToRuns && impactResult.recommended_regression_tests.length > 0 && (
-                    <button
-                      className="btn btn-secondary btn-sm"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => onNavigateToRuns()}
                     >
                       <PlayCircle size={14} />
                       <span>{t('impactExecuteInRunner')}</span>
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div
@@ -793,30 +818,26 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   ))}
                 </div>
               </div>
-            </div>
+            </Card>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Tab 4: Releases & Gate Dashboard */}
       {activeTab === 'releases' && (
         <>
           {releaseActionError && (
-            <div
-              className="async-state async-state-error"
-              role="alert"
-              style={{ marginBottom: '1rem' }}
-            >
+            <Alert role="alert" className="quality-action-error">
               {t('releaseActionFailed', { message: releaseActionError })}
-            </div>
+            </Alert>
           )}
-        <div className="card">
-          <div className="card-header">
+        <Card className="quality-card">
+          <div className="ds-card-head quality-card-heading">
             <h3>{t('releasesTitle')}</h3>
             <span className="text-secondary text-sm">{t('releasesHint')}</span>
           </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <Table className="quality-releases-table">
               <thead>
                 <tr>
                   <th>{t('colVersion')}</th>
@@ -836,39 +857,35 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                       <td style={{ fontWeight: 600 }}>{rel.version}</td>
                       <td>{rel.name}</td>
                       <td>
-                        <span
-                          className={`status-pill ${
-                            rel.status === 'RELEASED'
-                              ? 'status-pill-passed'
-                              : rel.status === 'BLOCKED'
-                              ? 'status-pill-failed'
-                              : 'status-pill-draft'
-                          }`}
-                        >
+                        <Badge tone={rel.status === 'RELEASED' ? 'success' : rel.status === 'BLOCKED' ? 'danger' : 'neutral'}>
                           {rel.status}
-                        </span>
+                        </Badge>
                       </td>
                       <td>{rel.target_date || '--'}</td>
                       <td>{rel.pass_rate_threshold}%</td>
                       <td>{rel.quality_score > 0 ? `${rel.quality_score}/100` : '--'}</td>
                       <td>
                         {rel.blockers && rel.blockers.length > 0 ? (
-                          <span className="status-pill status-pill-failed">
+                          <Badge tone="danger">
                             {t('blockersCount', { value: rel.blockers.length })}
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="status-pill status-pill-passed">{t('blockersZero')}</span>
+                          <Badge tone="success">{t('blockersZero')}</Badge>
                         )}
                       </td>
                       <td>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleEvaluateGate(rel.id)}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={(event) => {
+                            gateEvaluateTriggerRef.current = event.currentTarget;
+                            void handleEvaluateGate(rel.id);
+                          }}
                           disabled={evaluatingGateId === rel.id}
                         >
                           <ShieldCheck size={14} className={evaluatingGateId === rel.id ? 'spinning' : ''} />
                           <span>{evaluatingGateId === rel.id ? t('gateEvaluating') : t('gateEvaluate')}</span>
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -880,115 +897,78 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                   </tr>
                 )}
               </tbody>
-            </table>
+            </Table>
           </div>
-        </div>
+        </Card>
         </>
       )}
 
-      </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Modal: Create Release */}
-      {showCreateReleaseModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '500px' }}>
-            <div className="modal-header">
-              <h3>{t('createReleaseTitle')}</h3>
-              <button className="btn-icon" onClick={() => setShowCreateReleaseModal(false)}>
-                &times;
-              </button>
-            </div>
-            <form onSubmit={handleCreateRelease}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {releaseActionError && (
-                  <div className="async-state async-state-error" role="alert">
-                    {t('releaseActionFailed', { message: releaseActionError })}
-                  </div>
-                )}
-                <div className="form-group">
-                  <label>{t('createReleaseVersionLabel')}</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    placeholder="v1.4.0"
-                    value={newReleaseVersion}
-                    onChange={(e) => setNewReleaseVersion(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t('createReleaseNameLabel')}</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    placeholder={t('createReleaseNamePlaceholder')}
-                    value={newReleaseName}
-                    onChange={(e) => setNewReleaseName(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t('createReleaseTargetDateLabel')}</label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={newReleaseTargetDate}
-                    onChange={(e) => setNewReleaseTargetDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t('createReleaseThresholdLabel')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    className="form-control"
-                    value={newReleaseThreshold}
-                    onChange={(e) => setNewReleaseThreshold(parseFloat(e.target.value))}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateReleaseModal(false)}>
-                  {t('common:cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={creatingRelease}>
-                  {creatingRelease ? t('createReleaseSubmitting') : t('createReleaseSubmit')}
-                </button>
-              </div>
-            </form>
+      <Drawer open={showCreateReleaseModal} onOpenChange={setShowCreateReleaseModal}>
+        <DrawerContent
+          className="quality-release-drawer"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            createReleaseTriggerRef.current?.focus();
+          }}
+        >
+          <div className="ds-drawer-head">
+            <DrawerTitle>{t('createReleaseTitle')}</DrawerTitle>
+            <IconButton variant="ghost" aria-label={t('common:cancel')} onClick={() => setShowCreateReleaseModal(false)}>&times;</IconButton>
           </div>
-        </div>
-      )}
+          <form onSubmit={handleCreateRelease}>
+            <div className="ds-drawer-body">
+              {releaseActionError && <Alert role="alert">{t('releaseActionFailed', { message: releaseActionError })}</Alert>}
+              <FormField label={t('createReleaseVersionLabel')} htmlFor="quality-release-version" required>
+                <Input id="quality-release-version" type="text" required placeholder="v1.4.0" value={newReleaseVersion} onChange={(e) => setNewReleaseVersion(e.target.value)} />
+              </FormField>
+              <FormField label={t('createReleaseNameLabel')} htmlFor="quality-release-name" required>
+                <Input id="quality-release-name" type="text" required placeholder={t('createReleaseNamePlaceholder')} value={newReleaseName} onChange={(e) => setNewReleaseName(e.target.value)} />
+              </FormField>
+              <FormField label={t('createReleaseTargetDateLabel')} htmlFor="quality-release-target-date">
+                <Input id="quality-release-target-date" type="date" value={newReleaseTargetDate} onChange={(e) => setNewReleaseTargetDate(e.target.value)} />
+              </FormField>
+              <FormField label={t('createReleaseThresholdLabel')} htmlFor="quality-release-threshold">
+                <Input id="quality-release-threshold" type="number" min="0" max="100" step="0.5" value={newReleaseThreshold} onChange={(e) => setNewReleaseThreshold(parseFloat(e.target.value))} />
+              </FormField>
+            </div>
+            <div className="ds-drawer-foot quality-drawer-actions">
+              <Button type="button" variant="secondary" onClick={() => setShowCreateReleaseModal(false)}>{t('common:cancel')}</Button>
+              <Button type="submit" variant="primary" disabled={creatingRelease}>
+                {creatingRelease ? t('createReleaseSubmitting') : t('createReleaseSubmit')}
+              </Button>
+            </div>
+          </form>
+        </DrawerContent>
+      </Drawer>
 
-      {/* Modal: Gate Report Detail */}
-      {selectedGateReport && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
+      <Drawer
+        open={selectedGateReport !== null}
+        onOpenChange={(open) => { if (!open) setSelectedGateReport(null); }}
+      >
+        <DrawerContent
+          className="quality-gate-report-drawer"
+          onCloseAutoFocus={(event) => {
+            const trigger = gateEvaluateTriggerRef.current;
+            if (trigger?.isConnected) {
+              event.preventDefault();
+              trigger.focus();
+            }
+          }}
+        >
+          {selectedGateReport && (
+            <>
+            <div className="ds-drawer-head">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShieldCheck size={20} color={selectedGateReport.can_release ? 'var(--accent-green)' : 'var(--accent-red)'} />
-                <h3>{t('gateReportTitle', { version: selectedGateReport.version })}</h3>
+                <DrawerTitle>{t('gateReportTitle', { version: selectedGateReport.version })}</DrawerTitle>
               </div>
-              <button className="btn-icon" onClick={() => setSelectedGateReport(null)}>
-                &times;
-              </button>
+              <IconButton variant="ghost" aria-label={t('gateCloseReport')} onClick={() => setSelectedGateReport(null)}>&times;</IconButton>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  borderRadius: 'var(--r-sm)',
-                  backgroundColor: selectedGateReport.can_release
-                    ? 'rgba(16, 185, 129, 0.1)'
-                    : 'rgba(239, 68, 68, 0.1)',
-                  border: `1px solid ${selectedGateReport.can_release ? 'var(--accent-green)' : 'var(--accent-red)'}`,
-                }}
-              >
+            <div className="ds-drawer-body">
+              <Alert className="quality-gate-verdict">
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
                     {t('gateVerdict', { verdict: selectedGateReport.verdict })}
@@ -999,16 +979,12 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 </div>
                 <div>
                   {selectedGateReport.can_release ? (
-                    <span className="status-pill status-pill-passed" style={{ fontSize: '0.9rem', padding: '4px 10px' }}>
-                      {t('gateReadyToRelease')}
-                    </span>
+                    <Badge tone="success"><CheckCircle2 size={12} aria-hidden="true" />{t('gateReadyToRelease')}</Badge>
                   ) : (
-                    <span className="status-pill status-pill-failed" style={{ fontSize: '0.9rem', padding: '4px 10px' }}>
-                      {t('gateReleaseBlocked')}
-                    </span>
+                    <Badge tone="danger"><XCircle size={12} aria-hidden="true" />{t('gateReleaseBlocked')}</Badge>
                   )}
                 </div>
-              </div>
+              </Alert>
 
               {/* Gate Checks Breakdown */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1094,14 +1070,15 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                 </div>
               )}
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn btn-primary" onClick={() => setSelectedGateReport(null)}>
+            <div className="ds-drawer-foot quality-drawer-actions">
+              <Button variant="primary" onClick={() => setSelectedGateReport(null)}>
                 {t('gateCloseReport')}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+            </>
+          )}
+        </DrawerContent>
+      </Drawer>
+    </Stack>
   );
 };

@@ -210,7 +210,7 @@ export const FailureWorkflowPanel: React.FC<{
         {running && (
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
             onClick={onCancel}
           >
             <StopCircle size={13} /> {t('workflow.cancel')}
@@ -312,13 +312,13 @@ export const FailureWorkflowPanel: React.FC<{
               </div>
               {primaryAction === 'BLOCKED' ? (
                 <div className="failure-manual-next-step-actions">
-                  {onOpenStudio && <button type="button" className="btn btn-primary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openFailureCode')}</button>}
-                  {onDebug && <button type="button" className="btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
+                  {onOpenStudio && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={onOpenStudio}><Code2 size={14} />{t('openFailureCode')}</button>}
+                  {onDebug && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onDebug}><Bug size={14} />{t('debugFromFailure')}</button>}
                 </div>
               ) : (
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="ds-btn-primary ds-btn btn btn-primary"
                   disabled={primaryActionDisabled}
                   onClick={onPrimaryAction}
                 >
@@ -386,7 +386,7 @@ export const FailureWorkflowPanel: React.FC<{
                     type="button"
                     aria-pressed={selected}
                     disabled={running}
-                    onClick={() => onSelect(item.id)}
+                    onClick={() => onSelect(item.id)} className="ds-btn"
                   >
                     <time dateTime={item.created_at}>
                       {new Date(item.created_at).toLocaleString()}

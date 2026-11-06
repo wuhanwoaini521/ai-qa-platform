@@ -28,7 +28,7 @@ export const RunOutputPanel: React.FC<RunOutputPanelProps> = ({ lastRunResult, r
       <span>{lastRunResult}</span>
       {onNavigateToRuns && (
         <button
-          className="btn btn-secondary btn-sm"
+          className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
           style={{ padding: '2px 6px', fontSize: '10px' }}
           onClick={() => onNavigateToRuns(runId ?? undefined)}
         >

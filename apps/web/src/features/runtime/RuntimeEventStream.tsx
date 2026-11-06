@@ -71,7 +71,7 @@ export function RuntimeEventStream({
         </code>
       </summary>
       {!follow && (
-        <button className="rt-resume" onClick={() => setFollow(true)}>
+        <button className="ds-btn rt-resume" onClick={() => setFollow(true)}>
           {t('resumeLive')}
         </button>
       )}
@@ -144,7 +144,7 @@ export function RuntimeEventStream({
                   <button
                     disabled={!event.step_id}
                     onClick={() => event.step_id && onSelect(event.step_id)}
-                    title={`${event.title}${summary ? ' · ' + summary : ''}`}
+                    title={`${event.title}${summary ? ' · ' + summary : ''}`} className="ds-btn"
                   >
                     {label}
                     {summary && ` · ${summary}`}

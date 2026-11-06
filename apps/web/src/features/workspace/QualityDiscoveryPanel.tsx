@@ -424,33 +424,33 @@ export function QualityDiscoveryPanel({
         <div className="qd-heading">
           <div className="qd-heading-icon"><Waypoints size={18} aria-hidden="true" /></div>
           <div><span className="qd-eyebrow">{t('eyebrow')}</span><h3>{t('title')}</h3><p>{t('description')}</p></div>
-          {active && <button type="button" className="btn btn-ghost btn-sm qd-launch-toggle" onClick={() => setLaunchOpen((open) => !open)} aria-expanded={launchOpen}>{launchOpen ? t('hideLaunchForm') : t('showLaunchForm')}</button>}
+          {active && <button type="button" className="ds-btn-ghost ds-btn-sm ds-btn btn btn-ghost btn-sm qd-launch-toggle" onClick={() => setLaunchOpen((open) => !open)} aria-expanded={launchOpen}>{launchOpen ? t('hideLaunchForm') : t('showLaunchForm')}</button>}
         </div>
         {!launchCollapsed && <>
         <div className="qd-form-grid">
-          <label className="qd-field qd-url-field"><span>{t('startUrl')} <span className="qd-required-mark" aria-hidden="true">*</span></span><input type="url" value={url} onChange={(event) => { setUrlTouched(true); setUrl(event.target.value); }} onBlur={() => setUrlTouched(true)} placeholder={t('startUrlPlaceholder')} aria-label={t('startUrl')} aria-required="true" aria-invalid={startUrlInvalid} aria-describedby="qd-start-url-help" required /><small id="qd-start-url-help" className={`qd-field-hint${startUrlInvalid ? ' is-error' : ''}`}>{t(startUrlHelp)}</small></label>
-          <label className="qd-field"><span>{t('mode')}</span><select value={mode} onChange={(event) => setMode(event.target.value as QualityDiscoveryMode)} aria-label={t('mode')}>
+          <label className="qd-field qd-url-field"><span>{t('startUrl')} <span className="qd-required-mark" aria-hidden="true">*</span></span><input type="url" value={url} onChange={(event) => { setUrlTouched(true); setUrl(event.target.value); }} onBlur={() => setUrlTouched(true)} placeholder={t('startUrlPlaceholder')} aria-label={t('startUrl')} aria-required="true" aria-invalid={startUrlInvalid} aria-describedby="qd-start-url-help" required className="ds-input" /><small id="qd-start-url-help" className={`qd-field-hint${startUrlInvalid ? ' is-error' : ''}`}>{t(startUrlHelp)}</small></label>
+          <label className="qd-field"><span>{t('mode')}</span><select value={mode} onChange={(event) => setMode(event.target.value as QualityDiscoveryMode)} aria-label={t('mode')} className="ds-select">
             <option value="EXPLORE">{t('modes.EXPLORE')}</option><option value="VALIDATE">{t('modes.VALIDATE')}</option><option value="AUDIT">{t('modes.AUDIT')}</option>
           </select></label>
-          {needsRequirement && <label className="qd-field"><span>{t('requirementRequired')} <span className="qd-required-mark" aria-hidden="true">*</span></span><select value={requirementId} onChange={(event) => { requirementEdited.current = true; setRequirementId(event.target.value); setRequirementText(''); }} aria-label={t('requirementRequired')}>
+          {needsRequirement && <label className="qd-field"><span>{t('requirementRequired')} <span className="qd-required-mark" aria-hidden="true">*</span></span><select value={requirementId} onChange={(event) => { requirementEdited.current = true; setRequirementId(event.target.value); setRequirementText(''); }} aria-label={t('requirementRequired')} className="ds-select">
             <option value="">{t('noRequirement')}</option>
             {requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
           </select>{requirementsError && <small className="qd-field-hint is-error" role="status">{t('requirementsLoadError')}</small>}</label>}
         </div>
-        {needsRequirement && !requirementId && <label className="qd-field qd-paste-field"><span>{t('pasteRequirementRequired')}</span><textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} rows={3} maxLength={20_000} placeholder={t('pastePlaceholder')} required /></label>}
+        {needsRequirement && !requirementId && <label className="qd-field qd-paste-field"><span>{t('pasteRequirementRequired')}</span><textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} rows={3} maxLength={20_000} placeholder={t('pastePlaceholder')} required className="ds-textarea" /></label>}
         <details className="qd-advanced" open={showAdvanced} onToggle={(event) => setShowAdvanced(event.currentTarget.open)}>
           <summary>{t('advanced')}</summary>
-          <label className="qd-field"><span>{t('allowedDomains')}</span><input value={allowedDomainsText} onChange={(event) => setAllowedDomainsText(event.target.value)} placeholder="docs.example.com, shop.example.com" /></label>
+          <label className="qd-field"><span>{t('allowedDomains')}</span><input value={allowedDomainsText} onChange={(event) => setAllowedDomainsText(event.target.value)} placeholder="docs.example.com, shop.example.com" className="ds-input" /></label>
           <p>{t('safeActionsNote')}</p>
         </details>
         <div className="qd-launch-actions">
-          <button type="button" className="btn btn-primary" onClick={() => void start()} disabled={historyStatus !== 'ready' || busy || active || !canStartUrl || (needsRequirement && !requirementId && !requirementText.trim())}>
+          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => void start()} disabled={historyStatus !== 'ready' || busy || active || !canStartUrl || (needsRequirement && !requirementId && !requirementText.trim())}>
             <Play size={14} aria-hidden="true" />{busy ? t('starting') : t('start')}
           </button>
-          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)}>{runs.map((item) => <option key={item.id} value={item.id}>{item.start_url} · {item.mode} · {new Date(item.created_at).toLocaleString()} · {item.status}</option>)}</select></label>}
+          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)} className="ds-select">{runs.map((item) => <option key={item.id} value={item.id}>{item.start_url} · {item.mode} · {new Date(item.created_at).toLocaleString()} · {item.status}</option>)}</select></label>}
           {active && <span className="qd-load-status" role="status">{t('activeRunHint')}</span>}
           {historyStatus === 'loading' && <span className="qd-load-status" role="status">{t('historyLoading')}</span>}
-          {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
+          {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
         </div>
         {error && <p className="qd-error" role="alert">{error}</p>}
         </>}
@@ -492,9 +492,9 @@ export function QualityDiscoveryPanel({
           {blockedFrontierCount > 0 && <p id="qd-blocked-actions-help" className="qd-field-hint" role="note">{t('blockedActionsHelp')}</p>}
           {run.error && <div className="qd-run-error"><ShieldAlert size={15} aria-hidden="true" />{run.error}</div>}
           <div className="qd-run-actions">
-            {run.status === 'RUNNING' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void controlRun('pause')}><Pause size={13} />{t('pause')}</button>}
-            {run.status === 'PAUSED' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void controlRun('resume')}><RotateCcw size={13} />{t('resume')}</button>}
-            {active && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void controlRun('stop')}><Square size={12} />{t('stop')}</button>}
+            {run.status === 'RUNNING' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('pause')}><Pause size={13} />{t('pause')}</button>}
+            {run.status === 'PAUSED' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('resume')}><RotateCcw size={13} />{t('resume')}</button>}
+            {active && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('stop')}><Square size={12} />{t('stop')}</button>}
             <div className="qd-provider-facts">
               <span>{t('ai')}: {run.result.ai?.provider ?? '—'} / {run.result.ai?.model ?? '—'}</span>
               <span>{t('jev')}: {jevProvider ?? '—'}{jevModel ? ` / ${jevModel}` : ''} / {run.result.jev?.decisions ?? 0}{attemptedJev}{(run.result.jev?.fallbacks ?? 0) > 0 ? ` · ${t('fallbackCount', { count: run.result.jev?.fallbacks })}` : ''}</span>
@@ -503,20 +503,20 @@ export function QualityDiscoveryPanel({
         </section>
 
         <nav className="qd-report-tabs" aria-label={t('reportSections')}>
-          <button type="button" aria-current={reportTab === 'live' ? 'page' : undefined} onClick={() => setReportTab('live')}>{t('liveView')}{active && <i className="qd-live-dot" aria-hidden="true" />}<span>{run.status}</span></button>
-          <button type="button" aria-current={reportTab === 'map' ? 'page' : undefined} onClick={() => setReportTab('map')}>{t('qualityMap')}<span>{coverage.length}</span></button>
-          <button type="button" aria-current={reportTab === 'gaps' ? 'page' : undefined} onClick={() => setReportTab('gaps')}>{t('qualityGaps')}<span>{gaps.length}</span></button>
-          <button type="button" aria-current={reportTab === 'features' ? 'page' : undefined} onClick={() => setReportTab('features')}>{t('features')}<span>{functionalFeatures.length}</span></button>
-          <button type="button" aria-current={reportTab === 'activity' ? 'page' : undefined} onClick={() => setReportTab('activity')}>{t('recentActivity')}<span>{run.result.events?.length ?? 0}</span></button>
+          <button type="button" aria-current={reportTab === 'live' ? 'page' : undefined} onClick={() => setReportTab('live')} className="ds-btn">{t('liveView')}{active && <i className="qd-live-dot" aria-hidden="true" />}<span>{run.status}</span></button>
+          <button type="button" aria-current={reportTab === 'map' ? 'page' : undefined} onClick={() => setReportTab('map')} className="ds-btn">{t('qualityMap')}<span>{coverage.length}</span></button>
+          <button type="button" aria-current={reportTab === 'gaps' ? 'page' : undefined} onClick={() => setReportTab('gaps')} className="ds-btn">{t('qualityGaps')}<span>{gaps.length}</span></button>
+          <button type="button" aria-current={reportTab === 'features' ? 'page' : undefined} onClick={() => setReportTab('features')} className="ds-btn">{t('features')}<span>{functionalFeatures.length}</span></button>
+          <button type="button" aria-current={reportTab === 'activity' ? 'page' : undefined} onClick={() => setReportTab('activity')} className="ds-btn">{t('recentActivity')}<span>{run.result.events?.length ?? 0}</span></button>
         </nav>
 
         {reportTab === 'live' && <DiscoveryLiveView runId={run.id} status={run.status} onOpenEvidence={(artifactId) => void openEvidence(artifactId)} />}
 
         {reportTab === 'map' && <section className="qd-section qd-quality-map">
-          <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('qualityMap')}</span><h3>{t('coverageMap')}</h3></div><div className="qd-map-tools"><label className="qd-map-search"><span className="sr-only">{t('mapSearch')}</span><input type="search" value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} placeholder={t('mapSearch')} /></label><label className="qd-filter"><span>{t('mapFilter')}</span><select value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}><option value="ALL">{t('allFeatures')}</option><option value="GAPS">{t('featuresWithGaps')}</option><option value="UNCOVERED">{t('uncoveredFeatures')}</option><option value="FAILED">{t('failedFeatures')}</option></select></label><label className="qd-filter"><span>{t('mapSort')}</span><select value={mapSort} onChange={(event) => setMapSort(event.target.value)}><option value="FEATURE">{t('sortFeature')}</option><option value="RISK">{t('sortRisk')}</option><option value="COVERAGE">{t('sortCoverage')}</option></select></label>{terminalStatuses.has(run.status) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshCoverage()} disabled={coverageRefreshing} aria-busy={coverageRefreshing}><RotateCcw size={13} aria-hidden="true" />{coverageRefreshing ? t('refreshingCoverage') : t('refreshCoverage')}</button>}</div></div>
+          <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('qualityMap')}</span><h3>{t('coverageMap')}</h3></div><div className="qd-map-tools"><label className="qd-map-search"><span className="sr-only">{t('mapSearch')}</span><input type="search" value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} placeholder={t('mapSearch')} className="ds-input" /></label><label className="qd-filter"><span>{t('mapFilter')}</span><select value={mapFilter} onChange={(event) => setMapFilter(event.target.value)} className="ds-select"><option value="ALL">{t('allFeatures')}</option><option value="GAPS">{t('featuresWithGaps')}</option><option value="UNCOVERED">{t('uncoveredFeatures')}</option><option value="FAILED">{t('failedFeatures')}</option></select></label><label className="qd-filter"><span>{t('mapSort')}</span><select value={mapSort} onChange={(event) => setMapSort(event.target.value)} className="ds-select"><option value="FEATURE">{t('sortFeature')}</option><option value="RISK">{t('sortRisk')}</option><option value="COVERAGE">{t('sortCoverage')}</option></select></label>{terminalStatuses.has(run.status) && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void refreshCoverage()} disabled={coverageRefreshing} aria-busy={coverageRefreshing}><RotateCcw size={13} aria-hidden="true" />{coverageRefreshing ? t('refreshingCoverage') : t('refreshCoverage')}</button>}</div></div>
           {coverageRefreshError && <p className="qd-error" role="alert">{coverageRefreshError}</p>}
           {coverageRefreshed && <p className="qd-field-hint" role="status">{t('coverageRefreshed')}</p>}
-          {!coverage.length ? <p className="qd-empty">{t('coveragePending')}</p> : !filteredCoverage.length ? <p className="qd-empty">{t('noMapMatches')}</p> : <div className="qd-table-scroll"><table className="qd-coverage-table">
+          {!coverage.length ? <p className="qd-empty">{t('coveragePending')}</p> : !filteredCoverage.length ? <p className="qd-empty">{t('noMapMatches')}</p> : <div className="qd-table-scroll"><table className="ds-table qd-coverage-table">
             <thead><tr><th>{t('mapFeature')}</th><th>{t('mapProduct')}</th><th>{t('mapCoverage')}</th><th>{t('mapTests')}</th><th>{t('mapAutomation')}</th><th>{t('mapLastRun')}</th><th>{t('mapRisk')}</th></tr></thead>
             <tbody>{filteredCoverage.map((row, index) => {
               const featureId = String(row.feature_id ?? '');
@@ -536,7 +536,7 @@ export function QualityDiscoveryPanel({
                       return <li key={id}>{String(requirement?.title ?? id)}</li>;
                     })}</ul></section> : <p>{t('noLinkedRequirement')}</p>}
                     {featureGaps.length > 0 && <section><b>{t('mapGaps')}</b><ul>{featureGaps.map((gap) => <li key={gap.id}><span className={`qd-gap-risk is-${gap.risk.toLowerCase()}`}>{gap.risk}</span> {gap.title}</li>)}</ul></section>}
-                    {!!feature?.evidence_ids.length && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" /><span>{t('evidence')}:</span>{feature.evidence_ids.map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading}>{id.slice(0, 10)}</button>)}</div>}
+                    {!!feature?.evidence_ids.length && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" /><span>{t('evidence')}:</span>{feature.evidence_ids.map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading} className="ds-btn">{id.slice(0, 10)}</button>)}</div>}
                   </div>
                 </details></td>
                 <td><span className={`qd-map-state is-${String(row.product_status ?? row.functional_status ?? 'unknown').toLowerCase()}`}>{String(row.product_status ?? row.functional_status ?? '—')}</span></td>
@@ -558,15 +558,15 @@ export function QualityDiscoveryPanel({
               <strong>{String(item.name ?? '—')}</strong><span>{String(item.trust ?? 'INFERRED')}</span>
               <p>{String(item.description ?? '')}</p>
               <small>{t('requirementStatus')}: {String(item.requirement_status ?? '—')} · {t('testCases')}: {Array.isArray(item.test_case_ids) ? item.test_case_ids.length : 0} · {t('automation')}: {String(item.last_run_status ?? '—')}</small>
-              {Array.isArray(item.evidence_ids) && item.evidence_ids.length > 0 && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" />{item.evidence_ids.map((id) => <button type="button" key={String(id)} onClick={() => void openEvidence(String(id))} disabled={evidenceLoading}>{String(id).slice(0, 10)}</button>)}</div>}
+              {Array.isArray(item.evidence_ids) && item.evidence_ids.length > 0 && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" />{item.evidence_ids.map((id) => <button type="button" key={String(id)} onClick={() => void openEvidence(String(id))} disabled={evidenceLoading} className="ds-btn">{String(id).slice(0, 10)}</button>)}</div>}
             </article>)}</div>
           </details>
           <details className="qd-document-details">
             <summary><span>{t('userJourneys')}</span><small>{journeys.length}</small></summary>
             <div className="qd-journey-list">{journeys.map((journey) => <article key={journey.journey_id}>
               {journey.steps.map((step, index) => <span key={`${step.state_id}-${index}`}>{index > 0 && <ArrowDownRight size={12} aria-hidden="true" />}{step.title}</span>)}
-              {journey.steps.flatMap((step) => step.evidence_ids ?? []).map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading}>{t('openEvidence')} · {id.slice(0, 8)}</button>)}
-              {run.status === 'COMPLETED' && <div className="qd-journey-draft"><button type="button" className="btn btn-secondary btn-sm" disabled={!onOpenTask || draftBusyJourney !== null} onClick={() => void createJourneyDraft(journey.journey_id)}><Code2 size={13} aria-hidden="true" />{draftBusyJourney === journey.journey_id ? t('draftingPytest') : t('createPytestDraft')}</button><small>{t('pytestDraftNote')}</small></div>}
+              {journey.steps.flatMap((step) => step.evidence_ids ?? []).map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading} className="ds-btn">{t('openEvidence')} · {id.slice(0, 8)}</button>)}
+              {run.status === 'COMPLETED' && <div className="qd-journey-draft"><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={!onOpenTask || draftBusyJourney !== null} onClick={() => void createJourneyDraft(journey.journey_id)}><Code2 size={13} aria-hidden="true" />{draftBusyJourney === journey.journey_id ? t('draftingPytest') : t('createPytestDraft')}</button><small>{t('pytestDraftNote')}</small></div>}
             </article>)}</div>
             {draftError && <p className="qd-error" role="alert">{draftError}</p>}
           </details>
@@ -574,7 +574,7 @@ export function QualityDiscoveryPanel({
 
         {reportTab === 'gaps' && <section className="qd-section">
           <div className="qd-section-heading"><div><span className="qd-eyebrow">{t('coverage')}</span><h3>{t('qualityGaps')}</h3></div>
-            <label className="qd-filter"><span>{t('filter')}</span><select value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}><option value="ACTIONABLE">{t('actionableGaps')}</option><option value="ALL">{t('allGaps')}</option>{[...new Set(gaps.map((gap) => gap.category))].map((category) => <option key={category} value={category}>{t(`gapTypes.${category}`, { defaultValue: category })}</option>)}</select></label>
+            <label className="qd-filter"><span>{t('filter')}</span><select value={gapFilter} onChange={(event) => setGapFilter(event.target.value)} className="ds-select"><option value="ACTIONABLE">{t('actionableGaps')}</option><option value="ALL">{t('allGaps')}</option>{[...new Set(gaps.map((gap) => gap.category))].map((category) => <option key={category} value={category}>{t(`gapTypes.${category}`, { defaultValue: category })}</option>)}</select></label>
           </div>
           {actionError && <p className="qd-error" role="alert">{actionError}</p>}
           {actionNote && <p className="qd-note" role="status">{actionNote}</p>}
@@ -587,14 +587,14 @@ export function QualityDiscoveryPanel({
                 <div><dt>{t('gapExpected')}</dt><dd>{gap.expected?.length ? gap.expected.join('；') : t('gapNoExpected')}</dd></div>
                 <div><dt>{t('gapObserved')}</dt><dd>{gap.observed || t('gapNoObserved')}</dd></div>
               </dl>
-              {!!gap.evidence_ids.length && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" /><span>{t('evidence')}:</span>{gap.evidence_ids.map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading}>{id.slice(0, 10)}</button>)}</div>}
+              {!!gap.evidence_ids.length && <div className="qd-evidence-row"><Eye size={13} aria-hidden="true" /><span>{t('evidence')}:</span>{gap.evidence_ids.map((id) => <button type="button" key={id} onClick={() => void openEvidence(id)} disabled={evidenceLoading} className="ds-btn">{id.slice(0, 10)}</button>)}</div>}
               <div className="qd-gap-actions">
-                {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING' && featureForGap(gap) && !hasRealRequirement(featureForGap(gap)!)) && <button type="button" className="btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'create_requirement_draft')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('createRequirementDraft')}</button>}
-                {gap.category === 'TEST_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id])} title={!featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id]) ? t('needRequirementDraft') : undefined} onClick={() => void runGapAction(gap, 'generate_tests')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateTests')}</button>}
-                {gap.category === 'AUTOMATION_MISSING' && <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap)?.test_case_ids?.length} title={!featureForGap(gap)?.test_case_ids?.length ? t('needTestCases') : undefined} onClick={() => void runGapAction(gap, 'generate_automation')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateAutomation')}</button>}
-                {gap.category === 'AUTOMATION_FAILING' && <button type="button" className="btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'open_failure')}>{t('openFailure')}</button>}
+                {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING' && featureForGap(gap) && !hasRealRequirement(featureForGap(gap)!)) && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'create_requirement_draft')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('createRequirementDraft')}</button>}
+                {gap.category === 'TEST_MISSING' && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id])} title={!featureForGap(gap) || (!hasRealRequirement(featureForGap(gap)!) && !run.result.requirement_drafts?.[featureForGap(gap)!.feature_id]) ? t('needRequirementDraft') : undefined} onClick={() => void runGapAction(gap, 'generate_tests')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateTests')}</button>}
+                {gap.category === 'AUTOMATION_MISSING' && <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={Boolean(actionBusy) || !featureForGap(gap)?.test_case_ids?.length} title={!featureForGap(gap)?.test_case_ids?.length ? t('needTestCases') : undefined} onClick={() => void runGapAction(gap, 'generate_automation')}>{actionBusy?.startsWith(`${gap.id}:`) ? t('working') : t('generateAutomation')}</button>}
+                {gap.category === 'AUTOMATION_FAILING' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" disabled={Boolean(actionBusy)} onClick={() => void runGapAction(gap, 'open_failure')}>{t('openFailure')}</button>}
                 {!!gapActionHint(gap) && <span className="qd-gap-hint">{gapActionHint(gap)}</span>}
-                {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING') && requirementDraftActionId(run.result.gap_actions?.[gap.id]?.create_requirement_draft) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRequirementDraft(gap)}>{t('openRequirement')}</button>}
+                {(gap.category === 'UNDOCUMENTED_FEATURE' || gap.category === 'TEST_MISSING') && requirementDraftActionId(run.result.gap_actions?.[gap.id]?.create_requirement_draft) && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => openRequirementDraft(gap)}>{t('openRequirement')}</button>}
               </div>
             </article>)}
           </div>}
@@ -618,7 +618,7 @@ export function QualityDiscoveryPanel({
             </details>
           </div>
         </section>}
-        {(evidenceUrl || evidenceText) && <section className="qd-section qd-evidence-section"><div className="qd-evidence-viewer"><div><strong>{evidenceText ? t('snapshotPreview') : t('evidencePreview')}</strong><button type="button" className="btn btn-secondary btn-sm" onClick={() => { setEvidenceUrl(''); setEvidenceText(''); }}>{t('close')}</button></div>{evidenceUrl ? <img src={evidenceUrl} alt={t('evidenceAlt')} /> : <pre>{evidenceText}</pre>}</div></section>}
+        {(evidenceUrl || evidenceText) && <section className="qd-section qd-evidence-section"><div className="qd-evidence-viewer"><div><strong>{evidenceText ? t('snapshotPreview') : t('evidencePreview')}</strong><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setEvidenceUrl(''); setEvidenceText(''); }}>{t('close')}</button></div>{evidenceUrl ? <img src={evidenceUrl} alt={t('evidenceAlt')} /> : <pre>{evidenceText}</pre>}</div></section>}
         <a className="qd-api-link" href={`/api/discovery/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer"><ExternalLink size={13} />{t('apiView')}</a>
       </>}
     </div>

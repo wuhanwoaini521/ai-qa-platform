@@ -26,7 +26,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     <div className={`studio-project-select${hideProjectSelect ? ' is-quick-open' : ''}`}>
       {!hideProjectSelect && <>
         <FolderGit2 size={15} color="var(--ui-primary-strong)" />
-        <select aria-label={t('projectSelector.selectProject')} value={currentProjectId} onChange={(e) => onSelectProject(e.target.value)}>
+        <select aria-label={t('projectSelector.selectProject')} value={currentProjectId} onChange={(e) => onSelectProject(e.target.value)} className="ds-select">
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {projectDisplayNames.get(p.id) ?? p.name}
@@ -34,7 +34,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           ))}
         </select>
       </>}
-      <button type="button" className={`icon-btn${hideProjectSelect ? ' is-labeled' : ''}`} title={t('projectSelector.quickOpen')} aria-label={t('projectSelector.quickOpen')} onClick={onQuickOpen}>
+      <button type="button" className={`ds-btn ds-btn-icon ds-btn icon-btn${hideProjectSelect ? ' is-labeled' : ''}`} title={t('projectSelector.quickOpen')} aria-label={t('projectSelector.quickOpen')} onClick={onQuickOpen}>
         <Search size={14} />
         {hideProjectSelect && <span>{t('projectSelector.quickOpen')}</span>}
       </button>

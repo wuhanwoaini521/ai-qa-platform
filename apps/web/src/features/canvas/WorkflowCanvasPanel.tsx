@@ -68,7 +68,7 @@ function StageHeader({ data }: NodeProps<Node<CanvasStageData>>) {
   return (
     <button
       type="button"
-      className={`lw-stage${data.collapsed ? ' is-collapsed' : ''}`}
+      className={`ds-btn lw-stage${data.collapsed ? ' is-collapsed' : ''}`}
       aria-expanded={!data.collapsed}
       title={data.description}
       onClick={(event) => {
@@ -190,7 +190,7 @@ function EvidenceSection({
           <button
             key={key}
             type="button"
-            className={`btn btn-secondary btn-sm${kind === key ? ' is-active' : ''}`}
+            className={`ds-btn ds-btn ds-btn-sm btn btn-secondary btn-sm${kind === key ? ' is-active' : ''}`}
             onClick={() => setKind(kind === key ? null : key)}
           >
             {t(`canvas.evidenceUi.kinds.${key}`)} {value}
@@ -266,7 +266,7 @@ function NodeDetail({ node, onClose }: { node: WorkflowNode; onClose: () => void
           <h3>{node.title}</h3>
           {node.subtitle && <p className="lw-detail-subtitle">{node.subtitle}</p>}
         </div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
           {t('canvas.detail.close')}
         </button>
       </header>
@@ -326,7 +326,7 @@ function NodeDetail({ node, onClose }: { node: WorkflowNode; onClose: () => void
         <h4>{t('canvas.detail.open')}</h4>
         <div className="lw-detail-actions">
           {navigation.map(([key, href]) => (
-            <Link key={key} className="btn btn-secondary btn-sm" to={href}>{t(`canvas.links.${key}`)}</Link>
+            <Link key={key} className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={href}>{t(`canvas.links.${key}`)}</Link>
           ))}
         </div>
       </section>}
@@ -423,7 +423,7 @@ function CanvasSurface({ projectId, requirementId }: { projectId: string; requir
       <section className="lw-canvas lw-canvas-state" role="alert">
         <h2>{t('canvas.errorTitle')}</h2>
         <p>{error}</p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>{t('canvas.retry')}</button>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void load()}>{t('canvas.retry')}</button>
       </section>
     );
   }
@@ -514,7 +514,7 @@ export function WorkflowCanvasPanel({ projectId, requirementId }: { projectId: s
             type="button"
             role="tab"
             aria-selected={mode === key}
-            className={`lw-canvas-mode${mode === key ? ' is-active' : ''}`}
+            className={`ds-btn lw-canvas-mode${mode === key ? ' is-active' : ''}`}
             onClick={() => setMode(key)}
           >
             {t(CANVAS_MODE_LABEL[key])}

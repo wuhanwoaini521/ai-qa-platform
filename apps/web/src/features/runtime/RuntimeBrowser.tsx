@@ -58,7 +58,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
           {t('testRun')}{' '}
           <select
             value={runId ?? ''}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(event) => setSelected(event.target.value)} className="ds-select"
           >
             {snapshot.runs.map((run) => (
               <option key={run.id} value={run.id}>
@@ -102,7 +102,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
           <button
             key={value}
             aria-pressed={channel === value}
-            onClick={() => setChannel(value)}
+            onClick={() => setChannel(value)} className="ds-btn"
           >
             {label}
           </button>
@@ -131,7 +131,7 @@ export function RuntimeBrowser({ snapshot, projectId, onOpenSource }: {
               </span>
               <code>{String(entry.status ?? entry.status_code ?? '')}</code>
               {onOpenSource && typeof entry.file === 'string' && typeof entry.line === 'number' && (
-                <button className="btn btn-secondary btn-sm" onClick={() => onOpenSource(entry.file as string, entry.line as number)}>
+                <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => onOpenSource(entry.file as string, entry.line as number)}>
                   {entry.file}:{entry.line}
                 </button>
               )}

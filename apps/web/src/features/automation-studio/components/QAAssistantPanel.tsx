@@ -168,7 +168,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
           <button
             key={actionType}
             type="button"
-            className="ai-chip"
+            className="ds-btn ai-chip"
             disabled={loading}
             onClick={() => actionType === 'generate' ? setShowGenerate(true) : onSend(prompt, actionType)}
           >
@@ -183,9 +183,9 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
         onStartGenerateTask(targetUrl.trim(), testGoal.trim());
         setShowGenerate(false);
       }} style={{ display: 'grid', gap: 8, padding: 12 }}>
-        <label>{t('tasks:studioUrl')}<input type="url" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" style={{ width: '100%' }} /></label>
-        <label>{t('tasks:studioGoal')}<textarea required minLength={3} value={testGoal} onChange={(event) => setTestGoal(event.target.value)} rows={3} style={{ width: '100%' }} /></label>
-        <div style={{ display: 'flex', gap: 8 }}><button type="submit" className="btn btn-primary btn-sm" disabled={generateTaskBusy}>{t('tasks:studioCreate')}</button><button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>{t('tasks:studioCancel')}</button></div>
+        <label>{t('tasks:studioUrl')}<input type="url" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" style={{ width: '100%' }} className="ds-input" /></label>
+        <label>{t('tasks:studioGoal')}<textarea required minLength={3} value={testGoal} onChange={(event) => setTestGoal(event.target.value)} rows={3} style={{ width: '100%' }} className="ds-textarea" /></label>
+        <div style={{ display: 'flex', gap: 8 }}><button type="submit" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={generateTaskBusy}>{t('tasks:studioCreate')}</button><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>{t('tasks:studioCancel')}</button></div>
       </form>}
       <ContextTaskProgress task={generateTask} error={generateTaskError} />
 
@@ -228,7 +228,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
                         <pre className="ai-code">{segment.value}</pre>
                         <button
                           type="button"
-                          className="ai-snippet-action"
+                          className="ds-btn ai-snippet-action"
                           onClick={() => onInsertSnippet(segment.value)}
                         >
                           <Check size={12} /> {t('assistant.insertCode')}
@@ -244,7 +244,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
                   <pre className="ai-code">{trailingSnippet}</pre>
                   <button
                     type="button"
-                    className="ai-snippet-action"
+                    className="ds-btn ai-snippet-action"
                     onClick={() => onInsertSnippet(trailingSnippet)}
                   >
                     <Check size={12} /> {t('assistant.insertCode')}
@@ -266,7 +266,7 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
           }}
         >
           <textarea
-            className="ai-input"
+            className="ds-textarea ai-input"
             rows={Math.min(4, Math.max(1, input.split('\n').length))}
             placeholder={t('assistant.placeholder')}
             aria-label={t('assistant.placeholder')}
@@ -282,14 +282,14 @@ export const QAAssistantPanel: React.FC<QAAssistantPanelProps> = ({
           />
           <button
             type="submit"
-            className="ai-send"
+            className="ds-btn ds-btn-primary ai-send"
             disabled={!canSend}
             aria-label={t('assistant.send')}
             title={t('assistant.send')}
           >
             <Send size={14} />
           </button>
-          {loading && <button type="button" className="ai-send ai-stop" onClick={onCancel} aria-label={t('assistant.cancel')} title={t('assistant.cancel')}><StopCircle size={14} /></button>}
+          {loading && <button type="button" className="ds-btn ai-send ai-stop" onClick={onCancel} aria-label={t('assistant.cancel')} title={t('assistant.cancel')}><StopCircle size={14} /></button>}
         </form>
         <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--ui-ink-muted)' }}>
           {t('assistant.composerHint')}

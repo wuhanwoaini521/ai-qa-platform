@@ -92,7 +92,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
               type="button"
               onClick={() => onSelectFrame(frame)}
               title={frame.source?.path}
-              style={{ display: 'block', width: '100%', border: 0, background: 'transparent', textAlign: 'left', padding: '3px 2px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 11 }}
+              style={{ display: 'block', width: '100%', border: 0, background: 'transparent', textAlign: 'left', padding: '3px 2px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 11 }} className="ds-btn"
             >
               <span>{frame.name}</span>
               <span style={{ marginLeft: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>

@@ -49,7 +49,7 @@ export const PullRequestPanel: React.FC<PullRequestPanelProps> = ({
             {t('pullRequest.openDescription')}
           </p>
           <button
-            className="btn btn-primary btn-sm"
+            className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
             style={{ width: '100%', padding: '6px', background: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
             onClick={onOpenPRModal}
           >
@@ -110,7 +110,7 @@ export const PullRequestPanel: React.FC<PullRequestPanelProps> = ({
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>{t('pullRequest.checksTitle')}</span>
               <button
-                className="icon-btn"
+                className="ds-btn-icon ds-btn icon-btn"
                 title={t('pullRequest.refreshChecks')}
                 disabled={loadingChecks}
                 onClick={onRefreshChecks}
@@ -147,7 +147,7 @@ export const PullRequestPanel: React.FC<PullRequestPanelProps> = ({
                   {check.status === 'FAILED' && (
                     <div style={{ marginTop: '4px', borderTop: '1px dashed var(--line)', paddingTop: '4px' }}>
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
                         style={{ padding: '2px 6px', fontSize: '10px', gap: '3px' }}
                         disabled={diagnosingCheckId === check.id}
                         onClick={() => onDiagnose(check)}
@@ -168,7 +168,7 @@ export const PullRequestPanel: React.FC<PullRequestPanelProps> = ({
                 <span>{t('pullRequest.diagnosisTitle', { classification: ciDiagnosisResult.classification })}</span>
                 <button
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)' }}
-                  onClick={onDismissDiagnosis}
+                  onClick={onDismissDiagnosis} className="ds-btn"
                 >
                   ✕
                 </button>
@@ -182,7 +182,7 @@ export const PullRequestPanel: React.FC<PullRequestPanelProps> = ({
 
           <div style={{ marginTop: '12px' }}>
             <button
-              className="btn btn-secondary btn-sm"
+              className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
               style={{ width: '100%', padding: '4px', fontSize: '11px' }}
               onClick={onOpenPRModal}
             >

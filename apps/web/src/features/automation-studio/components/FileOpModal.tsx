@@ -31,7 +31,7 @@ export const FileOpModal: React.FC<FileOpModalProps> = ({
           <button
             type="button"
             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            onClick={onClose}
+            onClick={onClose} className="ds-btn"
           >
             ✕
           </button>
@@ -52,7 +52,7 @@ export const FileOpModal: React.FC<FileOpModalProps> = ({
               <input
                 autoFocus
                 type="text"
-                className="form-control"
+                className="ds-input form-control"
                 value={inputText}
                 onChange={(e) => onInputChange(e.target.value)}
                 onKeyDown={(e) => {
@@ -64,12 +64,11 @@ export const FileOpModal: React.FC<FileOpModalProps> = ({
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
+          <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onClose}>
             {t('common:cancel')}
           </button>
           <button
-            className={`btn btn-sm ${state.type === 'delete' ? 'btn-danger' : 'btn-primary'}`}
-            style={state.type === 'delete' ? { background: 'var(--accent-red)', color: 'var(--surface-raised)' } : {}}
+            className={`ds-btn ds-btn-sm btn btn-sm ${state.type === 'delete' ? 'ds-btn-danger btn-danger' : 'ds-btn-primary btn-primary'}`}
             onClick={onConfirm}
           >
             {state.type === 'delete' ? t('common:delete') : t('common:confirm')}

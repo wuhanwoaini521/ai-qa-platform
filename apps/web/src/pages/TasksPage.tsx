@@ -104,17 +104,17 @@ export const TasksPage: React.FC<{
         <section className="panel tasks-panel task-navigator" style={{ padding: 12 }}>
           <div className="task-navigator-heading">
             <h3>{t('taskList')} <span>({visibleTasks.length})</span></h3>
-            <button type="button" className="btn btn-secondary btn-sm" aria-label={t('refresh')} title={t('refresh')} onClick={() => void refreshTasks()}><RefreshCw size={14} aria-hidden="true" /></button>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" aria-label={t('refresh')} title={t('refresh')} onClick={() => void refreshTasks()}><RefreshCw size={14} aria-hidden="true" /></button>
           </div>
           <label className="task-navigator-project">{t('project')}
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="ds-select">
               <option value="">{t('allProjects')}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{projectDisplayNames.get(p.id) ?? p.name}</option>)}
             </select>
           </label>
           <div className="task-navigator-filters" role="group" aria-label={t('statusFilter')}>
             {(['active', 'approval', 'failed', 'completed', 'all'] as const).map((value) => (
-              <button key={value} type="button" className={`btn btn-sm ${filter === value ? 'btn-primary' : 'btn-secondary'}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>
+              <button key={value} type="button" className={`ds-btn ds-btn-sm btn btn-sm ${filter === value ? 'ds-btn-primary btn-primary' : 'btn-secondary'}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>
                 {t(`filter_${value}`)} ({tasks.filter((task) => matchesFilter(task, value)).length})
               </button>
             ))}
@@ -140,7 +140,7 @@ export const TasksPage: React.FC<{
               <button
                 key={task.id}
                 type="button"
-                className={`task-nav-item${detail?.id === task.id ? ' is-selected' : ''}`}
+                className={`ds-btn task-nav-item${detail?.id === task.id ? ' is-selected' : ''}`}
                 aria-pressed={detail?.id === task.id}
                 onClick={() =>
                   setSearchParams((params) => {

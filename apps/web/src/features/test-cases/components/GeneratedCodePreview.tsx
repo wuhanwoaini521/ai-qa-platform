@@ -28,7 +28,7 @@ export const GeneratedCodePreview: React.FC<GeneratedCodePreviewProps> = ({
           {t('codeTitle', { file: generatedDraft.target_file })}
         </div>
         <button
-          className="btn btn-primary btn-sm"
+          className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm"
           disabled={savingDraft}
           onClick={onSaveDraftToWorkspace}
         >

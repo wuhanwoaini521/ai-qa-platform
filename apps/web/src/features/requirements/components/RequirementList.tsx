@@ -20,7 +20,7 @@ export const RequirementList: React.FC<RequirementListProps> = ({
 }) => {
   const { t } = useTranslation('requirements');
   return (
-    <div className="card">
+    <div className="ds-card card">
       <div className="card-header">
         <span className="card-title">{t('listTitle', { total: requirements.length })}</span>
       </div>
@@ -52,7 +52,7 @@ export const RequirementList: React.FC<RequirementListProps> = ({
                       {r.title}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-                      <span className="status-pill status-pill-draft">{r.status}</span>
+                      <span className="ds-tag ds-tag--neutral status-pill status-pill-draft">{r.status}</span>
                       {r.external_system === 'JIRA' && r.external_id && (
                         <span style={{ fontSize: '11px', background: 'var(--accent-blue-soft)', color: 'var(--accent-blue)', padding: '1px 6px', borderRadius: 'var(--r-xs)', fontWeight: 600 }}>
                           {t('listJiraBadge', { id: r.external_id })}

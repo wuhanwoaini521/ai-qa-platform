@@ -45,7 +45,7 @@ export function RuntimeOverview({
         <div className="rt-overview-state-copy">
           <span className="rt-eyebrow">{t('currentState')}</span>
           <div className="rt-overview-status"><span className={`rt-status status-${snapshot.status.toLowerCase()}`}>{t(runtimeStatusKey(snapshot.status))}</span>
-            {blockerStep && <button className="rt-inline-step" onClick={() => onSelectStep(blockerStep.id)}><code>{t('blockedAt')} · {blockerStep.key}</code></button>}
+            {blockerStep && <button className="ds-btn rt-inline-step" onClick={() => onSelectStep(blockerStep.id)}><code>{t('blockedAt')} · {blockerStep.key}</code></button>}
           </div>
           {snapshot.status === 'BLOCKED' && blocker?.reason && <p className="rt-blocker-reason">{blocker.reason}</p>}
           {snapshot.status === 'BLOCKED' && snapshot.task?.type === 'FIX_FAILURE' && snapshot.runs.length === 0 && <p className="rt-not-reached">{t('testNotStarted')}</p>}
@@ -55,7 +55,7 @@ export function RuntimeOverview({
         <div className="rt-next-action">
           <span className="rt-eyebrow">{t('nextAction')}</span>
           <strong>{next === 'retry' ? t(retryLabel) : next === 'replan' ? t('replan') : next === 'approval' ? t('approvalRequired') : next === 'run_next' ? t('running') : next === 'running' ? t('running') : next === 'none' ? t('noNextAction') : t('unknown')}</strong>
-          {blockerStep && <button className="btn btn-secondary btn-sm" onClick={() => onSelectStep(blockerStep.id)}>{t('inspectOutput')}</button>}
+          {blockerStep && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => onSelectStep(blockerStep.id)}>{t('inspectOutput')}</button>}
         </div>
       </section>
 
@@ -68,7 +68,7 @@ export function RuntimeOverview({
           {snapshot.steps.map((step: RuntimeStep) => {
             const downstream = facts.counts.blockedStepIds.includes(step.id);
             return <li key={step.id} className={`status-${step.status.toLowerCase()}${downstream ? ' is-blocked-downstream' : ''}`}>
-              <button onClick={() => onSelectStep(step.id)} title={`${step.title} · ${t(runtimeStatusKey(step.status))}`} aria-label={`${step.key}, ${t(runtimeStatusKey(step.status))}`}>
+              <button onClick={() => onSelectStep(step.id)} title={`${step.title} · ${t(runtimeStatusKey(step.status))}`} aria-label={`${step.key}, ${t(runtimeStatusKey(step.status))}`} className="ds-btn">
                 <StepMark status={step.status} /><code>{step.key}</code><span>{step.title}</span>
                 {step.status === 'FAILED' && snapshot.status === 'BLOCKED' && <small>{t('blockedHere')}</small>}
                 {downstream && <small>{t('blockedBy', { step: snapshot.blocking?.step_key })}</small>}
@@ -76,7 +76,7 @@ export function RuntimeOverview({
             </li>;
           })}
         </ol>
-        {onOpenFlow && snapshot.steps.length > 0 && <button className="btn btn-secondary btn-sm" onClick={onOpenFlow}>{t('openFlow')}</button>}
+        {onOpenFlow && snapshot.steps.length > 0 && <button className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onOpenFlow}>{t('openFlow')}</button>}
       </section>
 
       {snapshot.task?.type === 'EXPLORE_PAGE' && (agentProgress || agentAction || agentResult) && <section className="rt-block">

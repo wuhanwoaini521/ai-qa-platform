@@ -40,7 +40,7 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
           aria-controls="studio-sidebar-panel"
           aria-selected={sidebarTab === view.id}
           tabIndex={sidebarTab === view.id ? 0 : -1}
-          className={sidebarTab === view.id ? 'is-active' : ''}
+          className={["ds-btn", (sidebarTab === view.id ? 'is-active' : '')].filter(Boolean).join(' ')}
           title={
             view.id === 'git'
               ? t('sidebarView.git', { changeCount })
