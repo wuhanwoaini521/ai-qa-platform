@@ -6,7 +6,7 @@
   "startUrlPlaceholder": "例如：https://shop.example.com",
   "startUrlRequiredHelp": "必填。输入应用首页 URL 后才能开始。",
   "startUrlInvalidHelp": "请输入有效的 http(s) URL，不要加入账号信息、查询参数或片段。",
-  "startUrlHelp": "将从此页面开始探索。",
+  "startUrlHelp": "请输入不含查询参数或片段的首页或路径；探索器会继续访问同域内使用安全参数的商品和搜索链接。",
   "mode": "运行模式",
   "requirementOptional": "关联需求（可选）",
   "requirementRequired": "关联要验证的需求（必填）",
@@ -16,7 +16,7 @@
   "pastePlaceholder": "描述功能、规则或验收标准。内容会作为需求分析输入，不会自动写入需求库。",
   "advanced": "高级选项",
   "allowedDomains": "额外允许域名（逗号分隔）",
-  "safeActionsNote": "仅考虑起始域名及显式允许域名内的可见控件。结账、支付、下单、账户修改和破坏性操作会被阻止；要求 Jev 返回有置信度的选择。",
+  "safeActionsNote": "仅考虑起始域名及显式允许域名内的可见控件。同域商品和搜索链接可使用 q、category、sku、page 等常见参数，查询值不会保存。带账号凭据、片段、敏感或未识别查询键、未允许域名的链接，以及结账、支付、下单、账户修改和破坏性操作会被阻止；要求 Jev 返回有置信度的选择。",
   "modes": {
     "EXPLORE": "Explore · 探索产品",
     "VALIDATE": "Validate · 对照需求",
@@ -162,6 +162,7 @@
   "visitedStates": "已访问状态",
   "pendingActions": "待处理动作",
   "blockedActions": "已阻止动作",
+  "blockedActionsHelp": "部分链接因安全规则被跳过：查询键敏感或未识别、包含片段或账号凭据、目标域名未获允许，或操作存在风险。可在“高级选项”中允许可信域名。查询值不会保存。",
   "failedActions": "失败动作",
   "candidateFrontier": "候选动作状态",
   "frontierStatuses": {

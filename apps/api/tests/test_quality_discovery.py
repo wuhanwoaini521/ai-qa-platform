@@ -1925,6 +1925,75 @@ def test_search_navigation_link_is_not_treated_as_a_submitted_query():
     assert candidates[0]["target"] == "Search"
 
 
+def test_discovery_follows_safe_query_links_without_exposing_values():
+    service = QualityDiscoveryService.__new__(QualityDiscoveryService)
+    allowed_hosts = {"shop.example.test"}
+    safe_sentinel = "catalog-query-sentinel"
+    safe_control = service._safe_controls(
+        [
+            {
+                "index": 0,
+                "name": "Products",
+                "tag": "a",
+                "role": "link",
+                "href": f"/search?category={safe_sentinel}",
+                "visible": True,
+                "enabled": True,
+            }
+        ]
+    )[0]
+    state = {
+        "state_id": "home",
+        "url": "https://shop.example.test/",
+        "controls": [safe_control],
+        "scroll": {"height": 500, "viewport": 720},
+    }
+
+    assert safe_control["href"] == "/search"
+    assert safe_control["has_query"] is True
+    assert safe_control["has_safe_query"] is True
+    candidates = service._candidate_actions(state, allowed_hosts, 5)
+    assert [item["target"] for item in candidates] == ["Products"]
+    assert service._blocked_candidates(state, allowed_hosts) == []
+    assert safe_sentinel not in json.dumps({"controls": state["controls"], "candidates": candidates})
+
+    for href in (
+        "/search?access_token=secret-query-sentinel",
+        "/search?unrecognized=secret-query-sentinel",
+        "/products/shirt?sku=blue#session-sentinel",
+    ):
+        control = service._safe_controls(
+            [
+                {
+                    "index": 0,
+                    "name": "Products",
+                    "tag": "a",
+                    "role": "link",
+                    "href": href,
+                    "visible": True,
+                    "enabled": True,
+                }
+            ]
+        )[0]
+        unsafe_state = {**state, "controls": [control]}
+        assert control["href"] in {"/search", "/products/shirt"}
+        assert control["has_safe_query"] is False
+        assert service._candidate_actions(unsafe_state, allowed_hosts, 5) == []
+        assert service._blocked_candidates(unsafe_state, allowed_hosts)
+        assert "secret-query-sentinel" not in json.dumps({"controls": [control], "state": unsafe_state})
+
+
+def test_discovery_redacts_relative_urls_from_accessibility_tree_preserving_link_names():
+    sentinel = "landmark-query-sentinel"
+    tree = f'- link "Products":\n    - /url: /search?category={sentinel}\n'
+
+    safe_tree = QualityDiscoveryService._safe_accessibility_tree(tree)
+
+    assert 'link "Products"' in safe_tree
+    assert "/url: /search" in safe_tree
+    assert sentinel not in safe_tree
+
+
 def test_candidate_expected_effects_describe_observable_outcomes():
     expected = QualityDiscoveryService._candidate_expected_effect
 

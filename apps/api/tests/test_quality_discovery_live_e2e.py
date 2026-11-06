@@ -34,32 +34,34 @@ LAYOUT = {
     "Products": {"x": 120, "y": 120, "width": 150, "height": 24},
 }
 GEOMETRY_TOLERANCE = 8
+QUERY_SENTINEL = "discovery-query-sentinel-72f9"
+
+SEARCH_FORM = (
+    "<form action='/search'>"
+    "<input id='q' name='q' type='search' role='textbox' aria-label='Search' placeholder='Search' "
+    "style='position:absolute;left:120px;top:60px;width:200px;height:28px'>"
+    "<button type='submit' style='position:absolute;left:340px;top:60px;width:90px;height:28px'>Search</button>"
+    "</form>"
+)
 
 PAGES = {
     "home": (
         "<main><h1>QA Shop</h1>"
-        "<a href='/search' style='position:absolute;left:120px;top:120px;width:150px;height:24px'>Products</a>"
+        f"<a href='/search?category={QUERY_SENTINEL}' style='position:absolute;left:120px;top:120px;width:150px;height:24px'>Products</a>"
         "</main>"
     ),
-    "search": (
-        "<main><h1>Search products</h1>"
-        "<form action='/search'>"
-        "<input id='q' name='q' type='search' role='textbox' aria-label='Search' placeholder='Search' "
-        "style='position:absolute;left:120px;top:60px;width:200px;height:28px'>"
-        "<button type='submit' style='position:absolute;left:340px;top:60px;width:90px;height:28px'>Search</button>"
-        "</form></main>"
-    ),
-    "results": "<main><h1>Search results</h1><p>Canvas tote</p></main>",
+    "search": "<main><h1>Search products</h1>" + SEARCH_FORM + "</main>",
+    "results": "<main><h1>Category results</h1>" + SEARCH_FORM + "<p>Canvas tote</p></main>",
 }
 
 
 class _Site(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 - http.server API
         parsed = urlsplit(self.path)
-        query = parse_qs(parsed.query).get("q", [""])[0]
+        category = parse_qs(parsed.query).get("category", [""])[0]
         if parsed.path in {"/", "/index.html"}:
             body = PAGES["home"]
-        elif parsed.path == "/search" and query:
+        elif parsed.path == "/search" and category == QUERY_SENTINEL:
             body = PAGES["results"]
         else:
             body = PAGES["search"]
@@ -234,6 +236,10 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
         workspace_service=WorkspaceService(base_dir=workspace_dir),
     )
     monkeypatch.setattr(service, "_assert_real_ai_available", lambda: None)
+    config = service._get_config()
+    # This acceptance isolates one link click and verifies its destination before the run budget ends.
+    bounded_config = config.model_copy(update={"discovery": config.discovery.model_copy(update={"max_actions": 2})})
+    monkeypatch.setattr(service, "_get_config", lambda: bounded_config)
     monkeypatch.setitem(app.dependency_overrides, get_quality_discovery_service, lambda: service)
 
     # Record what the real adapter produced, so the streamed frames can be tied back to it.
@@ -268,11 +274,12 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     run_id = created.json()["id"]
 
     def ready(frames: list[dict]) -> bool:
-        kinds = [frame["event"] for frame in frames]
-        return "run.finished" in kinds or ("browser.frame" in kinds and kinds.count("element.inventory") >= 2)
+        return any(frame["event"] == "run.finished" for frame in frames)
 
-    frames, _stopped_early = await _read_stream(client, run_id, budget_seconds=90, ready=ready)
+    frames, stopped_early = await _read_stream(client, run_id, budget_seconds=90, ready=ready)
     kinds = [frame["event"] for frame in frames]
+    assert not stopped_early, f"the SSE stream did not reach a terminal event: {kinds[-5:]}"
+    assert "run.finished" in kinds, f"the SSE stream omitted its terminal event: {kinds[-5:]}"
     assert kinds and kinds[0] == "snapshot", f"the stream must open with the run snapshot, got {kinds[:5]}"
     assert "browser.frame" in kinds, f"no live frame reached the viewer: {kinds}"
     assert "element.inventory" in kinds, f"no element inventory reached the viewer: {kinds}"
@@ -318,7 +325,34 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     assert painted and max(painted) > 0, "the discovery highlight was never painted onto the real page"
 
     # 4. The run produced its own evidence (states, actions, screenshots), not a placeholder.
-    assert run["status"] in {"COMPLETED", "STOPPED"}, {key: run.get(key) for key in ("status", "error", "progress")}
+    assert run["status"] in {"COMPLETED", "STOPPED", "BUDGET_EXHAUSTED"}, {
+        key: run.get(key) for key in ("status", "error", "progress")
+    }
+    state_urls = [str(state.get("url") or "") for state in run["result"]["states"]]
+    assert any(urlsplit(url).path == "/search" for url in state_urls), state_urls
+    assert all(not urlsplit(url).query and not urlsplit(url).fragment for url in state_urls), state_urls
+    assert any('heading "Category results"' in state.get("landmarks", "") for state in run["result"]["states"]), (
+        "the destination did not receive the allowlisted category query"
+    )
+    frame_urls = [frame["data"]["metadata"].get("url", "") for frame in frames if frame["event"] == "browser.frame"]
+    assert all(not urlsplit(url).query and not urlsplit(url).fragment for url in frame_urls), frame_urls
+    assert decisions[0] == "Products", decisions
+
+    def matching_paths(value, path="$path"):
+        if isinstance(value, dict):
+            return [match for key, child in value.items() for match in matching_paths(child, f"{path}.{key}")]
+        if isinstance(value, list):
+            return [match for index, child in enumerate(value) for match in matching_paths(child, f"{path}[{index}]")]
+        if isinstance(value, str) and QUERY_SENTINEL in value:
+            return [path]
+        return []
+
+    evidence_response = await client.get(f"/api/discovery/runs/{run_id}/evidence")
+    assert evidence_response.status_code == 200, evidence_response.text
+    evidence = evidence_response.json()
+    assert isinstance(evidence, list) and evidence, "the run has no persisted evidence"
+    leaks = matching_paths({"result": run["result"], "frames": frames, "evidence": evidence})
+    assert not leaks, f"query value leaked at {leaks}"
     assert run["result"]["states"], "the run recorded no observed state"
     assert run["result"]["states"][0]["screenshot_evidence_id"], "the state has no screenshot evidence"
     assert decisions, "the controlled decision policy never ran"

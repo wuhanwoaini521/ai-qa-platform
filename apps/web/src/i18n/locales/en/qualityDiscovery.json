@@ -6,7 +6,7 @@
   "startUrlPlaceholder": "e.g. https://shop.example.com",
   "startUrlRequiredHelp": "Required. Enter the application home URL to enable Start.",
   "startUrlInvalidHelp": "Enter a valid http(s) URL without credentials, query parameters, or fragments.",
-  "startUrlHelp": "Exploration will begin at this page.",
+  "startUrlHelp": "Use a clean home or path URL without query or fragment. Exploration can follow same-domain product and search links with safe parameters.",
   "mode": "Run mode",
   "requirementOptional": "Requirement (optional)",
   "requirementRequired": "Requirement to validate (required)",
@@ -16,7 +16,7 @@
   "pastePlaceholder": "Describe a feature, rule, or acceptance criteria. This is analysis input and is not saved to the requirement library.",
   "advanced": "Advanced options",
   "allowedDomains": "Additional allowed domains (comma separated)",
-  "safeActionsNote": "Only visible controls on the start domain and explicitly allowed domains are considered. Checkout, payment, orders, account changes, and destructive actions are blocked. Jev must return a confident choice.",
+  "safeActionsNote": "Only visible controls on the start domain and explicitly allowed domains are considered. Same-domain product and search links can use common parameters such as q, category, sku, or page; query values are never stored. Links with credentials, fragments, sensitive or unrecognized query keys, unapproved domains, checkout, payment, orders, account changes, and destructive actions are blocked. Jev must return a confident choice.",
   "modes": {
     "EXPLORE": "Explore · Discover product",
     "VALIDATE": "Validate · Compare requirement",
@@ -162,6 +162,7 @@
   "visitedStates": "Visited states",
   "pendingActions": "Pending actions",
   "blockedActions": "Blocked actions",
+  "blockedActionsHelp": "Some links were skipped by safety rules: sensitive or unrecognized query keys, fragments, credentials, unapproved domains, or unsafe actions. Use Advanced options to allow a trusted domain. Query values are never stored.",
   "failedActions": "Failed actions",
   "candidateFrontier": "Candidate action status",
   "frontierStatuses": {

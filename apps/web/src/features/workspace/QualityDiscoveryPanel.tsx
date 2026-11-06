@@ -486,9 +486,10 @@ export function QualityDiscoveryPanel({
           <div className="qd-frontier-summary" role="group" aria-label={t('frontierSummary')}>
             <span>{t('visitedStates')}: {run.result.states?.length ?? run.progress.states}</span>
             <span>{t('pendingActions')}: {pendingFrontierCount}</span>
-            <span>{t('blockedActions')}: {blockedFrontierCount}</span>
+            <span aria-describedby={blockedFrontierCount > 0 ? 'qd-blocked-actions-help' : undefined}>{t('blockedActions')}: {blockedFrontierCount}</span>
             <span>{t('failedActions')}: {failedFrontierCount}</span>
           </div>
+          {blockedFrontierCount > 0 && <p id="qd-blocked-actions-help" className="qd-field-hint" role="note">{t('blockedActionsHelp')}</p>}
           {run.error && <div className="qd-run-error"><ShieldAlert size={15} aria-hidden="true" />{run.error}</div>}
           <div className="qd-run-actions">
             {run.status === 'RUNNING' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void controlRun('pause')}><Pause size={13} />{t('pause')}</button>}

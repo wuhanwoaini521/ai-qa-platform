@@ -7,7 +7,7 @@ import re
 import time
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from uuid import uuid4
 
 from project_model.lifecycle import StructuredRequirementModel
@@ -36,6 +36,73 @@ from app.services.quality_discovery_models import (
     DiscoveryStatus,
     RequirementAnalysis,
     RequirementSignal,
+)
+
+# Only common catalog/search parameters are followed; their values are never persisted.
+_SAFE_DISCOVERY_QUERY_KEYS = frozenset(
+    {
+        "brand",
+        "brand_id",
+        "category",
+        "category_id",
+        "categoryid",
+        "collection",
+        "color",
+        "colour",
+        "currency",
+        "filter",
+        "filter_color",
+        "filter_size",
+        "filters",
+        "id",
+        "id_product",
+        "item",
+        "item_id",
+        "itemid",
+        "k",
+        "keyword",
+        "keywords",
+        "lang",
+        "limit",
+        "locale",
+        "max_price",
+        "min_price",
+        "offset",
+        "order",
+        "order_by",
+        "orderby",
+        "p",
+        "page",
+        "page_size",
+        "per_page",
+        "pid",
+        "post_type",
+        "price_max",
+        "price_min",
+        "product",
+        "product_cat",
+        "product_id",
+        "productid",
+        "q",
+        "query",
+        "s",
+        "search",
+        "search_query",
+        "size",
+        "sku",
+        "sort",
+        "sort_by",
+        "source",
+        "ref",
+        "utm_campaign",
+        "utm_content",
+        "utm_medium",
+        "utm_source",
+        "utm_term",
+        "variant",
+        "variant_id",
+        "variantid",
+    }
 )
 
 
@@ -776,7 +843,7 @@ class QualityDiscoveryExecutionMixin:
                 "url": self._safe_url(snapshot.url),
                 "title": self._safe_title(snapshot.title),
                 "visible_text": SensitiveRedactor.redact_text(snapshot.text[:5000]),
-                "accessibility_tree": SensitiveRedactor.redact_text(snapshot.accessibility_tree[:8000]),
+                "accessibility_tree": self._safe_accessibility_tree(snapshot.accessibility_tree[:8000]),
                 "controls": state["controls"][:40],
                 "network": self._network_summary(snapshot.network),
                 "state_id": state["state_id"],
@@ -1023,7 +1090,11 @@ class QualityDiscoveryExecutionMixin:
             role = str(control.get("role") or "")
             href = str(control.get("href") or "")
             input_type = str(control.get("type") or "").lower()
-            if control.get("has_query") or control.get("has_credentials") or self._url_has_secret_query(href):
+            if (
+                control.get("has_credentials")
+                or (control.get("has_query") and not control.get("has_safe_query"))
+                or self._url_has_secret_query(href)
+            ):
                 continue
             href_parts = urlsplit(href)
             relative_href = bool(href) and not href_parts.scheme and not href_parts.netloc
@@ -1170,12 +1241,16 @@ class QualityDiscoveryExecutionMixin:
         for control in state.get("controls", []):
             name = str(control.get("name") or control.get("href") or "").strip()
             href = str(control.get("href") or "")
-            outside = bool(control.get("has_query") or control.get("has_credentials"))
+            outside = bool(
+                control.get("has_credentials")
+                or (control.get("has_query") and not control.get("has_safe_query"))
+                or self._url_has_secret_query(href)
+            )
             if href:
                 parsed = urlsplit(href)
                 if parsed.scheme or parsed.netloc:
                     outside = outside or not self._host_allowed(href, allowed_hosts)
-                elif parsed.query or parsed.fragment:
+                elif (parsed.query or parsed.fragment) and self._url_has_secret_query(href):
                     outside = True
             cart_blocked = self._is_cart_mutation_label(name) and not allow_cart_mutation
             if not name or not (dangerous.search(name) or cart_blocked or outside):
@@ -1258,8 +1333,10 @@ class QualityDiscoveryExecutionMixin:
                 href_parts = urlsplit(href)
                 has_query = bool(href_parts.query or href_parts.fragment)
                 has_credentials = bool(href_parts.username or href_parts.password)
+                has_safe_query = bool(href_parts.query and not cls._url_has_secret_query(href))
             except ValueError:
                 has_query = has_credentials = True
+                has_safe_query = False
             result.append(
                 {
                     "index": int(control.get("index", len(result))),
@@ -1269,6 +1346,7 @@ class QualityDiscoveryExecutionMixin:
                     "type": str(control.get("type") or "")[:30],
                     "href": safe_href[:500],
                     "has_query": has_query,
+                    "has_safe_query": has_safe_query,
                     "has_credentials": has_credentials,
                     "test_id": SensitiveRedactor.redact_text(str(control.get("test_id") or ""))[:120],
                     "id": SensitiveRedactor.redact_text(str(control.get("id") or ""))[:120],
@@ -1686,6 +1764,15 @@ class QualityDiscoveryExecutionMixin:
         return f"state_{fingerprint[:16]}", fingerprint
 
     @classmethod
+    def _safe_accessibility_tree(cls, accessibility_tree: str) -> str:
+        safe_tree = SensitiveRedactor.redact_text(accessibility_tree or "")
+        return re.sub(
+            r"(?m)^(?P<prefix>\s*-\s*/url:\s*)(?P<url>\S+)",
+            lambda match: f"{match.group('prefix')}{SensitiveRedactor.redact_url(match.group('url'))}",
+            safe_tree,
+        )
+
+    @classmethod
     def _state_record(cls, snapshot, controls, scroll, state_id, fingerprint) -> dict[str, Any]:
         text = re.sub(r"\s+", " ", snapshot.text or "").strip()
         evidence_chars = cls._get_config().discovery.max_evidence_chars
@@ -1700,7 +1787,7 @@ class QualityDiscoveryExecutionMixin:
             "visible_controls": len(controls),
             "controls": controls,
             "main_content": SensitiveRedactor.redact_text(text)[:content_limit],
-            "landmarks": SensitiveRedactor.redact_text(snapshot.accessibility_tree or "")[
+            "landmarks": cls._safe_accessibility_tree(snapshot.accessibility_tree or "")[
                 : evidence_chars - content_limit
             ],
             "scroll": scroll,
@@ -1849,8 +1936,22 @@ class QualityDiscoveryExecutionMixin:
 
     @staticmethod
     def _url_has_secret_query(url: str) -> bool:
-        parsed = urlsplit(url)
-        return bool(parsed.query or parsed.fragment)
+        try:
+            parsed = urlsplit(str(url)[:4096])
+            if parsed.fragment:
+                return True
+            if not parsed.query:
+                return False
+            if len(parsed.query) > 2048:
+                return True
+            parameters = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=32)
+        except (TypeError, ValueError):
+            return True
+        return not parameters or any(
+            key.strip().casefold() not in _SAFE_DISCOVERY_QUERY_KEYS
+            or SensitiveRedactor.SENSITIVE_KEYS.search(key.strip())
+            for key, _value in parameters
+        )
 
     @classmethod
     def _safe_error(cls, error: Exception, limit: int = 500) -> str:
