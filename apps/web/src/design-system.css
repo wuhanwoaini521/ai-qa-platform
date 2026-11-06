@@ -263,8 +263,9 @@
 .app-design-system .app-frame { color: var(--c-text); }
 .app-design-system .app-topbar { z-index: 10; }
 .app-design-system .app-sidebar { padding-inline: var(--sp-3); }
-.app-design-system .sidebar-header { flex-wrap: wrap; }
-.app-design-system .sidebar-project-context { order: 3; flex-basis: 100%; height: auto; }
+.app-design-system .sidebar-header { flex-wrap: nowrap; }
+.app-design-system .sidebar-header > .ds-avatar { flex: none; }
+.app-design-system .sidebar-project-context { flex: 1 1 0; height: auto; }
 .app-design-system .sidebar-nav { gap: var(--sp-2); }
 .app-design-system .app-sidebar .ds-nav-item { width: 100%; }
 .app-design-system .app-sidebar .ds-nav-item > svg { flex: none; }
