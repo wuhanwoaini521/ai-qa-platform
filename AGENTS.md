@@ -141,11 +141,11 @@ Historical mobile requirements in prompts, TODOs, and design documents are **OUT
 
 Follow `docs/UI_DESIGN_SYSTEM.md`.
 
-The default desktop design direction is **Warm Light Editorial Workspace** (see `docs/UI_DESIGN_SYSTEM.md`). The `/` Dashboard route has a scoped Graphite exception, including its shell and content subtree; this does not authorize changing shared/global theme aliases or any other route.
+The default desktop design direction is **self-ui-style Cold Light Workspace**: a cool light dotted canvas, purple primary/focus accent, raised key surfaces and controls, and small squared radii. `@self/ui-style` owns generic control visuals and base tokens; the platform owns business layout and semantic mapping.
 
-Prefer existing design tokens, components, navigation patterns, and layout primitives. Avoid introducing competing visual systems.
+The approved rollout covers every desktop route, including `/` Dashboard and Workspace Debug/Explore. There is no Graphite visual exception. Preserve existing route-specific geometry, navigation, content density and interactions while replacing the old palette. Keep the package pinned to the checked-in lockfile and map the existing `light`/`dark`/`system` preference within the scoped `.ds-theme`; do not create another global palette.
 
-Do not sacrifice functional usability, accessibility, or readability for visual fidelity.
+Prefer official `ds-*` classes and components where their contracts fit. Keep business tables, editors and runtime surfaces in their existing layers. Do not introduce global tag selectors or `!important` overrides; do not sacrifice usability, accessibility or readability for visual fidelity.
 
 ## 5. Development Priorities and Efficiency
 

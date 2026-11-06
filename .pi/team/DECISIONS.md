@@ -35,8 +35,17 @@
 - **Reason:** First QA launch defaulted to detached asynchronous execution even though its task prose requested synchronous work. It completed safely, but the mismatch exposed a tool-call-level guardrail requirement. The independent review surfaced that the interim launch/status note did not retain the final QA result; durable evidence was added separately.
 - **Limit:** These settings apply to new Pi sessions; they do not retrofit the already-running Pi parent or stop sessions launched before the change.
 
+
 ## EORG-007 — User-authorized Graphite fidelity scope extension (2026-10-27)
 
 - **Status:** Accepted for the named fidelity task only.
 - **Decision:** The current user request explicitly extends Direction A to Projects, Requirements, Test Explorer, Write Tests, Results, AI Repair, and Quality, in addition to Dashboard and Workspace Debug/Explore. This overrides EORG-004's earlier implementation-only boundary for `.ai-runs/2026-10-27-graphite-fidelity-recovery/`.
 - **Constraints:** The approved Pencil frames still cover only Dashboard, Debug, and Explore. For the added views, preserve existing React structure/content/actions and use the existing Graphite shell/tokens; do not invent IA or alter runtime, deterministic verdict, human approval, API, or business semantics. The extension does not authorize unrelated routes or mobile-specific work.
+
+## EORG-008 — Adopt self-ui-style across all desktop routes
+
+- **Status:** Accepted by user m02786 (2026-11-05); supersedes EORG-004 and the route-scope limit in EORG-007 for the current visual direction.
+- **Decision:** Extend the accepted Quality self-ui-style pilot to all desktop web routes, including Dashboard, Workspace Debug/Explore/browser modes and login. Use the cold dotted light canvas, purple emphasis, raised key controls/surfaces and compact small-radius geometry. Graphite is no longer a visual exception.
+- **Boundaries:** Preserve route/query context, business layout and data, API contracts, authentication/permissions, i18n, deterministic Quality decisions, Runtime/Workspace state and keyboard/accessibility behavior. Keep dense tables/logs/editors flat and readable. Preserve the existing `light`/`dark`/`system` preference by mapping dark tokens inside `.ds-theme`; do not add a second global palette, change backend/runtime architecture, or develop mobile-specific UI. Existing `--graphite-*` names are temporary compatibility aliases for unmigrated selectors and must resolve directly to package tokens; new components must not use them and the aliases are removed after selector migration. Use official `@self/ui-style` tokens/classes/components; no global tag overrides or `!important` stack. No service management, commit, push, merge or deploy.
+- **Reason:** User explicitly approved the entire system after accepting the Quality pilot. Independent Architecture and Design reviews confirmed the route contracts and recommended the shared shell → operational views → Dashboard → specialized Workspace/Canvas/Studio rollout.
+- **Delivery addendum (2026-11-06, user m11894):** The user authorized categorizing the completed changes into commits and then a normal push after validation; this supersedes the commit/push boundary above for this delivery only. No merge or deploy.

@@ -1,59 +1,54 @@
 # Web UI 设计系统约定
 
 本文件记录 ai-qa-platform 前端的共享视觉与交互规则，供后续页面新增与维护复用。当前 UI 使用
-React + TypeScript + Vite，不依赖 Tailwind。**新增页面/组件先复用这里的 token、布局原语与状态
-规则，再考虑新增样式。**
+React + TypeScript + Vite。**新增页面/组件优先复用 `@self/ui-style` 官方 token、`ds-*` 类和 React 控件；平台仅负责业务布局、语义别名与交互行为。**
 
-设计方向：**Warm Light Editorial Workspace**——暖中性浅色画布、白色圆角卡片、1px 细边框、
-充裕留白；导航常驻文字标签；主操作使用近黑实心按钮；强调色只用一支暖橙，状态色以柔和胶囊表达。
-整体观感对齐产品参考稿：安静、明亮、信息优先，不做深色主题或霓虹装饰。
+设计方向：**self-ui-style Cold Light Workspace**——浅冷色点阵画布、紫色主操作与焦点强调、关键面板和控件采用凸起表面、方正小圆角。状态色继续表达通过、运行、警告、失败等既有语义。全系统共用同一视觉方向，包括 Dashboard 与 Workspace Debug/Explore；Graphite 只作为已被新方向取代的历史实现。
 
-**Dashboard route styling:** `/` keeps route-local `--dashboard-*` tokens for its layout and visual hierarchy, but follows the selected app theme: Warm Light in light mode and the shared dark palette in dark mode. Keep shared `:root` values and `.app-frame.is-graphite` aliases unchanged. Dashboard evidence surfaces stay opaque, with the warm accent used sparingly and red/amber/blue retaining their status meanings.
+`@self/ui-style` 的通用控件规则与基础 token 是单一来源，应用现有语义变量在 `.app-design-system.ds-theme` 作用域内映射到包内 token。保留应用 `light` / `dark` / `system` 偏好；暗色使用同一组件规则和作用域内的暗色 token 映射，不再提供另一套 Graphite 视觉系统。移动端行为保持现状，本次不新增移动布局或移动验收。
 
 ## 视觉基线
 
-- 默认页面使用单一 Warm Light 外观：暖中性画布（`#f4f3f0`）、白色内容卡片、近黑正文；`/` Dashboard 可保留局部布局 token，但颜色随系统设置的浅色/深色外观切换，与其他页面保持一致。
-- App Shell 统一为左侧常驻文字导航（品牌 → 搜索 → 主导航 → 平台分组 → 设置/语言），所有路由共用同一外壳；不再按路由切换成 64px 图标栏或另一套侧栏。顶部工具栏与内容保持不透明，优先保证阅读对比度。
+- 默认桌面画布使用包内冷浅色 token（主表面 `#f7fafc`、柔和表面 `#eef3f8`、深层表面 `#e7eef6`）；全站点阵保持可见但低对比，不干扰内容。
+- 主操作、选中态与键盘焦点使用紫色强调；通过、运行、警告、失败仍使用各自语义色并保留文字。
+- 应用 Shell 与内容采用同一主题；保留现有左侧导航、顶部工具栏、内容滚动区和路由上下文。Dashboard/Workspace 的旧 route class 可继续表达布局，不得再提供 Graphite 配色例外。
 - 运行状态胶囊只在 URL 明确带有 `runId` 时出现，读取现有 `useRunStore`，并返回到已有 Workspace 结果/失败面板；不推断“最近”或“最新”运行。
-- 阴影、渐变和高饱和装饰用于层级提示，不替代正文对比度或状态文字。
-- `--graphite-*` 共享别名保留原名并继续使用现有全局值；`/` Dashboard 使用 `.app-frame.is-dashboard-route` 内的 `--dashboard-*` 局部 token 覆盖 route 语义，并随 `data-theme` 适配浅色或深色，不改共享 root 值或 `.app-frame.is-graphite` 的共享值。
-- 旧 `--ui-*` 与 `--text-*` 别名族统一指向同一套浅色调色板；`--ui-indigo*` 不再引入第二种品牌色，只作暖橙强调的别名。
+- 关键操作、指标和主要信息面板使用适度凸起层级；表格、日志、代码编辑器和工作台内嵌面板保持紧凑、连续，避免层层叠卡。
+- `.app-design-system` 内的旧应用语义变量统一映射至包内 token；现存 `--graphite-*` 名称仅供尚未迁移的旧 route selector 兼容使用，必须在该作用域中直接映射到包 token，不得保留独立色值。新建或修改的组件不得引用这些兼容名；相关旧 selector 迁移后删除别名。
 
 ## 设计 Tokens
 
-共享 token 的单一来源仍是 `apps/web/src/index.css` 的 `:root`，其余样式通过 `var(--token)` 引用。仅 `/` Dashboard 例外可在 `.app-frame.is-dashboard-route` 下声明局部 `--dashboard-*` 视觉 token；不得改写共享 root 值或 `.app-frame.is-graphite` 别名，也不得把局部 token 复用到其他路由。
+`apps/web/node_modules/@self/ui-style/src/tokens/tokens.css` 是当前固定版本的通用视觉来源，变量由 `.ds-theme` 限定。应用的 `--canvas`、`--surface`、`--ink`、`--line`、`--ui-*` 等兼容变量仅在 `.app-design-system` 内映射，不再把 `apps/web/src/index.css` 的旧 Warm Light/Graphite 色值当作第二来源。包版本由 `apps/web/package.json` 与 `pnpm-lock.yaml` 固定；不得虚构版本或复制包源码。
 
 ### 颜色
 
-| 用途 | Token | 当前基准 |
+| 用途 | 包内 token | 当前基准 |
 | --- | --- | --- |
-| 页面画布 | `--canvas` / `--bg-app` | `#f4f3f0` |
-| 面板表面 | `--surface` `--surface-raised` `--surface-inset` / `--bg-card` | `#ffffff` / `#f7f6f3`（inset） |
-| 正文 | `--ink` / `--text-main` / `--ui-ink` | `#17181a` |
-| 次级正文 | `--ink-soft` `--ink-muted` / `--text-muted` | `#3f4247` / `#6e7176` |
-| 分隔线 | `--line` `--line-soft` `--line-strong` / `--border-color` | `#e6e3de` / `#efece7` / `#d8d4ce` |
-| 强调色（唯一） | `--graphite-mint` / `--ui-primary` / `--ui-indigo*` | `#c2410c`（soft `#fff1e7`） |
-| 主操作按钮 | `.btn-primary` / `--primary-hover` | `#17181a` 实心，hover `#000000` |
-| 聚焦轮廓 | `--graphite-focus` / `--ui-focus` | `rgba(194, 65, 12, 0.28)` |
-| 成功/警告/失败/AI | `--accent-green` `--accent-amber` `--accent-red` `--accent-violet` | 仅用于对应状态 |
-| 圆角阶梯 | `--r-xs` `--r-sm` `--r-md` `--r-card` `--r-lg` `--r-xl` `--r-pill` | 6/8/10/14/16/18px，胶囊为 999px |
-| 间距阶梯 | `--sp-1` … `--sp-7` | 4/8/12/16/24/32/48px；栅格使用 `--sp-grid` |
-| 尺寸骨架 | `--sidebar-w` `--toolbar-h` `--workspace-pad` | 240px / 50px / 20px |
-| 动效 | `--dur-fast` `--dur` `--ease` | 120/180ms，只用于反馈与空间变化 |
-| Shell 玻璃材质 | `--glass-shell-mix` `--glass-rail-mix` `--glass-island-mix` `--glass-border-mix` `--glass-blur` `--glass-saturation` | 仅用于顶栏、导航栏与运行状态胶囊，内容面板保持不透明 |
+| 页面主表面 | `--c-bg` | `#f7fafc` |
+| 柔和/抬升表面 | `--c-bg-soft` | `#eef3f8` |
+| 深层表面 | `--c-bg-deep` | `#e7eef6` |
+| 正文/次级文字 | `--c-text` / `--c-text-strong` / `--c-text-muted` | `#333333` / `#26272b` / `#5b6370` |
+| 分隔线/描边 | `--c-line` / `--c-stroke` | `#dde7f1` / 包内半透明描边 |
+| 主操作/焦点 | `--c-accent` / `--c-accent-hover` / `--c-accent-active` / `--c-accent-ink` | `#6d5dfc` 系列 |
+| 成功/警告/失败/信息 | `--c-success` / `--c-warn` / `--c-danger` / `--c-info` | 使用包内语义色，不混用 |
+| 阴影 | `--sh-raised*` / `--sh-inset*` / `--sh-input*` | 包内双光源凸起/内凹层级 |
+| 圆角 | `--r-xs` / `--r-sm` / `--r-md` / `--r-lg` / `--r-xl` | 6/8/10/12/16px |
+| 间距 | `--sp-1` … `--sp-12` | 4/8/12/16/20/24/32/40/48px |
+| 控件高度 | `--h-sm` / `--h-md` / `--h-lg` / `--h-xl` | 28/32/36/40px |
+| 应用布局 | `--sidebar-w` / `--toolbar-h` / `--workspace-pad` | 保留现有布局尺寸，按业务布局语义映射 |
 
-旧变量（如 `--color-primary`、`--surface-primary`、`--ui-*` 别名族）作为兼容层保留在 `:root`。
-新增样式优先使用语义 token；迁移旧页面时再逐步删去别名，避免一次性改动破坏功能页面。
+兼容变量只为未迁移调用方提供过渡映射；迁移完成后删除旧别名和旧控件样式，避免两套组件规则同时控制同一元素。
+
 
 ### 状态颜色语义（不要混用）
 
 | 语义 | token |
 | --- | --- |
-| 通过 / 已验证 / 已连接 | `--accent-green`（文本 `--ui-success-strong`） |
-| 运行中 / 处理中 / 分析中 | `--accent-blue`（AI 相关用 `--accent-violet`） |
-| 待处理 / 不稳定 / 需确认 | `--accent-amber`（文本 `--ui-warning-strong`） |
-| 失败 / 阻断 / 危险操作 | `--accent-red`（文本 `--danger-text`） |
-| 中性 / 未执行 | `--ink-muted` + `--line` |
+| 通过 / 已验证 / 已连接 | `--c-success`（正文同时保留成功语义文字） |
+| 运行中 / 处理中 / 分析中 | `--c-info`（AI 相关只在业务需要时使用 `--c-accent`） |
+| 待处理 / 不稳定 / 需确认 | `--c-warn` |
+| 失败 / 阻断 / 危险操作 | `--c-danger` |
+| 中性 / 未执行 | `--c-text-muted` + `--c-line` |
 
 ### 字体
 
@@ -67,9 +62,11 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 
 ### 圆角、阴影、间距
 
-- 圆角使用 `--r-xs`、`--r-sm`、`--r-card`、`--r-lg`、`--r-xl`，分别用于控件、内层面板、卡片和主要容器。
-- 阴影使用 `--shadow-xs/sm/md/lg`。普通数据卡片以轻阴影和边框为主。
-- 间距使用 `--sp-1` 至 `--sp-7`（4、8、12、16、24、32、48px）；卡片网格用 `--sp-grid`，页面区块用 `--sp-section`。
+- 通用尺寸、圆角、阴影从 `.ds-theme` 下的包 token 获取；应用只维护业务布局值与必要语义别名。
+- 关键面板可用 `--sh-raised`，按钮/输入/选择控件用对应官方类及 `--sh-raised-xs` / `--sh-raised-hover-xs`；焦点环必须清晰可见。
+- 表格、日志、代码编辑器、运行时间线与工作台内嵌窗格保持扁平紧凑，避免嵌套凸起卡片。
+- 间距优先复用 `--sp-*` 包 token；工作区高度、dock 和面板尺寸仍由现有布局模型负责。
+
 
 ## 布局原语
 
@@ -86,13 +83,12 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 
 ## 共享组件
 
-- 页面容器与标题：`.page-container`、`.page-header`、`.subtitle`
-- 指标：`.stats-grid`、`.stat-card`、`.stat-value`
-- 面板、表单和按钮：`.card`、`.form-control`、`.btn`、`.btn-primary`、`.btn-secondary`
-- 状态：`.status-pill` 与 `success/running/warning/failed` 等语义修饰类；状态必须同时保留文字，不能只靠颜色表达。
-- Tabs 与宽表：`.tab-btn`、`.table-responsive`。宽表放进 `.table-responsive`，让横向滚动留在表格容器，不扩大页面视口。
-- 异步状态与反馈：`.async-state`、`.alert` 及 `alert-error/warning/info` 修饰类。
-- 旧页面兼容基础：低特异性的 `:where(button/input/select/textarea)` 规则兜底；更具体组件类应覆盖它，避免重复造基础控件。
+- 通用按钮、图标按钮、输入框、选择器、标签、卡片、基础表格、对话框和 Toast 优先使用包内 React 控件或官方 `.ds-*` 类；例如 `.ds-btn`, `.ds-input`, `.ds-select`, `.ds-card`, `.ds-badge`, `.ds-table`。
+- 页面容器、工作区网格、指标布局、抽屉内部业务结构由平台负责，使用语义 token 和现有布局原语，不复制包内控件视觉规则。
+- 状态由 `Badge`/`.ds-badge` 表达，但必须保留业务文字；过滤/排序仍使用原始 API 状态值。
+- 业务表格继续使用现有列、排序、筛选、展开和虚拟化行为；包内 `Table` 只负责适合的语义骨架，不承担缺失的数据行为。
+- 异步状态与反馈复用现有 `.async-state`、`.alert` 等交互实现；视觉可采用包内 `Alert`/`EmptyState`/`ErrorState`，不改变重试与错误恢复路径。
+- 迁移中的旧 `.btn`、`.form-control`、`.card`、`.status-pill` 仅保留在尚未迁移的调用点，不得新增；每批移除对应旧规则，确保只有一个通用样式来源。
 
 ### 组件规则
 
@@ -106,12 +102,14 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 
 ### Round Six 页面模式
 
-- Dashboard 的执行概览与项目/需求/用例数量分区呈现，不重复统计同一总执行数；注意事项保留可追踪的状态文字。
+- Dashboard 使用全站 self-ui-style 画布与紫色主强调，保留执行概览、项目/需求/用例数量分区和可追踪状态文字；不再使用 Graphite 专属色板。
 - Projects 使用紧凑注册表；加载失败与创建失败必须提供反馈，加载错误可重试；表格滚动限制在自身容器内。
 - Quality 顶部五项指标共享 `.quality-metrics` 语义网格；评分方法使用原生 `<details>`；视图切换使用方向键可操作的 ARIA tabs。风险分数、覆盖计算、发布门禁和 AI/人工裁定均由既有业务服务负责，样式不得改变其含义。
 - Explore 的任务步骤和 Debug 的代码/日志/运行面板在窄屏可切换；Task 面板需保留可见高度，长列表在面板内部滚动，不能压缩到 0px。
 
-## 响应式规则
+## 现有响应式规则（本任务仅维护，不扩展）
+
+下面记录现有断点，供桌面布局避免溢出；本次验收只覆盖桌面基准视口，移动端仅保持既有行为，不新增移动专属设计或回归测试。
 
 - `1050px`：统计卡片按可用宽度重排；多栏 Test Cases、Runs、Tasks 页面转为单栏；宽表使用容器内横向滚动。
 - `760px`：页面头部堆叠，卡片与统计缩紧；Recorder 改为纵向工作区，绑定信息及设置单列显示。
@@ -160,7 +158,7 @@ webfont 会让 `document.fonts.ready` 永不 resolve，从而挂住 Playwright �
 1. 复用共享容器、卡片、表单、状态与异步组件，不复制 token 值或基础控件样式。
 2. 页面局部颜色优先使用语义 token；状态标记同时显示文本。
 3. Grid/Flex 内容设置 `min-width: 0`；宽表包在 `.table-responsive` 中。
-4. 至少检查 1440×900、1920×1080；重点交互页另检查 390px 窄屏。
+4. 至少检查桌面基准视口 1280×800、1440×900、1920×1080；移动行为保持现状，不在本任务新增移动验收。
 5. 页面空态、错误态、加载态和键盘焦点应与成功态同样清晰。
 6. 新增文案同时写入 `en` 与 `zh-CN`，并用字面量 `t('key')` 引用，最后跑 `scripts/i18n_check.py`。
 7. 提交前跑 `design-system.test.mjs` 与前端四条验证命令。
