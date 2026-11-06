@@ -573,17 +573,21 @@ def test_discovered_search():
             assert any(item["id"] == failure_id for item in persisted_failures.json())
 
             viewport_matrix = [
-                ("1920x1080", 1920, 1080),
+                ("1280x800", 1280, 800),
                 ("1440x900", 1440, 900),
-                ("1366x768", 1366, 768),
+                ("1920x1080", 1920, 1080),
             ]
             page_routes = [
                 ("dashboard", "/"),
                 ("projects", "/projects"),
+                ("project-management", f"/projects/{project_id}/management"),
                 ("project-overview", f"/projects/{project_id}?tab=overview"),
                 ("project-knowledge", f"/projects/{project_id}?tab=knowledge"),
                 ("project-coverage", f"/projects/{project_id}?tab=coverage"),
                 ("requirements", f"/projects/{project_id}/requirements"),
+                ("quality", f"/quality?projectId={project_id}"),
+                ("runs", "/runs"),
+                ("settings", "/settings"),
                 (
                     "requirement-workspace",
                     f"/workspace/{project_id}?view=requirement&requirementId={requirement_id}",
@@ -753,7 +757,7 @@ def test_discovered_search():
                 finally:
                     await page.unroute(pattern)
 
-            # Round 6: the release modal must explain a rejected write instead of closing silently.
+            # Round 6: the release drawer must explain a rejected write instead of closing silently.
             print("ROUND6_ERROR_SURFACE=release-create", flush=True)
             await page.set_viewport_size({"width": 1440, "height": 900})
 
@@ -768,16 +772,18 @@ def test_discovered_search():
             try:
                 await _goto_app(page, f"http://127.0.0.1:{vite_port}/quality")
                 await page.wait_for_selector("body")
-                await page.locator(".tab-btn").filter(has_text="发布门禁").first.click()
+                await page.get_by_role("tab", name="发布门禁").click()
                 await page.get_by_role("button", name="新建发布").first.click()
-                modal = page.locator(".modal-overlay")
-                await modal.wait_for(state="visible", timeout=15000)
-                inputs = modal.locator("input")
+                drawer = page.get_by_role("dialog").last
+                await drawer.wait_for(state="visible", timeout=15000)
+                inputs = drawer.locator("input")
                 await inputs.nth(0).fill("v0.0.1-round6")
                 await inputs.nth(1).fill("Round 6 forced failure")
-                await modal.locator('button[type="submit"]').click()
+                await drawer.locator('button[type="submit"]').click()
                 await (
-                    modal.locator('[role="alert"]').filter(has_text="操作失败").wait_for(state="visible", timeout=15000)
+                    drawer.locator('[role="alert"]')
+                    .filter(has_text="操作失败")
+                    .wait_for(state="visible", timeout=15000)
                 )
                 await _shot(
                     page,
@@ -788,18 +794,7 @@ def test_discovered_search():
             finally:
                 await page.unroute("**/api/releases")
 
-            responsive_pages = [
-                "dashboard",
-                "project-overview",
-                "requirement-workspace",
-                "quality-discovery",
-                "test-cases",
-                "automation-studio",
-                "live-browser",
-                "debugger",
-                "run-result",
-                "failure-repair",
-            ]
+            responsive_pages = [name for name, _path in page_routes]
             for viewport_name, width, height in viewport_matrix:
                 await page.set_viewport_size({"width": width, "height": height})
                 for name in responsive_pages:
