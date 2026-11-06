@@ -123,9 +123,9 @@ test('quality filters use raised library shadows and localize requirement status
 });
 
 test('quality uses the pinned official default surface and package stylesheet', () => {
-  const pin = '690a35f47e8354707f914687fb748bdf74be410f';
+  const pin = '7ae760fdad47e4ecabb42276cddf96bfbe9f2eab';
   const manifest = JSON.parse(read(path.join(root, 'package.json')));
-  assert.equal(manifest.dependencies['@self/ui-style'], 'github:wuhanwoaini521/self-ui-style#v0.8.1');
+  assert.equal(manifest.dependencies['@self/ui-style'], 'github:wuhanwoaini521/self-ui-style#v0.9.0');
   assert.ok(read(path.join(root, '..', '..', 'pnpm-lock.yaml')).includes(pin), 'lockfile must resolve the pinned latest component commit');
   assert.match(read(path.join(srcDir, 'main.tsx')), /@self\/ui-style\/react\/style\.css/);
 

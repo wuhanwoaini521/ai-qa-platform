@@ -172,8 +172,8 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.56.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@self/ui-style':
-        specifier: github:wuhanwoaini521/self-ui-style#v0.8.1
-        version: https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/690a35f47e8354707f914687fb748bdf74be410f(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: github:wuhanwoaini521/self-ui-style#v0.9.0
+        version: https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/7ae760fdad47e4ecabb42276cddf96bfbe9f2eab(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@xyflow/react':
         specifier: ^12.12.0
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -677,6 +677,19 @@ packages:
       '@types/react':
         optional: true
 
+  '@radix-ui/react-context-menu@2.4.1':
+    resolution: {integrity: sha512-Pddn3Z8lio3/ChxyXaEP3jHTTo1LTHCWwF8+mG1chQlWijP+ttVHBKwezrQTiV6Mj670ojvumqvuGh+mdv33iQ==}
+    peerDependencies:
+      '@types/react': '*'
+      '@types/react-dom': '*'
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+
   '@radix-ui/react-context@1.3.0':
     resolution: {integrity: sha512-v5AYEocMISkbJ+1fTXzZpiFv7NRr3D2WiYbLIKf+FkmJ8VkP6d503eV2n34MFussHXY1pcoq3yfJiQH77dc4Mg==}
     peerDependencies:
@@ -1160,9 +1173,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@self/ui-style@https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/690a35f47e8354707f914687fb748bdf74be410f':
-    resolution: {gitHosted: true, integrity: sha512-7HlTGvrrUXm6kou+l+ssF0phJuNXisFqsjBwnD5IOR0Dr2jUD+q+D8aF4Xftg2J4vnQpbQ2cszAledIM4FQB+A==, tarball: https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/690a35f47e8354707f914687fb748bdf74be410f}
-    version: 0.8.1
+  '@self/ui-style@https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/7ae760fdad47e4ecabb42276cddf96bfbe9f2eab':
+    resolution: {gitHosted: true, integrity: sha512-v9ZouKJjO0wcvjN6zVkQLJ8ea/uzzNdI2Lh8wiJjJ0UYoBtCUSFSNzxnckHB7K2H/uKFsfEBGsYaLwkB3VM6sw==, tarball: https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/7ae760fdad47e4ecabb42276cddf96bfbe9f2eab}
+    version: 0.9.0
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=18.2.0'
@@ -2465,6 +2478,19 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
 
+  '@radix-ui/react-context-menu@2.4.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      '@radix-ui/primitive': 1.2.0
+      '@radix-ui/react-context': 1.3.0(@types/react@19.3.0)(react@19.3.0)
+      '@radix-ui/react-menu': 2.2.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-primitive': 2.2.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-use-controllable-state': 1.3.0(@types/react@19.3.0)(react@19.3.0)
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+    optionalDependencies:
+      '@types/react': 19.3.0
+      '@types/react-dom': 19.3.0(@types/react@19.3.0)
+
   '@radix-ui/react-context@1.3.0(@types/react@19.3.0)(react@19.3.0)':
     dependencies:
       react: 19.3.0
@@ -2932,11 +2958,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.4':
     optional: true
 
-  '@self/ui-style@https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/690a35f47e8354707f914687fb748bdf74be410f(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@self/ui-style@https://codeload.github.com/wuhanwoaini521/self-ui-style/tar.gz/7ae760fdad47e4ecabb42276cddf96bfbe9f2eab(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@radix-ui/react-accordion': 1.3.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-alert-dialog': 1.2.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-checkbox': 1.4.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-context-menu': 2.4.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-dialog': 1.3.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-dropdown-menu': 2.2.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-popover': 1.3.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
