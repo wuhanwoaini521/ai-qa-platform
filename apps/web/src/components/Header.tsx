@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -39,6 +39,11 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationSearch = new URLSearchParams(location.search);
+  const isWorkspaceResultsView = location.pathname.startsWith('/workspace/')
+    && locationSearch.get('stage') === 'result'
+    && locationSearch.get('view') === 'results';
   const { language, setLanguage } = usePreferences();
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [runnerProfiles, setRunnerProfiles] = useState<RunnerProfile[]>([]);
@@ -188,7 +193,7 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="topbar-separator" aria-hidden="true" />
         <h1 className="topbar-page-title">{title}</h1>
       </div>
-      {selectedRunContext?.runId && (
+      {selectedRunContext?.runId && !isWorkspaceResultsView && (
         <div className="topbar-run-island-slot"><RunStatusIsland context={selectedRunContext} /></div>
       )}
       <div className="topbar-utility-section">

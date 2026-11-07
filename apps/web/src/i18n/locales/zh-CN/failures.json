@@ -187,7 +187,7 @@
     "rolledBack": "已回滚，原代码已恢复",
     "autoRolledBack": "原失败用例未通过，系统已自动回滚补丁，原文件内容已恢复。",
     "rolledBackDetail": "修复补丁已回滚，原文件内容已恢复。",
-    "liveEvents": "查看已发生的分析阶段",
+    "liveEvents": "AI 分析过程",
     "resultTitle": "分析结论与处理状态",
     "rootCause": "失败原因",
     "locatorTimeoutConclusion": "测试等待定位器 {{locator}} 时超过 {{duration}} ms，页面上没有找到它，因此点击操作超时。",
@@ -198,10 +198,10 @@
     "applied": "已应用",
     "notApplied": "未应用",
     "notRun": "未运行",
-    "nextSteps": "下一步",
+    "nextSteps": "建议处理步骤",
+    "analysisDetails": "查看分析过程与历史记录",
     "locatorRepairAdvice": "将失败定位器更新为当前页面定位：{{locator}}。",
     "locatorRetestAdvice": "重跑该测试，并确认加入购物车及金额断言都通过。",
-    "originalDiagnosis": "展开 AI 原始分析与建议",
     "localDecisionFallback": "Jev 本次未成功采用（原因：{{reason}}），系统使用本地规则选择候选；仍以原失败用例复测结果为准。",
     "localDecisionLowConfidence": "Jev 本次置信度为 {{confidence}}，低于配置的最低阈值",
     "decisionBlocked": "修复已阻止：{{reason}}。未应用代码修改，也未启动验证运行。",
@@ -292,7 +292,9 @@
   ,"manualNextStep": "请在调试视图检查失败脚本；当前没有可应用的提案。修改脚本前必须由你审阅并批准，之后再复测失败用例。"
   ,"manualNextStepOverview": "当前没有可安全应用的补丁。请检查失败证据，或在调试视图手动检查脚本；源代码只会在人工批准后写入。"
   ,"preparingCodeRepair": "正在启动分析与修复任务…"
-  ,"openCodeRepairTask": "打开分析与修复任务"
+  ,"openCodeRepairTask": "查看修复任务"
+  ,"openRepairTaskDescription": "进入现有任务，查看已完成的诊断和修复方案。"
+  ,"reanalyzeDescription": "重新运行 AI + Jev 诊断，为当前失败生成新的分析记录。"
   ,"repairTaskExists": "已有分析与修复任务"
   ,"repairRequiresProject": "请先选择项目，再启动分析与修复任务。"
   ,"codeRepairTaskGoal": "请根据失败证据为用例 {{nodeid}} 提出最小的 Python 测试脚本修复。保留现有断言和业务预期；未经人工批准不得写入源代码。"

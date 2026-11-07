@@ -2,7 +2,25 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
-## Current follow-up: desktop sidebar collapse and breakpoint repair (2026-11-06)
+## Current follow-up: workspace run results cleanup (2026-11-06)
+
+- **Objective and scope:** Reduce duplicated status, navigation, and run-context content on the Workspace results page while keeping lifecycle navigation, evidence, failure repair, and active-run controls available. Apply the existing self-ui-style soft raised shadow tokens.
+- **Repository state:** Branch `main`, HEAD `512b473`. Recorder changes and other existing dirty/untracked files remain preserved. No commit or push was made.
+- **Changes:** `WorkspacePage.tsx` hides the redundant workspace description/current-object chips, header utility actions, mode switcher, terminal run dock, and duplicate failure action only on completed results view; it preserves run controls during active work. `Header.tsx` hides the duplicate global run status island on that view. `WorkspaceRunResult.tsx` removes extra runtime-detail shortcuts and the duplicated run/case/environment metadata block while retaining the event log and repair workflow. `workspace.css` reduces the current stage summary, simplifies stat surfaces, and adds `--sh-raised-xs` shadows to result cards.
+- **Verification actually run:** `rtk pnpm -C apps/web run typecheck` exit 0; `rtk pnpm -C apps/web run lint` exit 0. Browser MCP visual inspection at 1090×1084 confirmed the simplified layout and soft card shadows; browser console reported 0 errors. Browser MCP Playwright version was not established, so this does not establish the repository's pinned Playwright 1.62.0 gate.
+- **Quality limits:** No automated tests were run. The active-run and failure-repair paths were preserved by conditional rendering/code inspection, not manually exercised. Browser MCP Playwright version was not established.
+- **Next actions:** If further visual acceptance is requested, inspect at 1280×800, 1440×900, and 1920×1080 with the repository-pinned Playwright 1.62.0.
+
+## Previous follow-up: recorder explore workflow (2026-11-06)
+
+- **Objective and scope:** Repair the Automation → Explore recording workflow and reduce its desktop UI clutter. Preserve the existing recorder service, BrowserRuntime, and Task Runtime; no new runtime or provider was added.
+- **Repository state:** Branch `main`, base HEAD `512b473`. Existing user changes in `apps/web/src/features/workspace/workspace.css` and all untracked `.ai-runs/**` folders remain present; no commit or push was made.
+- **Changes:** `recorder_service.py` drains browser event buffers before pausing/stopping, disables capture at that boundary, and re-enables it on resume. `recorder.py` acknowledges recording state/revision and returns authoritative steps on stop. `RecorderPage.tsx` waits for command acknowledgements, updates recording state only after confirmation, gates generation on a connected/stopped/synced session with steps, removes the redundant generic Explore action, and prevents AI exploration from overlapping active recording. Desktop UI promotes four common actions, moves other actions into More tools, opens the natural-language workflow by default, and collapses API calls. Recorder strings are concise and bilingual.
+- **Verification actually run:** `rtk pnpm -C apps/web exec tsc --noEmit` exit 0; targeted ESLint `rtk pnpm -C apps/web exec eslint src/pages/RecorderPage.tsx` exit 0; `python -m py_compile` on the two changed API modules exit 0. Browser MCP visual inspection at 1280×800, 1440×900, and 1920×1080; after a fresh reload the current page reported zero console errors. The More tools disclosure was opened and inspected.
+- **Quality limits:** No recorder start/stop/API integration interaction was executed against the demo project and no automated tests were run. `rtk pnpm --filter @ai-qa/web build` passed the `tsc -b` phase but Vite failed to spawn esbuild (`spawn EPERM`). Browser MCP Playwright version was not established, so this is not evidence for the repository's pinned Playwright 1.62.0 gate. API contract and isolated recorder lifecycle tests remain NOT TESTED.
+- **Next actions:** In an isolated disposable project/database, exercise create/connect → start → browser actions → stop → verify final step list → generate script, and test stop failure/reconnect behavior. Re-run the production build in an environment that permits esbuild child processes. Keep existing unrelated edits and `.ai-runs/**` data intact; do not commit/push without explicit authorization.
+
+## Previous follow-up: desktop sidebar collapse and breakpoint repair (2026-11-06)
 
 - 用户在932×1106总览页反馈侧栏头部堆叠；上一轮仅验证展开状态，未覆盖收起/缩放，验收不完整。
 - 已真实复现收起状态实际宽度仍232px。根因是旧窄屏网格规则与组件库宽度变量冲突；进一步补查发现宽窗口Workspace compact-shell还用min-width/flex-basis固定236px。
@@ -2253,3 +2271,13 @@ git diff --check
 - **Review:** Three read-only architect reviews closed two P2 E2E proof gaps: the destination is category-query-specific and the sentinel scan waits for complete SSE through `run.finished`. Final verdict: **OK with notes**; reviewer confirmed `max_actions=2` is test-service-scoped and assertions are not vacuous. Full findings and run IDs are in `.ai-runs/2026-11-05-explorer-query-navigation/05-review.md`.
 - **Limitations:** No live authenticated/anti-bot e-commerce domain was supplied. The previous full `pnpm test` run, before this fix, had 7 failures/1,202 passed/12 skipped/73 warnings and was not rerun; see `.ai-runs/2026-11-05-explorer-query-navigation/04-validation.md`. No commit/push/deploy or user-service management was performed.
 - **Next:** Continue the outstanding full desktop viewport matrix from m02786; no further Explorer implementation is pending.
+
+## AI exploration partial-draft and assertion feedback (2026-11-06)
+
+- **Objective:** Improve the natural-language exploration-to-script path and make regression verification scope clearer, reusing Task Runtime, BrowserRuntime, and the human-approved repair workflow.
+- **Change:** Eligible blocked `EXPLORE_PAGE` tasks now expose a draft action when their history artifact contains at least one successful replayable action. RecorderPage downloads the existing artifact on explicit request and runs it through the existing converter. Partial drafts only retain successful actions with verified locators, do not claim goal verification, and require review/manual execution. Scripts without observed business-outcome text assertions show a warning; title fallback is not considered business proof. Repair verification copy points users to the created Run for actual scope.
+- **Files:** `apps/api/app/services/task_browser_executor.py`, `apps/web/src/pages/RecorderPage.tsx`, `apps/web/src/pages/recorderAgentModel.ts`, recorder and workspace locales.
+- **Validation:** `pnpm --filter @ai-qa/web typecheck` (TypeScript reported no errors; RTK wrapper returned exit 1), `pnpm --dir apps/web exec tsc --noEmit --pretty false` passed, web ESLint passed, Ruff on `task_browser_executor.py` passed, Python AST and four locale JSON files parsed, `git diff --check` passed. No tests or AI exploration run. Live browser inspection found 0 console errors, but the new blocked-task flow was not exercised end-to-end.
+- **Review:** Independent scoped review found one issue: `partial` actions were eligible despite uncertain effects. Both backend eligibility and frontend conversion were tightened to `success` only; re-review found no P0/P1 blockers.
+- **State:** Existing dirty recorder/workspace edits and untracked run directories predate this work and remain preserved. No commit/push/deploy.
+- **Next:** Run an authorized local exploration against a safe fixture to verify blocked-history download, draft generation and manual execution; separately improve deterministic regression-scope selection as required by roadmap.

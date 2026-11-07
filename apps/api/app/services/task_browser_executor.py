@@ -2456,6 +2456,72 @@ class TaskBrowserExecutor:
                 status="COMPLETED" if goal_completed else "BLOCKED",
                 event_type="browser.goal_completed" if goal_completed else "browser.goal_blocked",
             )
+            final_haystack = " ".join(
+                [
+                    str(latest_observation.get("url") or ""),
+                    str(latest_observation.get("title") or ""),
+                    str(latest_observation.get("text") or ""),
+                    str(latest_observation.get("accessibility_tree") or ""),
+                ]
+            ).casefold()
+            verified_text_criteria = [
+                value for value in criteria if isinstance(value, str) and value.casefold() in final_haystack
+            ]
+            verified_completion_evidence = [
+                value
+                for value in plan.completion_evidence
+                if isinstance(value, str) and value.strip() and value.casefold() in final_haystack
+            ]
+            goal_evidence = SensitiveRedactor.redact_value(
+                {
+                    "source": "live_page_observation",
+                    "cart_verified": any(item.get("cart_verified") is True for item in state["history"]),
+                    "visible_text_criteria": verified_text_criteria,
+                    "completion_evidence": verified_completion_evidence,
+                }
+            )
+            partial_draft_stop_reasons = {
+                "NO_CANDIDATE",
+                "ACTION_LIMIT_REACHED",
+                "JEV_NO_DECISION",
+                "ACTION_FAILED",
+                "UNEXPECTED_STATE",
+                "LOOP_DETECTED",
+                "GOAL_NOT_REACHED",
+            }
+            replayable_actions = [
+                item
+                for chunk in state["history_archive"]
+                for item in chunk.get("actions", [])
+            ] + list(state["history"])
+            has_replayable_action = any(
+                item.get("status") == "success"
+                and item.get("action") in {
+                    "navigate",
+                    "back",
+                    "scroll",
+                    "wait",
+                    "fill",
+                    "select",
+                    "hover",
+                    "press_key",
+                    "click",
+                    "open_product",
+                    "filter",
+                    "choose_variant",
+                    "add_to_cart",
+                }
+                and (
+                    item.get("action") in {"navigate", "back", "scroll", "wait"}
+                    or (item.get("locator_verified") is True and isinstance(item.get("locator"), dict))
+                )
+                for item in replayable_actions
+            )
+            partial_draft_available = (
+                not goal_completed
+                and stop_reason in partial_draft_stop_reasons
+                and has_replayable_action
+            )
             sample_artifact = await self.context.artifact(
                 task,
                 "browser_agent",
@@ -2476,6 +2542,16 @@ class TaskBrowserExecutor:
                         "archive": state["history_archive"],
                         "recent_actions": state["history"],
                         "incidents": state["incidents"],
+                        "exploration_result": {
+                            "verified": bool(goal_completed),
+                            "partial_draft": partial_draft_available,
+                            "kind": "ai_jev_browser_agent" if strategy == "agent" else "fast_browser_agent",
+                            "strategy": strategy,
+                            "final_url": SensitiveRedactor.redact_url(str(state["current_url"] or "")),
+                            "final_title": SensitiveRedactor.redact_text(str(latest_observation.get("title") or ""))[:200],
+                            "goal_evidence": goal_evidence,
+                            "stop_reason": stop_reason,
+                        },
                     },
                     ensure_ascii=False,
                     indent=2,
@@ -2570,25 +2646,10 @@ class TaskBrowserExecutor:
                         "verification_artifact_id": (state.get("human_verification") or {}).get("artifact_id"),
                         "decision_samples_artifact_id": sample_artifact["artifact_id"],
                         "history_artifact_id": history_artifact["artifact_id"],
+                        "script_draft_available": partial_draft_available,
                         "failure_incidents": state["incidents"],
                     },
                 )
-            final_haystack = " ".join(
-                [
-                    str(latest_observation.get("url") or ""),
-                    str(latest_observation.get("title") or ""),
-                    str(latest_observation.get("text") or ""),
-                    str(latest_observation.get("accessibility_tree") or ""),
-                ]
-            ).casefold()
-            verified_text_criteria = [
-                value for value in criteria if isinstance(value, str) and value.casefold() in final_haystack
-            ]
-            verified_completion_evidence = [
-                value
-                for value in plan.completion_evidence
-                if isinstance(value, str) and value.strip() and value.casefold() in final_haystack
-            ]
             result = {
                 "verified": True,
                 "kind": "ai_jev_browser_agent" if strategy == "agent" else "fast_browser_agent",
@@ -2596,12 +2657,7 @@ class TaskBrowserExecutor:
                 "goal": task.goal,
                 "final_url": state["current_url"],
                 "final_title": latest_observation.get("title", ""),
-                "goal_evidence": {
-                    "source": "live_page_observation",
-                    "cart_verified": bool(state["history"] and state["history"][-1].get("cart_verified")),
-                    "visible_text_criteria": verified_text_criteria,
-                    "completion_evidence": verified_completion_evidence,
-                },
+                "goal_evidence": goal_evidence,
                 "subgoals": state["subgoals"],
                 "actions": state["history"],
                 "history_archive": state["history_archive"],

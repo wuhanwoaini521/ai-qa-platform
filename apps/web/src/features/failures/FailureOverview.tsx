@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
+  ArrowRight,
   Bug,
   Code2,
   ExternalLink,
@@ -143,6 +144,8 @@ export const FailureOverview: React.FC<{
   const primaryIcon =
     primaryAction === 'RETRY' || primaryAction === 'VERIFY_FIX'
       ? <Play size={16} />
+      : primaryAction === 'RUN_DIAGNOSIS' && hasRepairTask
+        ? <ArrowRight size={16} />
       : primaryAction === 'CREATE_ISSUE_DRAFT'
         ? <Bug size={16} />
         : <Sparkles size={16} />;
@@ -281,6 +284,9 @@ export const FailureOverview: React.FC<{
             {showPrimaryAction && (
               <>
                 <span className="failure-section-label">{t('primaryAction')}</span>
+                {showReanalysis && primaryAction === 'RUN_DIAGNOSIS' && hasRepairTask && (
+                  <p className="failure-action-description">{t('openRepairTaskDescription')}</p>
+                )}
                 {primaryAction === 'BLOCKED' ? (
                   <div className="failure-manual-next-step">
                     {primaryReason && <p className="failure-action-reason" role="status">{primaryReason}</p>}
@@ -304,15 +310,18 @@ export const FailureOverview: React.FC<{
               </>
             )}
             {showReanalysis && (
-              <button
-                type="button"
-                className="ds-btn btn btn-secondary failure-reanalyze-action"
-                onClick={onReanalysis}
-                disabled={reanalysisPending}
-              >
-                <RefreshCw size={16} aria-hidden="true" />
-                {t(reanalysisPending ? 'reanalyzingAIJev' : 'reanalyzeAIJev')}
-              </button>
+              <div className="failure-reanalysis-option">
+                <button
+                  type="button"
+                  className="ds-btn btn btn-secondary failure-reanalyze-action"
+                  onClick={onReanalysis}
+                  disabled={reanalysisPending}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                  {t(reanalysisPending ? 'reanalyzingAIJev' : 'reanalyzeAIJev')}
+                </button>
+                <p className="failure-action-description">{t('reanalyzeDescription')}</p>
+              </div>
             )}
             {reanalysisBlockedReason && (
               <p className="failure-action-reason" role="status">{reanalysisBlockedReason}</p>

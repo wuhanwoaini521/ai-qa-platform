@@ -151,6 +151,8 @@ export const RecorderPage: React.FC<{
   const [previewMode, setPreviewMode] = useState<'raw' | 'optimized'>('raw');
   const previewDrafts = useRef({ raw: '', optimized: '' });
   const [recording, setRecording] = useState(false);
+  const [recordingCommand, setRecordingCommand] = useState<'start' | 'pause' | 'stop' | null>(null);
+  const pendingRecordingCommandsRef = useRef(new Map<string, 'start' | 'pause' | 'stop'>());
   const [busy, setBusy] = useState(false);
   const [error, setErrorState] = useState('');
   const [errorRecovery, setErrorRecovery] = useState<RecorderErrorRecovery | null>(null);
@@ -188,6 +190,7 @@ export const RecorderPage: React.FC<{
   const closeInFlightSessionRef = useRef<string | null>(null);
   const closedSessionRef = useRef<string | null>(null);
   const recorderSessionWorkAllowed = canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current);
+  const isConnected = socketState === 'connected';
   const [caseName, setCaseName] = useState(() => t('defaults.caseName'));
   const [requirement, setRequirement] = useState('');
   const [browserStrategy, setBrowserStrategy] = useState<'fast' | 'agent'>('agent');
@@ -218,9 +221,9 @@ export const RecorderPage: React.FC<{
   const [editorReady, setEditorReady] = useState(false);
   const [showCodeFallback, setShowCodeFallback] = useState(false);
   const [exploreMobilePanel, setExploreMobilePanel] = useState<'browser' | 'task'>('browser');
-  const [naturalFlowOpen, setNaturalFlowOpen] = useState(() => embedded && window.matchMedia('(max-width: 820px)').matches);
+  const [naturalFlowOpen, setNaturalFlowOpen] = useState(embedded);
   const [pendingAgentGoal, setPendingAgentGoal] = useState<PendingAgentGoal | null>(null);
-  const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number } | null>(null);
+  const [agentScriptSource, setAgentScriptSource] = useState<{ taskId: string; actionCount: number; jevCount: number; assertionCount: number; partialDraft: boolean; needsAssertionReview: boolean } | null>(null);
   const [pickTargetStep, setPickTargetStep] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [pickedElement, setPickedElement] = useState<Frame['picked']>(null);
@@ -573,13 +576,25 @@ export const RecorderPage: React.FC<{
           setPickTargetStep(null);
         }
         if (data.url && !pendingUrlRef.current && document.activeElement !== urlInputRef.current) setUrl(data.url);
-        if (data.state) setRecording(data.state === 'RECORDING');
+        if (data.state) {
+          setRecording(data.state === 'RECORDING');
+          const settledAction = [...pendingRecordingCommandsRef.current.entries()].find(([, action]) =>
+            (action === 'start' && data.state === 'RECORDING')
+            || (action === 'pause' && data.state === 'PAUSED')
+            || (action === 'stop' && data.state === 'STOPPED')
+          );
+          if (settledAction) {
+            pendingRecordingCommandsRef.current.delete(settledAction[0]);
+            setRecordingCommand(null);
+          }
+        }
       } else if (data.type === 'navigating') {
         pendingNavigationSnapshotsRef.current = Math.max(1, pendingNavigationSnapshotsRef.current);
         setNavigationPending(true);
         if (data.url && !pendingUrlRef.current && document.activeElement !== urlInputRef.current) setUrl(data.url);
       } else if (data.type === 'command_success') {
         if (typeof data.steps_revision === 'number') lastStepsRevisionRef.current = data.steps_revision;
+        if (data.action === 'stop' && Array.isArray(data.steps)) setSteps(data.steps as RecorderStep[]);
         if (data.command_id) {
           pendingStepCommandsRef.current = acknowledgeRecorderStepCommand(pendingStepCommandsRef.current, data.command_id);
           persistRecorderOutbox(sessionId, pendingStepCommandsRef.current);
@@ -587,6 +602,14 @@ export const RecorderPage: React.FC<{
         }
         if (data.action && recorderBrowserCommandBlocksClose(data.action)) {
           setPendingBrowserCommands((pending) => Math.max(0, pending - 1));
+        }
+        if (data.command_id) {
+          const recordingAction = pendingRecordingCommandsRef.current.get(data.command_id);
+          if (recordingAction) {
+            pendingRecordingCommandsRef.current.delete(data.command_id);
+            setRecordingCommand(null);
+            setRecording(recordingAction === 'start');
+          }
         }
         if (data.action && isQueueableRecorderNavigationCommand(data.action)) {
           pendingNavigationCommandsRef.current = acknowledgeRecorderNavigationCommand(
@@ -629,6 +652,14 @@ export const RecorderPage: React.FC<{
         const stepCommandRejected = pendingCanonicalStepSnapshotsRef.current > pendingCanonicalBefore;
         if (!data.action || (recorderBrowserCommandBlocksClose(data.action) && !stepCommandRejected)) {
           setPendingBrowserCommands((pending) => Math.max(0, pending - 1));
+        }
+        if (data.command_id) {
+          const recordingAction = pendingRecordingCommandsRef.current.get(data.command_id);
+          if (recordingAction) {
+            pendingRecordingCommandsRef.current.delete(data.command_id);
+            setRecordingCommand(null);
+            setError(recorderErrorMessage(data.message || t('errors.browserOperationFailed')));
+          }
         }
         if (data.action && isQueueableRecorderNavigationCommand(data.action)) {
           pendingNavigationCommandsRef.current = acknowledgeRecorderNavigationCommand(
@@ -731,13 +762,13 @@ export const RecorderPage: React.FC<{
   }, [code, projectCodeKey]);
 
   const send = useCallback((action: string, payload: Record<string, unknown> = {}) => {
-    if (!canSendRecorderSessionCommand(sessionId, closeInFlightSessionRef.current)) return;
+    if (!canSendRecorderSessionCommand(sessionId, closeInFlightSessionRef.current)) return false;
     const commandPayload = action === 'replace_steps' && lastStepsRevisionRef.current !== null
       ? { ...payload, base_steps_revision: lastStepsRevisionRef.current }
       : payload;
     const pendingCommand = createPendingRecorderStepCommand(crypto.randomUUID(), action, commandPayload);
     if (pendingCommand) {
-      if (!sessionId) return;
+      if (!sessionId) return false;
       const pendingBefore = pendingStepCommandsRef.current;
       let nextPending = [...pendingBefore, pendingCommand];
       if (stepOutboxStorageUnavailableRef.current) {
@@ -746,7 +777,7 @@ export const RecorderPage: React.FC<{
           pendingStepCommandsRef.current = nextPending;
           setPendingBrowserCommands((pending) => pending + 1);
           setStepOutboxStorageAvailability(false);
-          return;
+          return false;
         }
         const seenCommandIds = new Set<string>();
         nextPending = [...restored.commands, ...nextPending].filter((command) => {
@@ -757,19 +788,19 @@ export const RecorderPage: React.FC<{
       }
       pendingStepCommandsRef.current = nextPending;
       setPendingBrowserCommands((pending) => pending + nextPending.length - pendingBefore.length);
-      if (!persistRecorderOutbox(sessionId, nextPending)) return;
+      if (!persistRecorderOutbox(sessionId, nextPending)) return false;
       flushNextPendingRecorderStepCommand();
-      return;
+      return true;
     }
     if (isQueueableRecorderNavigationCommand(action)) {
-      if (!sessionId) return;
+      if (!sessionId) return false;
       const command = createPendingRecorderNavigationCommand(crypto.randomUUID(), action, commandPayload);
-      if (!command) return;
+      if (!command) return false;
       let pendingBefore = pendingNavigationCommandsRef.current;
       const pendingCountBefore = pendingBefore.length;
       if (navigationOutboxStorageUnavailableRef.current) {
         const restored = restoreStoredPendingRecorderNavigationCommands(sessionId);
-        if (!restored.available) return;
+        if (!restored.available) return false;
         const seenCommandIds = new Set<string>();
         pendingBefore = [...restored.commands, ...pendingBefore].filter((pending) => {
           if (seenCommandIds.has(pending.command_id)) return false;
@@ -780,18 +811,18 @@ export const RecorderPage: React.FC<{
       const nextPending = [...pendingBefore, command];
       if (!persistRecorderNavigationOutbox(sessionId, nextPending)) {
         if (action === 'navigate') pendingUrlRef.current = null;
-        return;
+        return false;
       }
       pendingNavigationCommandsRef.current = nextPending;
       setPendingBrowserCommands((pending) => pending + nextPending.length - pendingCountBefore);
       pendingNavigationSnapshotsRef.current = recorderNavigationPendingAfterCommand(pendingNavigationSnapshotsRef.current, action);
       setNavigationPending(true);
       flushNextPendingRecorderNavigationCommand();
-      return;
+      return true;
     }
-    const command = { action, ...commandPayload };
+    const command = { action, ...commandPayload, command_id: payload.command_id ?? crypto.randomUUID() };
     const ws = wsRef.current;
-    if (!socketReadyRef.current || ws?.readyState !== WebSocket.OPEN) return;
+    if (!socketReadyRef.current || ws?.readyState !== WebSocket.OPEN) return false;
     try {
       ws.send(JSON.stringify(command));
       if (recorderBrowserCommandBlocksClose(action)) {
@@ -801,8 +832,23 @@ export const RecorderPage: React.FC<{
         pendingNavigationSnapshotsRef.current = recorderNavigationPendingAfterCommand(pendingNavigationSnapshotsRef.current, action);
         setNavigationPending(true);
       }
-    } catch { /* browser command is not retried after ambiguous delivery */ }
-  }, [sessionId, flushNextPendingRecorderStepCommand, flushNextPendingRecorderNavigationCommand, persistRecorderOutbox, persistRecorderNavigationOutbox, setStepOutboxStorageAvailability]);
+      return true;
+    } catch {
+      setError(t('errors.connectionNotReady'));
+      return false;
+    }
+  }, [sessionId, flushNextPendingRecorderStepCommand, flushNextPendingRecorderNavigationCommand, persistRecorderOutbox, persistRecorderNavigationOutbox, setStepOutboxStorageAvailability, setError, t]);
+
+  const sendRecordingCommand = useCallback((action: 'start' | 'pause' | 'stop') => {
+    if (!recorderSessionWorkAllowed || !isConnected || recordingCommand) return;
+    const commandId = crypto.randomUUID();
+    pendingRecordingCommandsRef.current.set(commandId, action);
+    setRecordingCommand(action);
+    if (!send(action, { command_id: commandId })) {
+      pendingRecordingCommandsRef.current.delete(commandId);
+      setRecordingCommand(null);
+    }
+  }, [recorderSessionWorkAllowed, isConnected, recordingCommand, send]);
 
   const createSession = async () => {
     if (closeInFlightSessionRef.current) return;
@@ -992,7 +1038,7 @@ export const RecorderPage: React.FC<{
       }));
 
   const generate = async () => {
-    if (!canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || busy) return;
+    if (!canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || !isConnected || recording || recordingCommand || pendingBrowserCommands > 0 || navigationPending || !steps.length || busy) return;
     setBusy(true); setError('');
     try {
       const result = await api.generateRecorderCode(sessionId, {
@@ -1012,16 +1058,30 @@ export const RecorderPage: React.FC<{
 
   const generateFromAgent = async () => {
     const task = aiTask.task;
-    const output = browserAgentOutput;
-    if (!canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || !task || !output || !canGenerateAgentScript || busy) return;
+    if (!canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || !task || !canGenerateAgentScript || busy) return;
     const startUrl = normalizedHttpUrl(String(task.inputs.url ?? ''));
     if (!startUrl) { setError(t('errors.noAgentStartUrl')); return; }
-    const generated = recorderStepsFromAgent(output, startUrl);
-    if (!generated || generated.actionCount === 0) { setError(t('errors.noReusableActions')); return; }
 
     setBusy(true);
     setError('');
     try {
+      let output: unknown = browserAgentOutput;
+      let allowPartialDraft = false;
+      if (partialAgentScriptAvailable) {
+        const artifactId = browserAgentOutput?.history_artifact_id;
+        if (typeof artifactId !== 'string' || !artifactId) throw new Error(t('naturalFlow.partialTraceUnavailable'));
+        const trace = asRecord(JSON.parse(await (await api.downloadArtifact(artifactId)).text()));
+        const exploration = asRecord(trace?.exploration_result);
+        if (!trace || !exploration?.partial_draft) throw new Error(t('naturalFlow.partialTraceUnavailable'));
+        output = {
+          ...exploration,
+          actions: Array.isArray(trace.recent_actions) ? trace.recent_actions : [],
+          history_archive: Array.isArray(trace.archive) ? trace.archive : [],
+        };
+        allowPartialDraft = true;
+      }
+      const generated = recorderStepsFromAgent(output, startUrl, { allowPartialDraft });
+      if (!generated || generated.actionCount === 0) throw new Error(t('errors.noReusableActions'));
       const result = await api.generateRecorderCode(sessionId, {
         case_name: caseName,
         file_path: filePath,
@@ -1034,7 +1094,7 @@ export const RecorderPage: React.FC<{
       setVariables(result.variables ?? []);
       setOptimization(null);
       setPreviewMode('raw');
-      setAgentScriptSource({ taskId: task.id, actionCount: generated.actionCount, jevCount: generated.jevCount, assertionCount: generated.assertionCount });
+      setAgentScriptSource({ taskId: task.id, actionCount: generated.actionCount, jevCount: generated.jevCount, assertionCount: generated.assertionCount, partialDraft: generated.partialDraft, needsAssertionReview: generated.needsAssertionReview });
       setScriptGeneration((current) => current + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -1060,17 +1120,21 @@ export const RecorderPage: React.FC<{
     setCode(previewDrafts.current[mode]);
   };
 
-  const startAiTask = (type: 'CREATE_TEST' | 'EXPLORE_PAGE') => {
+  const startAiTask = () => {
     if (!projectId || !canStartRecorderSessionWork(sessionId, closeInFlightSessionRef.current) || agentTaskRunning) return;
     void aiTask.start({
-      type,
-      goal: type === 'CREATE_TEST' ? (requirement.trim() || t('defaults.testGoal', { caseName })) : t('defaults.exploreGoal', { url }),
+      type: 'CREATE_TEST',
+      goal: requirement.trim() || t('defaults.testGoal', { caseName }),
       project_id: projectId,
-      workspace_id: type === 'CREATE_TEST' ? projectId : undefined,
+      workspace_id: projectId,
       inputs: {
         url,
         recorder_session_id: sessionId,
-        ...(type === 'CREATE_TEST' ? { recorded_steps: steps, file_path: filePath, case_name: caseName, test_name: testName, requirement: requirement.trim() || caseName } : {}),
+        recorded_steps: steps,
+        file_path: filePath,
+        case_name: caseName,
+        test_name: testName,
+        requirement: requirement.trim() || caseName,
       },
     });
   };
@@ -1080,6 +1144,7 @@ export const RecorderPage: React.FC<{
     const goal = requirement.trim();
     const trustedDomains = normalizeTrustedDomains(trustedDomainsText);
     const strategy = browserStrategy;
+    if (recording || recordingCommand) { setError(t('naturalFlow.stopRecordingFirst')); return; }
     if (!projectId) { setError(t('errors.noProject')); return; }
     if (goal.length < 8) { setError(t('errors.goalTooShort')); return; }
     const currentPageUrl = frame?.url && frame.url !== 'about:blank' ? frame.url : url;
@@ -1256,14 +1321,18 @@ export const RecorderPage: React.FC<{
   };
 
   const projectName = projects.find((project) => project.id === projectId)?.name;
-  const isConnected = socketState === 'connected';
   const socketLabel = socketDetail || t(`connection.${socketState}`);
-  const browserAgentOutput = asRecord(aiTask.task?.plan.find((step) => step.key === 'browser_agent')?.outputs);
+  const browserAgentStep = aiTask.task?.plan.find((step) => step.key === 'browser_agent');
+  const browserAgentOutput = asRecord(browserAgentStep?.outputs);
+  const partialAgentScriptAvailable = aiTask.task?.type === 'EXPLORE_PAGE'
+    && aiTask.task.status === 'BLOCKED'
+    && browserAgentOutput?.script_draft_available === true
+    && typeof browserAgentOutput.history_artifact_id === 'string';
   const canGenerateAgentScript = aiTask.task?.type === 'EXPLORE_PAGE'
-    && aiTask.task.status === 'COMPLETED'
-    && browserAgentOutput?.verified === true
-    && ['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(browserAgentOutput.kind))
-    && Array.isArray(browserAgentOutput.actions);
+    && ((aiTask.task.status === 'COMPLETED'
+      && browserAgentOutput?.verified === true
+      && ['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(browserAgentOutput.kind))
+      && Array.isArray(browserAgentOutput.actions)) || partialAgentScriptAvailable);
   const locatorDecisionMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'decision_completed')?.metadata ?? {};
   const locatorVerificationMetadata = [...locatorTraceEvents].reverse().find((event) => event.type === 'verification_completed')?.metadata ?? {};
   const verificationFacts = (['unique', 'visible', 'enabled', 'editable', 'clickable'] as const)
@@ -1325,60 +1394,29 @@ export const RecorderPage: React.FC<{
         </div>
 
         <div className="recorder-actions" role="group" aria-label={t('header.actions')} tabIndex={embedded ? 0 : undefined}>
-          <button
-            type="button"
-            className={`ds-btn btn ${recording ? 'btn-secondary' : 'ds-btn-primary btn-primary'}`}
-            disabled={!recorderSessionWorkAllowed || busy || agentTaskRunning}
-            onClick={() => { const next = !recording; setRecording(next); send(recording ? 'pause' : 'start'); }}
-          >
-            {recording ? <CirclePause size={16} /> : <CirclePlay size={16} />}
-            {recording ? t('header.pause') : t('header.start')}
+          <button type="button" className={`ds-btn btn ${recording ? 'btn-secondary' : 'ds-btn-primary btn-primary'}`} disabled={!recorderSessionWorkAllowed || !isConnected || busy || agentTaskRunning || !!recordingCommand} onClick={() => sendRecordingCommand(recording ? 'pause' : 'start')}>
+            {recordingCommand ? <RotateCw size={16} className="is-spinning" /> : recording ? <CirclePause size={16} /> : <CirclePlay size={16} />}
+            {recordingCommand ? t('header.recordingCommandPending') : recording ? t('header.pause') : t('header.start')}
           </button>
-          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || agentTaskRunning} onClick={() => { send('stop'); setRecording(false); }}>
-            <Square size={15} /> {t('header.stop')}
+          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || !isConnected || !recording || !!recordingCommand || agentTaskRunning} onClick={() => sendRecordingCommand('stop')}>
+            <Square size={15} /> {recordingCommand === 'stop' ? t('header.stopping') : t('header.stop')}
           </button>
-          <button
-            type="button"
-            className={`ds-btn btn ${selectionMode ? 'ds-btn-primary btn-primary recorder-select-mode-active' : 'btn-secondary'}`}
-            disabled={!recorderSessionWorkAllowed || !isConnected || agentTaskRunning}
-            aria-pressed={selectionMode}
-            onClick={() => {
-              if (selectionMode) {
-                send('cancel_pick');
-                setSelectionMode(false);
-                pickTargetStepRef.current = null;
-                setPickTargetStep(null);
-              } else {
-                setSelectionMode(true);
-                pickTargetStepRef.current = null;
-                setPickTargetStep(null);
-                send('pick_element', { step_action: 'click' });
-              }
-            }}
-          >
-            <Crosshair size={15} /> {selectionMode ? t('header.cancelSelection') : t('header.selectElement')}
-          </button>
-          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || agentTaskRunning} onClick={generate}>
+          <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || !isConnected || recording || !!recordingCommand || pendingBrowserCommands > 0 || navigationPending || !steps.length || busy || agentTaskRunning} onClick={generate} title={!steps.length ? t('header.generateNeedsSteps') : undefined}>
             <Code2 size={16} /> {busy ? t('header.processing') : code ? t('header.regenerateScript') : t('header.generateScript')}
-          </button>
-          <button className="ds-btn-primary ds-btn btn btn-primary" disabled={!recorderSessionWorkAllowed || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('CREATE_TEST')}>
-            <Code2 size={16} /> {t('header.createVerifyTest')}
-          </button>
-          <button className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning} onClick={() => startAiTask('EXPLORE_PAGE')}>
-            {t('header.explorePage')}
           </button>
           <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy || aiTask.busy || agentTaskRunning || !code} onClick={saveAndRun}>
             <Save size={16} /> {t('header.saveAndRun')}
           </button>
-          <button
-            type="button"
-            className="ds-btn btn btn-secondary"
-            disabled={!recorderSessionWorkAllowed || mergeBusy || busy || !!aiTask.busy || agentTaskRunning}
-            onClick={() => void saveUiAndApiCases()}
-            title={t('header.saveBothHint')}
-          >
-            <Save size={16} /> {mergeBusy ? t('header.savingBoth') : t('header.saveBoth')}
-          </button>
+          <details className="recorder-more-actions">
+            <summary>{t('header.moreActions')}</summary>
+            <div>
+              <button type="button" className={`ds-btn btn ${selectionMode ? 'ds-btn-primary btn-primary recorder-select-mode-active' : 'btn-secondary'}`} disabled={!recorderSessionWorkAllowed || !isConnected || agentTaskRunning} aria-pressed={selectionMode} onClick={() => { if (selectionMode) { send('cancel_pick'); setSelectionMode(false); pickTargetStepRef.current = null; setPickTargetStep(null); } else { setSelectionMode(true); pickTargetStepRef.current = null; setPickTargetStep(null); send('pick_element', { step_action: 'click' }); } }}>
+                <Crosshair size={15} /> {selectionMode ? t('header.cancelSelection') : t('header.selectElement')}
+              </button>
+              <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || !steps.length || busy || aiTask.busy || agentTaskRunning} onClick={startAiTask}><Code2 size={16} /> {t('header.createVerifyTest')}</button>
+              <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || mergeBusy || busy || !!aiTask.busy || agentTaskRunning} onClick={() => void saveUiAndApiCases()} title={t('header.saveBothHint')}><Save size={16} /> {mergeBusy ? t('header.savingBoth') : t('header.saveBoth')}</button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -1458,7 +1496,7 @@ export const RecorderPage: React.FC<{
           </details>
         </div>
         <div className="recorder-natural-flow-actions">
-          <p>{t(browserStrategy === 'agent' ? 'naturalFlow.agentDescription' : 'naturalFlow.fastDescription')} {t('naturalFlow.scriptDescription')}</p>
+          <p>{t(browserStrategy === 'agent' ? 'naturalFlow.agentDescription' : 'naturalFlow.fastDescription')}</p>
           <div>
             <label className="recorder-strategy-control">
               <span>{t('naturalFlow.strategy')}</span>
@@ -1470,7 +1508,8 @@ export const RecorderPage: React.FC<{
             <button
               type="button"
               className="ds-btn-primary ds-btn btn btn-primary"
-              disabled={!projectId || (sessionId ? !recorderSessionWorkAllowed || !isConnected : restoreCheckedProjectId !== projectId) || !requirement.trim() || busy || aiTask.busy || agentTaskRunning || !!pendingAgentGoal}
+              disabled={!projectId || (sessionId ? !recorderSessionWorkAllowed || !isConnected : restoreCheckedProjectId !== projectId) || requirement.trim().length < 8 || recording || !!recordingCommand || busy || aiTask.busy || agentTaskRunning || !!pendingAgentGoal}
+              title={recording ? t('naturalFlow.stopRecordingFirst') : undefined}
               onClick={() => void startNaturalLanguageFlow()}
             >
               <CirclePlay size={15} aria-hidden="true" />
@@ -1480,7 +1519,7 @@ export const RecorderPage: React.FC<{
             </button>
             {canGenerateAgentScript && (
               <button type="button" className="ds-btn btn btn-secondary" disabled={!recorderSessionWorkAllowed || busy} onClick={() => void generateFromAgent()}>
-                <Code2 size={15} aria-hidden="true" /> {busy ? t('naturalFlow.generatingScript') : t('naturalFlow.generateFromVerified')}
+                <Code2 size={15} aria-hidden="true" /> {busy ? t('naturalFlow.generatingScript') : t(partialAgentScriptAvailable ? 'naturalFlow.generateFromPartial' : 'naturalFlow.generateFromVerified')}
               </button>
             )}
           </div>
@@ -1489,6 +1528,8 @@ export const RecorderPage: React.FC<{
               {t('naturalFlow.scriptSource', { actions: agentScriptSource.actionCount, decisions: agentScriptSource.jevCount, assertions: agentScriptSource.assertionCount })}
             </small>
           )}
+          {agentScriptSource?.partialDraft && <p className="alert alert-warning" role="status">{t('naturalFlow.partialScriptWarning')}</p>}
+          {agentScriptSource?.needsAssertionReview && <p className="alert alert-warning" role="status">{t('naturalFlow.assertionNeedsReview')}</p>}
         </div>
         </div>
       </details>
@@ -1696,7 +1737,7 @@ export const RecorderPage: React.FC<{
             {!steps.length && <div className="recorder-steps-empty">{t('steps.noSteps')}</div>}
           </div>
 
-          <details className="recorder-api-calls" open>
+          <details className="recorder-api-calls">
             <summary>
               <span>{t('apiCalls.title')}</span>
               <span className="recorder-step-count">{apiCalls.length}</span>

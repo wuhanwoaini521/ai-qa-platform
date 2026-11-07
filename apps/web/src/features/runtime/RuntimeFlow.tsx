@@ -13,7 +13,7 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react';
-import type { RuntimeSnapshot, RuntimeStep } from '../../types/runtime';
+import type { RuntimeSnapshot, RuntimeSpan, RuntimeStep } from '../../types/runtime';
 import {
   FLOW_NODE_HEIGHT,
   FLOW_NODE_WIDTH,
@@ -23,6 +23,71 @@ import {
 import type { FlowDirection } from './dagLayout';
 import { useFlowViewport } from './useFlowViewport';
 import { durationLabel, spanDuration } from './runtimeModel';
+
+function RunExecutionFlow({
+  snapshot,
+  executions,
+}: {
+  snapshot: RuntimeSnapshot;
+  executions: RuntimeSpan[];
+}) {
+  const { t } = useTranslation('runtime');
+  const run = snapshot.runs.find((item) => item.id === snapshot.id);
+  const ordered = executions
+    .map((execution, index) => ({ execution, index }))
+    .sort((a, b) => {
+      const aTime = Date.parse(a.execution.started_at ?? a.execution.finished_at ?? '');
+      const bTime = Date.parse(b.execution.started_at ?? b.execution.finished_at ?? '');
+      const aRecorded = Number.isFinite(aTime);
+      const bRecorded = Number.isFinite(bTime);
+      if (aRecorded && bRecorded && aTime !== bTime) return aTime - bTime;
+      if (aRecorded !== bRecorded) return aRecorded ? -1 : 1;
+      return a.index - b.index;
+    });
+  const passed = run?.passed ?? executions.filter((item) => ['PASSED', 'COMPLETED'].includes(item.status)).length;
+  const failed = run?.failed ?? executions.filter((item) => ['FAILED', 'ERROR'].includes(item.status)).length;
+  const skipped = run?.skipped ?? executions.filter((item) => item.status === 'SKIPPED').length;
+
+  return (
+    <section className="rt-run-execution-flow" aria-label={t('executionFlowTitle')}>
+      <header className="rt-run-flow-root">
+        <div>
+          <span>{t('testRun')}</span>
+          <strong>{snapshot.id}</strong>
+        </div>
+        <span className="rt-run-flow-status" data-status={snapshot.status}>
+          {t(snapshot.status.toLowerCase(), { defaultValue: snapshot.status })}
+        </span>
+        <div className="rt-run-flow-counts">
+          <span>{t('testsCount', { count: run?.total ?? executions.length })}</span>
+          <span>{t('passed')}: {passed}</span>
+          <span>{t('failed')}: {failed}</span>
+          <span>{t('skipped')}: {skipped}</span>
+          {snapshot.duration_ms != null && <span>{durationLabel(snapshot.duration_ms)}</span>}
+        </div>
+      </header>
+      <div className="rt-run-flow-connector" aria-hidden="true" />
+      <div className="rt-run-flow-cases-heading">
+        <h3>{t('executionFlowCases', { count: ordered.length })}</h3>
+        <p>{t('executionFlowHint')}</p>
+      </div>
+      <ol className="rt-run-flow-cases">
+        {ordered.map(({ execution }, index) => (
+          <li key={execution.id}>
+            <article className="rt-run-flow-case" data-status={execution.status}>
+              <div className="rt-run-flow-case-meta">
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <span>{t(execution.status.toLowerCase(), { defaultValue: execution.status })}</span>
+              </div>
+              <strong title={execution.title}>{execution.title}</strong>
+              <time>{durationLabel(execution.duration_ms)}</time>
+            </article>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 const StepNode = memo(function StepNode({
   step,
@@ -178,10 +243,16 @@ export function RuntimeFlow({
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
   }, [view.scale, view.inset, layout.width, hasSteps]);
-  if (!snapshot.steps.length)
-    return (
-      <p className="rt-empty">{t('noTaskDag')}</p>
+  if (!snapshot.steps.length) {
+    const executions = snapshot.kind === 'run'
+      ? snapshot.executions.filter((item) => !item.test_run_id || item.test_run_id === snapshot.id)
+      : [];
+    return executions.length ? (
+      <RunExecutionFlow snapshot={snapshot} executions={executions} />
+    ) : (
+      <p className="rt-empty">{t('noFlowData')}</p>
     );
+  }
   return (
     <section
       className="rt-flow"

@@ -34,7 +34,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           ))}
         </select>
       </>}
-      <button type="button" className={`ds-btn ds-btn-icon ds-btn icon-btn${hideProjectSelect ? ' is-labeled' : ''}`} title={t('projectSelector.quickOpen')} aria-label={t('projectSelector.quickOpen')} onClick={onQuickOpen}>
+      <button type="button" className={hideProjectSelect ? 'ds-btn studio-quick-open-button' : 'ds-btn ds-btn-icon icon-btn'} title={t('projectSelector.quickOpen')} aria-label={t('projectSelector.quickOpen')} onClick={onQuickOpen}>
         <Search size={14} />
         {hideProjectSelect && <span>{t('projectSelector.quickOpen')}</span>}
       </button>

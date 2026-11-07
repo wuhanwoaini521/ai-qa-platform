@@ -118,14 +118,19 @@
 .quality-coverage-meter > span { white-space: nowrap; }
 .quality-coverage-meter .ds-progress { width: 38px; flex: none; }
 .quality-coverage-group-row th { text-align: left; }
-.quality-coverage-detail { padding: var(--sp-4) var(--sp-5); }
-.quality-coverage-detail-summary { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin-bottom: var(--sp-4); }
-.quality-coverage-detail-summary > div { display: grid; gap: var(--sp-1); }
+.quality-coverage-detail-row td { padding: var(--sp-3); background: var(--c-bg-soft); }
+.quality-coverage-detail { display: grid; gap: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--c-stroke); border-radius: var(--r-md); background: var(--c-bg-soft); }
+.quality-coverage-detail-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; }
+.quality-coverage-detail-summary > div { display: grid; align-content: start; gap: var(--sp-1); min-width: 0; padding: var(--sp-3); border: 1px solid var(--c-stroke); border-radius: var(--r-sm); background: var(--c-bg); box-shadow: var(--sh-raised-xs); }
+.quality-coverage-detail-summary a,
+.quality-coverage-detail-summary strong { min-width: 0; overflow-wrap: anywhere; }
 .quality-coverage-detail-summary span,
 .quality-coverage-linked-tests li > span { color: var(--c-text-muted); font-size: var(--fs-12); }
 .quality-coverage-linked-tests h4 { margin: 0 0 var(--sp-2); font-size: var(--fs-13); }
-.quality-coverage-linked-tests ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-.quality-coverage-linked-tests li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.quality-coverage-linked-tests ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.quality-coverage-linked-tests li { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); min-width: 0; min-height: 48px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--c-stroke); border-radius: var(--r-sm); background: var(--c-bg); box-shadow: var(--sh-raised-xs); }
+.quality-coverage-linked-tests li > a { min-width: 0; overflow-wrap: anywhere; }
+.quality-coverage-linked-tests li > .ds-tag { flex: 0 0 auto; }
 .quality-coverage-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .quality-risk-list { display: grid; gap: var(--sp-4); padding: var(--sp-5); }

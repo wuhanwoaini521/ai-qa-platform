@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import { Tabs, TabsList, TabsTrigger } from '@self/ui-style/react';
 import { RuntimeHeader } from './RuntimeHeader';
 import { RuntimeOverview } from './RuntimeOverview';
 import { RuntimeFlow } from './RuntimeFlow';
@@ -142,12 +143,17 @@ export function RuntimeDetail({
         )}
       </section>
     );
+  const hasFlowData = snapshot.steps.length > 0 || (
+    snapshot.kind === 'run' && snapshot.executions.some(
+      (execution) => !execution.test_run_id || execution.test_run_id === snapshot.id,
+    )
+  );
   return (
       <section
         className={`rt-shell${focus ? ' rt-focus' : ''}`}
         aria-label={t('observatory')}
         data-active-tab={tab}
-        data-has-steps={snapshot.steps.length > 0 ? 'true' : 'false'}
+        data-has-flow-data={hasFlowData ? 'true' : 'false'}
       >
       <RuntimeHeader snapshot={snapshot} connection={connection} />
       <RuntimeTaskActions snapshot={snapshot} onChanged={refresh} onInspect={(stepId) => { selectStep(stepId); setTab('Flow'); }} onOpenStudio={onOpenStudio} />
@@ -167,17 +173,15 @@ export function RuntimeDetail({
           </button>
         </div>
       )}
-      <nav className="rt-tabs" aria-label={t('runtimeViews')}>
-        {tabs.filter((key) => key !== 'Results' || kind === 'run' || snapshot.runs.length > 0).map((key) => (
-          <button
-            key={key}
-            aria-current={key === tab ? 'page' : undefined}
-            onClick={() => setTab(key)} className="ds-btn"
-          >
-            {t(key)}
-          </button>
-        ))}
-        <button aria-label={t('forceRefresh')} title={t('forceRefresh')} onClick={refresh} className="ds-btn">
+      <nav className="rt-tab-bar" aria-label={t('runtimeViews')}>
+        <Tabs className="rt-tab-state" value={tab} onValueChange={(value) => setTab(value as RuntimeTab)}>
+          <TabsList className="rt-tabs-list">
+            {tabs.filter((key) => key !== 'Results' || kind === 'run' || snapshot.runs.length > 0).map((key) => (
+              <TabsTrigger key={key} value={key}>{t(key)}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <button type="button" aria-label={t('forceRefresh')} title={t('forceRefresh')} onClick={refresh} className="ds-btn ds-btn-sm btn btn-secondary btn-sm">
           <RefreshCw size={15} />
         </button>
       </nav>

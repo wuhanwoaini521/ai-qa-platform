@@ -1,7 +1,5 @@
 {
   "loadingOverview": "Loading platform overview...",
-  "overviewTitle": "Your workbench, in motion",
-  "overviewSubtitle": "Projects, execution evidence, and the next useful action.",
   "executionSignals": "Execution signals",
   "executionSignalsSubtitle": "Platform-wide run metrics; current-project actions are scoped below.",
   "currentProject": "Current project",

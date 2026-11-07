@@ -1358,8 +1358,8 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
               </div>
 
               {/* Similar Past Failures / Recurrence History */}
-              <div className="ds-card card failure-recurrence-workspace">
-                <div className="card-header">
+              <details className="ds-card card failure-recurrence-workspace">
+                <summary className="card-header failure-recurrence-summary">
                   <div
                     style={{
                       display: 'flex',
@@ -1374,7 +1374,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                         : t('recurrenceTitle', { count: recurrenceList.length })}
                     </span>
                   </div>
-                </div>
+                </summary>
                 <div className="card-body" style={{ padding: 0 }}>
                   {loadingRecurrence ? (
                     <div
@@ -1462,7 +1462,7 @@ export const FailuresPage: React.FC<FailuresPageProps> = ({
                     </table>
                   )}
                 </div>
-              </div>
+              </details>
             </div>
           ) : (
             <div className="ds-card card failure-select-prompt">

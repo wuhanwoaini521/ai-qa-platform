@@ -510,9 +510,9 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
           {returnHref && <Link className="ds-btn ds-btn-sm btn btn-secondary btn-sm" to={returnHref}>{failureReturnHref ? lc('returnToFailureContext') : lc('returnToWorkspace')}</Link>}
         </div>}
         {embedded && onStartRecording && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onStartRecording}>{lc('record')}</button>}
-        {embedded && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm lc-studio-files-toggle" aria-pressed={showFiles} aria-controls="studio-workspace-files" onClick={() => setShowFiles((visible) => !visible)} title={lc('workspaceFiles')}>
+        {embedded && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm lc-studio-files-toggle" aria-expanded={showFiles} aria-controls="studio-sidebar-panel" onClick={() => setShowFiles((visible) => !visible)} title={lc(showFiles ? 'hideFileTree' : 'showFileTree')}>
           {showFiles ? <PanelLeftClose size={14} aria-hidden="true" /> : <PanelLeftOpen size={14} aria-hidden="true" />}
-          <span>{lc('workspaceFiles')}</span>
+          <span>{lc('fileTree')}</span>
         </button>}
         <details className="lc-studio-tools" ref={toolsMenuRef} onBlur={(event) => {
           const nextTarget = event.relatedTarget;
@@ -526,12 +526,12 @@ export const AutomationStudioPage: React.FC<AutomationStudioPageProps> = ({
             <ChevronDown size={13} aria-hidden="true" />
           </summary>
           <div className="lc-studio-tools-menu" role="group" aria-label={lc('panelTools')}>
-            {!embedded && <button type="button" aria-pressed={showFiles} onClick={() => { setShowFiles(value => !value); closeToolsMenu(); }} className="ds-btn">{lc('workspaceFiles')}</button>}
-            <button type="button" aria-pressed={showContext} onClick={() => { setShowContext(value => !value); closeToolsMenu(); }} className="ds-btn">{lc('context')}</button>
-            <button type="button" aria-pressed={problems.showProblemsPanel} onClick={() => { problems.setShowProblemsPanel(value => !value); closeToolsMenu(); }} className="ds-btn">{t('editor.problems', { problemCount })}</button>
-            <button type="button" aria-pressed={showBrowser} onClick={() => { showBrowser ? setShowBrowser(false) : setShowBrowser(true); closeToolsMenu(); }} className="ds-btn">{lc('showBrowser')}</button>
-            <button type="button" aria-pressed={showAssistant} onClick={() => { setShowAssistant(value => !value); closeToolsMenu(); }} className="ds-btn">{lc('assistant')}</button>
-            <button type="button" onClick={() => { setShowCommands(true); closeToolsMenu(); }} className="ds-btn">{lc('commands')} <span>⌃K</span></button>
+            {!embedded && <button type="button" aria-pressed={showFiles} onClick={() => { setShowFiles(value => !value); closeToolsMenu(); }} className="ds-btn-ghost">{lc('workspaceFiles')}</button>}
+            <button type="button" aria-pressed={showContext} onClick={() => { setShowContext(value => !value); closeToolsMenu(); }} className="ds-btn-ghost">{lc('context')}</button>
+            <button type="button" aria-pressed={problems.showProblemsPanel} onClick={() => { problems.setShowProblemsPanel(value => !value); closeToolsMenu(); }} className="ds-btn-ghost">{t('editor.problems', { problemCount })}</button>
+            <button type="button" aria-pressed={showBrowser} onClick={() => { showBrowser ? setShowBrowser(false) : setShowBrowser(true); closeToolsMenu(); }} className="ds-btn-ghost">{lc('showBrowser')}</button>
+            <button type="button" aria-pressed={showAssistant} onClick={() => { setShowAssistant(value => !value); closeToolsMenu(); }} className="ds-btn-ghost">{lc('assistant')}</button>
+            <button type="button" onClick={() => { setShowCommands(true); closeToolsMenu(); }} className="ds-btn-ghost">{lc('commands')} <span>⌃K</span></button>
           </div>
         </details>
       </div>

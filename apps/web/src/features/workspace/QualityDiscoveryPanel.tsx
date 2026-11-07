@@ -56,7 +56,7 @@ export function QualityDiscoveryPanel({
   const [mapFilter, setMapFilter] = useState('ALL');
   const [mapQuery, setMapQuery] = useState('');
   const [mapSort, setMapSort] = useState('FEATURE');
-  const [reportTab, setReportTab] = useState<'live' | 'map' | 'gaps' | 'features' | 'activity'>('map');
+  const [reportTab, setReportTab] = useState<'live' | 'map' | 'gaps' | 'features' | 'activity'>('gaps');
   const [launchOpen, setLaunchOpen] = useState(false);
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [evidenceText, setEvidenceText] = useState('');
@@ -138,8 +138,9 @@ export function QualityDiscoveryPanel({
 
   useEffect(() => {
     if (!run) return;
-    // A running exploration opens on the live workbench; a finished one opens on its report.
-    setReportTab(terminalStatuses.has(run.status) ? 'map' : 'live');
+    // Keep users on the next useful view: review actionable findings first, then features.
+    const hasActionableGaps = run.result.gaps?.some((gap) => gap.category !== 'BLOCKED_BY_POLICY');
+    setReportTab(terminalStatuses.has(run.status) ? (hasActionableGaps ? 'gaps' : 'features') : 'live');
   }, [run?.id, run?.status]);
 
   useEffect(() => {
@@ -154,6 +155,8 @@ export function QualityDiscoveryPanel({
   }, [evidenceUrl]);
 
   const gaps = run?.result.gaps ?? [];
+  const actionableGapCount = gaps.filter((gap) => gap.category !== 'BLOCKED_BY_POLICY').length;
+  const visitedPageCount = new Set((run?.result.states ?? []).map((state) => state.url).filter(Boolean)).size || run?.progress.states || 0;
   const coverage = (run?.result.coverage ?? []) as Array<Record<string, unknown>>;
   const functionalFeatures = run?.result.functional_spec?.features ?? [];
   const journeys = run?.result.journeys ?? [];
@@ -447,7 +450,7 @@ export function QualityDiscoveryPanel({
           <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => void start()} disabled={historyStatus !== 'ready' || busy || active || !canStartUrl || (needsRequirement && !requirementId && !requirementText.trim())}>
             <Play size={14} aria-hidden="true" />{busy ? t('starting') : t('start')}
           </button>
-          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)} className="ds-select">{runs.map((item) => <option key={item.id} value={item.id}>{item.start_url} · {item.mode} · {new Date(item.created_at).toLocaleString()} · {item.status}</option>)}</select></label>}
+          {runs.length > 0 && <label className="qd-run-picker"><span>{t('previousRun')}</span><select value={run?.id ?? ''} onChange={(event) => void selectRun(event.target.value)} className="ds-select">{runs.map((item) => <option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString()} · {t(`modes.${item.mode}`, { defaultValue: item.mode })} · {t(`statuses.${item.status}`, { defaultValue: item.status })}</option>)}</select></label>}
           {active && <span className="qd-load-status" role="status">{t('activeRunHint')}</span>}
           {historyStatus === 'loading' && <span className="qd-load-status" role="status">{t('historyLoading')}</span>}
           {historyStatus === 'error' && <div className="qd-load-error" role="alert"><span>{t('historyLoadError')}</span><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setLoadVersion((version) => version + 1)}>{t('retryLoad')}</button></div>}
@@ -467,46 +470,53 @@ export function QualityDiscoveryPanel({
         <section className="qd-run-card" aria-live="polite">
           <div className="qd-run-heading">
             <div><span className="qd-eyebrow">{t('runStatus')}</span><h3>{t(`statuses.${run.status}`, { defaultValue: run.status })}</h3><p>{run.start_url}</p></div>
-            <span className={`qd-status-pill is-${run.status.toLowerCase()}`}>{run.status}</span>
+            <span className={`qd-status-pill is-${run.status.toLowerCase()}`}>{t(`statuses.${run.status}`, { defaultValue: run.status })}</span>
           </div>
-          <dl className="qd-scope" aria-label={t('scopeTitle')}>
-            <div><dt>{t('scopeProject')}</dt><dd>{run.project_id}</dd></div>
-            <div><dt>{t('scopeRun')}</dt><dd>{run.id}</dd></div>
-            <div><dt>{t('scopeRequirement')}</dt><dd>{run.requirement_id || (run.result.requirement_model?.source_id === 'PASTED' ? t('scopePasted') : t('scopeIndependent'))}</dd></div>
-          </dl>
-          <p className="qd-scope-note">{t('scopeNote')}</p>
           <div className="qd-progress-grid">
-            <div><strong>{run.progress.states}</strong><span>{t('states')}</span></div>
-            <div><strong>{run.progress.actions}</strong><span>{t('actions')}</span></div>
-            <div><strong>{run.progress.features}</strong><span>{t('features')}</span></div>
-            <div><strong>{gaps.length}</strong><span>{t('gaps')}</span></div>
+            <div><strong>{visitedPageCount}</strong><span>{t('visitedPages')}</span></div>
+            <div><strong>{functionalFeatures.length + journeys.length}</strong><span>{t('discoveredFeatures')}</span></div>
+            <div><strong>{actionableGapCount}</strong><span>{t('itemsToReview')}</span></div>
           </div>
-          <div className="qd-current-activity"><span>{t('currentActivity')}</span><strong>{run.result.events?.[run.result.events.length - 1]?.message ?? t(`statuses.${run.status}`, { defaultValue: run.status })}</strong></div>
+          {terminalStatuses.has(run.status) && <div className="qd-next-step" role="status">
+            <div><strong>{actionableGapCount ? t('nextReviewTitle') : t('nextFeaturesTitle')}</strong><span>{actionableGapCount ? t('nextReviewDescription', { count: actionableGapCount }) : t('nextFeaturesDescription')}</span></div>
+            <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => setReportTab(actionableGapCount ? 'gaps' : 'features')}>{actionableGapCount ? t('reviewFindings') : t('viewFeatures')}</button>
+          </div>}
+          {active && <div className="qd-current-activity"><span>{t('currentActivity')}</span><strong>{run.result.events?.[run.result.events.length - 1]?.message ?? t(`statuses.${run.status}`, { defaultValue: run.status })}</strong></div>}
           {pollError && <p className="qd-error" role="alert">{pollError}</p>}
-          <div className="qd-frontier-summary" role="group" aria-label={t('frontierSummary')}>
-            <span>{t('visitedStates')}: {run.result.states?.length ?? run.progress.states}</span>
-            <span>{t('pendingActions')}: {pendingFrontierCount}</span>
-            <span aria-describedby={blockedFrontierCount > 0 ? 'qd-blocked-actions-help' : undefined}>{t('blockedActions')}: {blockedFrontierCount}</span>
-            <span>{t('failedActions')}: {failedFrontierCount}</span>
-          </div>
-          {blockedFrontierCount > 0 && <p id="qd-blocked-actions-help" className="qd-field-hint" role="note">{t('blockedActionsHelp')}</p>}
-          {run.error && <div className="qd-run-error"><ShieldAlert size={15} aria-hidden="true" />{run.error}</div>}
-          <div className="qd-run-actions">
+          {active && <div className="qd-run-actions">
             {run.status === 'RUNNING' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('pause')}><Pause size={13} />{t('pause')}</button>}
             {run.status === 'PAUSED' && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('resume')}><RotateCcw size={13} />{t('resume')}</button>}
             {active && <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => void controlRun('stop')}><Square size={12} />{t('stop')}</button>}
+          </div>}
+          <details className="qd-technical-details">
+            <summary>{t('technicalDetails')}</summary>
+            <dl className="qd-scope" aria-label={t('scopeTitle')}>
+              <div><dt>{t('scopeProject')}</dt><dd>{run.project_id}</dd></div>
+              <div><dt>{t('scopeRun')}</dt><dd>{run.id}</dd></div>
+              <div><dt>{t('scopeRequirement')}</dt><dd>{run.requirement_id || (run.result.requirement_model?.source_id === 'PASTED' ? t('scopePasted') : t('scopeIndependent'))}</dd></div>
+            </dl>
+            <p className="qd-scope-note">{t('scopeNote')}</p>
+            <div className="qd-frontier-summary" role="group" aria-label={t('frontierSummary')}>
+              <span>{t('visitedStates')}: {run.result.states?.length ?? run.progress.states}</span>
+              <span>{t('pendingActions')}: {pendingFrontierCount}</span>
+              <span>{t('blockedActions')}: {blockedFrontierCount}</span>
+              <span>{t('failedActions')}: {failedFrontierCount}</span>
+            </div>
+            {blockedFrontierCount > 0 && <p className="qd-field-hint" role="note"><ShieldAlert size={13} aria-hidden="true" /> {t('blockedActionsHelp')}</p>}
+            {run.error && <div className="qd-run-error"><ShieldAlert size={15} aria-hidden="true" />{run.error}</div>}
             <div className="qd-provider-facts">
               <span>{t('ai')}: {run.result.ai?.provider ?? '—'} / {run.result.ai?.model ?? '—'}</span>
               <span>{t('jev')}: {jevProvider ?? '—'}{jevModel ? ` / ${jevModel}` : ''} / {run.result.jev?.decisions ?? 0}{attemptedJev}{(run.result.jev?.fallbacks ?? 0) > 0 ? ` · ${t('fallbackCount', { count: run.result.jev?.fallbacks })}` : ''}</span>
             </div>
-          </div>
+            <a className="qd-api-link" href={`/api/discovery/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer"><ExternalLink size={13} />{t('apiView')}</a>
+          </details>
         </section>
 
         <nav className="qd-report-tabs" aria-label={t('reportSections')}>
-          <button type="button" aria-current={reportTab === 'live' ? 'page' : undefined} onClick={() => setReportTab('live')} className="ds-btn">{t('liveView')}{active && <i className="qd-live-dot" aria-hidden="true" />}<span>{run.status}</span></button>
+          <button type="button" aria-current={reportTab === 'live' ? 'page' : undefined} onClick={() => setReportTab('live')} className="ds-btn">{t('liveView')}{active && <i className="qd-live-dot" aria-hidden="true" />}</button>
           <button type="button" aria-current={reportTab === 'map' ? 'page' : undefined} onClick={() => setReportTab('map')} className="ds-btn">{t('qualityMap')}<span>{coverage.length}</span></button>
-          <button type="button" aria-current={reportTab === 'gaps' ? 'page' : undefined} onClick={() => setReportTab('gaps')} className="ds-btn">{t('qualityGaps')}<span>{gaps.length}</span></button>
-          <button type="button" aria-current={reportTab === 'features' ? 'page' : undefined} onClick={() => setReportTab('features')} className="ds-btn">{t('features')}<span>{functionalFeatures.length}</span></button>
+          <button type="button" aria-current={reportTab === 'gaps' ? 'page' : undefined} onClick={() => setReportTab('gaps')} className="ds-btn">{t('qualityGaps')}<span>{actionableGapCount}</span></button>
+          <button type="button" aria-current={reportTab === 'features' ? 'page' : undefined} onClick={() => setReportTab('features')} className="ds-btn">{t('featuresAndJourneys')}<span>{functionalFeatures.length + journeys.length}</span></button>
           <button type="button" aria-current={reportTab === 'activity' ? 'page' : undefined} onClick={() => setReportTab('activity')} className="ds-btn">{t('recentActivity')}<span>{run.result.events?.length ?? 0}</span></button>
         </nav>
 
@@ -619,7 +629,6 @@ export function QualityDiscoveryPanel({
           </div>
         </section>}
         {(evidenceUrl || evidenceText) && <section className="qd-section qd-evidence-section"><div className="qd-evidence-viewer"><div><strong>{evidenceText ? t('snapshotPreview') : t('evidencePreview')}</strong><button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={() => { setEvidenceUrl(''); setEvidenceText(''); }}>{t('close')}</button></div>{evidenceUrl ? <img src={evidenceUrl} alt={t('evidenceAlt')} /> : <pre>{evidenceText}</pre>}</div></section>}
-        <a className="qd-api-link" href={`/api/discovery/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer"><ExternalLink size={13} />{t('apiView')}</a>
       </>}
     </div>
   );

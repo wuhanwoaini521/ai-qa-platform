@@ -626,18 +626,22 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                               <h4>{t('coverageLinkedTestsTitle')}</h4>
                               {testCases === null ? <p className="text-secondary">{t('testCasesSourceUnavailable')}</p>
                                 : linkedCases.length === 0 ? <p className="text-secondary">{t('coverageNoCases')}</p>
-                                  : <ul>{linkedCases.map((testCase) => (
-                                    <li key={testCase.id}>
-                                      <Link to={buildWorkspaceHref({
-                                        projectId: selectedProjectId ?? undefined,
-                                        requirementId: item.requirement_id,
-                                        testCaseId: testCase.id,
-                                        stage: 'cases',
-                                        view: 'cases',
-                                      })}>{testCase.title}</Link>
-                                      <span>{testCase.binding?.status ?? testCase.automation_status}</span>
-                                    </li>
-                                  ))}</ul>}
+                                  : <ul>{linkedCases.map((testCase) => {
+                                      const status = testCase.binding?.status ?? testCase.automation_status;
+                                      const tone = status === 'ACTIVE' ? 'success' : status === 'MANUAL' ? 'warn' : 'neutral';
+                                      return (
+                                        <li key={testCase.id}>
+                                        <Link to={buildWorkspaceHref({
+                                          projectId: selectedProjectId ?? undefined,
+                                          requirementId: item.requirement_id,
+                                          testCaseId: testCase.id,
+                                          stage: 'cases',
+                                          view: 'cases',
+                                        })}>{testCase.title}</Link>
+                                        <Badge tone={tone}>{status}</Badge>
+                                        </li>
+                                      );
+                                    })}</ul>}
                             </div>
                           </section>
                         </td></tr>}

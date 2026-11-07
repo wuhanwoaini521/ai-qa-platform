@@ -42,16 +42,22 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
             const step = snapshot.steps.find((item) => item.id === group.stepId);
             const timestamp = group.timestamp ? new Date(group.timestamp).toLocaleTimeString() : '—';
             const provider = [...new Set(group.events.map((event) => [event.metadata.provider, event.metadata.model].filter((part): part is string => typeof part === 'string' && Boolean(part)).join(' · ')).filter(Boolean))];
-            const title = group.id === 'lifecycle:task' ? t('taskStarted') : group.title;
+            const isLifecycle = group.id.startsWith('lifecycle:');
+            const browserTitleKey = group.category === 'browser' ? eventLabelKey(group.events[0]?.type) : null;
+            const title = isLifecycle
+              ? t(snapshot.kind === 'run' ? 'runLifecycle' : 'taskLifecycle')
+              : browserTitleKey ? t(browserTitleKey) : group.title;
             const status = group.status ?? (step?.status ?? '');
-            return <li key={group.id} className={`rt-trace-group status-${status.toLowerCase()}${group.stepId === selectedStepId ? ' is-selected' : ''}`}>
+            return <li key={group.id} className={`rt-trace-group status-${status.toLowerCase()}${selectedStepId !== null && group.stepId === selectedStepId ? ' is-selected' : ''}`}>
               <div className="rt-trace-group-main">
                 <time>{timestamp}</time>
                 {step ? <button className="ds-btn rt-trace-select" onClick={() => onSelect(step.id)}><span>{status === 'FAILED' ? '✕' : status === 'COMPLETED' ? '✓' : '•'}</span><strong>{step.key}</strong><span>{title}</span></button> : <div className="rt-trace-select"><strong>{title}</strong></div>}
                 <span className={`rt-trace-status status-${status.toLowerCase()}`}>{status ? t(status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : status.toLowerCase(), { defaultValue: status }) : '—'}</span>
                 <code>{group.durationMs == null ? '—' : durationLabel(group.durationMs)}</code>
               </div>
-              {group.id === 'lifecycle:task' && <p className="rt-trace-summary-line">{snapshot.task?.type ?? snapshot.kind} · {snapshot.steps.length} {t('plannedSteps')}</p>}
+              {isLifecycle && <p className="rt-trace-summary-line">{snapshot.kind === 'run'
+                ? t('traceRunSummary', { count: snapshot.executions.filter((execution) => !execution.test_run_id || execution.test_run_id === snapshot.id).length })
+                : t('traceTaskSummary', { type: snapshot.task?.type ?? snapshot.kind, count: snapshot.steps.length })}</p>}
               {group.evidenceCount > 0 && <p className="rt-trace-summary-line">{t('evidence')}: {group.evidenceCount} {t('itemsCount')}</p>}
               {step?.error && <p className="rt-trace-error">{step.error}</p>}
               {step?.validation_error && <p className="rt-trace-error">{step.validation_error}</p>}
@@ -59,7 +65,7 @@ export function RuntimeTrace({ snapshot, selectedStepId, onSelect }: {
               <details className="rt-trace-raw-events"><summary>{group.events.length} {t('events')}</summary><ul>{group.events.map((event) => { const labelKey = eventLabelKey(event.type); return <li key={event.id}><time>{event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '—'}</time><span>{labelKey ? t(labelKey) : event.title || event.type}</span><code>{event.type}</code>{event.summary && <small>{event.summary}</small>}</li>; })}</ul></details>
             </li>;
           })}
-          {invocations.map((call) => <li key={`ai:${call.id}`} className={`rt-trace-group status-${call.status.toLowerCase()}${call.step_id === selectedStepId ? ' is-selected' : ''}`}>
+          {invocations.map((call) => <li key={`ai:${call.id}`} className={`rt-trace-group status-${call.status.toLowerCase()}${selectedStepId !== null && call.step_id === selectedStepId ? ' is-selected' : ''}`}>
             <div className="rt-trace-group-main"><time>{call.started_at ? new Date(call.started_at).toLocaleTimeString() : '—'}</time>{call.step_id ? <button className="ds-btn rt-trace-select" onClick={() => onSelect(call.step_id!)}><strong>AI</strong><span>{call.title}</span></button> : <div className="rt-trace-select"><strong>AI</strong><span>{call.title}</span></div>}<span className={`rt-trace-status status-${call.status.toLowerCase()}`}>{t(call.status === 'WAITING_FOR_APPROVAL' ? 'waitingApproval' : call.status.toLowerCase(), { defaultValue: call.status })}</span><code>{durationLabel(call.duration_ms)}</code></div>
           </li>)}
         </ol>

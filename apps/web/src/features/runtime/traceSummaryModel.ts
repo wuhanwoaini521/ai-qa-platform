@@ -17,11 +17,16 @@ const eventTime = (event: RuntimeEvent) => event.timestamp ? Date.parse(event.ti
 export function summarizeTrace(events: RuntimeEvent[], snapshot: RuntimeSnapshot): TraceSummaryGroup[] {
   const groups = new Map<string, RuntimeEvent[]>();
   for (const event of events) {
+    const correlationId = event.task_id ?? event.test_run_id ?? event.trace_run_id ?? event.id;
     const key = event.step_id
       ? `step:${event.step_id}`
       : event.category === 'lifecycle'
-        ? 'lifecycle:task'
-        : `${event.category}:${event.trace_run_id ?? event.test_run_id ?? event.id}`;
+        ? `lifecycle:${correlationId}`
+        : event.category === 'test'
+          ? `test:${event.title ?? event.type}:${correlationId}`
+          : event.category === 'browser'
+            ? `browser:${event.type}:${correlationId}`
+            : `${event.category}:${correlationId}`;
     const group = groups.get(key);
     if (group) group.push(event);
     else groups.set(key, [event]);
@@ -32,7 +37,9 @@ export function summarizeTrace(events: RuntimeEvent[], snapshot: RuntimeSnapshot
     const step = snapshot.steps.find((item) => item.id === stepId);
     const terminalError = [...ordered].reverse().find((event) =>
       ['FAILED', 'BLOCKED', 'ERROR'].includes((event.status ?? '').toUpperCase()) ||
-      event.type.endsWith('.failed') || event.type === 'failed',
+      event.type.endsWith('.failed') || event.type === 'failed' ||
+      event.metadata.level === 'error' ||
+      Number(event.metadata.status_code ?? event.metadata.status) >= 400,
     );
     const latest = [...ordered].reverse().find((event) => event.status) ?? ordered.at(-1)!;
     const duration = step?.duration_ms ?? [...ordered].reverse().find((event) => event.duration_ms != null)?.duration_ms ?? null;
@@ -42,7 +49,11 @@ export function summarizeTrace(events: RuntimeEvent[], snapshot: RuntimeSnapshot
       stepId,
       category: step ? 'step' : ordered[0]?.category ?? 'system',
       title: step?.title ?? (id === 'lifecycle:task' ? 'Task lifecycle' : ordered.find((event) => event.title)?.title ?? 'Runtime event'),
-      status: terminalError?.status?.toUpperCase() === 'BLOCKED' ? 'BLOCKED' : terminalError ? 'FAILED' : latest?.status ?? null,
+      status: terminalError?.status?.toUpperCase() === 'BLOCKED'
+        ? 'BLOCKED'
+        : terminalError?.status?.toUpperCase() === 'ERROR' || terminalError?.metadata.level === 'error' || Number(terminalError?.metadata.status_code ?? terminalError?.metadata.status) >= 400
+          ? 'ERROR'
+          : terminalError ? 'FAILED' : latest?.status ?? null,
       timestamp: first,
       durationMs: duration,
       evidenceCount: ordered.filter((event) => event.type === 'evidence.created' || event.type.endsWith('.collected') || event.category === 'artifact').length,

@@ -315,11 +315,11 @@ export const RunsPage: React.FC<RunsPageProps> = ({
               : t('aiRegression')}
           </button>
           <button
-            className="ds-btn ds-btn-sm btn btn-secondary btn-sm"
+            className="ds-btn btn btn-secondary"
             onClick={fetchRuns}
             title={t('refreshRuns')}
           >
-            <RefreshCw size={14} /> {t('common:refresh')}
+            <RefreshCw size={16} /> {t('common:refresh')}
           </button>
           <button
             className="ds-btn-primary ds-btn btn btn-primary"
@@ -438,52 +438,24 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                         className={`ds-btn select-row ${isSelected ? 'is-selected' : ''}`}
                         aria-pressed={isSelected}
                       >
-                        <div
-                          style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              marginBottom: '4px',
-                            }}
-                          >
+                        <div className="runs-list-row-content">
+                          <div className="runs-list-row-heading">
                             {getStatusBadge(r.status)}
-                            <span
-                              style={{
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                fontFamily: 'var(--font-mono)',
-                              }}
-                            >
+                            <span className="runs-list-row-id">
                               #{r.id.slice(0, 8)}
                             </span>
-                            <span
-                              className="ds-tag ds-tag--neutral badge badge-draft"
-                              style={{ fontSize: '10px' }}
-                            >
+                            <span className="ds-tag ds-tag--neutral badge badge-draft runs-list-row-runner">
                               {r.runner_type || 'LOCAL'}
                             </span>
                             <span
-                              style={{
-                                fontSize: '11px',
-                                color: 'var(--text-muted)',
-                              }}
+                              className="runs-list-row-source"
+                              title={r.requested_by || r.triggered_by || ''}
                             >
                               {r.requested_by || r.triggered_by}
                             </span>
                           </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              fontSize: '11px',
-                              color: 'var(--ink-muted)',
-                            }}
-                          >
-                            <span>
+                          <div className="runs-list-row-metrics">
+                            <span className="runs-list-row-statistics">
                               {t('listTotal')}:{' '}
                               <b>{r.total ?? r.total_tests}</b> |{' '}
                               {t('listPassed')}:{' '}
@@ -499,13 +471,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
                                   : r.failed_tests}
                               </b>
                             </span>
-                            <span
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                              }}
-                            >
+                            <span className="runs-list-row-duration">
                               <Clock size={11} />{' '}
                               {(r.duration_ms / 1000).toFixed(2)}s
                             </span>
@@ -525,9 +491,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({
 
           {/* Right: Selected Run Detail & Live Stream */}
           {selectedRun ? (
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-            >
+            <div className="runs-detail-column">
               <RuntimeDetail
                 key={selectedRun.id}
                 kind="run"

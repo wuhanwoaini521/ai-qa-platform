@@ -10,7 +10,7 @@ interface SidebarViewSwitcherProps {
   onSelectTab: (tab: SidebarTab) => void;
 }
 
-/** Segmented control: one rounded track, the active view is a raised pill with a pixel dot. */
+/** Navigation for the file, test, source-control, and pull-request panels. */
 export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   sidebarTab,
   testCount,
@@ -29,7 +29,7 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
   ];
 
   return (
-    <div className="studio-view-switcher" role="tablist" aria-label={t('sidebarView.switcherLabel')}>
+    <div className="studio-view-switcher ds-segmented" role="tablist" aria-label={t('sidebarView.switcherLabel')}>
       {views.map((view, index) => (
         <button
           key={view.id}
@@ -40,7 +40,7 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
           aria-controls="studio-sidebar-panel"
           aria-selected={sidebarTab === view.id}
           tabIndex={sidebarTab === view.id ? 0 : -1}
-          className={["ds-btn", (sidebarTab === view.id ? 'is-active' : '')].filter(Boolean).join(' ')}
+          className="studio-view-tab"
           title={
             view.id === 'git'
               ? t('sidebarView.git', { changeCount })
@@ -67,7 +67,7 @@ export const SidebarViewSwitcher: React.FC<SidebarViewSwitcherProps> = ({
           }}
         >
           {view.label}
-          {typeof view.count === 'number' && view.count > 0 && <span className="view-count">{view.count}</span>}
+          {typeof view.count === 'number' && view.count > 0 && <span className="ds-count">{view.count}</span>}
         </button>
       ))}
     </div>

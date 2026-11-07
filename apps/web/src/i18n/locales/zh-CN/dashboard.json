@@ -1,7 +1,5 @@
 {
   "loadingOverview": "正在加载平台总览...",
-  "overviewTitle": "QA 工作台，持续推进",
-  "overviewSubtitle": "项目、执行证据，以及下一项有价值的操作。",
   "executionSignals": "执行信号",
   "executionSignalsSubtitle": "以下指标统计全平台运行数据；项目内快捷入口按当前项目定位。",
   "currentProject": "当前项目",

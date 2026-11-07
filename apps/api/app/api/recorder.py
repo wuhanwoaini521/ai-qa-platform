@@ -351,6 +351,11 @@ async def recorder_stream(websocket: WebSocket, session_id: str):
                     response["command_id"] = command_id
                 if action in {"add_step", "edit_step", "replace_steps", "delete_step", "reorder"}:
                     response["steps_revision"] = session.steps_revision
+                if action in {"start", "pause", "resume", "stop"}:
+                    response["state"] = session.state
+                    response["steps_revision"] = session.steps_revision
+                if action == "stop":
+                    response["steps"] = session.steps
                 if current_url is not None:
                     response["url"] = current_url
                 await websocket.send_json(response)

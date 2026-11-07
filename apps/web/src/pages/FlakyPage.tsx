@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { FlakyTestItem, Project, TestHistoryResponse } from '../types';
 import { api } from '../api/client';
+import './FlakyPage.css';
 
 interface FlakyPageProps {
   projects?: Project[];
@@ -89,7 +90,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container flaky-page">
       {/* Header & Metric Cards */}
       <div className="page-header">
         <div>
@@ -196,7 +197,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
       </div>
 
       {/* Flaky Intelligence Table */}
-      <div className="ds-card card">
+      <div className="ds-card card flaky-table-card">
         {loading ? (
           <div className="page-empty-state">
             <RefreshCw size={24} className="spinning" />
@@ -209,7 +210,19 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
             <p>{t('emptyDescription')}</p>
           </div>
         ) : (
-          <table className="ds-table data-table">
+          <div className="flaky-table-wrap">
+          <table className="ds-table data-table flaky-table">
+            <colgroup>
+              <col style={{ width: '26%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '8%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>{t('columnTestIdentifier')}</th>
@@ -232,38 +245,28 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
 
                 return (
                   <tr key={item.nodeid}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{item.test_name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    <td className="flaky-test-identifier">
+                      <div className="flaky-test-name">{item.test_name}</div>
+                      <div className="flaky-test-nodeid">
                         {item.nodeid}
                       </div>
                     </td>
-                    <td>{getClassificationBadge(item.flaky_score.classification)}</td>
+                    <td className="flaky-classification-cell">{getClassificationBadge(item.flaky_score.classification)}</td>
                     <td>
-                      <div className="page-toolbar-group">
-                        <div
-                          style={{
-                            width: '60px',
-                            height: '6px',
-                            backgroundColor: 'var(--border-color)',
-                            borderRadius: 'var(--r-xs)',
-                            overflow: 'hidden',
-                          }}
-                        >
+                      <div className="flaky-score-cell">
+                        <div className="flaky-score-track" aria-label={t('flakyScore')}>
                           <div
                             style={{
                               width: `${scorePct}%`,
-                              height: '100%',
-                              backgroundColor:
-                                scorePct > 40
-                                  ? 'var(--color-error)'
-                                  : scorePct > 20
+                              backgroundColor: scorePct > 40
+                                ? 'var(--color-error)'
+                                : scorePct > 20
                                   ? 'var(--color-warning)'
                                   : 'var(--color-success)',
                             }}
                           />
                         </div>
-                        <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.flaky_score.score.toFixed(2)}</span>
+                        <span>{item.flaky_score.score.toFixed(2)}</span>
                       </div>
                     </td>
                     <td>
@@ -287,7 +290,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
                       <span style={{ fontSize: '0.85rem' }}>{rerunPct}%</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span className="flaky-root-cause">
                         {item.flaky_score.main_failure_category || t('common:none')}
                       </span>
                     </td>
@@ -304,6 +307,7 @@ export const FlakyPage: React.FC<FlakyPageProps> = ({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

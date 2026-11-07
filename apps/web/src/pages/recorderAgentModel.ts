@@ -30,12 +30,21 @@ export interface RecorderAgentScript {
   actionCount: number;
   jevCount: number;
   assertionCount: number;
+  goalVerified: boolean;
+  partialDraft: boolean;
+  needsAssertionReview: boolean;
 }
 
-export function recorderStepsFromAgent(output: unknown, startUrl: string): RecorderAgentScript | null {
+export function recorderStepsFromAgent(
+  output: unknown,
+  startUrl: string,
+  options: { allowPartialDraft?: boolean } = {},
+): RecorderAgentScript | null {
   const normalizedStartUrl = httpUrl(startUrl);
   const result = asRecord(output);
-  if (!normalizedStartUrl || !result || result.verified !== true || !['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(result.kind)) || !Array.isArray(result.actions)) return null;
+  const partialDraft = result?.partial_draft === true;
+  const goalVerified = result?.verified === true;
+  if (!normalizedStartUrl || !result || (!goalVerified && !(options.allowPartialDraft && partialDraft)) || !['ai_jev_browser_agent', 'fast_browser_agent'].includes(String(result.kind)) || !Array.isArray(result.actions)) return null;
 
   const makeId = () => crypto.randomUUID().replaceAll('-', '').slice(0, 12);
   const steps: RecorderStep[] = [{ id: makeId(), action: 'navigate', url: normalizedStartUrl, description: `打开起始页面：${normalizedStartUrl}` }];
@@ -43,7 +52,7 @@ export function recorderStepsFromAgent(output: unknown, startUrl: string): Recor
   let jevCount = 0;
   const addAction = (raw: unknown) => {
     const item = asRecord(raw);
-    if (!item || !['success', 'partial'].includes(String(item.status))) return;
+    if (!item || (partialDraft ? item.status !== 'success' : !['success', 'partial'].includes(String(item.status)))) return;
     const agentAction = String(item.action ?? '');
     if (agentAction === 'inspect') return;
 
@@ -118,7 +127,9 @@ export function recorderStepsFromAgent(output: unknown, startUrl: string): Recor
   const visibleEvidence = [
     ...(Array.isArray(evidence.visible_text_criteria) ? evidence.visible_text_criteria : []),
     ...(Array.isArray(evidence.completion_evidence) ? evidence.completion_evidence : []),
-  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 1);
+  ].filter((value): value is string => typeof value === 'string'
+    && value.trim().length > 1
+    && !/\*{3}\s*REDACTED|\[REDACTED(?:[_ -][A-Z0-9_-]+)?\]/i.test(value));
   for (const value of [...new Set(visibleEvidence)].slice(0, 4)) addTextAssertion(value, `验证已观察到的目标证据：${value}`);
 
   if (evidence.cart_verified === true) {
@@ -132,10 +143,20 @@ export function recorderStepsFromAgent(output: unknown, startUrl: string): Recor
   }
 
   const title = typeof result.final_title === 'string' ? result.final_title.trim() : '';
-  if (title && !steps.some((step) => step.action === 'assert_text' || step.action === 'assert_title')) {
+  if (goalVerified && title && !steps.some((step) => step.action === 'assert_text' || step.action === 'assert_title')) {
     const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     steps.push({ id: makeId(), action: 'assert_title', value: `^${escapedTitle}$`, description: `核对最终页面标题：${title}` });
   }
 
-  return { steps, actionCount, jevCount, assertionCount: steps.filter((step) => step.action.startsWith('assert_')).length };
+  const assertionCount = steps.filter((step) => step.action.startsWith('assert_')).length;
+  const hasObservedGoalAssertion = steps.some((step) => step.action === 'assert_text');
+  return {
+    steps,
+    actionCount,
+    jevCount,
+    assertionCount,
+    goalVerified,
+    partialDraft,
+    needsAssertionReview: !hasObservedGoalAssertion,
+  };
 }

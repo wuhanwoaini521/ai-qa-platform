@@ -943,10 +943,14 @@ class BrowserRecorderService:
             for frame in page.frames:
                 await frame.evaluate("() => {window.__qaRecorderEnabled=true; window.__qaRecorderEvents=[]}")
         elif action == "pause":
+            await self._drain_recording_events(session, page, disable=True)
             session.state = "PAUSED"
         elif action == "resume":
             session.state = "RECORDING"
+            for frame in page.frames:
+                await frame.evaluate("() => { window.__qaRecorderEnabled = true; }")
         elif action == "stop":
+            await self._drain_recording_events(session, page, disable=True)
             session.state = "STOPPED"
         elif action == "click":
             await page.mouse.click(command["x"], command["y"])
@@ -990,6 +994,49 @@ class BrowserRecorderService:
             session.steps_revision += 1
         self.touch(session)
         return SensitiveRedactor.redact_url(page.url) if action == "navigate" else None
+
+    async def _drain_recording_events(
+        self,
+        session: RecorderSession,
+        page: Any,
+        *,
+        disable: bool = False,
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        new_steps: list[dict[str, Any]] = []
+        hovered_element = None
+        for frame in page.frames:
+            frame_hover = await frame.evaluate("() => window.__qaRecorderHovered || null")
+            if frame_hover:
+                hovered_element = frame_hover
+            if disable:
+                frame_events = await frame.evaluate(
+                    "() => { window.__qaRecorderEnabled = false; return window.__qaRecorderDrain ? window.__qaRecorderDrain() : []; }"
+                )
+            else:
+                frame_events = await frame.evaluate(
+                    "() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []"
+                )
+            for event in frame_events:
+                if event.get("action") == "pick":
+                    session.picked_element = {**event, "action": session.pending_pick_action}
+                    session.pending_pick_action = "click"
+                    continue
+                if session.state != "RECORDING":
+                    continue
+                locator_selection = await self._select_locator_candidate(
+                    page, event, session.id, session.browser_session_id
+                )
+                if locator_selection:
+                    event = {**event, "locator_selection": locator_selection}
+                    session.locator_trace = locator_selection["trace"]
+                for step in self.events_to_steps([event]):
+                    if not session.steps or self._dedupe_key(session.steps[-1]) != self._dedupe_key(step):
+                        session.steps.append(step)
+                        new_steps.append(step)
+        if new_steps:
+            session.steps_revision += 1
+            self.touch(session)
+        return hovered_element, new_steps
 
     async def close(self, session_id: str, owner_id: str) -> None:
         session = await self.get(session_id, owner_id)
@@ -1068,30 +1115,8 @@ class BrowserRecorderService:
                 session.steps.append(step)
                 new_steps.append(step)
             session.last_url = page.url
-            hovered_element = None
-            for frame in page.frames:
-                frame_hover = await frame.evaluate("() => window.__qaRecorderHovered || null")
-                if frame_hover:
-                    hovered_element = frame_hover
-                frame_events = await frame.evaluate("() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []")
-                for event in frame_events:
-                    if event.get("action") == "pick":
-                        session.picked_element = {**event, "action": session.pending_pick_action}
-                        session.pending_pick_action = "click"
-                        continue
-                    if session.state == "RECORDING":
-                        locator_selection = await self._select_locator_candidate(
-                            page, event, session.id, session.browser_session_id
-                        )
-                        if locator_selection:
-                            event = {**event, "locator_selection": locator_selection}
-                            session.locator_trace = locator_selection["trace"]
-                        for step in self.events_to_steps([event]):
-                            if not session.steps or self._dedupe_key(session.steps[-1]) != self._dedupe_key(step):
-                                session.steps.append(step)
-                                new_steps.append(step)
-            if new_steps:
-                session.steps_revision += 1
+            hovered_element, recorded_steps = await self._drain_recording_events(session, page)
+            new_steps.extend(recorded_steps)
             image = snapshot.screenshot or b""
             tabs = snapshot.tabs
             picked = session.picked_element

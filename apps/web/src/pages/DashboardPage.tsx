@@ -264,29 +264,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="dashboard-page">
-      <header className="ds-card dashboard-heading">
-        <div className="dashboard-heading-copy">
-          <h2>{t('overviewTitle')}</h2>
-          <p>{t('overviewSubtitle')}</p>
-        </div>
-        <div className="dashboard-project-summary">
-          <span className="dashboard-project-summary-scope">{t('platformScope')}</span>
-          <dl className="dashboard-project-scope" aria-label={t('projectOverview')}>
-            {[
-              { key: 'qaProjects', Icon: FolderGit2, value: countValue(stats?.total_projects) },
-              { key: 'requirements', Icon: FileText, value: countValue(stats?.total_requirements) },
-              { key: 'testCases', Icon: CheckSquare, value: countValue(stats?.total_test_cases) },
-            ].map(({ key, Icon, value }) => (
-              <div className="dashboard-scope-metric" key={key}>
-                <dt><Icon size={14} aria-hidden="true" />{t(key)}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </header>
-
-      <section className="ds-card dashboard-context-line" aria-labelledby="dashboard-continue-title">
+      <header className="ds-card dashboard-heading dashboard-focus-bar" aria-labelledby="dashboard-continue-title">
         <div className="dashboard-continue-project">
           <span>{currentProject ? t('currentProject') : focusProject ? t('latestRunProject') : t('currentProject')}</span>
           <h3 id="dashboard-continue-title">
@@ -295,23 +273,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {focusProject ? <small>{t('projectWorkspaceMeta', { framework: focusProject.framework_type, branch: focusProject.default_branch })}</small>
             : <p>{projectLoading ? t('projectContextLoadingDescription') : projectError ? t('projectContextUnavailableDescription') : projects.length ? t('selectProjectDescription') : t('firstProjectDescription')}</p>}
         </div>
+        <dl className="dashboard-project-scope" aria-label={`${t('platformScope')} · ${t('projectOverview')}`}>
+          {[
+            { key: 'qaProjects', Icon: FolderGit2, value: countValue(stats?.total_projects) },
+            { key: 'requirements', Icon: FileText, value: countValue(stats?.total_requirements) },
+            { key: 'testCases', Icon: CheckSquare, value: countValue(stats?.total_test_cases) },
+          ].map(({ key, Icon, value }) => (
+            <div className="dashboard-scope-metric" key={key}>
+              <dt><Icon size={14} aria-hidden="true" />{t(key)}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
         {nextStep ? (
           <div className="dashboard-next-step">
-            <span>{t('nextStep')}</span>
-            <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={nextStep.onClick}>
+            <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={nextStep.onClick}>
               <ArrowRight size={15} aria-hidden="true" />{nextStep.label}
             </button>
           </div>
         ) : focusProject ? (
-          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" onClick={() => onNavigate('workspace', focusProject.id)}>
+          <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" onClick={() => onNavigate('workspace', focusProject.id)}>
             <FolderGit2 size={15} aria-hidden="true" />{t('openWorkspace')}
           </button>
         ) : (
-          <button type="button" className="ds-btn-primary ds-btn btn btn-primary" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
+          <button type="button" className="ds-btn-primary ds-btn-sm ds-btn btn btn-primary btn-sm" disabled={projectLoading} onClick={() => canCreateFirstProject ? onOpenCreateProject?.() : onNavigate('projects')}>
             <FolderGit2 size={15} aria-hidden="true" />{canCreateFirstProject ? t('createFirstProject') : t('goToProjects')}
           </button>
         )}
-      </section>
+      </header>
 
       <section className="ds-card dashboard-signals card" aria-label={t('executionSignals')}>
         <div className="dashboard-signals-heading">

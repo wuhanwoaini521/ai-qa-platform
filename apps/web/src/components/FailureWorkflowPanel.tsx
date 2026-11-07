@@ -287,8 +287,13 @@ export const FailureWorkflowPanel: React.FC<{
             </p>
           )}
           {!verified && (recommendations.length > 0 || (locatorTimeout && Boolean(observedCartLocator))) && (
-            <div className="failure-workflow-result-block">
-              <span>{t('workflow.nextSteps')}</span>
+            <details className="failure-workflow-next-steps">
+              <summary>
+                <span>{t('workflow.nextSteps')}</span>
+                <span className="failure-workflow-detail-count">
+                  {locatorTimeout && isChinese ? 2 : recommendations.length}
+                </span>
+              </summary>
               {locatorTimeout && isChinese ? (
                 <ol>
                   <li>
@@ -301,7 +306,7 @@ export const FailureWorkflowPanel: React.FC<{
               ) : recommendations.length > 0 ? (
                 <ol>{recommendations.map((action, index) => <li key={`${index}-${action}`}>{action}</li>)}</ol>
               ) : null}
-            </div>
+            </details>
           )}
           {showPrimaryAction && completed && primaryAction && onPrimaryAction && (
             <div className="failure-diagnosis-next-step" role="group" aria-label={t('primaryAction')}>
@@ -327,20 +332,7 @@ export const FailureWorkflowPanel: React.FC<{
               )}
             </div>
           )}
-          {rootCause && (
-            <details className="failure-workflow-original-diagnosis">
-              <summary>{t('workflow.originalDiagnosis')}</summary>
-              <p>{rootCause}</p>
-              {recommendations.length > 0 && <ol>{recommendations.map((action, index) => <li key={`${index}-${action}`}>{action}</li>)}</ol>}
-            </details>
-          )}
         </section>
-      )}
-      {events.length > 0 && (
-        <details className="failure-workflow-live-events">
-          <summary>{t('workflow.liveEvents')}</summary>
-          <AIExecutionTimeline events={events} running={running} workflowMode />
-        </details>
       )}
       {(error || failed || cancelled || interrupted) && (
         <p className="failure-workflow-error" role="status">
@@ -350,60 +342,74 @@ export const FailureWorkflowPanel: React.FC<{
       <p className="failure-workflow-verification">
         {t('workflow.verificationBoundary')}
       </p>
-      <div className="failure-workflow-history">
-        <div className="failure-workflow-history-title">
-          <History size={14} aria-hidden="true" />
-          <strong>{t('analysisTimeline')}</strong>
-        </div>
-        {!failureCreatedAt && !history.length ? (
-          <p className="failure-workflow-empty">{t('noDiagnosisHistory')}</p>
-        ) : (
-          <ol className="failure-analysis-timeline">
-            {failureCreatedAt && (
-              <li>
-                <time dateTime={failureCreatedAt}>
-                  {new Date(failureCreatedAt).toLocaleString()}
-                </time>
-                <span>
-                  {t('failureRecorded')}
-                  {classification
-                    ? ` · ${t('ruleClassified', { classification })}`
-                    : ''}
-                </span>
-              </li>
-            )}
-            {history.map((item) => {
-              const selected = item.id === selectedId;
-              const labelKey =
-                item.status === 'COMPLETED'
-                  ? 'analysisCompleted'
-                  : item.status === 'FAILED'
-                    ? 'analysisFailed'
-                    : 'analysisStarted';
-              return (
-                <li key={item.id} className={selected ? 'is-selected' : ''}>
-                  <button
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={running}
-                    onClick={() => onSelect(item.id)} className="ds-btn"
-                  >
-                    <time dateTime={item.created_at}>
-                      {new Date(item.created_at).toLocaleString()}
+      {(events.length > 0 || failureCreatedAt || history.length > 0) && (
+        <details className="failure-workflow-history">
+          <summary className="failure-workflow-history-title">
+            <History size={14} aria-hidden="true" />
+            <strong>{t('workflow.analysisDetails')}</strong>
+            <span className="failure-workflow-detail-count">
+              {[events.length > 0, history.length > 0 || Boolean(failureCreatedAt)].filter(Boolean).length}
+            </span>
+          </summary>
+          {events.length > 0 && (
+            <section className="failure-workflow-detail-section">
+              <h4>{t('workflow.liveEvents')}</h4>
+              <AIExecutionTimeline events={events} running={running} workflowMode />
+            </section>
+          )}
+          <section className="failure-workflow-detail-section">
+            <h4>{t('analysisTimeline')}</h4>
+            {!failureCreatedAt && !history.length ? (
+              <p className="failure-workflow-empty">{t('noDiagnosisHistory')}</p>
+            ) : (
+              <ol className="failure-analysis-timeline">
+                {failureCreatedAt && (
+                  <li>
+                    <time dateTime={failureCreatedAt}>
+                      {new Date(failureCreatedAt).toLocaleString()}
                     </time>
                     <span>
-                      {t(labelKey)} · {t(`workflow.runStatus.${item.status}`)}
+                      {t('failureRecorded')}
+                      {classification
+                        ? ` · ${t('ruleClassified', { classification })}`
+                        : ''}
                     </span>
-                    {item.events.length > 0 && (
-                      <small>{item.events.length} {t('recordedEvents')}</small>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </div>
+                  </li>
+                )}
+                {history.map((item) => {
+                  const selected = item.id === selectedId;
+                  const labelKey =
+                    item.status === 'COMPLETED'
+                      ? 'analysisCompleted'
+                      : item.status === 'FAILED'
+                        ? 'analysisFailed'
+                        : 'analysisStarted';
+                  return (
+                    <li key={item.id} className={selected ? 'is-selected' : ''}>
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={running}
+                        onClick={() => onSelect(item.id)} className="ds-btn"
+                      >
+                        <time dateTime={item.created_at}>
+                          {new Date(item.created_at).toLocaleString()}
+                        </time>
+                        <span>
+                          {t(labelKey)} · {t(`workflow.runStatus.${item.status}`)}
+                        </span>
+                        {item.events.length > 0 && (
+                          <small>{item.events.length} {t('recordedEvents')}</small>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+        </details>
+      )}
     </section>
   );
 };

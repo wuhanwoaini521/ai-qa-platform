@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { FileCode2, X } from 'lucide-react';
+import { IconButton } from '@self/ui-style/react';
 import { EditorTab } from '../types';
 
 interface EditorTabsProps {
@@ -25,14 +26,15 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
       {tabs.map((tab) => {
         const isActive = tab.path === activeTabPath && !showDiffView;
         return (
-          <div key={tab.path} className={`studio-tab ${isActive ? 'is-active' : ''}`}>
+          <div key={tab.path} className={`studio-tab ${isActive ? 'is-active' : ''}`} title={tab.path}>
             <button type="button" className="ds-btn studio-tab-select" aria-pressed={isActive} onClick={() => onSelectTab(tab.path)}>
+              <FileCode2 size={14} aria-hidden="true" />
               {tab.isDirty && <span className="tab-dot" aria-hidden="true" />}
               <span className="studio-tab-name">{tab.name}</span>
             </button>
-            <button type="button" className="ds-btn studio-tab-close" aria-label={t('tabs.closeFile', { fileName: tab.name })} onClick={(e) => onCloseTab(tab.path, e)}>
+            <IconButton type="button" className="studio-tab-close" aria-label={t('tabs.closeFile', { fileName: tab.name })} onClick={(e) => onCloseTab(tab.path, e)}>
               <X size={12} />
-            </button>
+            </IconButton>
           </div>
         );
       })}
