@@ -200,3 +200,18 @@
   .quality-coverage-detail { padding: var(--sp-3); }
   .quality-coverage-linked-tests li { align-items: flex-start; flex-direction: column; gap: var(--sp-1); }
 }
+.quality-impact-unmapped {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xs);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.quality-impact-unmapped strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-primary);
+}

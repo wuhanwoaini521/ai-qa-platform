@@ -17394,6 +17394,13 @@
             "type": "array",
             "title": "Changed Files"
           },
+          "unmapped_changed_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unmapped Changed Files"
+          },
           "impacted_requirements": {
             "items": {
               "type": "string"

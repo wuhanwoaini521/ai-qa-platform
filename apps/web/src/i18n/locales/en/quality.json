@@ -93,6 +93,7 @@
   "impactTestCases": "Impacted Test Cases ({{value}})",
   "impactNoneIdentified": "None identified",
   "impactRecommendedSuite": "Recommended Regression Suite ({{value}} tests)",
+  "impactUnmappedFiles": "{{value}} changed file(s) have no verified test mapping",
   "impactExecuteInRunner": "Execute in Runner",
   "releasesTitle": "Release Pipelines & Gate Evaluations",
   "releasesHint": "Deterministic release gates requiring pass rate thresholds, 0 unautomated P0s, and flaky constraints.",

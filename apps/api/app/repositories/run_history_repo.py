@@ -83,6 +83,25 @@ class RunHistoryRepository:
             result = await session.execute(stmt)
             return [(execution, run) for execution, run in result.all()]
 
+    async def list_project_nodeids(self, project_id: str, workspace_id: str | None = None) -> list[str]:
+        """List real nodeids observed in terminal executions for one project/workspace."""
+        stmt = (
+            select(TestExecutionORM.nodeid)
+            .join(TestRunORM, TestExecutionORM.run_id == TestRunORM.id)
+            .where(
+                TestRunORM.project_id == project_id,
+                TestExecutionORM.status.in_(("PASSED", "FAILED", "ERROR", "SKIPPED")),
+                TestExecutionORM.nodeid != "",
+            )
+            .distinct()
+            .order_by(TestExecutionORM.nodeid)
+        )
+        if workspace_id:
+            stmt = stmt.where(TestRunORM.workspace_id == workspace_id)
+        async with self.session_factory() as session:
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def get_test_history_detail(
         self,
         nodeid: str,

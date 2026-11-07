@@ -1360,6 +1360,7 @@ class ImpactAnalysisRequest(BaseModel):
 class ImpactAnalysisResult(BaseModel):
     __test__ = False
     changed_files: list[str] = Field(default_factory=list)
+    unmapped_changed_files: list[str] = Field(default_factory=list)
     impacted_requirements: list[str] = Field(default_factory=list)
     impacted_test_cases: list[str] = Field(default_factory=list)
     recommended_regression_tests: list[str] = Field(default_factory=list)

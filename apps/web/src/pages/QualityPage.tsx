@@ -804,6 +804,12 @@ export const QualityPage: React.FC<QualityPageProps> = ({
                     </Button>
                   )}
                 </div>
+                {impactResult.unmapped_changed_files.length > 0 && (
+                  <div role="status" className="quality-impact-unmapped">
+                    <strong>{t('impactUnmappedFiles', { value: impactResult.unmapped_changed_files.length })}</strong>
+                    <div>{impactResult.unmapped_changed_files.join(', ')}</div>
+                  </div>
+                )}
                 <div
                   style={{
                     backgroundColor: 'var(--bg-base)',

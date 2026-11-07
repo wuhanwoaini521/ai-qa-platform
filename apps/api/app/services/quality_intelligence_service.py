@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from project_model.models import (
@@ -41,6 +42,46 @@ class QualityIntelligenceService:
         self.test_run_repo = test_run_repo
         self.history_repo = history_repo or RunHistoryRepository()
         self.workspace_service = workspace_service or WorkspaceService()
+
+    @staticmethod
+    def _impact_tokens(value: str) -> set[str]:
+        """Return stable, domain-oriented tokens while ignoring common path vocabulary."""
+        stop_words = {
+            "src",
+            "app",
+            "apps",
+            "api",
+            "tests",
+            "test",
+            "components",
+            "pages",
+            "index",
+            "service",
+            "services",
+            "utils",
+            "util",
+            "common",
+            "shared",
+            "base",
+            "core",
+            "config",
+            "configs",
+            "models",
+            "model",
+            "schemas",
+            "schema",
+            "handlers",
+            "controllers",
+            "main",
+            "init",
+            "view",
+            "views",
+            "lib",
+            "libs",
+        }
+        return {
+            token for token in re.split(r"[/\\._\-\s]+", value.casefold()) if len(token) > 2 and token not in stop_words
+        }
 
     async def calculate_coverage(self, project_id: str) -> QualityCoverageSummary:
         requirements = await self.requirement_repo.list_by_project(project_id)
@@ -266,7 +307,7 @@ class QualityIntelligenceService:
         changed_files: list[str],
         workspace_id: str | None = None,
     ) -> ImpactAnalysisResult:
-        files = list(changed_files)
+        files = sorted({str(path).replace("\\", "/").strip() for path in changed_files if str(path).strip()})
 
         # Auto-detect from git if workspace_id provided and files empty
         if not files and workspace_id:
@@ -276,70 +317,104 @@ class QualityIntelligenceService:
             except (SecurityException, FileNotFoundError):
                 # Unknown/unsafe workspace: fall back to an empty change set instead of guessing.
                 files = []
+        files = sorted({path.replace("\\", "/").strip() for path in files if path.strip()})
 
         test_cases = await self.test_case_repo.list_by_project(project_id)
         requirements = await self.requirement_repo.list_by_project(project_id)
         bindings = await self.binding_repo.list_by_project(project_id)
+        recorded_nodeids = await self.history_repo.list_project_nodeids(project_id, workspace_id)
 
         impacted_req_ids: set[str] = set()
         impacted_case_ids: set[str] = set()
         recommended_nodeids: set[str] = set()
         rationale: list[str] = []
 
-        # Domain keyword mapping heuristics
-        keywords: set[str] = set()
-        for f in files:
-            parts = f.lower().replace("_", "/").replace("-", "/").split("/")
-            for p in parts:
-                cleaned = p.replace(".py", "").replace(".ts", "").replace(".tsx", "").replace(".js", "")
-                if len(cleaned) > 2 and cleaned not in ("src", "app", "tests", "test", "components", "pages", "index"):
-                    keywords.add(cleaned)
+        # Keep one immutable token set per changed file so matching is stable regardless of
+        # repository iteration order. Only persisted bindings or executions can yield nodeids.
+        file_tokens = {file: self._impact_tokens(file) for file in files}
+        keywords = set().union(*file_tokens.values()) if file_tokens else set()
 
         rationale.append(
-            f"Analyzed {len(files)} changed files. Extracted domain components: {', '.join(keywords) or 'General'}"
+            f"Analyzed {len(files)} changed files. Extracted domain components: {', '.join(sorted(keywords)) or 'General'}"
         )
 
-        # Match against bindings
-        for b in bindings:
-            if any(k in b.file_path.lower() for k in keywords) or any(f in b.file_path for f in files):
-                impacted_case_ids.add(b.test_case_id)
-                recommended_nodeids.add(b.nodeid or b.file_path)
+        cases_by_id = {case.id: case for case in test_cases}
+        nodes_by_case: dict[str, set[str]] = {}
+        nodes_by_changed_file: dict[str, set[str]] = {file: set() for file in files}
 
-        # Match against test cases
+        for binding in bindings:
+            if binding.status not in {"ACTIVE", "VALIDATED"} or not binding.nodeid.strip():
+                continue
+            if workspace_id and binding.workspace_id != workspace_id:
+                continue
+            case = cases_by_id.get(binding.test_case_id)
+            if case is None:
+                continue
+            nodes_by_case.setdefault(case.id, set()).add(binding.nodeid)
+            binding_tokens = self._impact_tokens(binding.file_path)
+            for changed_file, tokens in file_tokens.items():
+                exact_path_match = (
+                    binding.file_path.replace("\\", "/").casefold() == changed_file.replace("\\", "/").casefold()
+                )
+                if exact_path_match or len(tokens & binding_tokens) >= 2:
+                    impacted_case_ids.add(case.id)
+                    if case.requirement_id:
+                        impacted_req_ids.add(case.requirement_id)
+                    recommended_nodeids.add(binding.nodeid)
+                    nodes_by_changed_file[changed_file].add(binding.nodeid)
+
+        # Execution history is also an authoritative source for real nodeids. Match changed
+        # test files directly, and associate other executions only through a matched case.
+        executions_by_case: dict[str, set[str]] = {}
+        for nodeid in recorded_nodeids:
+            test_file = nodeid.split("::", 1)[0]
+            for changed_file, tokens in file_tokens.items():
+                if test_file.replace("\\", "/").casefold() == changed_file.replace("\\", "/").casefold():
+                    nodes_by_changed_file[changed_file].add(nodeid)
+                    # A directly changed test file is an explicit execution-to-file mapping.
+                    executions_by_case.setdefault("", set()).add(nodeid)
+            for case_id, case_nodes in nodes_by_case.items():
+                if nodeid in case_nodes:
+                    executions_by_case.setdefault(case_id, set()).add(nodeid)
         for tc in test_cases:
-            matches_title = any(k in tc.title.lower() for k in keywords)
-            matches_tags = any(any(k in tag.lower() for k in keywords) for tag in (tc.tags or []))
-            if matches_title or matches_tags:
+            case_tokens = self._impact_tokens(tc.title) | {
+                token for tag in (tc.tags or []) for token in self._impact_tokens(tag)
+            }
+            matching_files = [file for file, tokens in file_tokens.items() if tokens & case_tokens]
+            if matching_files:
                 impacted_case_ids.add(tc.id)
                 if tc.requirement_id:
                     impacted_req_ids.add(tc.requirement_id)
-                # Formulate test nodeid heuristic
-                node_heuristic = (
-                    f"tests/test_{keywords.pop() if keywords else 'suite'}.py::{tc.title.lower().replace(' ', '_')}"
-                )
-                recommended_nodeids.add(node_heuristic)
+                recommended_nodeids.update(nodes_by_case.get(tc.id, set()))
+                recommended_nodeids.update(executions_by_case.get(tc.id, set()))
+                for changed_file in matching_files:
+                    nodes_by_changed_file[changed_file].update(nodes_by_case.get(tc.id, set()))
+                    nodes_by_changed_file[changed_file].update(executions_by_case.get(tc.id, set()))
+
+        recommended_nodeids.update(executions_by_case.get("", set()))
 
         # Match requirements
         for req in requirements:
-            if any(k in req.title.lower() or k in req.description.lower() for k in keywords):
+            if keywords & (self._impact_tokens(req.title) | self._impact_tokens(req.description)):
                 impacted_req_ids.add(req.id)
 
-        if not recommended_nodeids and test_cases:
-            # Fallback to high priority test cases
-            for tc in test_cases:
-                if tc.priority in ("P0", "P1"):
-                    recommended_nodeids.add(f"tests/test_regression.py::{tc.title.lower().replace(' ', '_')}")
-            rationale.append("No direct module match found; selected baseline P0/P1 regression test suite.")
-        else:
-            rationale.append(
-                f"Mapped {len(impacted_case_ids)} test cases and {len(impacted_req_ids)} requirements directly to changed code paths."
-            )
+        mapped_files = {changed_file for changed_file, nodes in nodes_by_changed_file.items() if nodes}
+        unmapped_files = sorted(set(files) - mapped_files)
+        confidence_score = round((len(mapped_files) / len(files)), 2) if files else 0.0
+        rationale.append(
+            f"Matched {len(impacted_case_ids)} test cases and {len(impacted_req_ids)} requirements by stable path/domain tokens; regression nodeids come from verified bindings or terminal execution records."
+        )
+        if not recommended_nodeids:
+            rationale.append("No executable regression nodeids could be verified from bindings or execution history.")
+        if unmapped_files:
+            rationale.append(f"No direct test mapping was found for {len(unmapped_files)} changed file(s).")
 
         return ImpactAnalysisResult(
             changed_files=files,
-            impacted_requirements=list(impacted_req_ids),
-            impacted_test_cases=list(impacted_case_ids),
+            unmapped_changed_files=unmapped_files,
+            impacted_requirements=sorted(impacted_req_ids),
+            impacted_test_cases=sorted(impacted_case_ids),
             recommended_regression_tests=sorted(list(recommended_nodeids)),
-            confidence_score=0.92 if len(files) > 0 else 0.70,
+            confidence_score=confidence_score,
             rationale=rationale,
         )

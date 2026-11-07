@@ -348,13 +348,15 @@ async def test_impact_analysis_and_regression_selector(client: AsyncClient):
         "/api/quality/impact-analysis",
         json={
             "project_id": project_id,
-            "changed_files": ["src/auth/service.py", "src/auth/tokens.py"],
+            "changed_files": ["src/auth/tokens.py", "src/auth/service.py"],
         },
     )
     assert impact_resp.status_code == 200
     impact = impact_resp.json()
     assert len(impact["changed_files"]) == 2
-    assert any("auth" in test.lower() for test in impact["recommended_regression_tests"])
+    assert impact["recommended_regression_tests"] == []
+    assert impact["unmapped_changed_files"] == ["src/auth/service.py", "src/auth/tokens.py"]
+    assert "No executable regression nodeids" in " ".join(impact["rationale"])
     assert len(impact["rationale"]) >= 1
 
 
@@ -404,6 +406,123 @@ async def test_impact_analysis_maps_automation_binding_to_nodeid(client: AsyncCl
     impact = impact_resp.json()
     assert impact["impacted_test_cases"] == [tc_id]
     assert impact["recommended_regression_tests"] == [nodeid]
+    assert impact["unmapped_changed_files"] == []
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_excludes_non_executable_and_other_workspace_bindings(client: AsyncClient):
+    project = (await client.post("/api/projects", json={"name": "Impact Scope Project"})).json()
+    project_id = project["id"]
+    case = (
+        await client.post(
+            "/api/test-cases",
+            json={"project_id": project_id, "title": "Auth Session", "priority": "P0", "tags": ["auth"]},
+        )
+    ).json()
+    second_case = (
+        await client.post(
+            "/api/test-cases",
+            json={"project_id": project_id, "title": "Auth Token", "priority": "P1", "tags": ["auth"]},
+        )
+    ).json()
+    for target_case, nodeid, status in (
+        (case, "tests/test_auth.py::test_active", "ACTIVE"),
+        (second_case, "tests/test_auth.py::test_disabled", "BROKEN"),
+    ):
+        response = await client.post(
+            f"/api/test-cases/{target_case['id']}/binding",
+            json={
+                "test_case_id": target_case["id"],
+                "workspace_id": project_id,
+                "nodeid": nodeid,
+                "file_path": "tests/test_auth.py",
+                "framework": "playwright_python",
+                "status": status,
+            },
+        )
+        assert response.status_code == 200
+
+    response = await client.post(
+        "/api/quality/impact-analysis",
+        json={"project_id": project_id, "workspace_id": project_id, "changed_files": ["src/auth/session.py"]},
+    )
+    assert response.status_code == 200
+    impact = response.json()
+    assert impact["recommended_regression_tests"] == ["tests/test_auth.py::test_active"]
+    assert impact["unmapped_changed_files"] == []
+
+    other_workspace = await client.post(
+        "/api/quality/impact-analysis",
+        json={"project_id": project_id, "workspace_id": "other_workspace", "changed_files": ["src/auth/session.py"]},
+    )
+    assert other_workspace.status_code == 200
+    assert other_workspace.json()["recommended_regression_tests"] == []
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_uses_real_terminal_execution_for_changed_test_file(client: AsyncClient, test_db_session):
+    project = (await client.post("/api/projects", json={"name": "Impact Execution Project"})).json()
+    project_id = project["id"]
+    nodeid = "tests/test_recorded_scope.py::test_exact_recorded_case"
+    run = RunORM(
+        id="run_impact_execution",
+        project_id=project_id,
+        workspace_id=project_id,
+        status="PASSED",
+        nodeids=[nodeid],
+    )
+    execution = ExecutionORM(
+        id="exec_impact_execution",
+        run_id=run.id,
+        nodeid=nodeid,
+        status="PASSED",
+    )
+    async with test_db_session() as session:
+        session.add_all([run, execution])
+        await session.commit()
+
+    response = await client.post(
+        "/api/quality/impact-analysis",
+        json={"project_id": project_id, "workspace_id": project_id, "changed_files": ["tests/test_recorded_scope.py"]},
+    )
+    assert response.status_code == 200
+    impact = response.json()
+    assert impact["recommended_regression_tests"] == [nodeid]
+    assert impact["unmapped_changed_files"] == []
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_does_not_match_generic_tokens_or_add_unrelated_priority_tests(client: AsyncClient):
+    project = (await client.post("/api/projects", json={"name": "Impact Generic Token Project"})).json()
+    project_id = project["id"]
+    case = (
+        await client.post(
+            "/api/test-cases",
+            json={"project_id": project_id, "title": "Service Health", "priority": "P0", "tags": ["service"]},
+        )
+    ).json()
+    binding = await client.post(
+        f"/api/test-cases/{case['id']}/binding",
+        json={
+            "test_case_id": case["id"],
+            "workspace_id": project_id,
+            "nodeid": "tests/test_service.py::test_health",
+            "file_path": "tests/test_service.py",
+            "framework": "playwright_python",
+            "status": "ACTIVE",
+        },
+    )
+    assert binding.status_code == 200
+
+    response = await client.post(
+        "/api/quality/impact-analysis",
+        json={"project_id": project_id, "changed_files": ["src/services/service.py"]},
+    )
+    assert response.status_code == 200
+    impact = response.json()
+    assert impact["recommended_regression_tests"] == []
+    assert impact["unmapped_changed_files"] == ["src/services/service.py"]
+    assert impact["confidence_score"] == 0.0
 
 
 @pytest.mark.asyncio

@@ -6423,6 +6423,8 @@ export interface components {
         ImpactAnalysisResult: {
             /** Changed Files */
             changed_files?: string[];
+            /** Unmapped Changed Files */
+            unmapped_changed_files?: string[];
             /** Impacted Requirements */
             impacted_requirements?: string[];
             /** Impacted Test Cases */

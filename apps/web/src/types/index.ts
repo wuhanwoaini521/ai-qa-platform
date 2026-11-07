@@ -1394,6 +1394,7 @@ export interface ImpactAnalysisRequest {
 
 export interface ImpactAnalysisResult {
   changed_files: string[];
+  unmapped_changed_files: string[];
   impacted_requirements: string[];
   impacted_test_cases: string[];
   recommended_regression_tests: string[];

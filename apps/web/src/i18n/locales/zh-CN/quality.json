@@ -93,6 +93,7 @@
   "impactTestCases": "受影响的测试用例（{{value}}）",
   "impactNoneIdentified": "未识别到",
   "impactRecommendedSuite": "推荐回归测试集（{{value}} 条用例）",
+  "impactUnmappedFiles": "有 {{value}} 个变更文件尚未关联到可验证的测试",
   "impactExecuteInRunner": "在运行器中执行",
   "releasesTitle": "发布流水线与门禁评估",
   "releasesHint": "确定性的发布门禁：要求满足通过率阈值、未自动化 P0 用例为 0，以及不稳定用例约束。",

@@ -2281,3 +2281,12 @@ git diff --check
 - **Review:** Independent scoped review found one issue: `partial` actions were eligible despite uncertain effects. Both backend eligibility and frontend conversion were tightened to `success` only; re-review found no P0/P1 blockers.
 - **State:** Existing dirty recorder/workspace edits and untracked run directories predate this work and remain preserved. No commit/push/deploy.
 - **Next:** Run an authorized local exploration against a safe fixture to verify blocked-history download, draft generation and manual execution; separately improve deterministic regression-scope selection as required by roadmap.
+
+## Deterministic regression impact selection (2026-11-07)
+
+- **Objective:** Make `/api/quality/impact-analysis` recommend only verifiable regression nodeids and report changed files with no test mapping.
+- **Implementation:** `QualityIntelligenceService` now uses stable normalized path/domain tokens, active/validated bindings scoped to the requested workspace, and nodeids from terminal execution history. It ignores generic tokens, requires two shared tokens for cross-file binding matches, and has no unrelated P0/P1 fallback. It no longer fabricates nodeids from test titles or consumes shared tokens during matching. Results include `unmapped_changed_files`; the Quality page displays that gap in English and Simplified Chinese. Confidence reflects the proportion of changed files mapped to an executable nodeid.
+- **Changed files:** `apps/api/app/services/quality_intelligence_service.py`, `apps/api/app/repositories/run_history_repo.py`, `packages/project-model/project_model/models.py`, `apps/api/tests/test_quality_and_releases.py`, `apps/web/src/pages/QualityPage.{tsx,css}`, `apps/web/src/types/index.ts`, OpenAPI JSON/types, and Quality locale JSON files.
+- **Verification:** `pytest apps/api/tests/test_quality_and_releases.py -q` — 19 passed; OpenAPI export `--check` passed; web TypeScript check and targeted ESLint passed; Ruff check/format passed; `git diff --check` passed.
+- **State:** Worktree was already carrying untracked historical `.ai-runs/` directories; they were preserved. Implementation is uncommitted. Base HEAD is `baf5333` on `main`; prior commit push remains unverified due the earlier GitHub network failure.
+- **Limitations:** Domain token overlap remains a deterministic heuristic and can miss semantic links with no shared naming/tags. Such files are surfaced as unmapped rather than assigned invented tests. No browser viewport review was run for the small Quality-page notice.
