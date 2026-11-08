@@ -2779,7 +2779,179 @@
   background: var(--c-accent-wash);
 }
 .workspace-shell .workspace-requirement-detail .flow-step-label { font-size: var(--fs-label); }
-.workspace-shell .workspace-requirement-detail .flow-step-action { color: var(--brand); }
+.workspace-shell .workspace-requirement-detail .flow-step-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-raised);
+  box-shadow: none;
+  color: var(--ink-soft);
+  font: 500 var(--fs-xs)/1 var(--font-sans);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.workspace-shell .workspace-requirement-detail .flow-step-action:hover:not(:disabled) {
+  border-color: var(--ui-focus);
+  background: var(--surface-hover);
+  color: var(--brand);
+  text-decoration: none;
+}
+.workspace-shell .workspace-requirement-detail .flow-step-action:disabled {
+  border-color: var(--line-soft);
+  background: var(--surface-inset);
+  color: var(--ink-faint);
+}
+.workspace-shell .workspace-requirement-detail .flow-step-action:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.workspace-shell .workspace-requirement-detail .lc-analysis-outcome {
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+}
+.workspace-shell .workspace-requirement-detail .lc-analysis-outcome h3,
+.workspace-shell .workspace-requirement-detail .lc-analysis-questions h3,
+.workspace-shell .workspace-requirement-detail .lc-analysis-risks h3 { margin: 0; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-outcome-hint { margin: 0; color: var(--ink-muted); font-size: var(--fs-xs); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-summary { margin: var(--sp-2) 0; color: var(--ink); font-size: var(--fs-body); line-height: 1.65; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin-top: var(--sp-3); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-metrics > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--surface-inset); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-metrics strong { color: var(--ink); font-size: var(--fs-title); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-metrics span { color: var(--ink-muted); font-size: var(--fs-xs); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-questions,
+.workspace-shell .workspace-requirement-detail .lc-analysis-risks { padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-question,
+.workspace-shell .workspace-requirement-detail .lc-analysis-risk { padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-question:last-child,
+.workspace-shell .workspace-requirement-detail .lc-analysis-risk:last-child { border-bottom: 0; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-question > p,
+.workspace-shell .workspace-requirement-detail .lc-analysis-risk > p { margin: 5px 0 0; line-height: 1.55; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-details { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-details > summary { color: var(--ink-soft); font-size: var(--fs-label); font-weight: 600; cursor: pointer; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-process { margin-top: var(--sp-2); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-process > .lc-toolbar { margin-top: var(--sp-2); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-decision { padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
+.workspace-shell .workspace-requirement-detail .lc-analysis-decision p { margin: 4px 0; }
+.workspace-shell .workspace-requirement-detail .lc-analysis-decision small { color: var(--ink-muted); }
+.workspace-shell .workspace-requirement-detail .lc-error > strong { display: block; margin-bottom: 4px; }
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card {
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  white-space: normal;
+}
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card strong,
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button strong { color: var(--ink); font-size: var(--fs-label); }
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card small,
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button small { color: var(--ink-muted); font-size: 10px; font-weight: 400; line-height: 1.35; }
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card.selected {
+  border-color: color-mix(in srgb, var(--ui-focus) 38%, var(--line));
+  background: var(--surface-raised);
+  box-shadow: var(--sh-raised-xs);
+}
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card.selected strong { color: var(--brand); }
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary .lc-tab-card:hover:not(.selected) { background: color-mix(in srgb, var(--surface-raised) 70%, transparent); }
+.workspace-shell .workspace-requirement-detail .lc-relation-chooser {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.workspace-shell .workspace-requirement-detail .lc-relation-chooser > div > strong { color: var(--ink); font-size: var(--fs-label); }
+.workspace-shell .workspace-requirement-detail .lc-relation-chooser > div > p { margin: 3px 0 0; color: var(--ink-muted); font-size: var(--fs-xs); }
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 9px 11px;
+  text-align: left;
+  white-space: normal;
+}
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button.selected { border-color: var(--ui-focus); background: color-mix(in srgb, var(--ui-focus) 10%, var(--surface-raised)); }
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button.selected strong { color: var(--brand); }
+.workspace-shell .workspace-requirement-detail .lc-tabs-primary button:focus-visible,
+.workspace-shell .workspace-requirement-detail .lc-relation-tabs button:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+}
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric {
+  display: grid;
+  grid-template-rows: auto auto minmax(2.6em, auto) 4px;
+  align-content: stretch;
+  justify-items: start;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  min-height: 108px;
+  padding: 11px 13px;
+  overflow: hidden;
+  text-align: left;
+  white-space: normal;
+}
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric > span:first-child {
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric > strong {
+  color: var(--ink);
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.1;
+}
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric > small {
+  align-self: start;
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.workspace-shell .workspace-requirement-detail .lc-coverage .lc-meter { align-self: end; width: 100%; }
+@media (max-width: 760px) {
+  .workspace-shell .workspace-requirement-detail .lc-tabs-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-shell .workspace-requirement-detail .lc-relation-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-shell .workspace-requirement-detail .lc-analysis-metrics { grid-template-columns: 1fr; }
+  .workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-shell .workspace-requirement-detail .lc-coverage .lc-metric { min-height: 100px; padding: 9px; }
+}
 .workspace-shell .workspace-mode-nav.is-inline .workspace-mode-tab:focus-visible,
 .workspace-shell .workspace-stage-nav > .workspace-view-tab:focus-visible,
 .workspace-shell .workspace-requirement-detail .lc-tabs :is(button, a):focus-visible {
