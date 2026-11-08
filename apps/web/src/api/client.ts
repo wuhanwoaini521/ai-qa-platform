@@ -792,6 +792,7 @@ export const api = {
     project_id?: string;
     workspace_id?: string;
     inputs?: Record<string, unknown>;
+    max_ai_calls?: number;
     idempotency_key?: string;
     plan_token?: string;
   }) =>
@@ -1074,6 +1075,11 @@ export const api = {
   // Test Designs
   getTestDesigns: (requirementId: string) =>
     request<TestDesign[]>(`/test-designs?requirement_id=${requirementId}`),
+  updateTestDesign: (id: string, data: Partial<TestDesignCreate> & { scenario_model?: TestDesign['scenario_model'] }) =>
+    request<TestDesign>(`/test-designs/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   createTestDesign: (data: TestDesignCreate) =>
     request<TestDesign>('/test-designs', {
       method: 'POST',

@@ -2,6 +2,16 @@
 
 > 规则：每个可验证里程碑完成后更新本文件。后续 Agent 必须先阅读本文件、核对 Git 状态与真实测试结果，再继续开发。
 
+## Current implementation: requirement-guided flow exploration (2026-11-08)
+
+- **Objective and authorized scope:** Allow a user to edit/reorder a requirement scenario's actions and expected outcomes, persist that reviewed plan separately from the AI analysis snapshot, and launch bounded web exploration with a Task Runtime node per planned action. Keep evidence attached to its execution node and never treat agent observations as a formal test verdict.
+- **Repository state:** Branch `main`, HEAD `6d4d9f8f3279ffdb3ac1dc5c1a28b6d7066fd960`. Many unrelated dirty and untracked files predate this implementation; preserve them. No files staged, committed, or pushed.
+- **Implementation:** `FlowCanvasPage.tsx` adds a plan editor, live canvas preview, save-to-`TestDesign.scenario_model`, and launch into the existing workspace browser with a recorder session. `RequirementLifecycleService.adopt_designs` now leaves existing design records intact so re-adoption cannot erase human edits. `build_plan` accepts a bounded guided plan for `EXPLORE_PAGE` and builds sequential `browser.agent` TaskSteps. `TaskBrowserExecutor` scopes each browser goal to the active planned action, limits per-node actions, records evidence/artifacts through existing `active_runtime_step`, and emits a `NEEDS_REVIEW` event when page evidence is insufficient. The runtime overview surfaces the guided-node event; formal PASS/FAIL remains tied to test execution.
+- **Independent review:** A separate read-only review found no blocking issue. It identified that a Task may complete while a node needs review; the implementation now marks that node event `NEEDS_REVIEW` and includes its summary in the runtime overview. This display has not yet been exercised in a browser.
+- **Verification actually run:** `rtk proxy pnpm --filter @ai-qa/web typecheck` PASS; same command with `lint` PASS; `rtk proxy python -m py_compile` on the four changed API modules PASS; JSON parsing of the four changed locale files PASS; `rtk git diff --check` PASS. No automated tests or browser interactions were run.
+- **Blocked / open:** `rtk proxy pnpm --filter @ai-qa/web build` failed before Vite build because sandbox process spawning returned `spawn EPERM` from esbuild. An initial `uv run` compile attempt could not access the external uv cache; direct Python bytecode compilation then passed. End-to-end behavior, recorder-session continuity, task restart/resume, and node evidence display remain unverified.
+- **Next actions:** Review the final diff and, when permitted by the execution environment, run a focused Task Runtime/API test and browser acceptance against the existing app without managing the user's server. Then update this handoff with observed results. Do not stage unrelated work.
+
 ## Current follow-up: workspace run results cleanup (2026-11-06)
 
 - **Objective and scope:** Reduce duplicated status, navigation, and run-context content on the Workspace results page while keeping lifecycle navigation, evidence, failure repair, and active-run controls available. Apply the existing self-ui-style soft raised shadow tokens.

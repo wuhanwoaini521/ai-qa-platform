@@ -6,6 +6,7 @@ interface FlowCanvasProps {
   scenario: ScenarioLike;
   criteria: CriterionLike[];
   sutBaseUrl?: string | null;
+  planned?: boolean;
 }
 
 const KIND_LABEL: Record<FlowNode['kind'], string> = {
@@ -15,7 +16,7 @@ const KIND_LABEL: Record<FlowNode['kind'], string> = {
   assert: 'kindAssert',
 };
 
-export const FlowCanvas: React.FC<FlowCanvasProps> = ({ scenario, criteria, sutBaseUrl }) => {
+export const FlowCanvas: React.FC<FlowCanvasProps> = ({ scenario, criteria, sutBaseUrl, planned = false }) => {
   const { t } = useTranslation('flowCanvas');
   const layout: FlowLayout = buildScenarioFlow(scenario, criteria);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -46,7 +47,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ scenario, criteria, sutB
         <span className="flow-canvas-chip">{t('chipActions', { count: scenario.actions.length })}</span>
         <span className="flow-canvas-chip">{t('chipOutcomes', { count: outcomes })}</span>
         {sutBaseUrl && <span className="flow-canvas-chip is-muted">{sutBaseUrl}</span>}
-        <span className="flow-canvas-hint">{t('readOnlyHint')}</span>
+        <span className="flow-canvas-hint">{t(planned ? 'planCanvasHint' : 'readOnlyHint')}</span>
       </header>
       <div ref={viewportRef} className="flow-canvas-viewport" tabIndex={0} role="region" aria-label={t('canvasScrollHint')}>
         <div

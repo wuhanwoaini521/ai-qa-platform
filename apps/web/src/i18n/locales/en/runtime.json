@@ -8,6 +8,7 @@
   "resuming": "Refreshing the plan",
   "waitingApproval": "Waiting approval",
   "completed": "Completed",
+  "needs_review": "Needs review",
   "failed": "Failed",
   "passed": "Passed",
   "success": "Succeeded",

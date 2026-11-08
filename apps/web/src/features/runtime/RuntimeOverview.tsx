@@ -32,7 +32,7 @@ export function RuntimeOverview({
   const actionLifecycle = snapshot.events.filter((event) => ['browser.action_started', 'browser.action_completed', 'browser.action_blocked'].includes(event.type));
   const lastActionEvent = actionLifecycle[actionLifecycle.length - 1];
   const agentAction = lastActionEvent?.type === 'browser.action_started' ? lastActionEvent : undefined;
-  const agentResult = [...snapshot.events].reverse().find((event) => ['browser.action_completed', 'browser.action_blocked'].includes(event.type));
+  const agentResult = [...snapshot.events].reverse().find((event) => ['browser.action_completed', 'browser.action_blocked', 'browser.guided_step_finished'].includes(event.type));
   const summaryLines = [
     facts.counts.completed > 0 && facts.counts.failed > 0,
     snapshot.status === 'BLOCKED' && blocker?.failure_type === 'AI_OUTPUT_INVALID',

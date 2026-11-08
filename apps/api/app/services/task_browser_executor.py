@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import replace
 from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -803,6 +804,16 @@ class TaskBrowserExecutor:
                 failure_type="BROWSER_STRATEGY_INVALID",
                 details={"strategy": strategy},
             )
+        guided_step = self.context.input(task, "guided_step", None)
+        guided_step = guided_step if isinstance(guided_step, dict) else None
+        step_goal = ""
+        if guided_step:
+            step_goal = str(guided_step.get("action") or guided_step.get("title") or "").strip()
+            expected = guided_step.get("expected_outcomes")
+            if isinstance(expected, list) and expected:
+                step_goal += ". Check the page for these expected outcomes: " + "; ".join(
+                    str(value).strip()[:300] for value in expected[:20] if str(value).strip()
+                )
 
         from app.container import recorder_service
         from app.services.recorder_service import RecorderSessionCreate
@@ -810,12 +821,18 @@ class TaskBrowserExecutor:
         task, _ = await self.context.load_task(task.id)
         if task is None:
             raise TaskBlocked("Browser task no longer exists.")
+        if guided_step:
+            task = replace(task, goal=step_goal or task.goal, inputs={**task.inputs, "guided_step": guided_step})
         persisted = (task.context or {}).get("browser_agent") or {}
         state = {
             "strategy": strategy,
             "current_url": persisted.get("current_url") or SensitiveRedactor.redact_url(requested_url),
             "subgoals": persisted.get("subgoals") or [],
-            "current_subgoal": persisted.get("current_subgoal") or task.goal[:300],
+            "current_subgoal": (
+                str(guided_step.get("action") or task.goal)[:300]
+                if guided_step
+                else persisted.get("current_subgoal") or task.goal[:300]
+            ),
             "current_subgoal_index": int(persisted.get("current_subgoal_index") or 0),
             "history": list(persisted.get("history") or [])[-BROWSER_HISTORY_WINDOW:],
             "history_archive": list(persisted.get("history_archive") or [])[-BROWSER_HISTORY_MAX_CHUNKS:],
@@ -935,6 +952,11 @@ class TaskBrowserExecutor:
                 int(self.context.input(task, "max_browser_actions", browser_policy.max_actions)),
             ),
         )
+        max_actions_per_guided_step = max(
+            1,
+            min(8, int(self.context.input(task, "max_actions_per_guided_step", 4))),
+        )
+        guided_step_action_start = int(state["metrics"].get("browser_actions", 0))
         max_recoveries = max(0, min(5, int(self.context.input(task, "max_recovery_attempts", 2))))
         criteria = self.context.input(task, "observable_text_criteria", [])
         criteria = [str(value)[:200] for value in criteria[:10]] if isinstance(criteria, list) else []
@@ -982,8 +1004,21 @@ class TaskBrowserExecutor:
                         metadata={"url": latest_observation["url"], "state_hash": latest_observation["state_hash"]},
                     )
 
-            while int(state["metrics"].get("browser_actions", 0)) < max_actions:
+            while (
+                int(state["metrics"].get("browser_actions", 0)) < max_actions
+                and (
+                    not guided_step
+                    or int(state["metrics"].get("browser_actions", 0)) - guided_step_action_start
+                    < max_actions_per_guided_step
+                )
+            ):
                 task, _ = await self.context.load_task(task.id)
+                if task and guided_step:
+                    task = replace(
+                        task,
+                        goal=step_goal or task.goal,
+                        inputs={**task.inputs, "guided_step": guided_step},
+                    )
                 if not task or task.status == TaskStatus.CANCELLED.value:
                     raise TaskBlocked("浏览任务已取消。", failure_type="ACTION_FAILED")
                 previous_url = str(latest_observation.get("url") or "")
@@ -2444,17 +2479,26 @@ class TaskBrowserExecutor:
                 )
             state["stop_reason"] = stop_reason
             state["metrics"]["goal_completion"] = bool(goal_completed)
+            guided_event_status = "COMPLETED" if goal_completed else "NEEDS_REVIEW"
             await self.context.persist_browser_agent_state(
                 task.id,
                 state,
-                title="浏览目标已验证" if goal_completed else "浏览 Agent 暂停并交由人工检查",
+                title=("流程节点已执行，等待人工复核" if guided_step and not goal_completed else "浏览目标已验证")
+                if goal_completed or guided_step
+                else "浏览 Agent 暂停并交由人工检查",
                 summary=(
+                    f"流程节点“{guided_step.get('title') or guided_step.get('id')}”已尝试；页面目标证据"
+                    f"{'已观察到' if goal_completed else '尚未充分，需人工复核'}。当前 URL：{state['current_url']}"
+                    if guided_step
+                    else
                     f"目标已由页面证据确认；当前 URL：{state['current_url']}"
                     if goal_completed
                     else f"停止原因：{stop_reason}；当前 URL：{state['current_url']}"
                 ),
-                status="COMPLETED" if goal_completed else "BLOCKED",
-                event_type="browser.goal_completed" if goal_completed else "browser.goal_blocked",
+                status=guided_event_status if guided_step else "COMPLETED" if goal_completed else "BLOCKED",
+                event_type=("browser.guided_step_finished" if guided_step else "browser.goal_completed")
+                if goal_completed or guided_step
+                else "browser.goal_blocked",
             )
             final_haystack = " ".join(
                 [
@@ -2559,6 +2603,15 @@ class TaskBrowserExecutor:
                 "application/json",
             )
             await self.context.persist_browser_agent_artifact(task.id, history_artifact)
+            if guided_step:
+                return {
+                    "guided_step_id": guided_step.get("id"),
+                    "guided_step_status": "observed" if goal_completed else "needs_review",
+                    "goal_evidence_observed": bool(goal_completed),
+                    "stop_reason": stop_reason,
+                    "current_url": SensitiveRedactor.redact_url(str(state["current_url"] or "")),
+                    "expected_outcomes": guided_step.get("expected_outcomes", []),
+                }
             if not goal_completed:
                 failure_type = (
                     stop_reason

@@ -8,6 +8,7 @@
   "resuming": "正在重新读取计划",
   "waitingApproval": "等待审批",
   "completed": "已完成",
+  "needs_review": "待人工复核",
   "failed": "失败",
   "passed": "通过",
   "success": "成功",

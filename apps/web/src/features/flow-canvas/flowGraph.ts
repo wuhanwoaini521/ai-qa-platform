@@ -1,9 +1,9 @@
 /**
- * Pure layout model for the read-only flow canvas.
+ * Pure layout model for the requirement and editable plan canvas.
  *
  * The canvas visualises existing requirement data (criteria → scenario → actions → expected
- * outcomes). It never executes anything and never writes: it is a view over `RequirementDocument`,
- * so a later editable canvas can compile the same node list into Recorder steps.
+ * outcomes). Layout stays independent from editing and execution; the plan editor persists its
+ * separate `TestDesign` snapshot and Task Runtime compiles that snapshot at launch.
  */
 
 export type FlowNodeKind = 'criterion' | 'scenario' | 'action' | 'assert';
@@ -55,7 +55,7 @@ export interface CriterionLike {
 const COLUMN_X = [40, 320, 620, 940] as const;
 const NODE_WIDTH = [210, 240, 270, 260] as const;
 const GAP_Y = 24;
-const NODE_HEIGHT = 64;
+const NODE_HEIGHT = 92;
 
 function clip(text: string, limit: number): string {
   const clean = text.trim().replace(/\s+/g, ' ');

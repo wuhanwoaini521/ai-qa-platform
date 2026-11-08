@@ -582,8 +582,8 @@ class RequirementLifecycleService:
             for scenario in document.analysis.scenarios:
                 found = next((item for item in existing if (item.scenario_model or {}).get("id") == scenario.id), None)
                 if found:
-                    found.scenario_model = scenario.model_dump(mode="json")
-                    found.description, found.title = scenario.intent, scenario.title
+                    # Once a scenario has a lifecycle record, it may contain deliberate human
+                    # edits. Re-adopting the immutable analysis snapshot must never overwrite them.
                     item = TestDesignService(repo, repositories.requirements)._to_dto(found)
                 else:
                     item = await TestDesignService(repo, repositories.requirements).create_test_design(

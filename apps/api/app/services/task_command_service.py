@@ -394,7 +394,7 @@ class TaskCommandService:
                 "_goal_request_inputs_hash": goal_request_inputs_hash,
             }
         else:
-            plan = build_plan(data.type)
+            plan = build_plan(data.type, data.inputs)
         if len(plan) > data.max_steps:
             raise ValueError(f"Task plan has {len(plan)} steps, exceeding max_steps={data.max_steps}")
         steps = [

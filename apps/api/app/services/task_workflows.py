@@ -5,7 +5,7 @@ import re
 from project_model.task_models import TaskStepSpec, TaskType
 
 
-def build_plan(task_type: TaskType) -> list[TaskStepSpec]:
+def build_plan(task_type: TaskType, inputs: dict | None = None) -> list[TaskStepSpec]:
     """Build a bounded DAG from registered tools; no user-provided tool names are accepted."""
     templates: dict[TaskType, list[tuple[str, str, str, tuple[str, ...], dict]]] = {
         TaskType.ANALYZE_REQUIREMENT: [
@@ -98,6 +98,35 @@ def build_plan(task_type: TaskType) -> list[TaskStepSpec]:
     if task_type == TaskType.WORKFLOW_EXECUTION:
         raise ValueError("Workflow execution plans must be compiled from a published definition.")
     steps = templates[task_type]
+    guided_plan = (inputs or {}).get("guided_plan") if task_type == TaskType.EXPLORE_PAGE else None
+    if guided_plan is not None:
+        plan_steps = guided_plan.get("steps") if isinstance(guided_plan, dict) else None
+        if not isinstance(plan_steps, list) or not 1 <= len(plan_steps) <= 24:
+            raise ValueError("guided_plan.steps must contain between 1 and 24 planned actions")
+        expected_outcomes = guided_plan.get("expected_outcomes", [])
+        if not isinstance(expected_outcomes, list) or len(expected_outcomes) > 20:
+            raise ValueError("guided_plan.expected_outcomes must contain at most 20 items")
+        compiled = []
+        prior_key: str | None = None
+        for index, item in enumerate(plan_steps):
+            if not isinstance(item, dict):
+                raise ValueError("Each guided plan step must be an object")
+            step_id = str(item.get("id") or f"step-{index + 1}")[:64]
+            title = str(item.get("title") or f"步骤 {index + 1}").strip()[:120]
+            action = str(item.get("action") or "").strip()[:500]
+            if not action:
+                raise ValueError(f"Guided plan step {index + 1} requires an action")
+            key = f"guided_{index + 1:02d}"
+            node_inputs = {"guided_step": {"id": step_id, "title": title, "action": action}}
+            if index == len(plan_steps) - 1:
+                node_inputs["guided_step"]["expected_outcomes"] = [
+                    str(value).strip()[:500] for value in expected_outcomes if str(value).strip()
+                ]
+            compiled.append(
+                (key, title, "browser.agent", (prior_key,) if prior_key else (), node_inputs)
+            )
+            prior_key = key
+        steps = compiled
     return [
         TaskStepSpec(
             key=key,
