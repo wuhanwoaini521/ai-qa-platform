@@ -6607,6 +6607,61 @@ grid-auto-rows: 0;
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table td { color: var(--dashboard-ink-soft); border-color: var(--dashboard-line-soft); font-size: var(--dashboard-type-body); }
 .app-frame.is-dashboard-route .dashboard-recent-runs .data-table tbody tr:hover td { background: var(--dashboard-hover); }
 .app-frame.is-dashboard-route .dashboard-run-link { color: var(--dashboard-blue); }
+.app-frame.is-dashboard-route .dashboard-recent-runs .status-pill-plain {
+  min-height: 28px;
+  padding: 4px 10px;
+  color: var(--dashboard-ink);
+  background: color-mix(in srgb, var(--dashboard-mint) 15%, var(--dashboard-surface));
+  border: 1px solid color-mix(in srgb, var(--dashboard-mint) 38%, var(--dashboard-line));
+  border-radius: 999px;
+  font-weight: 600;
+}
+.app-frame.is-dashboard-route .dashboard-recent-runs .status-pill-plain:has(.status-dot.is-failed),
+.app-frame.is-dashboard-route .dashboard-recent-runs .status-pill-plain:has(.status-dot.is-error) {
+  background: color-mix(in srgb, var(--dashboard-red) 12%, var(--dashboard-surface));
+  border-color: color-mix(in srgb, var(--dashboard-red) 34%, var(--dashboard-line));
+}
+.app-frame.is-dashboard-route .dashboard-recent-runs .dashboard-run-link {
+  min-height: 28px;
+  padding: 4px 9px;
+  color: var(--dashboard-blue);
+  background: color-mix(in srgb, var(--dashboard-blue) 10%, var(--dashboard-surface));
+  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 24%, var(--dashboard-line));
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.app-frame.is-dashboard-route .dashboard-journey-run-meta .dashboard-run-link {
+  min-height: 32px;
+  padding: 5px 12px;
+  background: color-mix(in srgb, var(--dashboard-blue) 11%, var(--dashboard-surface));
+  border-color: color-mix(in srgb, var(--dashboard-blue) 28%, var(--dashboard-line));
+  border-radius: 999px;
+  font-size: var(--dashboard-type-body);
+  font-weight: 650;
+  text-decoration: none;
+}
+.app-frame.is-dashboard-route .dashboard-journey-heading code {
+  width: fit-content;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--dashboard-blue) 7%, var(--dashboard-surface));
+  border: 1px solid var(--dashboard-line);
+  border-radius: 6px;
+}
+.app-frame.is-dashboard-route .dashboard-trend-body {
+  padding: var(--sp-3) var(--sp-4);
+  background: radial-gradient(ellipse at 52% 100%, color-mix(in srgb, var(--dashboard-blue) 7%, transparent), transparent 70%);
+}
+.app-frame.is-dashboard-route .trend-chart-grid { stroke: color-mix(in srgb, var(--dashboard-blue) 15%, var(--dashboard-line)); }
+.app-frame.is-dashboard-route .trend-chart-area { fill: color-mix(in srgb, var(--dashboard-blue) 14%, transparent); }
+.app-frame.is-dashboard-route .trend-chart-line { stroke: var(--dashboard-blue); stroke-width: 2.6; filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--dashboard-blue) 25%, transparent)); animation: dashboard-trend-draw 1.1s cubic-bezier(.2,.7,.2,1) both; }
+.app-frame.is-dashboard-route .trend-chart-cap { r: 4px; stroke-width: 3; animation: dashboard-trend-cap-in 450ms 750ms ease-out both; }
+@keyframes dashboard-trend-draw { from { stroke-dasharray: 1200; stroke-dashoffset: 1200; } to { stroke-dasharray: 1200; stroke-dashoffset: 0; } }
+@keyframes dashboard-trend-cap-in { from { opacity: 0; r: 1px; } to { opacity: 1; r: 4px; } }
+@media (prefers-reduced-motion: reduce) {
+  .app-frame.is-dashboard-route .trend-chart-line,
+  .app-frame.is-dashboard-route .trend-chart-cap { animation: none; }
+}
 .app-frame.is-dashboard-route .dashboard-trend { border: 0; }
 .app-frame.is-dashboard-route .dashboard-trend-body { min-height: 104px; padding: var(--sp-2) var(--sp-4); color: var(--dashboard-ink-muted); }
 .app-frame.is-dashboard-route .dashboard-trend .chart-insufficient { color: var(--dashboard-ink-muted); }
