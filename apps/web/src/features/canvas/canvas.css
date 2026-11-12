@@ -97,8 +97,8 @@
   height: 100%;
   overflow: hidden;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 10px 14px;
   border: 1px solid var(--line-strong);
   border-left: 3px solid var(--line-strong);
   border-radius: 10px;
@@ -130,7 +130,7 @@
 .lw-node-title {
   overflow: hidden;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

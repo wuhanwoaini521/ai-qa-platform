@@ -46,8 +46,8 @@ function TraceNodeCard({ data, selected }: NodeProps<Node<TreeCardData>>) {
     <div className={`let-node is-${data.tone}${selected ? ' is-selected' : ''}`} data-trace-node={node.id} data-trace-kind={node.type}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <div className="let-node-head">
-        <span className="let-node-kind">{node.type}</span>
-        <span className={`let-node-state is-${data.state}`}>{data.state}</span>
+        <span className="let-node-kind">{t(`executionTree.kinds.${node.type}`, { defaultValue: node.type })}</span>
+        <span className={`let-node-state is-${data.state}`}>{t(`executionTree.states.${data.state}`, { defaultValue: data.state })}</span>
       </div>
       <strong className="let-node-title">{node.label}</strong>
       <div className="let-node-meta">
@@ -441,13 +441,13 @@ function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialT
               maxZoom={1.6}
               proOptions={{ hideAttribution: false }}
             >
-              <Background gap={22} size={1} color="#20262f" />
+              <Background gap={22} size={1} color="var(--line-strong)" />
               <Controls showInteractive={false} />
               <MiniMap
                 pannable
                 zoomable
                 position="bottom-left"
-                maskColor="rgba(8, 11, 15, 0.75)"
+                maskColor="color-mix(in srgb, var(--surface-frame) 76%, transparent)"
                 nodeColor={(node) => toneColor((node.data as TreeCardData)?.tone)}
               />
             </ReactFlow>
@@ -478,11 +478,11 @@ function TreeSurface({ projectId, initialTaskId }: { projectId: string; initialT
 }
 
 function toneColor(tone: TreeCardData['tone'] | undefined): string {
-  if (tone === 'ok') return '#2f7d4f';
-  if (tone === 'active') return '#2563eb';
-  if (tone === 'attention') return '#a16207';
-  if (tone === 'bad') return '#9f1239';
-  return '#374151';
+  if (tone === 'ok') return 'var(--accent-green)';
+  if (tone === 'active') return 'var(--accent-blue)';
+  if (tone === 'attention') return 'var(--accent-amber)';
+  if (tone === 'bad') return 'var(--accent-red)';
+  return 'var(--ink-muted)';
 }
 
 export function ExecutionTreePanel({ projectId, taskId: initialTaskId }: { projectId: string; taskId?: string | null }) {

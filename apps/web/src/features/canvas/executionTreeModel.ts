@@ -7,10 +7,10 @@
  */
 import type { ExecutionTrace, TraceNode, TraceNodeType } from '../../types/executionTrace';
 
-export const TREE_COLUMN_WIDTH = 236;
-export const TREE_COLUMN_GAP = 76;
-export const TREE_ROW_HEIGHT = 104;
-export const TREE_NODE_HEIGHT = 84;
+export const TREE_COLUMN_WIDTH = 288;
+export const TREE_COLUMN_GAP = 64;
+export const TREE_ROW_HEIGHT = 156;
+export const TREE_NODE_HEIGHT = 132;
 /** Stacked cards take a fixed width so a long label cannot push the list past the screen edge. */
 export const TREE_STACK_WIDTH = 300;
 

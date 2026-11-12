@@ -326,15 +326,16 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   width: 100%;
   height: 100%;
-  padding: 8px 10px;
+  padding: 12px 14px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-left-width: 3px;
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface-raised);
+  box-shadow: var(--sh-raised-xs);
   font-family: var(--font-sans);
 }
 
@@ -355,28 +356,53 @@
   border-left-color: var(--accent-blue);
 }
 
-.wfe-node-key {
-  font-family: var(--font-mono);
+.wfe-node-kind {
+  color: var(--ink-muted);
   font-size: 11px;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .wfe-node-title {
-  font-size: 11px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wfe-node-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wfe-node-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--ink-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .wfe-node-risk {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--ink-muted);
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 700;
 }
+
+.wfe-node-risk.is-write { background: var(--accent-red-soft); color: var(--accent-red); }
+.wfe-node-risk.is-approval { background: var(--accent-amber-soft); color: var(--accent-amber); }
+.wfe-node-risk.is-execute { background: var(--accent-blue-soft); color: var(--accent-blue); }
 
 .wfe-inspector label {
   display: flex;

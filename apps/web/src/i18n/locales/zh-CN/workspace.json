@@ -857,7 +857,8 @@
     "done": "已完成",
     "running": "运行中",
     "waiting": "等待",
-    "failed": "失败"
+    "failed": "失败",
+    "unknown": "未知"
   },
   "kinds": {
     "task": "任务",
@@ -916,6 +917,12 @@
   "editor": "编辑工作流"
 },
   "workflowEditor": {
+    "riskLabels": {
+      "read": "读取",
+      "write": "写入",
+      "approval": "需审批",
+      "execute": "执行"
+    },
     "unsaved": "有未保存的更改",
     "mobilePanels": "工作流编辑面板",
     "panels": {

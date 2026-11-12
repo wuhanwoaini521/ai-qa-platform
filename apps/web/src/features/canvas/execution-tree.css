@@ -1,23 +1,18 @@
-/*
- * Dark execution-tree surface.
- *
- * Scoped to the tree: the rest of the platform keeps its light design system. The dark palette
- * exists so a trajectory of running and failed activities reads at a glance in a dense graph.
- */
+/* Execution-tree layout follows the same semantic surfaces as the workflow and editor canvases. */
 .let-panel {
-  --let-bg: #0b0f14;
-  --let-surface: #141a22;
-  --let-surface-raised: #1a212b;
-  --let-line: #232c39;
-  --let-line-strong: #334155;
-  --let-ink: #e6edf3;
-  --let-ink-soft: #b6c2d1;
-  --let-ink-muted: #8695a8;
-  --let-blue: #3b82f6;
-  --let-ok: #3fb950;
-  --let-active: #58a6ff;
-  --let-attention: #d29922;
-  --let-bad: #f85149;
+  --let-bg: var(--surface-frame);
+  --let-surface: var(--surface-raised);
+  --let-surface-raised: var(--surface-inset);
+  --let-line: var(--line);
+  --let-line-strong: var(--line-strong);
+  --let-ink: var(--ink);
+  --let-ink-soft: var(--ink-soft);
+  --let-ink-muted: var(--ink-muted);
+  --let-blue: var(--brand);
+  --let-ok: var(--accent-green);
+  --let-active: var(--accent-blue);
+  --let-attention: var(--accent-amber);
+  --let-bad: var(--accent-red);
 
   display: flex;
   flex-direction: column;
@@ -25,6 +20,7 @@
   height: 100%;
   background: var(--let-bg);
   color: var(--let-ink);
+  border: 1px solid var(--line);
   border-radius: var(--r-card);
   overflow: hidden;
   font-family: var(--font-sans);
@@ -81,9 +77,9 @@
   padding: 2px 8px;
   font-size: 11px;
   color: var(--let-active);
-  border: 1px solid rgba(88, 166, 255, 0.4);
+  border: 1px solid color-mix(in srgb, var(--let-active) 40%, transparent);
   border-radius: 999px;
-  background: rgba(88, 166, 255, 0.08);
+  background: var(--accent-blue-soft);
 }
 
 .let-live::before {
@@ -104,6 +100,7 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 440px;
+  background: var(--surface-inset);
 }
 
 .let-state {
@@ -134,24 +131,25 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: 8px 10px 8px 12px;
+  padding: 10px 14px;
   font-family: var(--font-sans);
   background: var(--let-surface);
   border: 1px solid var(--let-line);
   border-left: 3px solid var(--let-line-strong);
-  border-radius: 8px;
+  border-radius: 10px;
+  box-shadow: var(--sh-raised-xs);
   overflow: hidden;
   cursor: pointer;
 }
 
 .let-node.is-ok { border-left-color: var(--let-ok); }
-.let-node.is-active { border-left-color: var(--let-active); box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.35); }
+.let-node.is-active { border-left-color: var(--let-active); box-shadow: 0 0 0 1px color-mix(in srgb, var(--let-active) 35%, transparent); }
 .let-node.is-attention { border-left-color: var(--let-attention); }
-.let-node.is-bad { border-left-color: var(--let-bad); border-color: rgba(248, 81, 73, 0.5); }
+.let-node.is-bad { border-left-color: var(--let-bad); border-color: color-mix(in srgb, var(--let-bad) 50%, var(--let-line)); }
 .let-node.is-selected { border-color: var(--let-blue); box-shadow: 0 0 0 1px var(--let-blue); }
 
 .let-node-head {
@@ -163,28 +161,30 @@
 
 .let-node-kind {
   font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--let-ink-muted);
 }
 
 .let-node-state {
-  font-size: 11px;
-  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--let-line-strong);
   color: var(--let-ink-soft);
   white-space: nowrap;
 }
 
-.let-node-state.is-done { color: var(--let-ok); border-color: rgba(63, 185, 80, 0.45); }
-.let-node-state.is-running { color: var(--let-active); border-color: rgba(88, 166, 255, 0.45); }
-.let-node-state.is-waiting { color: var(--let-attention); border-color: rgba(210, 153, 34, 0.45); }
-.let-node-state.is-failed { color: var(--let-bad); border-color: rgba(248, 81, 73, 0.45); }
+.let-node-state.is-done { color: var(--let-ok); border-color: color-mix(in srgb, var(--let-ok) 45%, var(--let-line)); background: var(--accent-green-soft); }
+.let-node-state.is-running { color: var(--let-active); border-color: color-mix(in srgb, var(--let-active) 45%, var(--let-line)); background: var(--accent-blue-soft); }
+.let-node-state.is-waiting { color: var(--let-attention); border-color: color-mix(in srgb, var(--let-attention) 45%, var(--let-line)); background: var(--accent-amber-soft); }
+.let-node-state.is-failed { color: var(--let-bad); border-color: color-mix(in srgb, var(--let-bad) 45%, var(--let-line)); background: var(--accent-red-soft); }
 
 .let-node-title {
-  font-size: 12.5px;
-  line-height: 1.25;
+  font-size: 14px;
+  line-height: 1.3;
   color: var(--let-ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -195,8 +195,8 @@
 .let-node-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  font-size: 10.5px;
+  gap: 8px;
+  font-size: 11px;
   color: var(--let-ink-muted);
 }
 
@@ -205,7 +205,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 130px;
+  max-width: 160px;
 }
 
 .let-node-status {
@@ -218,8 +218,8 @@
   position: absolute;
   right: 4px;
   bottom: 4px;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   font-size: 12px;
   line-height: 1;
@@ -361,8 +361,8 @@
   padding: 8px;
   font-size: 11px;
   color: var(--let-bad);
-  background: rgba(248, 81, 73, 0.08);
-  border: 1px solid rgba(248, 81, 73, 0.35);
+  background: var(--accent-red-soft);
+  border: 1px solid color-mix(in srgb, var(--let-bad) 35%, var(--let-line));
   border-radius: 6px;
 }
 
@@ -458,6 +458,6 @@
   padding: 0 5px;
   font-size: 11px;
   color: var(--let-attention);
-  border: 1px solid rgba(210, 153, 34, 0.4);
+  border: 1px solid color-mix(in srgb, var(--let-attention) 40%, var(--let-line));
   border-radius: 4px;
 }

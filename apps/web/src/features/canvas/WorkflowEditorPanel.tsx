@@ -58,18 +58,23 @@ import './workflow-editor.css';
 
 interface EditorNodeData extends Record<string, unknown> {
   label: string;
+  title: string;
   kind: string;
   risk: ReturnType<typeof riskLabel>;
   selected: boolean;
 }
 
 function EditorNode({ data }: NodeProps<Node<EditorNodeData>>) {
+  const { t } = useTranslation('workspace');
   return (
     <div className={`wfe-node is-${data.risk}${data.selected ? ' is-selected' : ''}`} data-node-key={data.label}>
       <Handle type="target" position={Position.Left} />
-      <span className="wfe-node-key">{data.label}</span>
-      <span className="wfe-node-title">{data.kind}</span>
-      <span className={`wfe-node-risk is-${data.risk}`}>{data.risk}</span>
+      <span className="wfe-node-kind">{t(`workflowEditor.kinds.${data.kind}`, { defaultValue: data.kind })}</span>
+      <strong className="wfe-node-title">{data.title || data.label}</strong>
+      <span className="wfe-node-meta">
+        <span className="wfe-node-key">{data.label}</span>
+        <span className={`wfe-node-risk is-${data.risk}`}>{t(`workflowEditor.riskLabels.${data.risk}`)}</span>
+      </span>
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -116,12 +121,13 @@ function EditorSurface({
         position: node.position ?? { x: 40 + index * 24, y: 40 + index * 24 },
         data: {
           label: node.key,
+          title: node.title?.trim() || catalogue.find((entry) => entry.kind === node.kind)?.title || node.kind,
           kind: node.kind,
           risk: riskLabel(riskOf(node.kind)),
           selected: node.key === selectedKey,
         },
-        initialWidth: 236,
-        initialHeight: 78,
+        initialWidth: 268,
+        initialHeight: 104,
       })),
     [state.nodes, selectedKey, catalogue],
   );

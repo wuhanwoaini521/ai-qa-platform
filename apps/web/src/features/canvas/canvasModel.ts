@@ -7,10 +7,10 @@ import type {
 } from '../../types/workflowCanvas';
 
 /** Column per pipeline stage, one row per record: deterministic, so a reload keeps the same picture. */
-export const CANVAS_COLUMN_WIDTH = 264;
-export const CANVAS_COLUMN_GAP = 56;
-export const CANVAS_ROW_HEIGHT = 104;
-export const CANVAS_HEADER_HEIGHT = 64;
+export const CANVAS_COLUMN_WIDTH = 296;
+export const CANVAS_COLUMN_GAP = 64;
+export const CANVAS_ROW_HEIGHT = 132;
+export const CANVAS_HEADER_HEIGHT = 72;
 
 export type NodeTone = 'ok' | 'active' | 'attention' | 'bad' | 'idle';
 
@@ -109,7 +109,7 @@ export function flowNodes(
       },
       draggable: false,
       initialWidth: CANVAS_COLUMN_WIDTH - 32,
-      initialHeight: 88,
+      initialHeight: 112,
     } satisfies Node<CanvasNodeData>;
   });
 

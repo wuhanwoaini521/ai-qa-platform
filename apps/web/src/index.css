@@ -6215,6 +6215,7 @@ grid-auto-rows: 0;
 .flow-plan-list { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .flow-plan-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .flow-plan-list-heading h3 { margin: 0; color: var(--ink); font-size: var(--fs-label); }
+.flow-plan-list-count { color: var(--ink-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .flow-plan-list ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .flow-plan-list li { display: grid; grid-template-columns: 28px minmax(0, 1fr) 32px 32px 32px; align-items: center; gap: 6px; }
 .flow-plan-list .form-control { width: 100%; min-width: 0; margin: 0; }

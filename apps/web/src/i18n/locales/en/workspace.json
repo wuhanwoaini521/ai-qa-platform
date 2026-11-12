@@ -857,7 +857,8 @@
     "done": "Done",
     "running": "Running",
     "waiting": "Waiting",
-    "failed": "Failed"
+    "failed": "Failed",
+    "unknown": "Unknown"
   },
   "kinds": {
     "task": "Task",
@@ -916,6 +917,12 @@
   "editor": "Edit workflow"
 },
   "workflowEditor": {
+    "riskLabels": {
+      "read": "Read",
+      "write": "Write",
+      "approval": "Approval",
+      "execute": "Execute"
+    },
     "unsaved": "Unsaved changes",
     "mobilePanels": "Workflow editor panels",
     "panels": {
