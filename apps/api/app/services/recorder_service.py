@@ -1013,9 +1013,7 @@ class BrowserRecorderService:
                     "() => { window.__qaRecorderEnabled = false; return window.__qaRecorderDrain ? window.__qaRecorderDrain() : []; }"
                 )
             else:
-                frame_events = await frame.evaluate(
-                    "() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []"
-                )
+                frame_events = await frame.evaluate("() => window.__qaRecorderDrain ? window.__qaRecorderDrain() : []")
             for event in frame_events:
                 if event.get("action") == "pick":
                     session.picked_element = {**event, "action": session.pending_pick_action}
