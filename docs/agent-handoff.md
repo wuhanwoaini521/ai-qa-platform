@@ -2300,3 +2300,45 @@ git diff --check
 - **Verification:** `pytest apps/api/tests/test_quality_and_releases.py -q` — 19 passed; OpenAPI export `--check` passed; web TypeScript check and targeted ESLint passed; Ruff check/format passed; `git diff --check` passed.
 - **State:** Worktree was already carrying untracked historical `.ai-runs/` directories; they were preserved. Implementation is uncommitted. Base HEAD is `baf5333` on `main`; prior commit push remains unverified due the earlier GitHub network failure.
 - **Limitations:** Domain token overlap remains a deterministic heuristic and can miss semantic links with no shared naming/tags. Such files are surfaced as unmapped rather than assigned invented tests. No browser viewport review was run for the small Quality-page notice.
+
+
+## 模拟目标用户团队核心闭环验收（2026-11-07）
+
+- 目标与授权范围：模拟 QA/SDET、自动化工程师、QA Lead 与开发者完成需求探索、测试生成、执行、证据和 UI 核心旅程；仅修复本地发现的问题，不提交、推送或部署。
+- Git 状态：branch `main`，HEAD `d743ad83d9204d87e581bd79a5c2137924c115d3`；工作树有 15 个本轮 tracked 修改。原有未跟踪 `.ai-runs/**` 证据目录保留。详细报告：`.ai-runs/2026-11-07-simulated-target-team-full-workflow-validation/09-final-report.md`。
+- 修复：Discovery SSE idle read cancellation 与订阅/帧泵启动竞态；SQLite migration downgrade 的 FK/级联数据风险和历史 schema 测试夹具；初始 HTTP 错误路径空 plan；启动测试继承模型凭据；Windows 运行时关闭测试时间尺度；Workspace CSS 未声明 shadow token；无 correlation ID 的 lifecycle trace 分组。另按 Ruff 规范化了本轮修改文件及既有 recorder_service.py 格式。
+- 验证：核心 Discovery → Playwright 覆盖 E2E 1 passed；SSE/真实截图、DOM geometry、高亮 E2E 1 passed；live service 测试 12 passed；修复关联聚焦回归 9 passed；Web 单测 317 passed；typecheck、ESLint、Vite production build 通过；Ruff check/format、i18n 30 namespaces/2 languages/4,152 keys、OpenAPI check 通过；桌面 17 routes 视觉检查完成。
+- 全量结果：Python 1,214 passed / 12 skipped / 1 failed / 82 warnings。唯一失败 `test_late_terminal_event_cannot_overwrite_completed_analysis` 在全量运行中遇到 provider RuntimeError 并留下 FAILED 状态；单测复跑通过，紧邻的 3 项终态测试通过，因此仍标为间歇/待查，不宣称全量 PASS。PostgreSQL lane 因 `AI_QA_TEST_DATABASE_URL` 未配置而跳过。Vite 有 Monaco 大 chunk 警告。
+- 审查：独立只读审查未发现阻断问题。SQLite downgrade 为保护现有数据会保留关联列，不是逐字节 schema 回滚；建议未来将 frame pump 的 `asyncio.sleep(0)` 顺序屏障改为显式订阅就绪机制。
+- 安全记录：第一次完整测试前的启动隔离缺陷曾使本机 `.env` 配置触发一次模型探针，返回 `mimo-v2.6-flash`；之后修复并在后续测试环境清空 QA/JEV key，未重复调用。无外部写入。
+- 后续：如需扩展验收，准备隔离 PostgreSQL 测试库补跑 PG migration lane，并另行安排受预算与人工监督的真实 provider 验收。没有做 commit/push/deploy。
+
+
+### Final verification supersedes the initial full-suite observation (2026-11-07)
+
+- The first full Python run had one failure in `test_late_terminal_event_cannot_overwrite_completed_analysis`: the test implicitly used the configured AI provider, whose runtime failure changed the history state it was meant to test. The test now injects the existing `FakeAIProvider`; this keeps the assertion local and deterministic. Ruff check and format for the changed test both pass.
+- Latest complete `scripts/task.py test`: **1,215 passed, 12 skipped, 0 failed, 81 warnings** in 19m00s. This includes 317/317 Web unit tests, TypeScript typecheck, ESLint and Vite production build. The build has the existing Monaco large-chunk warning. PostgreSQL remains skipped because `AI_QA_TEST_DATABASE_URL` is unset.
+- Final project lint and `git diff --check` passed. Local simulation verdict is **PASS**; real provider and PostgreSQL behavior remain outside the tested evidence.
+
+
+- Workspace hygiene: `.validation-pytest-tmp/` is an ignored directory created by this run. Recursive cleanup was attempted after validating its absolute path, but Windows denied deletion of a nested fixture `.git/objects` file. It is not staged or tracked; leave it intact unless the OS permissions are deliberately resolved.
+
+
+## 引导式画板与探索闭环严肃复核（2026-11-08）
+
+- **目标/范围：** 按用户授权审查编辑画板、保存方案、按步骤启动探索，以及执行节点证据关联；修复可确认的问题。未提交、推送或部署。
+- **基线与工作区：** `main`，HEAD `4bb28ee2787dd074b3e00c5403ac8d8f589835a2`。保留此前所有本地脏改动及未跟踪 `.ai-runs/**`。`task_browser_executor.py` 含既有未提交改动，本次只追加了引导结果逐条匹配逻辑，没有覆盖原有改动。
+- **修复：** `task_workflows.build_plan` 原本把 `guided_step` 数据写入 TaskStepSpec 的 `when` 条件而不是 `inputs`，导致 Browser Agent 实际拿不到流程动作；现在每个流程节点把动作放入输入字段，依赖仍按顺序串联。画板新增数量达到上限时禁用添加并显示 0/24、0/20 计数。RuntimeOverview 根据有 `step_id` 的 `browser.guided_step_finished/NEEDS_REVIEW` 事件，将对应节点明确标记为“需要人工确认”。最后一步的每条预期结果均需在最终页面可见文本或无障碍树中逐条匹配；未匹配项写入执行节点输出并转人工复核，中英文说明已明确规则。
+- **独立审查：** 复核新增逻辑未发现明显回归；确认每条预期结果都必须在最终页面 evidence 匹配，缺一项将进人工复核；并确认 event.step_id 与执行步的映射方式合理。字面匹配遇到金额格式差异或同义表达会要求人工复核，这是明确的保守边界。预期结果是全局列表，仍统一交给最后一步核对，文案已说明；未新增 outcome 到 action 的单独映射模型。
+- **已执行验证：** 定向 Python 编译断言通过：动作字段进入各自 TaskStepSpec.inputs、依赖顺序正确、预期结果进入最后一步；非法空计划、25 个动作、21 条结果、空动作均按预期拒绝。Python `py_compile`、Ruff check、task_workflows.py 与 test_agent_tasks.py 的 Ruff format check、Web TypeScript typecheck、ESLint、4 份 locale JSON 解析、`git diff --check` 通过。新增专项 pytest 覆盖了计划编译和逐条预期结果匹配，但受环境依赖限制未能执行。
+- **阻塞验证：** API pytest 无法加载 conftest，环境缺 `aiosqlite`；`uv` 项目运行受外部 uv cache ACL 拒绝。Web node test runner 和 Vite/esbuild build/dev server 均受 `spawn EPERM` 阻塞。Playwright 1.62.0 未能在当前环境启动，因此没有真实浏览器操作或 1280×800/1440×900/1920×1080 视觉验收；系统安装的 Playwright 1.58.0 不符合仓库版本要求。
+- **剩余风险/下一步：** 在依赖缓存/进程权限恢复后运行 `pnpm --filter @ai-qa/web test`、`pnpm --filter @ai-qa/web build` 和 API `test_agent_tasks.py` 定向集成测试，再以 pinned Playwright 1.62.0 实际走保存、重载、按流程探索、逐步证据和 `NEEDS_REVIEW` 状态，并完成三个桌面尺寸验收。当前交付 verdict：**PARTIAL**，代码层根因已修复，运行时浏览器验收尚未完成。
+
+
+## 工作流画布三视图统一与节点可读性（2026-11-08）
+
+- **目标/范围：** 统一流程画布、执行树、编辑工作流三个视图的视觉语言，并改善节点信息密度与内容层级。仅修改相关 Web 组件、模型尺寸、样式与中英文案；未提交、推送或部署。
+- **参考：** 查看 n8n 官方 workflow 与 execution debug 文档，采用“画布表达拓扑和状态、节点详情承载完整数据、执行列表/选择独立于编辑流程”的分工；未引入 n8n 依赖或复刻其品牌界面。
+- **改动：** 执行树去除独立暗色配色，改用项目语义表面、状态色和浮层令牌；三类节点卡片扩大并留白，编辑节点展示节点类型、用户标题、键与本地化风险标签；执行树类型/状态翻译并使用主题令牌渲染网格与 MiniMap。执行树节点为 288×132、纵向行距 156；流程节点列宽 296、卡片高 112、行距 132；编辑节点 268×104。
+- **验证：** Web `typecheck` 通过；本次相关 TypeScript 文件 ESLint 通过；中英文 workspace locale JSON 解析通过；`git diff --check` 通过。
+- **阻塞与风险：** Vite dev 在加载配置阶段被 `esbuild spawn EPERM` 阻断，未能打开浏览器；因此 1280×800、1440×900、1920×1080 的实际布局、CSS variable 对 ReactFlow/MiniMap 的运行时渲染及节点裁切仍待验收。当前 verdict：**PARTIAL**。
