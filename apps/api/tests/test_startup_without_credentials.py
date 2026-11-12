@@ -21,7 +21,9 @@ OPTIONAL_ENV_VARS = (
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
+    "QA_AI_API_KEY",
     "QA_AI_PROVIDER",
+    "JEV_API_KEY",
     "JIRA_BASE_URL",
     "JIRA_EMAIL",
     "JIRA_API_TOKEN",
@@ -49,6 +51,10 @@ def test_import_and_serve_without_any_optional_configuration(tmp_path: Path):
     # that has nothing to do with credentials.
     env = {
         **{name: value for name, value in os.environ.items() if name not in OPTIONAL_ENV_VARS},
+        # ConfigManager also loads the repository .env file. Keep credential keys present but
+        # empty so that file cannot silently turn this isolation test into a live provider probe.
+        "QA_AI_API_KEY": "",
+        "JEV_API_KEY": "",
         "HOME": str(tmp_path),
         "USERPROFILE": str(tmp_path),
         "PYTHONPATH": os.pathsep.join(
@@ -133,4 +139,4 @@ print("STARTUP_OK")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "STARTUP_OK" in result.stdout
     for name in OPTIONAL_ENV_VARS:
-        assert name not in env
+        assert not env.get(name)

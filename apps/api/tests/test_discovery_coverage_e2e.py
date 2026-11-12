@@ -276,10 +276,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
             for font_host in ("https://fonts.googleapis.com/**", "https://fonts.gstatic.com/**"):
                 await context.route(font_host, lambda route: route.abort())
             token = client.headers["Authorization"].removeprefix("Bearer ")
-            await context.add_init_script(
-                f"localStorage.setItem('ai-qa.auth-token', {json.dumps(token)}); "
-                "localStorage.setItem('ai-qa.language', 'en');"
-            )
+            await context.add_init_script(f"localStorage.setItem('ai-qa.auth-token', {json.dumps(token)});")
             page = await context.new_page()
             page_diagnostics = []
             page.on("request", lambda request: page_diagnostics.append(f"request: {request.url}"))
@@ -306,7 +303,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
                     f"browser={page_diagnostics[-40:]}; "
                     f"document={await page.evaluate('({state: document.readyState, html: document.documentElement.outerHTML.slice(0, 1500)})')}"
                 ) from error
-            await page.get_by_role("button", name="需求与覆盖差距").click()
+            await page.get_by_role("navigation", name="发现报告分区").get_by_role("button", name="待复核问题").click()
             async with page.expect_response(
                 lambda response: (
                     f"/discovery/runs/{run_id}/gaps/{missing['id']}/actions/create_requirement_draft" in response.url
@@ -328,7 +325,7 @@ async def test_real_browser_discovery_to_playwright_coverage_e2e(client, test_db
             await page.get_by_text(f"Derived from Discovery run {run_id}", exact=False).wait_for(timeout=10000)
             await _shot(page, path=str(evidence_dir / "scenario-review.png"), full_page=True)
             await _goto_app(page, f"http://127.0.0.1:{vite_port}/workspace/{project_id}?view=discover")
-            await page.get_by_role("button", name="需求与覆盖差距").click()
+            await page.get_by_role("navigation", name="发现报告分区").get_by_role("button", name="待复核问题").click()
             generate_button = page.get_by_role("button", name="生成测试用例")
             await generate_button.wait_for(state="visible", timeout=10000)
             await expect(generate_button).to_be_enabled(timeout=10000)
@@ -453,7 +450,9 @@ def test_discovered_search():
             token = client.headers["Authorization"].removeprefix("Bearer ")
             await context.add_init_script(
                 f"localStorage.setItem('ai-qa.auth-token', {json.dumps(token)}); "
-                "localStorage.setItem('ai-qa.language', 'en');"
+                "localStorage.setItem('ai-qa.language', 'zh-CN'); "
+                "localStorage.setItem('ai-qa.ui-preferences', "
+                "JSON.stringify({theme:'light', language:'zh-CN', startPage:'/', defaultProjectId:null}));"
             )
             page = await context.new_page()
             debug_session_responses = []
@@ -484,12 +483,16 @@ def test_discovered_search():
             )
             await _goto_app(page, f"http://127.0.0.1:{vite_port}/workspace/{project_id}?view=discover")
             try:
-                await page.get_by_role("button", name="Quality Map").wait_for(timeout=20000)
+                await (
+                    page.get_by_role("navigation", name="发现报告分区")
+                    .get_by_role("button", name="覆盖概览")
+                    .wait_for(timeout=20000)
+                )
             except Exception as error:
                 raise AssertionError(
                     f"Quality Map UI absent at {page.url}; body={(await page.locator('body').inner_text())[:1200]}"
                 ) from error
-            await page.get_by_role("button", name="Quality Map").click()
+            await page.get_by_role("navigation", name="发现报告分区").get_by_role("button", name="覆盖概览").click()
             async with page.expect_response(
                 lambda response: f"/discovery/runs/{run_id}/coverage/refresh" in response.url
             ):
@@ -506,7 +509,7 @@ def test_discovered_search():
             evidence_dir.mkdir(parents=True, exist_ok=True)
             await _shot(page, path=str(evidence_dir / "quality-map-verified.png"), full_page=True)
             await page.reload(wait_until="commit")
-            await page.get_by_role("button", name="Quality Map").click()
+            await page.get_by_role("navigation", name="发现报告分区").get_by_role("button", name="覆盖概览").click()
             verified_row = page.locator(".qd-coverage-table tbody tr").filter(has_text="Search").first
             await verified_row.get_by_text("已验证", exact=True).wait_for(timeout=15000)
             await _goto_app(page, f"http://127.0.0.1:{vite_port}/workspace/{foreign_id}?view=discover")

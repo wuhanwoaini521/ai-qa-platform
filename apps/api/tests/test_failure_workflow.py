@@ -1732,7 +1732,9 @@ async def test_late_terminal_event_cannot_overwrite_completed_analysis(client, t
 
     _, failure_id, _ = await seed(client, test_db_session, error="AssertionError: assert 1 == 2")
     async with test_db_session() as session:
-        workflow = FailureWorkflowService(get_failure_service(session))
+        failure_service = get_failure_service(session)
+        failure_service.orchestrator = ProductionQAOrchestrator(ai_provider=FakeAIProvider())
+        workflow = FailureWorkflowService(failure_service)
         events = [event async for event in workflow.stream(failure_id)]
         analysis_id = events[-1].metadata["analysis_id"]
         failure = await workflow.failures.get_failure_state(failure_id)

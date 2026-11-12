@@ -598,7 +598,9 @@ async def test_browser_runtime_close_all_releases_every_session(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_browser_runtime_close_all_stops_driver_when_session_close_stalls(monkeypatch):
-    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.01)
+    # The forced shutdown needs a few event-loop turns for cancellation and the fake driver's
+    # stopped event to reach the close task; 10 ms was below scheduler resolution on Windows.
+    monkeypatch.setattr(browser_runtime_module, "_RESOURCE_CLOSE_TIMEOUT_SECONDS", 0.1)
     runtime, browsers, playwright = _fake_browser_runtime(monkeypatch)
     session = await runtime.create_session()
     close_started = asyncio.Event()
@@ -614,8 +616,8 @@ async def test_browser_runtime_close_all_stops_driver_when_session_close_stalls(
     close_task = asyncio.create_task(runtime.close_session(session.id))
     await asyncio.wait_for(close_started.wait(), timeout=1)
 
-    await asyncio.wait_for(runtime.close_all(), timeout=1)
-    await asyncio.wait_for(close_task, timeout=1)
+    await asyncio.wait_for(runtime.close_all(), timeout=2)
+    await asyncio.wait_for(close_task, timeout=2)
 
     assert session.status == "CLOSED"
     assert playwright.stop_calls == 1
