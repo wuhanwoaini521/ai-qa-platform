@@ -204,6 +204,48 @@ def test_event_generator_replays_history_then_finishes_for_a_terminal_run(monkey
     assert '"BLOCKED"' in frames[-1]
 
 
+def test_event_generator_keeps_live_subscription_across_idle_timeout(monkeypatch):
+    service = QualityDiscoveryService(None, browser_runtime=DiscoveryFixtureBrowserRuntime())
+    run_id = "run_idle_viewer"
+    row = SimpleNamespace(status="RUNNING", progress={}, result={})
+    monkeypatch.setattr(service, "get", lambda _run_id: asyncio.sleep(0, result=row))
+    monkeypatch.setattr(discovery_module, "LIVE_STREAM_IDLE_TIMEOUT_S", 0.01)
+
+    async def scenario():
+        # Suppress the frame pump; this test owns all live events explicitly.
+        pump = asyncio.create_task(asyncio.sleep(30))
+        service._pumps[run_id] = pump
+        frames = []
+
+        async def consume():
+            async for frame in service.event_generator(run_id):
+                frames.append(frame)
+
+        stream = asyncio.create_task(consume())
+        try:
+            await asyncio.sleep(0.05)
+            assert not stream.done(), "an idle check must keep the long-lived viewer attached"
+            assert service.live.has_subscribers(run_id)
+            service.live.publish(run_id, event_payload("page.opened", seq=1))
+            for _ in range(100):
+                if any(frame.startswith("event: page.opened") for frame in frames):
+                    break
+                await asyncio.sleep(0.001)
+            assert any(frame.startswith("event: page.opened") for frame in frames), frames
+            row.status = "COMPLETED"
+            service.live.publish(run_id, event_payload("run.finished", seq=2, metadata={"status": row.status}))
+            await asyncio.wait_for(stream, timeout=1)
+        finally:
+            pump.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pump
+
+        assert any(frame.startswith("event: page.opened") for frame in frames), frames
+        assert frames[-1].startswith("event: run.finished")
+
+    asyncio.run(scenario())
+
+
 def test_frame_pump_publishes_jpeg_frames_only_while_a_viewer_is_attached(monkeypatch):
     runtime = _FramingRuntime()
     frozen_config = _config_with_fast_frames()

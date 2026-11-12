@@ -12,19 +12,23 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import pytest_asyncio
+import uvicorn
 from app.adapters.playwright.browser_runtime import PlaywrightBrowserRuntime
 from app.container import get_quality_discovery_service
 from app.main import app
+from app.services import quality_discovery_service as discovery_module
 from app.services.decision_service import DecisionService
 from app.services.quality_discovery_service import QualityDiscoveryService
 from app.services.workspace_service import WorkspaceService
 from app.settings import settings
+from httpx import AsyncClient
 from project_model.models import DecisionResult
 from test_quality_discovery import DiscoveryFixtureAI
 
@@ -161,6 +165,12 @@ def _assert_geometry(element: dict, expected: dict) -> None:
         )
 
 
+def _free_port() -> int:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
 async def _read_stream(client, run_id: str, *, budget_seconds: float, ready) -> tuple[list[dict], bool]:
     """Collect SSE frames until ``ready(frames)`` holds. Returns the frames and whether we stopped early."""
     frames: list[dict] = []
@@ -238,8 +248,11 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     monkeypatch.setattr(service, "_assert_real_ai_available", lambda: None)
     config = service._get_config()
     # This acceptance isolates one link click and verifies its destination before the run budget ends.
-    bounded_config = config.model_copy(update={"discovery": config.discovery.model_copy(update={"max_actions": 2})})
+    bounded_config = config.model_copy(
+        update={"discovery": config.discovery.model_copy(update={"max_actions": 2, "live_frame_interval_ms": 100})}
+    )
     monkeypatch.setattr(service, "_get_config", lambda: bounded_config)
+    monkeypatch.setattr(discovery_module, "get_config", lambda: bounded_config)
     monkeypatch.setitem(app.dependency_overrides, get_quality_discovery_service, lambda: service)
 
     # Record what the real adapter produced, so the streamed frames can be tied back to it.
@@ -276,10 +289,50 @@ async def test_live_discovery_stream_carries_real_frames_geometry_and_highlights
     def ready(frames: list[dict]) -> bool:
         return any(frame["event"] == "run.finished" for frame in frames)
 
-    frames, stopped_early = await _read_stream(client, run_id, budget_seconds=90, ready=ready)
+    # ASGITransport closes long-lived StreamingResponse bodies when its synthetic request
+    # disconnects. Use loopback Uvicorn here so the SSE viewer remains attached like a real browser.
+    api_port = _free_port()
+    api_server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=api_port, lifespan="off", log_level="error"))
+    api_task = asyncio.create_task(api_server.serve())
+    try:
+        for _ in range(100):
+            if api_server.started:
+                break
+            if api_task.done():
+                raise AssertionError("local API server stopped before the SSE stream test started")
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("local API server did not start for the SSE stream test")
+        async with AsyncClient(
+            base_url=f"http://127.0.0.1:{api_port}",
+            headers=client.headers,
+            timeout=100,
+        ) as stream_client:
+            frames, stopped_early = await _read_stream(stream_client, run_id, budget_seconds=90, ready=ready)
+    finally:
+        api_server.should_exit = True
+        await asyncio.wait_for(api_task, timeout=15)
     kinds = [frame["event"] for frame in frames]
     assert not stopped_early, f"the SSE stream did not reach a terminal event: {kinds[-5:]}"
-    assert "run.finished" in kinds, f"the SSE stream omitted its terminal event: {kinds[-5:]}"
+    if "run.finished" not in kinds:
+        run_state = (await client.get(f"/api/discovery/runs/{run_id}")).json()
+        executor = service._tasks.get(run_id)
+        executor_state = (
+            {
+                "done": executor.done(),
+                "exception": repr(executor.exception()) if executor.done() and not executor.cancelled() else None,
+                "stack": [f"{frame.f_code.co_name}:{frame.f_lineno}" for frame in executor.get_stack()],
+            }
+            if executor
+            else None
+        )
+        raise AssertionError(
+            "the SSE stream omitted its terminal event: "
+            f"events={kinds[-5:]}, status={run_state.get('status')}, "
+            f"error={run_state.get('error')}, progress={run_state.get('progress')}, "
+            f"persisted_events={[event.get('type') for event in run_state.get('result', {}).get('events', [])[-8:]]}, "
+            f"executor={executor_state}, subscribers={service.live.has_subscribers(run_id)}"
+        )
     assert kinds and kinds[0] == "snapshot", f"the stream must open with the run snapshot, got {kinds[:5]}"
     assert "browser.frame" in kinds, f"no live frame reached the viewer: {kinds}"
     assert "element.inventory" in kinds, f"no element inventory reached the viewer: {kinds}"

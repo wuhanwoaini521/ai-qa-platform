@@ -994,16 +994,24 @@ class QualityDiscoveryService(
         if row.status in self.TERMINAL:
             yield event_frame("run.finished", event_payload("run.finished", seq=0, metadata={"status": row.status}))
             return
-        pump = self._pumps.get(run_id)
-        if pump is None or pump.done():
-            # One pump per run, shared by every viewer: two viewers must not double the screenshot cost.
-            pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
-            self._pumps[run_id] = pump
         subscription = self.live.subscribe(run_id)
+        next_event = asyncio.create_task(subscription.__anext__())
         try:
+            # subscribe() is an async generator, so it does not register its queue until the first
+            # __anext__ runs. Let that registration happen before the pump checks for viewers; otherwise
+            # the pump can start first, see no subscribers, and exit before this stream is attached.
+            await asyncio.sleep(0)
+            pump = self._pumps.get(run_id)
+            if pump is None or pump.done():
+                # One pump per run, shared by every viewer: two viewers must not double the screenshot cost.
+                pump = asyncio.create_task(self._pump_frames(run_id), name=f"quality-discovery-frames:{run_id}")
+                self._pumps[run_id] = pump
             while True:
                 try:
-                    payload = await asyncio.wait_for(subscription.__anext__(), timeout=LIVE_STREAM_IDLE_TIMEOUT_S)
+                    # Keep the pending read alive across idle checks. wait_for() cancels the awaitable
+                    # on timeout; directly wrapping __anext__() would close this async generator and
+                    # silently end the stream after its first idle interval.
+                    payload = await asyncio.wait_for(asyncio.shield(next_event), timeout=LIVE_STREAM_IDLE_TIMEOUT_S)
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
@@ -1020,7 +1028,11 @@ class QualityDiscoveryService(
                         break
                     continue
                 yield event_frame(str(payload.get("type") or "message"), payload)
+                next_event = asyncio.create_task(subscription.__anext__())
         finally:
+            if not next_event.done():
+                next_event.cancel()
+                await asyncio.gather(next_event, return_exceptions=True)
             await subscription.aclose()
 
     async def _live_viewport(self, session_id: str) -> dict[str, int]:
