@@ -17,7 +17,7 @@ const eventTime = (event: RuntimeEvent) => event.timestamp ? Date.parse(event.ti
 export function summarizeTrace(events: RuntimeEvent[], snapshot: RuntimeSnapshot): TraceSummaryGroup[] {
   const groups = new Map<string, RuntimeEvent[]>();
   for (const event of events) {
-    const correlationId = event.task_id ?? event.test_run_id ?? event.trace_run_id ?? event.id;
+    const correlationId = event.task_id ?? event.test_run_id ?? event.trace_run_id ?? (event.category === 'lifecycle' ? 'task' : event.id);
     const key = event.step_id
       ? `step:${event.step_id}`
       : event.category === 'lifecycle'

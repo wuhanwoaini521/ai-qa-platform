@@ -35,6 +35,7 @@
   "notReached": "Not reached",
   "notStarted": "Not started",
   "currentState": "Current state",
+  "guidedReviewNeeded": "{{count}} flow step(s) need manual review; task completion does not mean these outcomes were verified.",
   "nextAction": "Next action",
   "noNextAction": "No next action",
   "retryRepair": "Retry repair",

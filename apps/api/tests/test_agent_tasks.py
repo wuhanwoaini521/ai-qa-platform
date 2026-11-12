@@ -13,12 +13,14 @@ from app.container import get_task_runtime_service
 from app.persistence.models import TaskORM, TaskStepORM
 from app.repositories.task_repo import TaskRepository
 from app.repositories.task_unit_of_work import TaskRepositoryScopeFactory
+from app.services.task_browser_executor import TaskBrowserExecutor
 from app.services.task_code_generation_service import TaskCodeGenerationService
 from app.services.task_errors import TaskBlocked, TaskCancelled
 from app.services.task_runtime_service import TaskRuntimeService
 from app.services.task_workflows import build_plan, build_qa_goal_plan, parse_qa_goal
 from app.settings import settings
 from project_model.task_models import TaskStatus, TaskStepStatus, TaskType
+from qa_core.ai.models import BrowserAgentPlan
 
 pytestmark = pytest.mark.integration
 
@@ -137,6 +139,74 @@ def test_registered_task_workflows_are_valid_dags(task_type):
     known = set(keys)
     assert all(set(step.depends_on) <= known for step in plan)
     assert all(step.tool and step.name for step in plan)
+
+
+def test_guided_exploration_compiles_one_ordered_runtime_step_per_action():
+    plan = build_plan(
+        TaskType.EXPLORE_PAGE,
+        {
+            "guided_plan": {
+                "steps": [
+                    {"id": "action-1", "title": "Open product", "action": "Search and open the product"},
+                    {"id": "action-2", "title": "Add to cart", "action": "Add the selected product to cart"},
+                ],
+                "expected_outcomes": ["Cart contains the selected product"],
+            }
+        },
+    )
+
+    assert [step.key for step in plan] == ["guided_01", "guided_02"]
+    assert [step.depends_on for step in plan] == [[], ["guided_01"]]
+    assert [step.inputs["guided_step"]["id"] for step in plan] == ["action-1", "action-2"]
+    assert "expected_outcomes" not in plan[0].inputs["guided_step"]
+    assert plan[1].inputs["guided_step"]["expected_outcomes"] == ["Cart contains the selected product"]
+
+
+@pytest.mark.parametrize(
+    "guided_plan",
+    [
+        {"steps": []},
+        {"steps": [{"title": "Missing action"}]},
+        {"steps": [{"action": "  "}]},
+        {"steps": [{"action": "Explore"}], "expected_outcomes": ["result"] * 21},
+    ],
+)
+def test_guided_exploration_rejects_invalid_plan_content(guided_plan):
+    with pytest.raises(ValueError):
+        build_plan(TaskType.EXPLORE_PAGE, {"guided_plan": guided_plan})
+
+
+def test_guided_exploration_requires_every_expected_outcome_in_page_evidence():
+    plan = BrowserAgentPlan(goal_status="completed")
+    observation = {
+        "url": "https://shop.example/cart",
+        "title": "Cart",
+        "text": "Everyday Tee is in cart. Total: $29.00",
+    }
+    history = [{"status": "success", "action": "add_to_cart", "cart_verified": True}]
+    expected = ["Everyday Tee is in cart", "Total: $29.00"]
+
+    assert TaskBrowserExecutor._browser_goal_verified(
+        "Add item to cart", plan, observation, history, [], True, expected_outcomes=expected
+    )
+    assert not TaskBrowserExecutor._browser_goal_verified(
+        "Add item to cart",
+        plan,
+        {**observation, "text": "Everyday Tee is in cart"},
+        history,
+        [],
+        True,
+        expected_outcomes=expected,
+    )
+    assert not TaskBrowserExecutor._browser_goal_verified(
+        "Add item to cart",
+        BrowserAgentPlan(goal_status="in_progress"),
+        observation,
+        history,
+        [],
+        True,
+        expected_outcomes=expected,
+    )
 
 
 def test_goal_plan_skips_automation_when_every_case_is_already_bound():

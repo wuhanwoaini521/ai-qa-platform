@@ -1,11 +1,11 @@
-import { Check, Circle, Play, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Check, Circle, Play, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { RuntimeSnapshot, RuntimeStep } from '../../types/runtime';
 import { durationLabel, nextAction, overviewFacts, retryActionLabel, runtimeActive, runtimeStatusKey } from './runtimeModel';
 
 function StepMark({ status }: { status: string }) {
-  const Icon = status === 'COMPLETED' ? Check : status === 'FAILED' ? ShieldAlert : status === 'RUNNING' ? Play : Circle;
+  const Icon = status === 'COMPLETED' ? Check : status === 'FAILED' ? ShieldAlert : status === 'RUNNING' ? Play : status === 'NEEDS_REVIEW' ? AlertTriangle : Circle;
   return <Icon size={13} aria-hidden="true" />;
 }
 
@@ -25,6 +25,9 @@ export function RuntimeOverview({
   const blocker = snapshot.blocking;
   const retryLabel = retryActionLabel(snapshot.task?.type);
   const blockerStep = snapshot.steps.find((step) => step.id === blocker?.step_id);
+  const guidedReviewStepIds = new Set(snapshot.events
+    .filter((event) => event.type === 'browser.guided_step_finished' && event.status?.toUpperCase() === 'NEEDS_REVIEW' && event.step_id)
+    .map((event) => event.step_id as string));
   const failed = facts.failed[0];
   const relatedAi = snapshot.ai_invocations.filter((call) => call.step_id === blocker?.step_id);
   const testState = snapshot.runs.length ? 'started' : snapshot.status === 'BLOCKED' ? 'notReached' : 'notStarted';
@@ -51,6 +54,7 @@ export function RuntimeOverview({
           {snapshot.status === 'BLOCKED' && snapshot.task?.type === 'FIX_FAILURE' && snapshot.runs.length === 0 && <p className="rt-not-reached">{t('testNotStarted')}</p>}
           {snapshot.status !== 'BLOCKED' && (blocker?.reason || blockerStep?.error) && <p>{blocker?.reason ?? blockerStep?.error}</p>}
           {snapshot.status !== 'BLOCKED' && !blockerStep && <p>{facts.active.map((step) => step.title).join(' · ') || (active ? t('running') : t('completed'))}</p>}
+          {guidedReviewStepIds.size > 0 && <p className="rt-guided-review-notice">{t('guidedReviewNeeded', { count: guidedReviewStepIds.size })}</p>}
         </div>
         <div className="rt-next-action">
           <span className="rt-eyebrow">{t('nextAction')}</span>
@@ -62,14 +66,21 @@ export function RuntimeOverview({
       <section className="rt-overview-progress rt-block">
         <div className="rt-section-heading"><h3>{t('progress')}</h3><span className="rt-count-summary">{facts.counts.completed} {t('completedCount')} · {facts.counts.failed} {t('failedCount')} · {facts.counts.remaining} {t('pendingCount')}{facts.counts.blocked ? ` (${facts.counts.blocked} ${t('blockedCount')})` : ''}</span></div>
         <div className="rt-progress-segments" role="img" aria-label={t('progressAria', { completed: facts.counts.completed, failed: facts.counts.failed, pending: facts.counts.remaining })}>
-          {snapshot.steps.map((step) => <span key={step.id} className={`rt-progress-segment status-${step.status.toLowerCase()}`} title={`${step.key} · ${step.status}`} />)}
+          {snapshot.steps.map((step) => {
+            const needsReview = guidedReviewStepIds.has(step.id);
+            const status = needsReview ? 'NEEDS_REVIEW' : step.status;
+            return <span key={step.id} className={`rt-progress-segment status-${status.toLowerCase()}`} title={`${step.key} · ${needsReview ? t('browser.needsReview') : status}`} />;
+          })}
         </div>
         <ol className="rt-step-list">
           {snapshot.steps.map((step: RuntimeStep) => {
             const downstream = facts.counts.blockedStepIds.includes(step.id);
-            return <li key={step.id} className={`status-${step.status.toLowerCase()}${downstream ? ' is-blocked-downstream' : ''}`}>
-              <button onClick={() => onSelectStep(step.id)} title={`${step.title} · ${t(runtimeStatusKey(step.status))}`} aria-label={`${step.key}, ${t(runtimeStatusKey(step.status))}`} className="ds-btn">
-                <StepMark status={step.status} /><code>{step.key}</code><span>{step.title}</span>
+            const needsReview = guidedReviewStepIds.has(step.id);
+            const displayStatus = needsReview ? 'NEEDS_REVIEW' : step.status;
+            return <li key={step.id} className={`status-${displayStatus.toLowerCase()}${downstream ? ' is-blocked-downstream' : ''}`}>
+              <button onClick={() => onSelectStep(step.id)} title={`${step.title} · ${needsReview ? t('browser.needsReview') : t(runtimeStatusKey(step.status))}`} aria-label={`${step.key}, ${needsReview ? t('browser.needsReview') : t(runtimeStatusKey(step.status))}`} className="ds-btn">
+                <StepMark status={displayStatus} /><code>{step.key}</code><span>{step.title}</span>
+                {needsReview && <small>{t('browser.needsReview')}</small>}
                 {step.status === 'FAILED' && snapshot.status === 'BLOCKED' && <small>{t('blockedHere')}</small>}
                 {downstream && <small>{t('blockedBy', { step: snapshot.blocking?.step_key })}</small>}
               </button>

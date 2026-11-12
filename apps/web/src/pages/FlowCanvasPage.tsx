@@ -325,6 +325,7 @@ export const FlowCanvasPage: React.FC = () => {
               <PlanList
                 title={t('actionsTitle')}
                 items={scenarioDraft.actions}
+                maxItems={24}
                 onChange={(index, value) => updatePlanItem('actions', index, value)}
                 onMove={(index, offset) => movePlanItem('actions', index, offset)}
                 onAdd={() => setScenarioDraft((current) => current ? { ...current, actions: [...current.actions, ''] } : current)}
@@ -333,6 +334,7 @@ export const FlowCanvasPage: React.FC = () => {
               <PlanList
                 title={t('outcomesTitle')}
                 items={scenarioDraft.expected_outcomes}
+                maxItems={20}
                 onChange={(index, value) => updatePlanItem('expected_outcomes', index, value)}
                 onMove={(index, offset) => movePlanItem('expected_outcomes', index, offset)}
                 onAdd={() => setScenarioDraft((current) => current ? { ...current, expected_outcomes: [...current.expected_outcomes, ''] } : current)}
@@ -356,17 +358,20 @@ export const FlowCanvasPage: React.FC = () => {
 const PlanList: React.FC<{
   title: string;
   items: string[];
+  maxItems: number;
   onChange: (index: number, value: string) => void;
   onMove: (index: number, offset: number) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
-}> = ({ title, items, onChange, onMove, onAdd, onRemove }) => {
+}> = ({ title, items, maxItems, onChange, onMove, onAdd, onRemove }) => {
   const { t } = useTranslation('flowCanvas');
   return (
     <section className="flow-plan-list">
       <div className="flow-plan-list-heading">
         <h3>{title}</h3>
-        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onAdd}><Plus size={13} aria-hidden="true" />{t('planAdd')}</button>
+        <button type="button" className="ds-btn ds-btn-sm btn btn-secondary btn-sm" onClick={onAdd} disabled={items.length >= maxItems}>
+          <Plus size={13} aria-hidden="true" />{t('planAdd')} <span className="flow-plan-list-count">{items.length}/{maxItems}</span>
+        </button>
       </div>
       <ol>
         {items.map((item, index) => (

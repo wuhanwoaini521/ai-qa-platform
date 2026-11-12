@@ -98,6 +98,7 @@ def build_plan(task_type: TaskType, inputs: dict | None = None) -> list[TaskStep
     if task_type == TaskType.WORKFLOW_EXECUTION:
         raise ValueError("Workflow execution plans must be compiled from a published definition.")
     steps = templates[task_type]
+    step_inputs: dict[str, dict] = {}
     guided_plan = (inputs or {}).get("guided_plan") if task_type == TaskType.EXPLORE_PAGE else None
     if guided_plan is not None:
         plan_steps = guided_plan.get("steps") if isinstance(guided_plan, dict) else None
@@ -118,13 +119,12 @@ def build_plan(task_type: TaskType, inputs: dict | None = None) -> list[TaskStep
                 raise ValueError(f"Guided plan step {index + 1} requires an action")
             key = f"guided_{index + 1:02d}"
             node_inputs = {"guided_step": {"id": step_id, "title": title, "action": action}}
+            step_inputs[key] = node_inputs
             if index == len(plan_steps) - 1:
                 node_inputs["guided_step"]["expected_outcomes"] = [
                     str(value).strip()[:500] for value in expected_outcomes if str(value).strip()
                 ]
-            compiled.append(
-                (key, title, "browser.agent", (prior_key,) if prior_key else (), node_inputs)
-            )
+            compiled.append((key, title, "browser.agent", (prior_key,) if prior_key else (), {}))
             prior_key = key
         steps = compiled
     return [
@@ -134,6 +134,7 @@ def build_plan(task_type: TaskType, inputs: dict | None = None) -> list[TaskStep
             tool=tool,
             depends_on=list(dependencies),
             when=condition,
+            inputs=step_inputs.get(key, {}),
             max_retries=1,
             parallelizable=tool in {"source.inspect", "browser.inspect"},
         )

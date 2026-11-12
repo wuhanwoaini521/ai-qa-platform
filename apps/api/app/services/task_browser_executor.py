@@ -814,6 +814,11 @@ class TaskBrowserExecutor:
                 step_goal += ". Check the page for these expected outcomes: " + "; ".join(
                     str(value).strip()[:300] for value in expected[:20] if str(value).strip()
                 )
+        guided_expected_outcomes = (
+            [str(value).strip()[:500] for value in guided_step.get("expected_outcomes", []) if str(value).strip()][:20]
+            if guided_step and isinstance(guided_step.get("expected_outcomes"), list)
+            else []
+        )
 
         from app.container import recorder_service
         from app.services.recorder_service import RecorderSessionCreate
@@ -871,6 +876,7 @@ class TaskBrowserExecutor:
         owns_browser_session = False
         page = None
         initial_http_status = None
+        plan = BrowserAgentPlan()
 
         async def close_owned_browser_after_setup_error() -> None:
             if owns_browser_session and browser_session_id:
@@ -1192,6 +1198,7 @@ class TaskBrowserExecutor:
                     criteria,
                     cart_intent,
                     trusted_domains=trusted_domains,
+                    expected_outcomes=guided_expected_outcomes,
                 ):
                     goal_completed = True
                     stop_reason = "OBSERVED_GOAL_EVIDENCE"
@@ -2412,6 +2419,7 @@ class TaskBrowserExecutor:
                     criteria,
                     cart_intent,
                     trusted_domains=trusted_domains,
+                    expected_outcomes=guided_expected_outcomes,
                 )
                 if goal_completed:
                     stop_reason = "OBSERVED_GOAL_EVIDENCE"
@@ -2534,13 +2542,12 @@ class TaskBrowserExecutor:
                 "GOAL_NOT_REACHED",
             }
             replayable_actions = [
-                item
-                for chunk in state["history_archive"]
-                for item in chunk.get("actions", [])
+                item for chunk in state["history_archive"] for item in chunk.get("actions", [])
             ] + list(state["history"])
             has_replayable_action = any(
                 item.get("status") == "success"
-                and item.get("action") in {
+                and item.get("action")
+                in {
                     "navigate",
                     "back",
                     "scroll",
@@ -2562,9 +2569,7 @@ class TaskBrowserExecutor:
                 for item in replayable_actions
             )
             partial_draft_available = (
-                not goal_completed
-                and stop_reason in partial_draft_stop_reasons
-                and has_replayable_action
+                not goal_completed and stop_reason in partial_draft_stop_reasons and has_replayable_action
             )
             sample_artifact = await self.context.artifact(
                 task,
@@ -2592,7 +2597,9 @@ class TaskBrowserExecutor:
                             "kind": "ai_jev_browser_agent" if strategy == "agent" else "fast_browser_agent",
                             "strategy": strategy,
                             "final_url": SensitiveRedactor.redact_url(str(state["current_url"] or "")),
-                            "final_title": SensitiveRedactor.redact_text(str(latest_observation.get("title") or ""))[:200],
+                            "final_title": SensitiveRedactor.redact_text(str(latest_observation.get("title") or ""))[
+                                :200
+                            ],
                             "goal_evidence": goal_evidence,
                             "stop_reason": stop_reason,
                         },
@@ -2604,13 +2611,20 @@ class TaskBrowserExecutor:
             )
             await self.context.persist_browser_agent_artifact(task.id, history_artifact)
             if guided_step:
+                verified_expected_outcomes = self._browser_observed_expected_outcomes(
+                    guided_expected_outcomes, latest_observation
+                )
                 return {
                     "guided_step_id": guided_step.get("id"),
                     "guided_step_status": "observed" if goal_completed else "needs_review",
                     "goal_evidence_observed": bool(goal_completed),
                     "stop_reason": stop_reason,
                     "current_url": SensitiveRedactor.redact_url(str(state["current_url"] or "")),
-                    "expected_outcomes": guided_step.get("expected_outcomes", []),
+                    "expected_outcomes": guided_expected_outcomes,
+                    "verified_expected_outcomes": verified_expected_outcomes,
+                    "unverified_expected_outcomes": [
+                        value for value in guided_expected_outcomes if value not in verified_expected_outcomes
+                    ],
                 }
             if not goal_completed:
                 failure_type = (
@@ -3176,6 +3190,7 @@ class TaskBrowserExecutor:
         cart_intent: bool,
         *,
         trusted_domains: list[str] | None = None,
+        expected_outcomes: list[str] | None = None,
     ) -> bool:
         if TaskBrowserExecutor._browser_official_site_brand(goal):
             current_url = urlparse(str(observation.get("url") or ""))
@@ -3185,8 +3200,21 @@ class TaskBrowserExecutor:
             ):
                 return False
         haystack = " ".join(
-            [str(observation.get("url") or ""), str(observation.get("title") or ""), str(observation.get("text") or "")]
+            [
+                str(observation.get("url") or ""),
+                str(observation.get("title") or ""),
+                str(observation.get("text") or ""),
+                str(observation.get("accessibility_tree") or ""),
+            ]
         ).casefold()
+        if expected_outcomes:
+            visible_outcomes = TaskBrowserExecutor._browser_observed_expected_outcomes(expected_outcomes, observation)
+            return bool(
+                history
+                and history[-1].get("status") == "success"
+                and plan.goal_status == "completed"
+                and len(visible_outcomes) == len(expected_outcomes)
+            )
         if cart_intent:
             return any(item.get("action") == "add_to_cart" and item.get("cart_verified") is True for item in history)
         if criteria:
@@ -3225,6 +3253,24 @@ class TaskBrowserExecutor:
             and plan.goal_status == "completed"
             and (completion_visible or goal_visible)
         )
+
+    @staticmethod
+    def _browser_observed_expected_outcomes(expected_outcomes: list[str], observation: dict[str, Any]) -> list[str]:
+        visible_text = " ".join(
+            [
+                str(observation.get("url") or ""),
+                str(observation.get("title") or ""),
+                str(observation.get("text") or ""),
+                str(observation.get("accessibility_tree") or ""),
+            ]
+        )
+        normalized_visible_text = " ".join(visible_text.split()).casefold()
+        return [
+            outcome
+            for outcome in expected_outcomes
+            if (normalized_outcome := " ".join(str(outcome).split()).casefold())
+            and normalized_outcome in normalized_visible_text
+        ]
 
     async def _browser_inspect(self, task: TaskExecutionRecord, outputs: dict[str, Any]) -> dict[str, Any]:
         url = str(self.context.input(task, "url", "")).strip()

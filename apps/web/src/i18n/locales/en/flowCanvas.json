@@ -30,7 +30,7 @@
   "subtitleEdit": "Start an automation draft from this scenario. Adjust steps, add locators, preview the compiled result, and save it as a test script; the requirement analysis remains unchanged.",
   "planEditorLabel": "Flow planning",
   "planTitle": "Flow nodes",
-  "planDescription": "Each action becomes its own execution node. The saved plan drives this exploration while the original requirement analysis stays unchanged.",
+  "planDescription": "Actions run in order, one execution node at a time. Each expected outcome is checked against visible page text after the final action. Steps with missing expected text are marked for manual review. Saving this plan does not change the original requirement analysis.",
   "planCanvasHint": "The canvas below previews the current plan. Save it before starting guided exploration.",
   "actionsTitle": "Actions",
   "outcomesTitle": "Expected outcomes",

@@ -35,6 +35,7 @@
   "notReached": "未到达",
   "notStarted": "未启动",
   "currentState": "当前状态",
+  "guidedReviewNeeded": "有 {{count}} 个流程节点需要人工确认；任务完成不代表这些结果已验证。",
   "nextAction": "下一步操作",
   "noNextAction": "没有后续操作",
   "retryRepair": "重试修复生成",

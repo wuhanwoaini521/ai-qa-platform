@@ -1354,6 +1354,7 @@
 .rt-overview-status { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
 .rt-overview-status .rt-status { padding: 3px 8px; }
 .rt-overview-state-copy > p { margin: 8px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.rt-overview-state-copy > .rt-guided-review-notice { color: var(--warning); }
 .rt-overview-state-copy > .rt-blocker-reason { margin-top: 5px; color: var(--danger); font-size: 11px; }
 .rt-inline-step { padding: 2px; border: 0; background: transparent; cursor: pointer; color: var(--primary); }
 .rt-inline-step code { font: 11px var(--font-mono); }
@@ -1368,6 +1369,7 @@
 .rt-progress-segment.status-failed { background: var(--danger); }
 .rt-progress-segment.status-running { background: var(--primary); }
 .rt-progress-segment.status-waiting_for_approval { background: var(--warning); }
+.rt-progress-segment.status-needs_review { background: var(--warning); }
 .rt-step-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 0; margin: 0; list-style: none; }
 .rt-step-list li { min-width: 0; border-radius: 5px; }
 .rt-step-list li button { display: grid; grid-template-columns: 16px auto minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 5px 6px; border: 0; border-radius: 5px; background: transparent; text-align: left; color: var(--text-main); cursor: pointer; }
@@ -1377,6 +1379,8 @@
 .rt-step-list li small { grid-column: 3; font-size: 9px; color: var(--text-muted); }
 .rt-step-list li.status-failed { color: var(--danger); }
 .rt-step-list li.status-failed button > span { color: var(--danger); }
+.rt-step-list li.status-needs_review { color: var(--warning); }
+.rt-step-list li.status-needs_review button > span { color: var(--text-main); }
 .rt-step-list li.is-blocked-downstream { opacity: .55; }
 .rt-summary-block { min-width: 0; }
 .rt-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
