@@ -47,6 +47,11 @@ def upgrade():
 def downgrade():
     for name, _target in reversed(_COLUMNS):
         op.drop_index(f"ix_projects_{name}", table_name="projects")
-        if op.get_bind().dialect.name != "sqlite":
-            op.drop_constraint(f"fk_projects_{name}", "projects", type_="foreignkey")
+        if op.get_bind().dialect.name == "sqlite":
+            # SQLite cannot drop a column that carries its own REFERENCES clause. Rebuilding
+            # the projects table is not safe here: child tables reference it, and dropping the old
+            # table with foreign-key enforcement enabled can cascade-delete project data. Keep
+            # these nullable legacy columns on SQLite; older application versions ignore extras.
+            continue
+        op.drop_constraint(f"fk_projects_{name}", "projects", type_="foreignkey")
         op.drop_column("projects", name)

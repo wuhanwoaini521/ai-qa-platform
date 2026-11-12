@@ -8,10 +8,41 @@ def _head_revision() -> str:
     return ScriptDirectory.from_config(migration_config()).get_current_head()
 
 
+def _insert_schema_compatible(connection, table, **values):
+    """Insert through the schema at the selected historical revision, not today's ORM columns."""
+    from sqlalchemy import Column, MetaData, Table
+
+    present = {column["name"] for column in inspect(connection).get_columns(table.name)}
+    historical_table = Table(
+        table.name,
+        MetaData(),
+        *[
+            Column(
+                column.name,
+                column.type,
+                nullable=column.nullable,
+                default=column.default.arg if column.default is not None else None,
+                server_default=column.server_default,
+            )
+            for column in table.columns
+            if column.name in present
+        ],
+    )
+    connection.execute(
+        historical_table.insert().values(**{name: value for name, value in values.items() if name in present})
+    )
+
+
 def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
     from app.persistence.database import Base
+    from sqlalchemy import event
 
     engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
+
+    @event.listens_for(engine, "connect")
+    def enforce_foreign_keys(dbapi, _):
+        dbapi.execute("PRAGMA foreign_keys=ON")
+
     with engine.begin() as connection:
         upgrade_database(connection)
         tables = set(inspect(connection).get_table_names())
@@ -28,6 +59,9 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
         upgrade_database(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
+        from app.persistence.models import TestRunORM
+
+        connection.execute(TestRunORM.__table__.insert().values(id="run", project_id="p", workspace_id="p"))
         assert {"decision_value", "locator_repair_id"} <= {
             column["name"] for column in inspect(connection).get_columns("ai_invocations")
         }
@@ -57,6 +91,21 @@ def test_new_database_upgrade_and_non_destructive_baseline_rollback(tmp_path):
         }
         upgrade_database(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == _head_revision()
+        assert {"ix_projects_owner_id", "ix_projects_team_id"} <= {
+            index["name"] for index in inspect(connection).get_indexes("projects")
+        }
+        downgrade_database(connection, "0012_debug_session_lineage")
+        project_columns = {column["name"] for column in inspect(connection).get_columns("projects")}
+        assert {"owner_id", "team_id"} <= project_columns
+        assert not {"ix_projects_owner_id", "ix_projects_team_id"} & {
+            index["name"] for index in inspect(connection).get_indexes("projects")
+        }
+        assert connection.scalar(text("SELECT name FROM projects WHERE id='p'")) == "Retain"
+        assert connection.scalar(text("SELECT COUNT(*) FROM test_runs WHERE id='run'")) == 1
+        upgrade_database(connection)
+        assert {"ix_projects_owner_id", "ix_projects_team_id"} <= {
+            index["name"] for index in inspect(connection).get_indexes("projects")
+        }
         assert {"source_file", "source_line"} <= {
             column["name"] for column in inspect(connection).get_columns("failure_records")
         }
@@ -123,22 +172,24 @@ def test_relationship_backfill_rejects_ambiguous_links_and_fk_rollback_keeps_exe
 
     with engine.begin() as connection:
         upgrade_database(connection, "0002_runtime_timestamps")
-        connection.execute(ProjectORM.__table__.insert().values(id="p", name="FK"))
-        connection.execute(TestRunORM.__table__.insert().values(id="run", project_id="p", workspace_id="p"))
+        _insert_schema_compatible(connection, ProjectORM.__table__, id="p", name="FK")
+        _insert_schema_compatible(connection, TestRunORM.__table__, id="run", project_id="p", workspace_id="p")
         for task_id in ["a", "b"]:
-            connection.execute(
-                TaskORM.__table__.insert().values(
-                    id=task_id,
-                    owner_id="owner",
-                    project_id="p",
-                    type="RUN_REGRESSION",
-                    goal="Run",
-                    context={"run_id": "run"},
-                )
+            _insert_schema_compatible(
+                connection,
+                TaskORM.__table__,
+                id=task_id,
+                owner_id="owner",
+                project_id="p",
+                type="RUN_REGRESSION",
+                goal="Run",
+                context={"run_id": "run"},
             )
-        connection.execute(TestExecutionORM.__table__.insert().values(id="e", run_id="run", nodeid="test.py"))
+        _insert_schema_compatible(connection, TestExecutionORM.__table__, id="e", run_id="run", nodeid="test.py")
         upgrade_database(connection)
         assert connection.scalar(text("SELECT task_id FROM test_runs")) is None
+        assert connection.scalar(text("SELECT COUNT(*) FROM test_runs WHERE id='run'")) == 1
+        assert connection.scalar(text("SELECT COUNT(*) FROM test_executions WHERE id='e'")) == 1
         assert "conflicted=1" in caplog.text
         assert len(inspect(connection).get_foreign_keys("test_runs")) >= 4
         downgrade_database(connection, "0002_runtime_timestamps")
@@ -183,26 +234,35 @@ def test_time_and_step_backfill_uses_real_records_and_preserves_children_on_down
     now = utc_now()
     with engine.begin() as connection:
         upgrade_database(connection, "0001_baseline")
-        connection.execute(ProjectORM.__table__.insert().values(id="p", name="Timing"))
-        connection.execute(
-            TaskORM.__table__.insert().values(id="task", owner_id="owner", type="EXPLORE_PAGE", goal="Timing")
+        _insert_schema_compatible(connection, ProjectORM.__table__, id="p", name="Timing")
+        _insert_schema_compatible(
+            connection, TaskORM.__table__, id="task", owner_id="owner", type="EXPLORE_PAGE", goal="Timing"
         )
-        connection.execute(
-            TaskStepORM.__table__.insert().values(
-                id="s", task_id="task", key="inspect", name="Inspect", tool="browser.inspect"
-            )
+        _insert_schema_compatible(
+            connection,
+            TaskStepORM.__table__,
+            id="s",
+            task_id="task",
+            key="inspect",
+            name="Inspect",
+            tool="browser.inspect",
         )
-        connection.execute(
-            TaskEventORM.__table__.insert().values(task_id="task", type="step.started", payload={"step_id": "s"})
+        _insert_schema_compatible(
+            connection, TaskEventORM.__table__, task_id="task", type="step.started", payload={"step_id": "s"}
         )
-        connection.execute(
-            TaskEventORM.__table__.insert().values(task_id="task", type="ai.trace", payload={"step_id": "task:fake"})
+        _insert_schema_compatible(
+            connection, TaskEventORM.__table__, task_id="task", type="ai.trace", payload={"step_id": "task:fake"}
         )
-        connection.execute(TestRunORM.__table__.insert().values(id="run", project_id="p", workspace_id="p"))
-        connection.execute(
-            TestExecutionORM.__table__.insert().values(
-                id="e", run_id="run", nodeid="test.py::test_a", started_at=now, finished_at=now, duration_ms=2000
-            )
+        _insert_schema_compatible(connection, TestRunORM.__table__, id="run", project_id="p", workspace_id="p")
+        _insert_schema_compatible(
+            connection,
+            TestExecutionORM.__table__,
+            id="e",
+            run_id="run",
+            nodeid="test.py::test_a",
+            started_at=now,
+            finished_at=now,
+            duration_ms=2000,
         )
         upgrade_database(connection)
         row = connection.execute(text("SELECT started_at,finished_at,timestamp_source FROM test_executions")).one()
@@ -246,72 +306,74 @@ def test_locator_repair_migration_backfills_legacy_state_and_downgrades_cleanly(
     }
     with engine.begin() as connection:
         upgrade_database(connection, "0009_decision_signal_values")
-        connection.execute(
-            AIInvocationORM.__table__.insert().values(
-                id="legacy-invocation",
-                task="locator_choice",
-                provider="jev",
-                model="jev-test",
-            )
+        _insert_schema_compatible(
+            connection,
+            AIInvocationORM.__table__,
+            id="legacy-invocation",
+            task="locator_choice",
+            provider="jev",
+            model="jev-test",
         )
-        connection.execute(ProjectORM.__table__.insert().values(id="p", name="Legacy"))
-        connection.execute(TestRunORM.__table__.insert().values(id="run", project_id="p", workspace_id="p"))
-        connection.execute(
-            TestExecutionORM.__table__.insert().values(
-                id="execution", run_id="run", nodeid="tests/test_locator.py::test_button"
-            )
+        _insert_schema_compatible(connection, ProjectORM.__table__, id="p", name="Legacy")
+        _insert_schema_compatible(connection, TestRunORM.__table__, id="run", project_id="p", workspace_id="p")
+        _insert_schema_compatible(
+            connection,
+            TestExecutionORM.__table__,
+            id="execution",
+            run_id="run",
+            nodeid="tests/test_locator.py::test_button",
         )
-        connection.execute(
-            FailureRecordORM.__table__.insert().values(
-                id="failure",
-                run_id="run",
-                execution_id="execution",
-                test_nodeid="tests/test_locator.py::test_button",
-                test_name="test_button",
-                repair_proposal=applied_proposal,
-            )
+        _insert_schema_compatible(
+            connection,
+            FailureRecordORM.__table__,
+            id="failure",
+            run_id="run",
+            execution_id="execution",
+            test_nodeid="tests/test_locator.py::test_button",
+            test_name="test_button",
+            repair_proposal=applied_proposal,
         )
-        connection.execute(
-            FailureAnalysisORM.__table__.insert().values(
-                id="analysis",
-                failure_id="failure",
-                status="COMPLETED",
-                result=legacy_result,
-                events=[],
-            )
+        _insert_schema_compatible(
+            connection,
+            FailureAnalysisORM.__table__,
+            id="analysis",
+            failure_id="failure",
+            status="COMPLETED",
+            result=legacy_result,
+            events=[],
         )
-        connection.execute(
-            FailureAnalysisORM.__table__.insert().values(
-                id="analysis-applied",
-                failure_id="failure",
-                status="COMPLETED",
-                result={"repair_state": "PATCH_READY", "repair_proposal": applied_proposal},
-                events=[],
-            )
+        _insert_schema_compatible(
+            connection,
+            FailureAnalysisORM.__table__,
+            id="analysis-applied",
+            failure_id="failure",
+            status="COMPLETED",
+            result={"repair_state": "PATCH_READY", "repair_proposal": applied_proposal},
+            events=[],
         )
-        connection.execute(
-            FailureAnalysisORM.__table__.insert().values(
-                id="analysis-from-event",
-                failure_id="failure",
-                status="RUNNING",
-                result={},
-                events=[
-                    {
-                        "type": "repair.started",
-                        "stage": "repair",
-                        "metadata": {"state": "DECIDING"},
-                    }
-                ],
-            )
+        _insert_schema_compatible(
+            connection,
+            FailureAnalysisORM.__table__,
+            id="analysis-from-event",
+            failure_id="failure",
+            status="RUNNING",
+            result={},
+            events=[
+                {
+                    "type": "repair.started",
+                    "stage": "repair",
+                    "metadata": {"state": "DECIDING"},
+                }
+            ],
         )
-        connection.execute(
-            FailureAnalysisORM.__table__.insert().values(
-                id="analysis-without-repair",
-                failure_id="failure",
-                status="COMPLETED",
-                result={},
-                events=[{"type": "workflow.plan", "stage": "workflow", "metadata": {}}],
-            )
+        _insert_schema_compatible(
+            connection,
+            FailureAnalysisORM.__table__,
+            id="analysis-without-repair",
+            failure_id="failure",
+            status="COMPLETED",
+            result={},
+            events=[{"type": "workflow.plan", "stage": "workflow", "metadata": {}}],
         )
 
         upgrade_database(connection)

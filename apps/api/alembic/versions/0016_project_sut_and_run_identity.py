@@ -74,6 +74,7 @@ def upgrade():
 
 
 def downgrade():
+    is_sqlite = op.get_bind().dialect.name == "sqlite"
     for table, index_name, column in (
         ("test_runs", "ix_test_runs_case_id", "case_id"),
         ("test_runs", "ix_test_runs_requirement_id", "requirement_id"),
@@ -82,14 +83,17 @@ def downgrade():
     ):
         if index_name in _indexes(table):
             op.drop_index(index_name, table_name=table)
-        if column in _columns(table):
+        if column in _columns(table) and not is_sqlite:
             with op.batch_alter_table(table) as batch:
                 batch.drop_column(column)
 
     project_columns = _columns("projects")
-    if "hidden_from_overview" in project_columns:
+    if "hidden_from_overview" in project_columns and not is_sqlite:
         with op.batch_alter_table("projects") as batch:
             batch.drop_column("hidden_from_overview")
-    if "sut_base_url" in project_columns:
+    if "sut_base_url" in project_columns and not is_sqlite:
         with op.batch_alter_table("projects") as batch:
             batch.drop_column("sut_base_url")
+    # SQLite batch rebuilds can cascade-delete executions and other children when rebuilding
+    # referenced parent tables. Keep the nullable legacy columns on downgrade; older code
+    # safely ignores extra columns, and upgrade() recreates any indexes that were removed.
